@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BarChart3, Calendar, ArrowUpRight, RefreshCw, Settings, PieChart as PieIcon, Users, Filter, X } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, startOfWeek, endOfWeek, subDays, startOfYear } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
@@ -166,6 +166,14 @@ export default function SalesDashboard() {
         let from, to;
 
         switch (preset) {
+            case 'yesterday':
+                from = subDays(today, 1);
+                to = subDays(today, 1);
+                break;
+            case 'thisWeek':
+                from = startOfWeek(today, { weekStartsOn: 0 }); // Sunday
+                to = endOfWeek(today, { weekStartsOn: 0 }); // Saturday
+                break;
             case 'thisMonth':
                 from = startOfMonth(today);
                 to = endOfMonth(today);
@@ -174,14 +182,12 @@ export default function SalesDashboard() {
                 from = startOfMonth(subMonths(today, 1));
                 to = endOfMonth(subMonths(today, 1));
                 break;
-            case 'last3Months':
-                from = startOfMonth(subMonths(today, 3));
-                to = endOfMonth(today);
-                break;
-            case 'today':
-                from = today;
+            case 'thisYear':
+                from = startOfYear(today);
                 to = today;
                 break;
+            case 'custom':
+                return; // Don't change dates, let user pick manually
             default:
                 return;
         }
@@ -226,15 +232,17 @@ export default function SalesDashboard() {
                     <div className="grid grid-cols-2 md:flex md:flex-wrap gap-3 md:gap-4 items-end">
                         <div className="space-y-1 md:space-y-2 col-span-2 md:col-span-1">
                             <label className="text-xs md:text-sm font-medium text-gray-700">תקופה</label>
-                            <Select onValueChange={handleDatePreset} defaultValue="last3Months">
+                            <Select onValueChange={handleDatePreset} defaultValue="thisMonth">
                                 <SelectTrigger className="w-full md:w-[160px] bg-white border text-sm">
                                     <SelectValue placeholder="בחר תקופה" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="today">היום</SelectItem>
+                                    <SelectItem value="yesterday">אתמול</SelectItem>
+                                    <SelectItem value="thisWeek">השבוע (א'-ש')</SelectItem>
                                     <SelectItem value="thisMonth">החודש הנוכחי</SelectItem>
                                     <SelectItem value="lastMonth">חודש שעבר</SelectItem>
-                                    <SelectItem value="last3Months">3 חודשים</SelectItem>
+                                    <SelectItem value="thisYear">השנה עד היום</SelectItem>
+                                    <SelectItem value="custom">טווח מותאם אישית</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
