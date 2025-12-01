@@ -12,9 +12,9 @@ export default function Home() {
     if (!isLoading && currentUser) {
       // Redirect based on role - טכנאי goes to repairs, everyone else to sales dashboard
       if (currentUser.role === 'טכנאי') {
-        navigate(createPageUrl("RepairDashboard"));
+        navigate(createPageUrl("RepairDashboard"), { replace: true });
       } else {
-        navigate(createPageUrl("SalesDashboard"));
+        navigate(createPageUrl("SalesDashboard"), { replace: true });
       }
     }
   }, [currentUser, isLoading, navigate]);
