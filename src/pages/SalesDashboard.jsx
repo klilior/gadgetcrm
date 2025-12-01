@@ -148,6 +148,10 @@ export default function SalesDashboard() {
         let from, to;
 
         switch (preset) {
+            case 'today':
+                from = today;
+                to = today;
+                break;
             case 'yesterday':
                 from = subDays(today, 1);
                 to = subDays(today, 1);
