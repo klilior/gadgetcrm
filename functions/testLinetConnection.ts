@@ -25,8 +25,8 @@ Deno.serve(async (req) => {
         }
 
         const credentialsStatus = {
-            login_id: login_id ? `✅ Set (${login_id.substring(0, 4)}...)` : "❌ MISSING",
-            login_hash: login_hash ? `✅ Set (${login_hash.substring(0, 4)}...)` : "❌ MISSING",
+            login_id: login_id ? `✅ Set (${String(login_id).substring(0, 4)}...)` : "❌ MISSING",
+            login_hash: login_hash ? `✅ Set (${String(login_hash).substring(0, 4)}...)` : "❌ MISSING",
             login_company: login_company ? `✅ Set (${login_company})` : "❌ MISSING"
         };
 
