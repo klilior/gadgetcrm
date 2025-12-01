@@ -36,6 +36,10 @@ export default function SalesDashboard() {
     const [availableReps, setAvailableReps] = useState([]);
     const [selectedCategories, setSelectedCategories] = useState([]);
     const [availableCategories, setAvailableCategories] = useState([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [showAll, setShowAll] = useState(false);
+    const ITEMS_PER_PAGE = 20;
+    const DEFAULT_ITEMS = 10;
 
     const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
@@ -71,7 +75,7 @@ export default function SalesDashboard() {
             }
 
             console.log("Fetching sales with query:", query);
-            const data = await base44.entities.SalesTransaction.filter(query, '-issue_date', 10000);
+            const data = await base44.entities.SalesTransaction.filter(query, '-issue_date', 5000);
             
             // Extract all categories for filter
             const cats = [...new Set(data.map(tx => tx.category).filter(Boolean))].sort();
@@ -85,6 +89,7 @@ export default function SalesDashboard() {
             
             setTransactions(filteredData);
             calculateStats(filteredData);
+            setCurrentPage(1); // Reset to first page on new data
         } catch (error) {
             console.error("Error loading sales data:", error);
             setTransactions([]);
@@ -476,7 +481,29 @@ export default function SalesDashboard() {
             {/* Transactions Table - Desktop */}
             <Card className="glass-card border-0 hidden md:block">
                 <CardHeader className="p-4 md:p-6">
-                    <CardTitle className="text-sm md:text-base">פירוט עסקאות ({transactions.length})</CardTitle>
+                    <div className="flex justify-between items-center">
+                        <CardTitle className="text-sm md:text-base">פירוט עסקאות ({transactions.length})</CardTitle>
+                        <div className="flex gap-2">
+                            {!showAll && transactions.length > DEFAULT_ITEMS && (
+                                <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => setShowAll(true)}
+                                >
+                                    הצג הכל
+                                </Button>
+                            )}
+                            {showAll && (
+                                <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => { setShowAll(false); setCurrentPage(1); }}
+                                >
+                                    הצג פחות
+                                </Button>
+                            )}
+                        </div>
+                    </div>
                 </CardHeader>
                 <CardContent className="p-0 md:p-6 md:pt-0">
                     <div className="rounded-lg overflow-x-auto border border-gray-200">
@@ -489,6 +516,7 @@ export default function SalesDashboard() {
                                     <TableHead className="text-right text-xs">מסמך</TableHead>
                                     <TableHead className="text-right text-xs">פריט</TableHead>
                                     <TableHead className="text-center text-xs">כמות</TableHead>
+                                    <TableHead className="text-left text-xs">מחיר יחידה</TableHead>
                                     <TableHead className="text-left text-xs">ללא מע"מ</TableHead>
                                     <TableHead className="text-left text-xs">כולל מע"מ</TableHead>
                                     <TableHead className="text-right text-xs">קטגוריה</TableHead>
@@ -498,7 +526,7 @@ export default function SalesDashboard() {
                             <TableBody>
                                 {transactions.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan="10" className="text-center py-12 text-gray-500">
+                                        <TableCell colSpan="11" className="text-center py-12 text-gray-500">
                                             {isLoading ? (
                                                 <div className="flex flex-col items-center gap-2">
                                                     <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
@@ -520,7 +548,10 @@ export default function SalesDashboard() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    transactions.map((tx) => (
+                                    (showAll 
+                                        ? transactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+                                        : transactions.slice(0, DEFAULT_ITEMS)
+                                    ).map((tx) => (
                                         <TableRow key={tx.id} className="hover:bg-gray-50/50">
                                             <TableCell>
                                                 <span className={`px-2 py-1 rounded-full text-xs ${
@@ -534,6 +565,9 @@ export default function SalesDashboard() {
                                             <TableCell className="text-xs">{tx.doc_number}</TableCell>
                                             <TableCell className="text-xs max-w-[150px] truncate" title={tx.product_name}>{tx.product_name}</TableCell>
                                             <TableCell className="text-center text-xs font-bold">{tx.quantity}</TableCell>
+                                            <TableCell className="text-left text-xs text-gray-600" dir="ltr">
+                                                ₪{tx.unit_price?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            </TableCell>
                                             <TableCell className="text-left text-xs font-bold text-blue-700" dir="ltr">
                                                 ₪{tx.price_ex_vat?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                             </TableCell>
@@ -550,6 +584,31 @@ export default function SalesDashboard() {
                             </TableBody>
                         </Table>
                     </div>
+                    
+                    {/* Pagination */}
+                    {showAll && transactions.length > ITEMS_PER_PAGE && (
+                        <div className="flex justify-center items-center gap-2 mt-4">
+                            <Button 
+                                variant="outline" 
+                                size="sm"
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPage(p => p - 1)}
+                            >
+                                הקודם
+                            </Button>
+                            <span className="text-sm text-gray-600">
+                                עמוד {currentPage} מתוך {Math.ceil(transactions.length / ITEMS_PER_PAGE)}
+                            </span>
+                            <Button 
+                                variant="outline" 
+                                size="sm"
+                                disabled={currentPage >= Math.ceil(transactions.length / ITEMS_PER_PAGE)}
+                                onClick={() => setCurrentPage(p => p + 1)}
+                            >
+                                הבא
+                            </Button>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
@@ -557,6 +616,11 @@ export default function SalesDashboard() {
             <div className="md:hidden space-y-3">
                 <div className="flex justify-between items-center px-1">
                     <h3 className="font-semibold text-gray-800">עסקאות ({transactions.length})</h3>
+                    {!showAll && transactions.length > DEFAULT_ITEMS && (
+                        <Button variant="outline" size="sm" onClick={() => setShowAll(true)}>
+                            הצג הכל
+                        </Button>
+                    )}
                 </div>
                 {isLoading ? (
                     <div className="flex justify-center py-8">
@@ -567,30 +631,70 @@ export default function SalesDashboard() {
                         <p>אין נתונים לתקופה זו</p>
                     </Card>
                 ) : (
-                    transactions.map((tx) => (
-                        <Card key={tx.id} className="glass-card border-0 p-3">
-                            <div className="flex justify-between items-start mb-2">
-                                <div>
-                                    <p className="font-semibold text-sm">{tx.customer_name}</p>
-                                    <p className="text-xs text-gray-500">{tx.product_name}</p>
+                    <>
+                        {(showAll 
+                            ? transactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+                            : transactions.slice(0, DEFAULT_ITEMS)
+                        ).map((tx) => (
+                            <Card key={tx.id} className="glass-card border-0 p-3">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <p className="font-semibold text-sm">{tx.customer_name}</p>
+                                        <p className="text-xs text-gray-500">{tx.product_name}</p>
+                                    </div>
+                                    <div className="text-left">
+                                        <span className={`block px-2 py-1 rounded-full text-xs font-bold ${
+                                            tx.doc_type?.includes('זיכוי') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                                        }`}>
+                                            ₪{tx.price_ex_vat?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                        </span>
+                                        <span className="text-xs text-gray-400 block text-center mt-1">
+                                            כולל: ₪{tx.total_row_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div className="text-left">
-                                    <span className={`block px-2 py-1 rounded-full text-xs font-bold ${
-                                        tx.doc_type?.includes('זיכוי') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-                                    }`}>
-                                        ₪{tx.price_ex_vat?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                    </span>
-                                    <span className="text-xs text-gray-400 block text-center mt-1">
-                                        כולל: ₪{tx.total_row_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                    </span>
+                                <div className="flex justify-between text-xs text-gray-500">
+                                    <span>{format(new Date(tx.issue_date), 'dd/MM/yyyy')}</span>
+                                    <span>{tx.sales_rep}</span>
                                 </div>
+                            </Card>
+                        ))}
+                        
+                        {/* Mobile Pagination */}
+                        {showAll && transactions.length > ITEMS_PER_PAGE && (
+                            <div className="flex justify-center items-center gap-2 py-4">
+                                <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    disabled={currentPage === 1}
+                                    onClick={() => setCurrentPage(p => p - 1)}
+                                >
+                                    הקודם
+                                </Button>
+                                <span className="text-sm text-gray-600">
+                                    {currentPage}/{Math.ceil(transactions.length / ITEMS_PER_PAGE)}
+                                </span>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    disabled={currentPage >= Math.ceil(transactions.length / ITEMS_PER_PAGE)}
+                                    onClick={() => setCurrentPage(p => p + 1)}
+                                >
+                                    הבא
+                                </Button>
                             </div>
-                            <div className="flex justify-between text-xs text-gray-500">
-                                <span>{format(new Date(tx.issue_date), 'dd/MM/yyyy')}</span>
-                                <span>{tx.sales_rep}</span>
-                            </div>
-                        </Card>
-                    ))
+                        )}
+                        
+                        {showAll && (
+                            <Button 
+                                variant="ghost" 
+                                className="w-full"
+                                onClick={() => { setShowAll(false); setCurrentPage(1); }}
+                            >
+                                הצג פחות
+                            </Button>
+                        )}
+                    </>
                 )}
             </div>
         </div>
