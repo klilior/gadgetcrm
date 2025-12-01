@@ -68,17 +68,23 @@ Deno.serve(async (req) => {
 
         const data1 = await res1.json();
         
-        // Test 2: With date filter
-        console.log(`📡 Test 2: Docs with date filter ${testDateFrom} to ${testDateTo}...`);
+        // Test 2: With date filter (exact format that works)
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        console.log(`📡 Test 2: Docs for yesterday ${yesterday}...`);
         
         const payload2 = {
             login_id,
             login_hash,
             login_company: Number(login_company),
-            limit: 10,
-            offset: 0,
-            query: { issue_date: `${testDateFrom} to ${testDateTo}` }
+            limit: 100,
+            query: { 
+                issue_date: `${yesterday} to ${yesterday}`,
+                doctype: ["9", "3"],
+                refstatus: null
+            }
         };
+
+        console.log("Payload 2:", JSON.stringify(payload2));
 
         const res2 = await fetch(`${BASE_URL}/newsearch/docs`, {
             method: 'POST',
@@ -88,20 +94,22 @@ Deno.serve(async (req) => {
 
         const data2 = await res2.json();
 
-        // Test 3: With doctype filter
-        console.log("📡 Test 3: Docs with doctype filter...");
+        // Test 3: With custom date range
+        console.log(`📡 Test 3: Docs with custom range ${testDateFrom} to ${testDateTo}...`);
         
         const payload3 = {
             login_id,
             login_hash,
             login_company: Number(login_company),
-            limit: 10,
-            offset: 0,
+            limit: 100,
             query: { 
                 issue_date: `${testDateFrom} to ${testDateTo}`,
-                doctype: [3, 4, 9]
+                doctype: ["9", "3"],
+                refstatus: null
             }
         };
+
+        console.log("Payload 3:", JSON.stringify(payload3));
 
         const res3 = await fetch(`${BASE_URL}/newsearch/docs`, {
             method: 'POST',
