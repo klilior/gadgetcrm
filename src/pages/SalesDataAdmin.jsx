@@ -234,6 +234,32 @@ export default function SalesDataAdmin() {
         }
     };
 
+    const handleTestConnection = async () => {
+        setIsLoading(true);
+        setDebugData(null);
+        setDebugAnalysis(null);
+        try {
+            const res = await base44.functions.invoke('testLinetConnection', {
+                date_from: manualDateFrom || '2025-11-01',
+                date_to: manualDateTo || format(new Date(), 'yyyy-MM-dd')
+            });
+            
+            console.log("Test Connection Result:", res.data);
+            setDebugData(res.data);
+            
+            if (res.data.success) {
+                setDebugAnalysis(res.data.recommendation);
+            } else {
+                setDebugAnalysis(`❌ שגיאה: ${res.data.error}`);
+            }
+        } catch (error) {
+            console.error("Test Connection failed:", error);
+            setDebugAnalysis(`❌ שגיאה: ${error.message}`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleDeleteAllData = async () => {
         if (!currentUser || (currentUser.role !== 'מנהל' && currentUser.role !== 'admin')) {
             alert("אין לך הרשאה לבצע פעולה זו.");
