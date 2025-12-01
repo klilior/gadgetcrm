@@ -219,6 +219,7 @@ export default function SalesDashboard() {
                                     <SelectValue placeholder="בחר תקופה" />
                                 </SelectTrigger>
                                 <SelectContent>
+                                    <SelectItem value="today">היום</SelectItem>
                                     <SelectItem value="yesterday">אתמול</SelectItem>
                                     <SelectItem value="thisWeek">השבוע (א'-ש')</SelectItem>
                                     <SelectItem value="thisMonth">החודש הנוכחי</SelectItem>
