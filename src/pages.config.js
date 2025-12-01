@@ -26,7 +26,6 @@ import WhatsAppDebug from './pages/WhatsAppDebug';
 import ShippingProviders from './pages/ShippingProviders';
 import PaymentReturn from './pages/PaymentReturn';
 import Products from './pages/Products';
-import SalesDashboard from './pages/SalesDashboard';
 import SalesDataAdmin from './pages/SalesDataAdmin';
 import Home from './pages/Home';
 import __Layout from './Layout.jsx';
@@ -61,7 +60,6 @@ export const PAGES = {
     "ShippingProviders": ShippingProviders,
     "PaymentReturn": PaymentReturn,
     "Products": Products,
-    "SalesDashboard": SalesDashboard,
     "SalesDataAdmin": SalesDataAdmin,
     "Home": Home,
 }
