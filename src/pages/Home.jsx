@@ -10,11 +10,10 @@ export default function Home() {
 
   useEffect(() => {
     if (!isLoading && currentUser) {
-      // Redirect based on role
+      // Redirect based on role - טכנאי goes to repairs, everyone else to sales dashboard
       if (currentUser.role === 'טכנאי') {
         navigate(createPageUrl("RepairDashboard"));
       } else {
-        // Default for everyone else (Managers, Agents, Shift Managers)
         navigate(createPageUrl("SalesDashboard"));
       }
     }

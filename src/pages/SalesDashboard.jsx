@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useUser } from "../components/UserAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart3, Calendar, ArrowUpRight, RefreshCw, Settings, PieChart as PieIcon, Users } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subMonths, isSameDay, parseISO } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1', '#a4de6c', '#d0ed57'];
 
@@ -173,127 +173,132 @@ export default function SalesDashboard() {
     };
 
     return (
-        <div className="p-6 space-y-6" style={{ background: 'linear-gradient(135deg, #F8F9FB 0%, #E8ECFF 100%)', minHeight: '100vh' }}>
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="p-3 md:p-6 space-y-4 md:space-y-6" style={{ background: 'linear-gradient(135deg, #F8F9FB 0%, #E8ECFF 100%)', minHeight: '100vh' }}>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">דשבורד מכירות</h1>
-                    <p className="text-gray-600">סיכום נתונים מתוך Linet</p>
+                    <h1 className="text-2xl md:text-3xl font-bold text-gray-900">דשבורד מכירות</h1>
+                    <p className="text-sm md:text-base text-gray-600">סיכום נתונים מתוך Linet</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    <Link to={createPageUrl("SalesDataAdmin")}>
-                        <Button className="bg-purple-600 text-white hover:bg-purple-700 shadow-md">
-                            <Settings className="w-4 h-4 ml-2" />
-                            ניהול וסנכרון
-                        </Button>
-                    </Link>
+                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                    {isManager && (
+                        <Link to={createPageUrl("SalesDataAdmin")} className="flex-1 md:flex-none">
+                            <Button className="w-full md:w-auto bg-purple-600 text-white hover:bg-purple-700 shadow-md text-sm">
+                                <Settings className="w-4 h-4 ml-1 md:ml-2" />
+                                <span className="hidden sm:inline">ניהול וסנכרון</span>
+                                <span className="sm:hidden">ניהול</span>
+                            </Button>
+                        </Link>
+                    )}
                     <Button 
                         onClick={loadData} 
                         disabled={isLoading} 
-                        className="bg-blue-600 text-white hover:bg-blue-700 shadow-md"
+                        className="flex-1 md:flex-none bg-blue-600 text-white hover:bg-blue-700 shadow-md text-sm"
                     >
-                        <RefreshCw className={`w-4 h-4 ml-2 ${isLoading ? 'animate-spin' : ''}`} />
-                        רענן נתונים
+                        <RefreshCw className={`w-4 h-4 ml-1 md:ml-2 ${isLoading ? 'animate-spin' : ''}`} />
+                        רענן
                     </Button>
                 </div>
             </div>
 
             {/* Filters */}
             <Card className="glass-card border-0">
-                <CardContent className="p-4 flex flex-wrap gap-4 items-end">
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700">טווח תאריכים מהיר</label>
-                        <Select onValueChange={handleDatePreset} defaultValue="last3Months">
-                            <SelectTrigger className="w-[180px] bg-white border">
-                                <SelectValue placeholder="בחר תקופה" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="today">היום</SelectItem>
-                                <SelectItem value="thisMonth">החודש הנוכחי</SelectItem>
-                                <SelectItem value="lastMonth">חודש שעבר</SelectItem>
-                                <SelectItem value="last3Months">3 חודשים אחרונים</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    {isManager && (
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">סינון לפי נציג</label>
-                            <Select value={selectedRep} onValueChange={setSelectedRep}>
-                                <SelectTrigger className="w-[180px] bg-white border">
-                                    <SelectValue placeholder="כל הנציגים" />
+                <CardContent className="p-3 md:p-4">
+                    <div className="grid grid-cols-2 md:flex md:flex-wrap gap-3 md:gap-4 items-end">
+                        <div className="space-y-1 md:space-y-2 col-span-2 md:col-span-1">
+                            <label className="text-xs md:text-sm font-medium text-gray-700">תקופה</label>
+                            <Select onValueChange={handleDatePreset} defaultValue="last3Months">
+                                <SelectTrigger className="w-full md:w-[160px] bg-white border text-sm">
+                                    <SelectValue placeholder="בחר תקופה" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">כל הנציגים</SelectItem>
-                                    {availableReps.map(rep => (
-                                        <SelectItem key={rep} value={rep}>{rep}</SelectItem>
-                                    ))}
+                                    <SelectItem value="today">היום</SelectItem>
+                                    <SelectItem value="thisMonth">החודש הנוכחי</SelectItem>
+                                    <SelectItem value="lastMonth">חודש שעבר</SelectItem>
+                                    <SelectItem value="last3Months">3 חודשים</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
-                    )}
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700">מתאריך</label>
-                        <Input 
-                            type="date" 
-                            value={dateRange.from}
-                            onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-                            className="bg-white border w-auto"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700">עד תאריך</label>
-                        <Input 
-                            type="date" 
-                            value={dateRange.to}
-                            onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-                            className="bg-white border w-auto"
-                        />
+                        {isManager && (
+                            <div className="space-y-1 md:space-y-2 col-span-2 md:col-span-1">
+                                <label className="text-xs md:text-sm font-medium text-gray-700">נציג</label>
+                                <Select value={selectedRep} onValueChange={setSelectedRep}>
+                                    <SelectTrigger className="w-full md:w-[160px] bg-white border text-sm">
+                                        <SelectValue placeholder="כל הנציגים" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">כל הנציגים</SelectItem>
+                                        {availableReps.map(rep => (
+                                            <SelectItem key={rep} value={rep}>{rep}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+                        <div className="space-y-1 md:space-y-2">
+                            <label className="text-xs md:text-sm font-medium text-gray-700">מתאריך</label>
+                            <Input 
+                                type="date" 
+                                value={dateRange.from}
+                                onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                                className="bg-white border text-sm"
+                            />
+                        </div>
+                        <div className="space-y-1 md:space-y-2">
+                            <label className="text-xs md:text-sm font-medium text-gray-700">עד תאריך</label>
+                            <Input 
+                                type="date" 
+                                value={dateRange.to}
+                                onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+                                className="bg-white border text-sm"
+                            />
+                        </div>
                     </div>
                 </CardContent>
             </Card>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-6">
                 <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-600 to-blue-500 text-white">
-                    <CardContent className="p-6">
+                    <CardContent className="p-4 md:p-6">
                         <div className="flex justify-between items-start">
                             <div>
-                                <p className="text-blue-100 text-sm font-medium mb-1">סה"כ מכירות (לתקופה)</p>
-                                <h3 className="text-3xl font-bold text-white">
-                                    ₪{stats.totalSales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                <p className="text-blue-100 text-xs md:text-sm font-medium mb-1">סה"כ מכירות</p>
+                                <h3 className="text-xl md:text-3xl font-bold text-white">
+                                    ₪{stats.totalSales.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                 </h3>
                             </div>
                             <div className="p-2 bg-white/20 rounded-lg">
-                                <BarChart3 className="w-6 h-6 text-white" />
+                                <BarChart3 className="w-5 h-5 md:w-6 md:h-6 text-white" />
                             </div>
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-600 to-purple-500 text-white">
-                    <CardContent className="p-6">
+                    <CardContent className="p-4 md:p-6">
                         <div className="flex justify-between items-start">
                             <div>
-                                <p className="text-purple-100 text-sm font-medium mb-1">מספר עסקאות</p>
-                                <h3 className="text-3xl font-bold text-white">{stats.count}</h3>
+                                <p className="text-purple-100 text-xs md:text-sm font-medium mb-1">עסקאות</p>
+                                <h3 className="text-xl md:text-3xl font-bold text-white">{stats.count}</h3>
                             </div>
                             <div className="p-2 bg-white/20 rounded-lg">
-                                <ArrowUpRight className="w-6 h-6 text-white" />
+                                <ArrowUpRight className="w-5 h-5 md:w-6 md:h-6 text-white" />
                             </div>
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-600 to-emerald-500 text-white">
-                    <CardContent className="p-6">
+                    <CardContent className="p-4 md:p-6">
                         <div className="flex justify-between items-start">
                             <div>
-                                <p className="text-emerald-100 text-sm font-medium mb-1">ממוצע לעסקה</p>
-                                <h3 className="text-3xl font-bold text-white">
+                                <p className="text-emerald-100 text-xs md:text-sm font-medium mb-1">ממוצע</p>
+                                <h3 className="text-xl md:text-3xl font-bold text-white">
                                     ₪{stats.avgSale.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                 </h3>
                             </div>
                             <div className="p-2 bg-white/20 rounded-lg">
-                                <Calendar className="w-6 h-6 text-white" />
+                                <Calendar className="w-5 h-5 md:w-6 md:h-6 text-white" />
                             </div>
                         </div>
                     </CardContent>
@@ -301,22 +306,22 @@ export default function SalesDashboard() {
             </div>
 
             {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {isManager && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
+                {isManager && salesByRepData.length > 0 && (
                     <Card className="glass-card border-0 lg:col-span-2">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-gray-800">
-                                <Users className="w-5 h-5 text-indigo-600" />
+                        <CardHeader className="p-3 md:p-6">
+                            <CardTitle className="flex items-center gap-2 text-gray-800 text-sm md:text-base">
+                                <Users className="w-4 h-4 md:w-5 md:h-5 text-indigo-600" />
                                 מכירות לפי נציג
                             </CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="h-[300px] w-full">
+                        <CardContent className="p-2 md:p-6 pt-0">
+                            <div className="h-[200px] md:h-[300px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={salesByRepData}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                                        <XAxis dataKey="name" stroke="#6B7280" fontSize={12} />
-                                        <YAxis stroke="#6B7280" fontSize={12} tickFormatter={(val) => `₪${val/1000}k`} />
+                                        <XAxis dataKey="name" stroke="#6B7280" fontSize={10} tick={{ fontSize: 10 }} />
+                                        <YAxis stroke="#6B7280" fontSize={10} tickFormatter={(val) => `₪${val/1000}k`} width={50} />
                                         <RechartsTooltip 
                                             formatter={(value) => [`₪${value.toLocaleString()}`, 'מכירות']}
                                             contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
@@ -330,27 +335,27 @@ export default function SalesDashboard() {
                 )}
 
                 <Card className="glass-card border-0">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-gray-800">
-                            <PieIcon className="w-5 h-5 text-purple-600" />
-                            התפלגות לפי קטגוריות
+                    <CardHeader className="p-3 md:p-6">
+                        <CardTitle className="flex items-center gap-2 text-gray-800 text-sm md:text-base">
+                            <PieIcon className="w-4 h-4 md:w-5 md:h-5 text-purple-600" />
+                            התפלגות קטגוריות
                         </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <div className="h-[300px] w-full">
+                    <CardContent className="p-2 md:p-6 pt-0">
+                        <div className="h-[220px] md:h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
-                                        data={categoriesData}
+                                        data={categoriesData.slice(0, 8)}
                                         cx="50%"
                                         cy="50%"
                                         labelLine={false}
-                                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                                        outerRadius={100}
+                                        label={({ name, percent }) => percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ''}
+                                        outerRadius={70}
                                         fill="#8884d8"
                                         dataKey="value"
                                     >
-                                        {categoriesData.map((entry, index) => (
+                                        {categoriesData.slice(0, 8).map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
@@ -362,19 +367,19 @@ export default function SalesDashboard() {
                 </Card>
 
                 <Card className="glass-card border-0">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-gray-800">
-                            <BarChart3 className="w-5 h-5 text-blue-600" />
+                    <CardHeader className="p-3 md:p-6">
+                        <CardTitle className="flex items-center gap-2 text-gray-800 text-sm md:text-base">
+                            <BarChart3 className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
                             מכירות יומיות
                         </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <div className="h-[300px] w-full">
+                    <CardContent className="p-2 md:p-6 pt-0">
+                        <div className="h-[220px] md:h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={dailyData}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                                    <XAxis dataKey="name" stroke="#6B7280" fontSize={12} />
-                                    <YAxis stroke="#6B7280" fontSize={12} tickFormatter={(val) => `₪${val/1000}k`} />
+                                    <XAxis dataKey="name" stroke="#6B7280" fontSize={10} tick={{ fontSize: 10 }} />
+                                    <YAxis stroke="#6B7280" fontSize={10} tickFormatter={(val) => `₪${val/1000}k`} width={50} />
                                     <RechartsTooltip 
                                         formatter={(value) => [`₪${value.toLocaleString()}`, 'מכירות']}
                                         contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
@@ -387,49 +392,47 @@ export default function SalesDashboard() {
                 </Card>
             </div>
 
-            {/* Transactions Table */}
-            <Card className="glass-card border-0">
-                <CardHeader>
-                    <CardTitle>פירוט עסקאות</CardTitle>
+            {/* Transactions Table - Desktop */}
+            <Card className="glass-card border-0 hidden md:block">
+                <CardHeader className="p-4 md:p-6">
+                    <CardTitle className="text-sm md:text-base">פירוט עסקאות ({transactions.length})</CardTitle>
                 </CardHeader>
-                <CardContent>
-                    <div className="rounded-lg overflow-hidden border border-gray-200">
+                <CardContent className="p-0 md:p-6 md:pt-0">
+                    <div className="rounded-lg overflow-x-auto border border-gray-200">
                         <Table>
                             <TableHeader className="bg-gray-50">
                                 <TableRow>
-                                    <TableHead className="text-right">סוג מסמך</TableHead>
-                                    <TableHead className="text-right">תאריך הפקה</TableHead>
-                                    <TableHead className="text-right">חברה</TableHead>
-                                    <TableHead className="text-right">מספר מסמך</TableHead>
-                                    <TableHead className="text-right">מק"ט</TableHead>
-                                    <TableHead className="text-right">שם פריט</TableHead>
-                                    <TableHead className="text-center">כמות</TableHead>
-                                    <TableHead className="text-left">מחיר פריט (כולל מע"מ)</TableHead>
-                                    <TableHead className="text-left">סך שורה לפני מע"מ</TableHead>
-                                    <TableHead className="text-left">סך שורה (כולל מע"מ)</TableHead>
-                                    <TableHead className="text-right">קטגוריה</TableHead>
-                                    <TableHead className="text-right">בעלים</TableHead>
+                                    <TableHead className="text-right text-xs">סוג</TableHead>
+                                    <TableHead className="text-right text-xs">תאריך</TableHead>
+                                    <TableHead className="text-right text-xs">חברה</TableHead>
+                                    <TableHead className="text-right text-xs">מסמך</TableHead>
+                                    <TableHead className="text-right text-xs">פריט</TableHead>
+                                    <TableHead className="text-center text-xs">כמות</TableHead>
+                                    <TableHead className="text-left text-xs">סכום</TableHead>
+                                    <TableHead className="text-right text-xs">קטגוריה</TableHead>
+                                    <TableHead className="text-right text-xs">נציג</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {transactions.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan="8" className="text-center py-12 text-gray-500">
+                                        <TableCell colSpan="9" className="text-center py-12 text-gray-500">
                                             {isLoading ? (
                                                 <div className="flex flex-col items-center gap-2">
                                                     <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
-                                                    <p>טוען נתונים...</p>
+                                                    <p>טוען...</p>
                                                 </div>
                                             ) : (
                                                 <div className="flex flex-col items-center gap-4">
-                                                    <p className="text-lg font-semibold">לא נמצאו נתונים לטווח הנבחר</p>
-                                                    <p className="text-sm text-gray-500">יתכן וטרם בוצע סנכרון מול Linet, או שאין עסקאות בטווח התאריכים.</p>
-                                                    <Link to={createPageUrl("SalesDataAdmin")}>
-                                                        <Button variant="outline" className="mt-2">
-                                                            <Settings className="w-4 h-4 mr-2" />
-                                                            עבור למסך ניהול וסנכרון
-                                                        </Button>
-                                                    </Link>
+                                                    <p className="font-semibold">אין נתונים</p>
+                                                    {isManager && (
+                                                        <Link to={createPageUrl("SalesDataAdmin")}>
+                                                            <Button variant="outline" size="sm">
+                                                                <Settings className="w-4 h-4 mr-2" />
+                                                                סנכרן נתונים
+                                                            </Button>
+                                                        </Link>
+                                                    )}
                                                 </div>
                                             )}
                                         </TableCell>
@@ -439,32 +442,23 @@ export default function SalesDashboard() {
                                         <TableRow key={tx.id} className="hover:bg-gray-50/50">
                                             <TableCell>
                                                 <span className={`px-2 py-1 rounded-full text-xs ${
-                                                    tx.doc_type && tx.doc_type.includes('זיכוי') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                                                    tx.doc_type?.includes('זיכוי') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
                                                 }`}>
-                                                    {tx.doc_type}
+                                                    {tx.doc_type?.includes('זיכוי') ? 'זיכוי' : 'מכירה'}
                                                 </span>
                                             </TableCell>
-                                            <TableCell className="font-medium">
-                                                {format(new Date(tx.issue_date), 'dd/MM/yyyy')}
-                                            </TableCell>
-                                            <TableCell>{tx.customer_name}</TableCell>
-                                            <TableCell>{tx.doc_number}</TableCell>
-                                            <TableCell className="font-mono text-xs">{tx.sku}</TableCell>
-                                            <TableCell className="max-w-[200px] truncate" title={tx.product_name}>
-                                                {tx.product_name}
-                                            </TableCell>
-                                            <TableCell className="text-center font-bold">{tx.quantity}</TableCell>
-                                            <TableCell className="text-left">₪{tx.unit_price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                                            <TableCell className="text-left">₪{tx.price_ex_vat?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                                            <TableCell className="text-left font-bold" dir="ltr">
-                                                ₪{tx.total_row_amount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            <TableCell className="text-xs">{format(new Date(tx.issue_date), 'dd/MM')}</TableCell>
+                                            <TableCell className="text-xs max-w-[120px] truncate">{tx.customer_name}</TableCell>
+                                            <TableCell className="text-xs">{tx.doc_number}</TableCell>
+                                            <TableCell className="text-xs max-w-[150px] truncate" title={tx.product_name}>{tx.product_name}</TableCell>
+                                            <TableCell className="text-center text-xs font-bold">{tx.quantity}</TableCell>
+                                            <TableCell className="text-left text-xs font-bold" dir="ltr">
+                                                ₪{tx.total_row_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                             </TableCell>
                                             <TableCell>
-                                                <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium text-gray-600">
-                                                    {tx.category || '-'}
-                                                </span>
+                                                <span className="px-2 py-1 bg-gray-100 rounded text-xs">{tx.category || '-'}</span>
                                             </TableCell>
-                                            <TableCell>{tx.sales_rep}</TableCell>
+                                            <TableCell className="text-xs">{tx.sales_rep}</TableCell>
                                         </TableRow>
                                     ))
                                 )}
@@ -473,6 +467,42 @@ export default function SalesDashboard() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Transactions - Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                <div className="flex justify-between items-center px-1">
+                    <h3 className="font-semibold text-gray-800">עסקאות ({transactions.length})</h3>
+                </div>
+                {isLoading ? (
+                    <div className="flex justify-center py-8">
+                        <RefreshCw className="w-6 h-6 animate-spin text-blue-500" />
+                    </div>
+                ) : transactions.length === 0 ? (
+                    <Card className="glass-card border-0 p-6 text-center text-gray-500">
+                        <p>אין נתונים לתקופה זו</p>
+                    </Card>
+                ) : (
+                    transactions.slice(0, 50).map((tx) => (
+                        <Card key={tx.id} className="glass-card border-0 p-3">
+                            <div className="flex justify-between items-start mb-2">
+                                <div>
+                                    <p className="font-semibold text-sm">{tx.customer_name}</p>
+                                    <p className="text-xs text-gray-500">{tx.product_name}</p>
+                                </div>
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                    tx.doc_type?.includes('זיכוי') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                                }`}>
+                                    ₪{tx.total_row_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </span>
+                            </div>
+                            <div className="flex justify-between text-xs text-gray-500">
+                                <span>{format(new Date(tx.issue_date), 'dd/MM/yyyy')}</span>
+                                <span>{tx.sales_rep}</span>
+                            </div>
+                        </Card>
+                    ))
+                )}
+            </div>
         </div>
     );
 }
