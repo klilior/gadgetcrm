@@ -630,14 +630,18 @@ export default function SalesDataAdmin() {
                             <CardTitle className="flex justify-between items-center flex-wrap gap-2">
                                 <span>נתונים גולמיים וניתוח מסמכים</span>
                                 <div className="flex gap-2">
-                                    <Button onClick={handleDebugSync} disabled={isLoading} size="sm" className="bg-orange-600 hover:bg-orange-700 text-white shadow-md">
-                                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                                        🔬 Debug Sync (חפש מסמך 300142)
-                                    </Button>
-                                    <Button onClick={handleDebugFetch} disabled={isLoading} size="sm" className="bg-red-600 hover:bg-red-700 text-white shadow-md">
-                                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                                        טען נתונים גולמיים כלליים
-                                    </Button>
+                                    <Button onClick={handleTestConnection} disabled={isLoading} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white shadow-md">
+                                                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                                                        🔬 בדיקת חיבור Linet
+                                                    </Button>
+                                                    <Button onClick={handleDebugSync} disabled={isLoading} size="sm" className="bg-orange-600 hover:bg-orange-700 text-white shadow-md">
+                                                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                                                        Debug Sync
+                                                    </Button>
+                                                    <Button onClick={handleDebugFetch} disabled={isLoading} size="sm" className="bg-red-600 hover:bg-red-700 text-white shadow-md">
+                                                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                                                        נתונים גולמיים
+                                                    </Button>
                                 </div>
                             </CardTitle>
                         </CardHeader>
