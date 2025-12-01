@@ -28,6 +28,7 @@ import PaymentReturn from './pages/PaymentReturn';
 import Products from './pages/Products';
 import SalesDataAdmin from './pages/SalesDataAdmin';
 import Home from './pages/Home';
+import SalesDashboard from './pages/SalesDashboard';
 import __Layout from './Layout.jsx';
 
 
@@ -62,6 +63,7 @@ export const PAGES = {
     "Products": Products,
     "SalesDataAdmin": SalesDataAdmin,
     "Home": Home,
+    "SalesDashboard": SalesDashboard,
 }
 
 export const pagesConfig = {
