@@ -6,7 +6,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart3, Calendar, ArrowUpRight, RefreshCw, Settings, PieChart as PieIcon, Users } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { BarChart3, Calendar, ArrowUpRight, RefreshCw, Settings, PieChart as PieIcon, Users, Filter, X } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -32,6 +34,8 @@ export default function SalesDashboard() {
     const [salesByRepData, setSalesByRepData] = useState([]);
     const [selectedRep, setSelectedRep] = useState("all");
     const [availableReps, setAvailableReps] = useState([]);
+    const [selectedCategories, setSelectedCategories] = useState([]);
+    const [availableCategories, setAvailableCategories] = useState([]);
 
     const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
@@ -67,10 +71,20 @@ export default function SalesDashboard() {
             }
 
             console.log("Fetching sales with query:", query);
-            const data = await base44.entities.SalesTransaction.filter(query, '-issue_date', 2000);
+            const data = await base44.entities.SalesTransaction.filter(query, '-issue_date', 10000);
             
-            setTransactions(data);
-            calculateStats(data);
+            // Extract all categories for filter
+            const cats = [...new Set(data.map(tx => tx.category).filter(Boolean))].sort();
+            setAvailableCategories(cats);
+            
+            // Apply category filter client-side
+            let filteredData = data;
+            if (selectedCategories.length > 0) {
+                filteredData = data.filter(tx => selectedCategories.includes(tx.category));
+            }
+            
+            setTransactions(filteredData);
+            calculateStats(filteredData);
         } catch (error) {
             console.error("Error loading sales data:", error);
             setTransactions([]);
@@ -80,7 +94,8 @@ export default function SalesDashboard() {
     };
 
     const calculateStats = (data) => {
-        const total = data.reduce((sum, tx) => sum + (tx.total_row_amount || 0), 0);
+        // Use price_ex_vat (without VAT) for all calculations
+        const total = data.reduce((sum, tx) => sum + (tx.price_ex_vat || 0), 0);
         const count = data.length;
         setStats({
             totalSales: total,
@@ -88,11 +103,11 @@ export default function SalesDashboard() {
             avgSale: count > 0 ? total / count : 0
         });
 
-        // Category Breakdown
+        // Category Breakdown (using price_ex_vat)
         const catMap = {};
         data.forEach(tx => {
             const cat = tx.category || 'אחר';
-            catMap[cat] = (catMap[cat] || 0) + (tx.total_row_amount || 0);
+            catMap[cat] = (catMap[cat] || 0) + (tx.price_ex_vat || 0);
         });
         
         const catData = Object.entries(catMap)
@@ -101,11 +116,11 @@ export default function SalesDashboard() {
         
         setCategoriesData(catData);
 
-        // Daily Breakdown
+        // Daily Breakdown (using price_ex_vat)
         const dayMap = {};
         data.forEach(tx => {
             const day = tx.issue_date ? format(new Date(tx.issue_date), 'dd/MM') : 'Unknown';
-            dayMap[day] = (dayMap[day] || 0) + (tx.total_row_amount || 0);
+            dayMap[day] = (dayMap[day] || 0) + (tx.price_ex_vat || 0);
         });
 
         const dayData = Object.entries(dayMap)
@@ -118,12 +133,12 @@ export default function SalesDashboard() {
         // Since API returns desc, reverse for chart
         setDailyData(dayData.reverse());
 
-        // Sales by Rep (for Managers)
+        // Sales by Rep (for Managers) - using price_ex_vat
         if (isManager) {
             const repMap = {};
             data.forEach(tx => {
                 const rep = tx.sales_rep || 'לא משויך';
-                repMap[rep] = (repMap[rep] || 0) + (tx.total_row_amount || 0);
+                repMap[rep] = (repMap[rep] || 0) + (tx.price_ex_vat || 0);
             });
             const repData = Object.entries(repMap)
                 .map(([name, value]) => ({ name, value }))
@@ -139,7 +154,7 @@ export default function SalesDashboard() {
 
     useEffect(() => {
         loadData();
-    }, [dateRange, selectedRep]);
+    }, [dateRange, selectedRep, selectedCategories]);
 
     const handleDatePreset = (preset) => {
         const today = new Date();
@@ -252,7 +267,73 @@ export default function SalesDashboard() {
                                 className="bg-white border text-sm"
                             />
                         </div>
+                        
+                        {/* Category Multi-Select Filter */}
+                        <div className="space-y-1 md:space-y-2 col-span-2 md:col-span-1">
+                            <label className="text-xs md:text-sm font-medium text-gray-700">קטגוריות</label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" className="w-full md:w-[200px] justify-between bg-white text-sm">
+                                        <span className="truncate">
+                                            {selectedCategories.length === 0 
+                                                ? "כל הקטגוריות" 
+                                                : `${selectedCategories.length} נבחרו`}
+                                        </span>
+                                        <Filter className="w-4 h-4 mr-2 shrink-0" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[250px] p-2 max-h-[300px] overflow-y-auto" align="start">
+                                    <div className="flex justify-between items-center mb-2 pb-2 border-b">
+                                        <span className="text-sm font-medium">בחר קטגוריות</span>
+                                        {selectedCategories.length > 0 && (
+                                            <Button 
+                                                variant="ghost" 
+                                                size="sm" 
+                                                onClick={() => setSelectedCategories([])}
+                                                className="h-6 px-2 text-xs"
+                                            >
+                                                נקה הכל
+                                            </Button>
+                                        )}
+                                    </div>
+                                    <div className="space-y-1">
+                                        {availableCategories.map(cat => (
+                                            <div key={cat} className="flex items-center gap-2 p-1 hover:bg-gray-100 rounded cursor-pointer"
+                                                onClick={() => {
+                                                    setSelectedCategories(prev => 
+                                                        prev.includes(cat) 
+                                                            ? prev.filter(c => c !== cat)
+                                                            : [...prev, cat]
+                                                    );
+                                                }}
+                                            >
+                                                <Checkbox 
+                                                    checked={selectedCategories.includes(cat)}
+                                                    className="pointer-events-none"
+                                                />
+                                                <span className="text-sm">{cat}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
                     </div>
+                    
+                    {/* Selected Categories Tags */}
+                    {selectedCategories.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
+                            {selectedCategories.map(cat => (
+                                <span key={cat} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                                    {cat}
+                                    <X 
+                                        className="w-3 h-3 cursor-pointer hover:text-blue-600" 
+                                        onClick={() => setSelectedCategories(prev => prev.filter(c => c !== cat))}
+                                    />
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
@@ -262,7 +343,7 @@ export default function SalesDashboard() {
                     <CardContent className="p-4 md:p-6">
                         <div className="flex justify-between items-start">
                             <div>
-                                <p className="text-blue-100 text-xs md:text-sm font-medium mb-1">סה"כ מכירות</p>
+                                <p className="text-blue-100 text-xs md:text-sm font-medium mb-1">סה"כ (ללא מע"מ)</p>
                                 <h3 className="text-xl md:text-3xl font-bold text-white">
                                     ₪{stats.totalSales.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                 </h3>
@@ -408,7 +489,8 @@ export default function SalesDashboard() {
                                     <TableHead className="text-right text-xs">מסמך</TableHead>
                                     <TableHead className="text-right text-xs">פריט</TableHead>
                                     <TableHead className="text-center text-xs">כמות</TableHead>
-                                    <TableHead className="text-left text-xs">סכום</TableHead>
+                                    <TableHead className="text-left text-xs">ללא מע"מ</TableHead>
+                                    <TableHead className="text-left text-xs">כולל מע"מ</TableHead>
                                     <TableHead className="text-right text-xs">קטגוריה</TableHead>
                                     <TableHead className="text-right text-xs">נציג</TableHead>
                                 </TableRow>
@@ -416,7 +498,7 @@ export default function SalesDashboard() {
                             <TableBody>
                                 {transactions.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan="9" className="text-center py-12 text-gray-500">
+                                        <TableCell colSpan="10" className="text-center py-12 text-gray-500">
                                             {isLoading ? (
                                                 <div className="flex flex-col items-center gap-2">
                                                     <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
@@ -452,7 +534,10 @@ export default function SalesDashboard() {
                                             <TableCell className="text-xs">{tx.doc_number}</TableCell>
                                             <TableCell className="text-xs max-w-[150px] truncate" title={tx.product_name}>{tx.product_name}</TableCell>
                                             <TableCell className="text-center text-xs font-bold">{tx.quantity}</TableCell>
-                                            <TableCell className="text-left text-xs font-bold" dir="ltr">
+                                            <TableCell className="text-left text-xs font-bold text-blue-700" dir="ltr">
+                                                ₪{tx.price_ex_vat?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            </TableCell>
+                                            <TableCell className="text-left text-xs text-gray-500" dir="ltr">
                                                 ₪{tx.total_row_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                             </TableCell>
                                             <TableCell>
@@ -482,18 +567,23 @@ export default function SalesDashboard() {
                         <p>אין נתונים לתקופה זו</p>
                     </Card>
                 ) : (
-                    transactions.slice(0, 50).map((tx) => (
+                    transactions.map((tx) => (
                         <Card key={tx.id} className="glass-card border-0 p-3">
                             <div className="flex justify-between items-start mb-2">
                                 <div>
                                     <p className="font-semibold text-sm">{tx.customer_name}</p>
                                     <p className="text-xs text-gray-500">{tx.product_name}</p>
                                 </div>
-                                <span className={`px-2 py-1 rounded-full text-xs ${
-                                    tx.doc_type?.includes('זיכוי') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                                }`}>
-                                    ₪{tx.total_row_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                </span>
+                                <div className="text-left">
+                                    <span className={`block px-2 py-1 rounded-full text-xs font-bold ${
+                                        tx.doc_type?.includes('זיכוי') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                        ₪{tx.price_ex_vat?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                    </span>
+                                    <span className="text-xs text-gray-400 block text-center mt-1">
+                                        כולל: ₪{tx.total_row_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                    </span>
+                                </div>
                             </div>
                             <div className="flex justify-between text-xs text-gray-500">
                                 <span>{format(new Date(tx.issue_date), 'dd/MM/yyyy')}</span>
