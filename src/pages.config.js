@@ -1,4 +1,3 @@
-import AgentConsole from './pages/AgentConsole';
 import Settings from './pages/Settings';
 import TodaysCalls from './pages/TodaysCalls';
 import Tickets from './pages/Tickets';
@@ -33,7 +32,6 @@ import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "AgentConsole": AgentConsole,
     "Settings": Settings,
     "TodaysCalls": TodaysCalls,
     "Tickets": Tickets,
@@ -67,7 +65,7 @@ export const PAGES = {
 }
 
 export const pagesConfig = {
-    mainPage: "AgentConsole",
+    mainPage: "Settings",
     Pages: PAGES,
     Layout: __Layout,
 };
