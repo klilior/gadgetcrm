@@ -151,7 +151,11 @@ Deno.serve(async (req) => {
                 login_company: Number(login_company),
                 limit: limit,
                 offset: offset,
-                query: { issue_date: `${dateFrom} to ${dateTo}` }
+                query: { 
+                    issue_date: `${dateFrom} to ${dateTo}`,
+                    doctype: ["9", "3"],
+                    refstatus: null
+                }
             };
 
             console.log(`📡 Fetching docs offset=${offset}... Query: ${JSON.stringify(payload.query)}`);
