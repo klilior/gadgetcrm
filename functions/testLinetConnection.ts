@@ -39,7 +39,13 @@ Deno.serve(async (req) => {
         }
 
         // Parse body for test parameters
-        const body = await req.json().catch(() => ({}));
+        let body = {};
+        try {
+            const text = await req.text();
+            if (text) body = JSON.parse(text);
+        } catch (e) {
+            console.log("No body or invalid JSON, using defaults");
+        }
         const testDateFrom = body.date_from || '2025-11-01';
         const testDateTo = body.date_to || '2025-12-01';
 
