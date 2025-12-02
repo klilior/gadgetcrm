@@ -98,6 +98,7 @@ function AppContent({ children, currentPageName }) {
         { title: "מודלי עמלות", url: createPageUrl("CommissionModels") },
         { title: "שיוך עמלות לנציגים", url: createPageUrl("AgentCommissionAssignment") },
         { title: "חישוב עמלות", url: createPageUrl("CommissionCalculation") },
+        { title: "יעדים וביצועים", url: createPageUrl("GoalsDashboard") },
         { title: "ספקי וואטסאפ", url: createPageUrl("WhatsAppProviders") },
         { title: "🔧 דיבאג וואטסאפ", url: createPageUrl("WhatsAppDebug") },
         { title: "ספקי משלוחים", url: createPageUrl("ShippingProviders") },
