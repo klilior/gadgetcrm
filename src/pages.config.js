@@ -30,6 +30,7 @@ import Home from './pages/Home';
 import SalesDashboard from './pages/SalesDashboard';
 import CommissionModels from './pages/CommissionModels';
 import CommissionCalculation from './pages/CommissionCalculation';
+import AgentCommissionAssignment from './pages/AgentCommissionAssignment';
 import __Layout from './Layout.jsx';
 
 
@@ -66,6 +67,7 @@ export const PAGES = {
     "SalesDashboard": SalesDashboard,
     "CommissionModels": CommissionModels,
     "CommissionCalculation": CommissionCalculation,
+    "AgentCommissionAssignment": AgentCommissionAssignment,
 }
 
 export const pagesConfig = {
