@@ -221,12 +221,21 @@ export default function SalesDashboard() {
                         </Link>
                     )}
                     <Button 
-                        onClick={loadData} 
+                        onClick={async () => {
+                            setIsLoading(true);
+                            try {
+                                await base44.functions.invoke('syncLinetSalesData', { offset: 0 });
+                                await loadData();
+                            } catch (e) {
+                                console.error("Sync error:", e);
+                                setIsLoading(false);
+                            }
+                        }} 
                         disabled={isLoading} 
                         className="flex-1 md:flex-none bg-blue-600 text-white hover:bg-blue-700 shadow-md text-sm"
                     >
                         <RefreshCw className={`w-4 h-4 ml-1 md:ml-2 ${isLoading ? 'animate-spin' : ''}`} />
-                        רענן
+                        סנכרן עכשיו
                     </Button>
                 </div>
             </div>
