@@ -43,6 +43,25 @@ export default function SalesDashboard() {
 
     const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
+    // Auto-sync every 5 minutes
+    useEffect(() => {
+        const autoSync = async () => {
+            try {
+                console.log("🔄 Auto-syncing sales data...");
+                await base44.functions.invoke('syncLinetSalesData', { offset: 0 });
+            } catch (e) {
+                console.log("Auto-sync error:", e.message);
+            }
+        };
+        
+        // Run immediately on mount
+        autoSync();
+        
+        // Then every 5 minutes
+        const interval = setInterval(autoSync, 5 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, []);
+
     const loadData = async () => {
         setIsLoading(true);
         try {
