@@ -29,6 +29,7 @@ import SalesDataAdmin from './pages/SalesDataAdmin';
 import Home from './pages/Home';
 import SalesDashboard from './pages/SalesDashboard';
 import CommissionModels from './pages/CommissionModels';
+import CommissionCalculation from './pages/CommissionCalculation';
 import __Layout from './Layout.jsx';
 
 
@@ -64,6 +65,7 @@ export const PAGES = {
     "Home": Home,
     "SalesDashboard": SalesDashboard,
     "CommissionModels": CommissionModels,
+    "CommissionCalculation": CommissionCalculation,
 }
 
 export const pagesConfig = {
