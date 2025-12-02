@@ -117,11 +117,14 @@ Deno.serve(async (req) => {
 
         if (!manualDateFrom) {
             try {
-                // Step A: Find latest Issue_Date
+                // Step A: Find latest Issue_Date and go back 1 day to catch any missed docs
                 const lastTx = await base44.asServiceRole.entities.SalesTransaction.list("-issue_date", 1);
                 if (lastTx && lastTx.length > 0 && lastTx[0].issue_date) {
-                    dateFrom = lastTx[0].issue_date;
-                    console.log(`📅 Incremental Sync: Found latest transaction date: ${dateFrom}`);
+                    // Go back 1 day to ensure we catch all documents from that day
+                    const lastDate = new Date(lastTx[0].issue_date);
+                    lastDate.setDate(lastDate.getDate() - 1);
+                    dateFrom = format(lastDate, 'yyyy-MM-dd');
+                    console.log(`📅 Incremental Sync: Latest transaction date was ${lastTx[0].issue_date}, syncing from ${dateFrom}`);
                 } else {
                     console.log(`📅 First Run: Table is empty. Syncing from default start date: ${dateFrom}`);
                 }
