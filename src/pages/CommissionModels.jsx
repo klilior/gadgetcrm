@@ -623,11 +623,19 @@ export default function CommissionModels() {
 
                         <div>
                             <label className="text-sm font-medium mb-2 block">קטגוריות כלולות ({availableCategories.length} קטגוריות)</label>
+                            <Input 
+                                placeholder="חפש קטגוריה..."
+                                value={ruleForm.categorySearch || ''}
+                                onChange={(e) => setRuleForm({ ...ruleForm, categorySearch: e.target.value })}
+                                className="mb-2"
+                            />
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-lg max-h-64 overflow-y-auto">
                                 {availableCategories.length === 0 ? (
                                     <p className="text-sm text-gray-500 col-span-3">טוען קטגוריות...</p>
                                 ) : (
-                                    availableCategories.map((category) => (
+                                    availableCategories
+                                        .filter(cat => !ruleForm.categorySearch || cat.includes(ruleForm.categorySearch))
+                                        .map((category) => (
                                         <div key={category} className="flex items-center gap-2">
                                             <Checkbox 
                                                 id={category}
