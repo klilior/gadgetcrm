@@ -62,7 +62,8 @@ function AppContent({ children, currentPageName }) {
       ];
       } else if (currentUser) {
       navigationItems = [
-      { title: "דוח מכירות (Linet)", url: createPageUrl("SalesDashboard"), icon: BarChart3 },
+                  { title: "דוח מכירות (Linet)", url: createPageUrl("SalesDashboard"), icon: BarChart3 },
+                  { title: "ביצועי נציגים", url: createPageUrl("AgentPerformanceDashboard"), icon: Users },
       { title: "מרכז הודעות", url: createPageUrl("MessageCenter"), icon: MessageCircle },
       { title: "שיחות היום", url: createPageUrl("TodaysCalls"), icon: Phone },
       { title: "הטיקטים שלי", url: createPageUrl("Tickets"), icon: Ticket },
