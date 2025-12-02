@@ -32,6 +32,7 @@ import CommissionModels from './pages/CommissionModels';
 import CommissionCalculation from './pages/CommissionCalculation';
 import AgentCommissionAssignment from './pages/AgentCommissionAssignment';
 import AgentPerformanceDashboard from './pages/AgentPerformanceDashboard';
+import GoalsDashboard from './pages/GoalsDashboard';
 import __Layout from './Layout.jsx';
 
 
@@ -70,6 +71,7 @@ export const PAGES = {
     "CommissionCalculation": CommissionCalculation,
     "AgentCommissionAssignment": AgentCommissionAssignment,
     "AgentPerformanceDashboard": AgentPerformanceDashboard,
+    "GoalsDashboard": GoalsDashboard,
 }
 
 export const pagesConfig = {
