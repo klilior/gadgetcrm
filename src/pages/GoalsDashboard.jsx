@@ -194,6 +194,9 @@ export default function GoalsDashboard() {
                         יעדים וביצועים
                     </h1>
                     <p className="text-gray-600 mt-1">הגדרת ומעקב אחר יעדי מכירות</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                        💡 יעדים מגדירים מטרות ביצועים (כמות מכשירים, קווים, סכום אביזרים). הבונוס על יעד מוגדר במסך "בונוס יעדים".
+                    </p>
                 </div>
                 <div className="flex gap-2">
                     <Button onClick={handleCalculateAll} disabled={isCalculating} variant="outline">

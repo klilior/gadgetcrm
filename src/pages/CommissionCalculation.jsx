@@ -325,6 +325,9 @@ export default function CommissionCalculation() {
                         חישוב עמלות ובונוסים
                     </h1>
                     <p className="text-gray-600 mt-1">עמלות בסיס + בונוס יעדים + בונוס משמרות</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                        💡 עמלות בסיס מחושבות לפי מודלי העמלות. בונוס יעדים ומשמרות מוגדרים במסכים הייעודיים.
+                    </p>
                 </div>
                 
                 <div className="flex flex-wrap gap-2">
