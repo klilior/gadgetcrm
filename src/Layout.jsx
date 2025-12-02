@@ -94,6 +94,7 @@ function AppContent({ children, currentPageName }) {
     if (isManager) {
       settingsMenuItems = [
         { title: "ניהול עובדים ומשתמשים", url: createPageUrl("ManageEmployees") },
+        { title: "מודלי עמלות", url: createPageUrl("CommissionModels") },
         { title: "ספקי וואטסאפ", url: createPageUrl("WhatsAppProviders") },
         { title: "🔧 דיבאג וואטסאפ", url: createPageUrl("WhatsAppDebug") },
         { title: "ספקי משלוחים", url: createPageUrl("ShippingProviders") },
