@@ -21,21 +21,7 @@ const RULE_TYPES = {
     LINE_5G: { label: "קו 5G", icon: "📡" }
 };
 
-// Available categories from SalesTransaction
-const AVAILABLE_CATEGORIES = [
-    "טלפונים סלולריים",
-    "אביזרים סלולריים",
-    "טאבלטים",
-    "טלפונים למבוגרים",
-    "קווים",
-    "מחשבים",
-    "מסכים",
-    "שעונים חכמים",
-    "אוזניות",
-    "מטענים",
-    "כיסויים",
-    "אחר"
-];
+
 
 export default function CommissionModels() {
     const { currentUser } = useUser();
@@ -43,6 +29,7 @@ export default function CommissionModels() {
     const [rules, setRules] = useState([]);
     const [selectedModel, setSelectedModel] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [availableCategories, setAvailableCategories] = useState([]);
     
     // Modal states
     const [showModelModal, setShowModelModal] = useState(false);
@@ -74,7 +61,17 @@ export default function CommissionModels() {
 
     useEffect(() => {
         loadModels();
+        loadCategories();
     }, []);
+
+    const loadCategories = async () => {
+        try {
+            const categories = await base44.entities.LinetCategoryTranslation.list('category_name', 500);
+            setAvailableCategories(categories.map(c => c.category_name).filter(Boolean).sort());
+        } catch (error) {
+            console.error("Error loading categories:", error);
+        }
+    };
 
     useEffect(() => {
         if (selectedModel) {
@@ -625,20 +622,24 @@ export default function CommissionModels() {
                         )}
 
                         <div>
-                            <label className="text-sm font-medium mb-2 block">קטגוריות כלולות</label>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-lg max-h-48 overflow-y-auto">
-                                {AVAILABLE_CATEGORIES.map((category) => (
-                                    <div key={category} className="flex items-center gap-2">
-                                        <Checkbox 
-                                            id={category}
-                                            checked={ruleForm.filters_json?.categories_included?.includes(category)}
-                                            onCheckedChange={() => toggleCategory(category)}
-                                        />
-                                        <label htmlFor={category} className="text-sm cursor-pointer">
-                                            {category}
-                                        </label>
-                                    </div>
-                                ))}
+                            <label className="text-sm font-medium mb-2 block">קטגוריות כלולות ({availableCategories.length} קטגוריות)</label>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-lg max-h-64 overflow-y-auto">
+                                {availableCategories.length === 0 ? (
+                                    <p className="text-sm text-gray-500 col-span-3">טוען קטגוריות...</p>
+                                ) : (
+                                    availableCategories.map((category) => (
+                                        <div key={category} className="flex items-center gap-2">
+                                            <Checkbox 
+                                                id={category}
+                                                checked={ruleForm.filters_json?.categories_included?.includes(category)}
+                                                onCheckedChange={() => toggleCategory(category)}
+                                            />
+                                            <label htmlFor={category} className="text-sm cursor-pointer truncate" title={category}>
+                                                {category}
+                                            </label>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
 
