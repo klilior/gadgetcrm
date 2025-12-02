@@ -24,8 +24,12 @@ Deno.serve(async (req) => {
 
         const checkFilters = (sale, filters) => {
             if (!filters) return false;
+            // Support both category_in and categories_included
             if (filters.category_in && filters.category_in.length > 0) {
                 if (!filters.category_in.includes(sale.category)) return false;
+            }
+            if (filters.categories_included && filters.categories_included.length > 0) {
+                if (!filters.categories_included.includes(sale.category)) return false;
             }
             if (filters.category && sale.category !== filters.category) return false;
             return true;
@@ -80,7 +84,8 @@ Deno.serve(async (req) => {
                     break;
             }
 
-            const progressPercent = goal.target_value > 0 ? (currentValue / goal.target_value) * 100 : 0;
+            // Prevent division by zero
+            const progressPercent = (goal.target_value && goal.target_value > 0) ? (currentValue / goal.target_value) * 100 : 0;
 
             // Find existing progress record or create new
             const existingProgress = await base44.asServiceRole.entities.GoalProgress.filter({ goal_id: goal.id });

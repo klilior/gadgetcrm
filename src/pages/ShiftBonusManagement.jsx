@@ -289,7 +289,7 @@ export default function ShiftBonusManagement() {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowModal(false)}>ביטול</Button>
-                        <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white" disabled={!form.agent_name || !form.bonus_per_shift}>
+                        <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white" disabled={!form.agent_name || form.bonus_per_shift <= 0}>
                             {editingItem ? "שמור" : "צור"}
                         </Button>
                     </DialogFooter>

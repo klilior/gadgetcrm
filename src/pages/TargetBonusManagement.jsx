@@ -344,7 +344,7 @@ export default function TargetBonusManagement() {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowModal(false)}>ביטול</Button>
-                        <Button onClick={handleSave} className="bg-amber-600 hover:bg-amber-700 text-white" disabled={!form.goal_id || !form.bonus_amount}>
+                        <Button onClick={handleSave} className="bg-amber-600 hover:bg-amber-700 text-white" disabled={!form.goal_id || form.bonus_amount <= 0}>
                             {editingItem ? "שמור" : "צור"}
                         </Button>
                     </DialogFooter>

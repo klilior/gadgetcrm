@@ -35,11 +35,13 @@ Deno.serve(async (req) => {
 
             // Get existing target bonuses to avoid duplicates
             const existingTargetBonuses = await base44.asServiceRole.entities.BonusEntry.filter({
-                bonus_type: 'TARGET',
-                period_start: { $gte: date_from },
-                period_end: { $lte: date_to }
-            });
-            const existingKeys = new Set(existingTargetBonuses.map(b => `${b.goal_id}_${b.agent_id}`));
+                bonus_type: 'TARGET'
+            }, null, 1000);
+            // Filter by overlapping period
+            const relevantBonuses = existingTargetBonuses.filter(b => 
+                b.period_start <= date_to && b.period_end >= date_from
+            );
+            const existingKeys = new Set(relevantBonuses.map(b => `${b.goal_id}_${b.agent_id || b.agent_name}`));
 
             for (const goal of relevantGoals) {
                 const bonusDef = bonusDefByGoal[goal.id];
@@ -50,9 +52,12 @@ Deno.serve(async (req) => {
 
                 if (progress.progress_percent >= bonusDef.min_progress_percent) {
                     const agentName = goal.agent_name || 'צוות';
-                    const key = `${goal.id}_${agentName}`;
+                    const agentId = goal.agent_id || agentName;
+                    const key = `${goal.id}_${agentId}`;
                     
-                    if (existingKeys.has(key)) continue;
+                    // Also check by agent_name for backwards compatibility
+                    const keyByName = `${goal.id}_${agentName}`;
+                    if (existingKeys.has(key) || existingKeys.has(keyByName)) continue;
 
                     const bonusEntry = {
                         agent_id: goal.agent_id || agentName,

@@ -411,7 +411,7 @@ export default function GoalsDashboard() {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowModal(false)}>ביטול</Button>
-                        <Button onClick={handleSave} className="bg-amber-600 hover:bg-amber-700 text-white">
+                        <Button onClick={handleSave} className="bg-amber-600 hover:bg-amber-700 text-white" disabled={!form.name || form.target_value <= 0 || !form.period_start || !form.period_end}>
                             {editingGoal ? "שמור" : "צור יעד"}
                         </Button>
                     </DialogFooter>

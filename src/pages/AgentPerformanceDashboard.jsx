@@ -57,7 +57,7 @@ export default function AgentPerformanceDashboard() {
             const [groupsData, mappingsData, goalsData, agentsData] = await Promise.all([
                 base44.entities.CommissionGroup.filter({ is_active: true }),
                 base44.entities.CommissionGroupMapping.filter({ is_active: true }),
-                base44.entities.SalesGoal.filter({ is_active: true }),
+                base44.entities.GoalDefinition.filter({ is_active: true }),
                 base44.entities.LinetUsersMap.list(null, 100)
             ]);
             setGroups(groupsData);
