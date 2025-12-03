@@ -10,14 +10,11 @@ export default function Home() {
 
   useEffect(() => {
     if (!isLoading && currentUser) {
-      // Redirect based on role - טכנאי goes to repairs, everyone else to sales dashboard
-      if (currentUser.role === 'טכנאי') {
-        navigate(createPageUrl("RepairDashboard"), { replace: true });
-      } else {
-        navigate(createPageUrl("SalesDashboard"), { replace: true });
-      }
+      // Redirect immediately based on role
+      const targetPage = currentUser.role === 'טכנאי' ? "RepairDashboard" : "SalesDashboard";
+      window.location.href = createPageUrl(targetPage);
     }
-  }, [currentUser, isLoading, navigate]);
+  }, [currentUser, isLoading]);
 
   return (
     <div className="h-screen w-full flex items-center justify-center bg-slate-50">
