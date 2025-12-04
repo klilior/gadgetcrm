@@ -225,10 +225,19 @@ Deno.serve(async (req) => {
                 const doc_type_name = is_credit ? "חשבונית זיכוי" : "חשבונית מס קבלה";
 
                 // Delete existing transaction for this doc to avoid duplicates
-                // We'll do this asynchronously
-                const existing = await base44.asServiceRole.entities.SalesTransaction.filter({ linet_doc_id: linet_doc_id });
-                if (existing.length > 0) {
-                     await Promise.all(existing.map(ex => base44.asServiceRole.entities.SalesTransaction.delete(ex.id)));
+                try {
+                    const existing = await base44.asServiceRole.entities.SalesTransaction.filter({ linet_doc_id: linet_doc_id });
+                    if (existing.length > 0) {
+                         for (const ex of existing) {
+                             try {
+                                 await base44.asServiceRole.entities.SalesTransaction.delete(ex.id);
+                             } catch (delErr) {
+                                 console.log(`⚠️ Failed to delete old tx ${ex.id}: ${delErr.message}`);
+                             }
+                         }
+                    }
+                } catch (filterErr) {
+                    console.log(`⚠️ Failed to filter existing tx for doc ${linet_doc_id}: ${filterErr.message}`);
                 }
 
                 if (Array.isArray(doc.docDetailes)) {
