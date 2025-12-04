@@ -35,6 +35,7 @@ import AgentPerformanceDashboard from './pages/AgentPerformanceDashboard';
 import GoalsDashboard from './pages/GoalsDashboard';
 import ShiftBonusManagement from './pages/ShiftBonusManagement';
 import TargetBonusManagement from './pages/TargetBonusManagement';
+import SyncManagement from './pages/SyncManagement';
 import __Layout from './Layout.jsx';
 
 
@@ -76,6 +77,7 @@ export const PAGES = {
     "GoalsDashboard": GoalsDashboard,
     "ShiftBonusManagement": ShiftBonusManagement,
     "TargetBonusManagement": TargetBonusManagement,
+    "SyncManagement": SyncManagement,
 }
 
 export const pagesConfig = {
