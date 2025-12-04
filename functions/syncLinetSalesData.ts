@@ -306,11 +306,15 @@ Deno.serve(async (req) => {
 
                                 // Save to Cache (Memory + DB)
                                 productCache[sku] = category_name;
-                                await base44.asServiceRole.entities.LinetProductMap.create({
-                                    sku: sku,
-                                    linet_category_name: category_name,
-                                    last_checked: new Date().toISOString()
-                                });
+                                try {
+                                    await base44.asServiceRole.entities.LinetProductMap.create({
+                                        sku: sku,
+                                        linet_category_name: category_name,
+                                        last_checked: new Date().toISOString()
+                                    });
+                                } catch (mapErr) {
+                                    console.log(`⚠️ Failed to save product map for SKU ${sku}: ${mapErr.message}`);
+                                }
                             }
                         }
 
