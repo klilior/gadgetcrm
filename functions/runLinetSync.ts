@@ -155,10 +155,16 @@ Deno.serve(async (req) => {
             console.log("No request body, using defaults");
         }
 
-        const fromDatetime = body.from_datetime;
+        let fromDatetime = body.from_datetime;
         const toDatetime = body.to_datetime || new Date().toISOString();
         const triggerType = body.trigger_type || "MANUAL";
         const updateLastSuccessful = body.update_last_successful !== false;
+
+        // If no from_datetime provided, default to 1 day ago
+        if (!fromDatetime) {
+            fromDatetime = subDays(new Date(), 1).toISOString();
+            console.log(`ℹ️ No from_datetime provided, defaulting to 1 day ago: ${fromDatetime}`);
+        }
 
         console.log(`🚀 Starting Linet Sync: ${fromDatetime} → ${toDatetime} (${triggerType})`);
 
