@@ -107,6 +107,7 @@ function AppContent({ children, currentPageName }) {
         { title: "הגדרות תשלום", url: createPageUrl("PaymentSettings") },
         { title: "הגדרות נוכחות", url: createPageUrl("AttendanceSettings") },
         { title: "ניהול נתוני מכירות", url: createPageUrl("SalesDataAdmin") },
+        { title: "🔄 סנכרון לינט", url: createPageUrl("SyncManagement") },
         { title: "הגדרות כלליות", url: createPageUrl("Settings") },
       ];
     }
