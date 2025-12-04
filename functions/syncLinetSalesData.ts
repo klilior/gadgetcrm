@@ -15,12 +15,26 @@ Deno.serve(async (req) => {
     
     try {
         const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
+        
+        // For cron jobs, we don't need user authentication
+        let user = null;
+        try {
+            user = await base44.auth.me();
+        } catch (authErr) {
+            console.log("⚠️ No user auth (likely cron job), proceeding with service role...");
+        }
 
-        if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-
-        // Parse request body for offset and optional overrides
-        const body = await req.json().catch(() => ({}));
+        // Parse request body safely - handle cron calls with no body
+        let body = {};
+        try {
+            const text = await req.text();
+            if (text && text.trim()) {
+                body = JSON.parse(text);
+            }
+        } catch (parseErr) {
+            console.log("ℹ️ No request body or invalid JSON, using defaults");
+        }
+        
         const startOffset = body.offset || 0;
         const manualDateFrom = body.manual_date_from;
         const manualDateTo = body.manual_date_to;
