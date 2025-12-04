@@ -325,23 +325,27 @@ Deno.serve(async (req) => {
                             price_ex_vat = Math.abs(price_ex_vat) * -1;
                         }
 
-                        await base44.asServiceRole.entities.SalesTransaction.create({
-                            linet_doc_id: linet_doc_id,
-                            doc_number: doc_number,
-                            doc_type: doc_type_name,
-                            issue_date: issue_date,
-                            sales_rep: sales_rep_name,
-                            customer_name: customer_name,
-                            sku: sku,
-                            product_name: product_name,
-                            quantity: quantity,
-                            unit_price: unit_price,
-                            total_row_amount: total_row_amount,
-                            price_ex_vat: price_ex_vat,
-                            category: category_name,
-                            sync_timestamp: new Date().toISOString()
-                        });
-                        totalSaved++;
+                        try {
+                            await base44.asServiceRole.entities.SalesTransaction.create({
+                                linet_doc_id: linet_doc_id,
+                                doc_number: doc_number,
+                                doc_type: doc_type_name,
+                                issue_date: issue_date,
+                                sales_rep: sales_rep_name,
+                                customer_name: customer_name,
+                                sku: sku,
+                                product_name: product_name,
+                                quantity: quantity,
+                                unit_price: unit_price,
+                                total_row_amount: total_row_amount,
+                                price_ex_vat: price_ex_vat,
+                                category: category_name,
+                                sync_timestamp: new Date().toISOString()
+                            });
+                            totalSaved++;
+                        } catch (createErr) {
+                            console.error(`❌ Failed to create tx for doc ${doc_number}, SKU ${sku}: ${createErr.message}`);
+                        }
                     }
                 }
                 docsProcessed++;
