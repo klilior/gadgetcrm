@@ -130,9 +130,23 @@ export default function AgentPerformanceDashboard() {
 
     // Calculate agent performance data
     const agentPerformance = useMemo(() => {
+        // First, remove duplicates based on doc_number + sku + product_name
+        const uniqueSales = [];
+        const seenKeys = new Set();
+        
+        for (const sale of sales) {
+            const uniqueKey = `${sale.doc_number || ''}_${sale.sku || ''}_${sale.product_name || ''}`;
+            if (!seenKeys.has(uniqueKey)) {
+                seenKeys.add(uniqueKey);
+                uniqueSales.push(sale);
+            }
+        }
+        
+        console.log(`📊 Agent Performance: ${sales.length} total sales, ${uniqueSales.length} unique (removed ${sales.length - uniqueSales.length} duplicates)`);
+        
         const perfMap = {};
 
-        sales.forEach(sale => {
+        uniqueSales.forEach(sale => {
             const agent = sale.sales_rep || 'Unknown';
             if (!perfMap[agent]) {
                 perfMap[agent] = {
