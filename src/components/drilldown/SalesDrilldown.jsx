@@ -17,7 +17,7 @@ import { format } from "date-fns";
  * - filters: Object - פילטרים לשאילתת מכירות
  * - dateFrom/dateTo: String - טווח תאריכים
  * - groupCode: String - DEVICES/LINES/ACCESSORIES_GROUP
- * - metricType: String - סוג המדד לצורך הסיכום
+ * - mappings: Array - רשימת CommissionGroupMapping לסינון
  */
 export default function SalesDrilldown({ 
     isOpen, 
@@ -28,7 +28,7 @@ export default function SalesDrilldown({
     dateFrom,
     dateTo,
     groupCode = null,
-    metricType = null
+    mappings = []
 }) {
     const [sales, setSales] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -39,6 +39,37 @@ export default function SalesDrilldown({
             loadSales();
         }
     }, [isOpen, filters, dateFrom, dateTo]);
+
+    // Function to determine commission group for a sale
+    const getCommissionGroup = (sale) => {
+        const sortedMappings = [...mappings].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+        for (const mapping of sortedMappings) {
+            if (checkFilters(sale, mapping.filters_json)) {
+                return mapping.commission_group_code;
+            }
+        }
+        return null;
+    };
+
+    const checkFilters = (sale, filters) => {
+        if (!filters) return false;
+
+        if (filters.category_in && filters.category_in.length > 0) {
+            if (!filters.category_in.includes(sale.category)) return false;
+        }
+
+        if (filters.category && sale.category !== filters.category) {
+            return false;
+        }
+
+        if (filters.product_name_contains) {
+            if (!sale.product_name || !sale.product_name.includes(filters.product_name_contains)) {
+                return false;
+            }
+        }
+
+        return true;
+    };
 
     const loadSales = async () => {
         setIsLoading(true);
@@ -54,13 +85,19 @@ export default function SalesDrilldown({
 
             const data = await base44.entities.SalesTransaction.filter(query, '-issue_date', 2000);
             
+            // Filter by commission group if specified
+            let filteredData = data;
+            if (groupCode && mappings.length > 0) {
+                filteredData = data.filter(sale => getCommissionGroup(sale) === groupCode);
+            }
+            
             // Calculate summary
-            const totalQty = data.reduce((sum, s) => sum + Math.abs(s.quantity || 0), 0);
-            const totalNet = data.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
+            const totalQty = filteredData.reduce((sum, s) => sum + Math.abs(s.quantity || 0), 0);
+            const totalNet = filteredData.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
 
-            setSales(data);
+            setSales(filteredData);
             setSummary({
-                count: data.length,
+                count: filteredData.length,
                 totalQty,
                 totalNet
             });

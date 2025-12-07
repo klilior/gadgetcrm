@@ -533,6 +533,7 @@ export default function AgentPerformanceDashboard() {
                     dateFrom={dateFrom}
                     dateTo={dateTo}
                     groupCode={drilldownGroupCode}
+                    mappings={mappings}
                 />
             )}
         </div>
