@@ -91,14 +91,29 @@ export default function SalesDrilldown({
                 filteredData = data.filter(sale => getCommissionGroup(sale) === groupCode);
             }
             
-            // Remove duplicates based on unique ID (each record should have a unique id field)
+            // Remove duplicates based on business logic:
+            // Same doc_number + sku + quantity + product_name = duplicate
+            // Different products in same invoice = legitimate separate rows
             const uniqueSales = [];
-            const seenIds = new Set();
+            const seenKeys = new Set();
             
             for (const sale of filteredData) {
-                if (!seenIds.has(sale.id)) {
-                    seenIds.add(sale.id);
+                // Create unique key: doc_number + sku + product_name
+                // This ensures that:
+                // - Same product in same invoice appears once
+                // - Different products in same invoice appear separately
+                const uniqueKey = `${sale.doc_number || ''}_${sale.sku || ''}_${sale.product_name || ''}`;
+                
+                if (!seenKeys.has(uniqueKey)) {
+                    seenKeys.add(uniqueKey);
                     uniqueSales.push(sale);
+                } else {
+                    console.log('⚠️ Duplicate detected:', {
+                        doc: sale.doc_number,
+                        product: sale.product_name,
+                        sku: sale.sku,
+                        qty: sale.quantity
+                    });
                 }
             }
             
