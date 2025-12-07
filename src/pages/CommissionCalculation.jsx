@@ -11,9 +11,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
     Calculator, RefreshCw, Download, Users, ChevronDown, ChevronUp, 
-    DollarSign, TrendingUp, Filter, FileSpreadsheet, Target, Calendar, Gift
+    DollarSign, TrendingUp, Filter, FileSpreadsheet, Target, Calendar, Gift, MousePointerClick
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import CommissionDrilldown from "../components/drilldown/CommissionDrilldown";
+import BonusDrilldown from "../components/drilldown/BonusDrilldown";
 
 export default function CommissionCalculation() {
     const { currentUser } = useUser();
@@ -40,6 +42,11 @@ export default function CommissionCalculation() {
     const [showBonusModal, setShowBonusModal] = useState(false);
     const [selectedAgentBonuses, setSelectedAgentBonuses] = useState([]);
     const [selectedAgentName, setSelectedAgentName] = useState("");
+    
+    // Drilldown modals
+    const [showCommissionDrilldown, setShowCommissionDrilldown] = useState(false);
+    const [showBonusDrilldown, setShowBonusDrilldown] = useState(false);
+    const [drilldownBonusType, setDrilldownBonusType] = useState(null);
 
     const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
@@ -501,16 +508,54 @@ export default function CommissionCalculation() {
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-4">
-                                            <div className="text-right">
-                                                <div className="flex gap-2 text-sm">
-                                                    <span className="text-green-600">בסיס: ₪{agent.base_commission.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                                                    {agent.target_bonus > 0 && <span className="text-amber-600">יעדים: ₪{agent.target_bonus.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>}
-                                                    {agent.shift_bonus > 0 && <span className="text-blue-600">משמרות: ₪{agent.shift_bonus.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>}
-                                                </div>
-                                            </div>
-                                            <p className="text-2xl font-bold text-purple-600">
-                                                ₪{agent.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                            </p>
+                                           <div className="text-right">
+                                               <div className="flex gap-2 text-sm">
+                                                   <span 
+                                                       className="text-green-600 cursor-pointer hover:underline font-bold"
+                                                       onClick={(e) => {
+                                                           e.stopPropagation();
+                                                           setSelectedAgentName(agent.agent_name);
+                                                           setShowCommissionDrilldown(true);
+                                                       }}
+                                                       title="לחץ לפירוט עמלות בסיס"
+                                                   >
+                                                       בסיס: ₪{agent.base_commission.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                   </span>
+                                                   {agent.target_bonus > 0 && (
+                                                       <span 
+                                                           className="text-amber-600 cursor-pointer hover:underline font-bold"
+                                                           onClick={(e) => {
+                                                               e.stopPropagation();
+                                                               setSelectedAgentName(agent.agent_name);
+                                                               setSelectedAgentBonuses(agent.bonuses);
+                                                               setDrilldownBonusType('TARGET');
+                                                               setShowBonusDrilldown(true);
+                                                           }}
+                                                           title="לחץ לפירוט בונוס יעדים"
+                                                       >
+                                                           יעדים: ₪{agent.target_bonus.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                       </span>
+                                                   )}
+                                                   {agent.shift_bonus > 0 && (
+                                                       <span 
+                                                           className="text-blue-600 cursor-pointer hover:underline font-bold"
+                                                           onClick={(e) => {
+                                                               e.stopPropagation();
+                                                               setSelectedAgentName(agent.agent_name);
+                                                               setSelectedAgentBonuses(agent.bonuses);
+                                                               setDrilldownBonusType('SHIFT');
+                                                               setShowBonusDrilldown(true);
+                                                           }}
+                                                           title="לחץ לפירוט בונוס משמרות"
+                                                       >
+                                                           משמרות: ₪{agent.shift_bonus.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                       </span>
+                                                   )}
+                                               </div>
+                                           </div>
+                                           <p className="text-2xl font-bold text-purple-600">
+                                               ₪{agent.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                           </p>
                                         </div>
                                     </div>
 
@@ -572,34 +617,23 @@ export default function CommissionCalculation() {
                 </CardContent>
             </Card>
 
-            {/* Bonus Details Modal */}
-            <Dialog open={showBonusModal} onOpenChange={setShowBonusModal}>
-                <DialogContent className="max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>פירוט בונוסים - {selectedAgentName}</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                        {selectedAgentBonuses.map((bonus, idx) => (
-                            <div key={idx} className={`p-3 rounded-lg border ${bonus.bonus_type === 'TARGET' ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'}`}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="font-bold">{bonus.bonus_type === 'TARGET' ? '🎯 בונוס יעד' : '📅 בונוס משמרות'}</p>
-                                        {bonus.goal_name && <p className="text-sm text-gray-600">{bonus.goal_name}</p>}
-                                        <p className="text-xs text-gray-500">{bonus.period_start} עד {bonus.period_end}</p>
-                                    </div>
-                                    <p className="text-xl font-bold">₪{bonus.bonus_amount}</p>
-                                </div>
-                                {bonus.meta_json && (
-                                    <div className="mt-2 text-xs text-gray-600">
-                                        {bonus.meta_json.shifts_count && <span>משמרות: {bonus.meta_json.shifts_count} × ₪{bonus.meta_json.bonus_per_shift}</span>}
-                                        {bonus.meta_json.progress_percent && <span>התקדמות: {bonus.meta_json.progress_percent.toFixed(0)}%</span>}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </DialogContent>
-            </Dialog>
+            {/* Commission Drilldown */}
+            <CommissionDrilldown
+                isOpen={showCommissionDrilldown}
+                onClose={() => setShowCommissionDrilldown(false)}
+                agentName={selectedAgentName}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+            />
+
+            {/* Bonus Drilldown */}
+            <BonusDrilldown
+                isOpen={showBonusDrilldown}
+                onClose={() => setShowBonusDrilldown(false)}
+                agentName={selectedAgentName}
+                bonuses={selectedAgentBonuses}
+                bonusType={drilldownBonusType}
+            />
         </div>
     );
 }
