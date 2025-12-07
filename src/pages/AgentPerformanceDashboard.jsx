@@ -13,10 +13,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Progress } from "@/components/ui/progress";
 import { 
     BarChart3, RefreshCw, Users, Filter, Smartphone, Radio, 
-    ShoppingBag, TrendingUp, ChevronDown, Target, X
+    ShoppingBag, TrendingUp, ChevronDown, Target, X, MousePointerClick
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from 'recharts';
+import SalesDrilldown from "../components/drilldown/SalesDrilldown";
 
 export default function AgentPerformanceDashboard() {
     const { currentUser } = useUser();
@@ -38,6 +39,9 @@ export default function AgentPerformanceDashboard() {
     // Drill-down
     const [selectedAgent, setSelectedAgent] = useState(null);
     const [showDrillDown, setShowDrillDown] = useState(false);
+    const [drilldownFilters, setDrilldownFilters] = useState({});
+    const [drilldownGroupCode, setDrilldownGroupCode] = useState(null);
+    const [drilldownTitle, setDrilldownTitle] = useState('');
 
     const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
@@ -235,8 +239,14 @@ export default function AgentPerformanceDashboard() {
         setDateTo(format(to, 'yyyy-MM-dd'));
     };
 
-    const openDrillDown = (agent) => {
-        setSelectedAgent(agent);
+    const openDrillDown = (agentName, groupCode, metricLabel) => {
+        // בניית הפילטרים לפי הקבוצה
+        const agentSales = sales.filter(s => s.sales_rep === agentName);
+        const relevantSales = agentSales.filter(s => getCommissionGroup(s) === groupCode);
+        
+        setSelectedAgent({ agent_name: agentName });
+        setDrilldownGroupCode(groupCode);
+        setDrilldownTitle(`${metricLabel} - ${agentName}`);
         setShowDrillDown(true);
     };
 
@@ -452,33 +462,56 @@ export default function AgentPerformanceDashboard() {
                                 </TableHeader>
                                 <TableBody>
                                     {agentPerformance.map((agent) => {
-                                        const deviceGoal = getGoalProgress(agent.agent_name, 'DEVICES_UNITS');
-                                        return (
-                                            <TableRow 
-                                                key={agent.agent_name} 
-                                                className="cursor-pointer hover:bg-blue-50"
-                                                onClick={() => openDrillDown(agent)}
-                                            >
-                                                <TableCell className="font-medium">{agent.agent_name}</TableCell>
-                                                <TableCell className="text-center font-bold text-blue-600">{agent.devices_units}</TableCell>
-                                                <TableCell className="text-center font-bold text-green-600">{agent.lines_units}</TableCell>
-                                                <TableCell className="text-center text-gray-600">{agent.lines_4g_units}</TableCell>
-                                                <TableCell className="text-center text-gray-600">{agent.lines_5g_units}</TableCell>
-                                                <TableCell className="text-left text-purple-600">₪{agent.accessories_net.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                                                <TableCell className="text-left font-bold">₪{agent.total_net.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                                                <TableCell>
-                                                    {deviceGoal && (
-                                                        <div className="w-24">
-                                                            <div className="flex justify-between text-xs mb-1">
-                                                                <span>{deviceGoal.actual}/{deviceGoal.target}</span>
-                                                                <span>{deviceGoal.progress.toFixed(0)}%</span>
-                                                            </div>
-                                                            <Progress value={deviceGoal.progress} className="h-2" />
-                                                        </div>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
+                                       const deviceGoal = getGoalProgress(agent.agent_name, 'DEVICES_UNITS');
+                                       return (
+                                           <TableRow key={agent.agent_name} className="hover:bg-gray-50">
+                                               <TableCell className="font-medium">{agent.agent_name}</TableCell>
+                                               <TableCell 
+                                                   className="text-center font-bold text-blue-600 cursor-pointer hover:underline"
+                                                   onClick={(e) => {
+                                                       e.stopPropagation();
+                                                       openDrillDown(agent.agent_name, 'DEVICES', 'מכשירים');
+                                                   }}
+                                                   title="לחץ לפירוט מכירות מכשירים"
+                                               >
+                                                   {agent.devices_units}
+                                               </TableCell>
+                                               <TableCell 
+                                                   className="text-center font-bold text-green-600 cursor-pointer hover:underline"
+                                                   onClick={(e) => {
+                                                       e.stopPropagation();
+                                                       openDrillDown(agent.agent_name, 'LINES', 'קווים');
+                                                   }}
+                                                   title="לחץ לפירוט מכירות קווים"
+                                               >
+                                                   {agent.lines_units}
+                                               </TableCell>
+                                               <TableCell className="text-center text-gray-600">{agent.lines_4g_units}</TableCell>
+                                               <TableCell className="text-center text-gray-600">{agent.lines_5g_units}</TableCell>
+                                               <TableCell 
+                                                   className="text-left text-purple-600 cursor-pointer hover:underline font-bold"
+                                                   onClick={(e) => {
+                                                       e.stopPropagation();
+                                                       openDrillDown(agent.agent_name, 'ACCESSORIES_GROUP', 'אביזרים');
+                                                   }}
+                                                   title="לחץ לפירוט מכירות אביזרים"
+                                               >
+                                                   ₪{agent.accessories_net.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                               </TableCell>
+                                               <TableCell className="text-left font-bold">₪{agent.total_net.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                                               <TableCell>
+                                                   {deviceGoal && (
+                                                       <div className="w-24">
+                                                           <div className="flex justify-between text-xs mb-1">
+                                                               <span>{deviceGoal.actual}/{deviceGoal.target}</span>
+                                                               <span>{deviceGoal.progress.toFixed(0)}%</span>
+                                                           </div>
+                                                           <Progress value={deviceGoal.progress} className="h-2" />
+                                                       </div>
+                                                   )}
+                                               </TableCell>
+                                           </TableRow>
+                                       );
                                     })}
                                 </TableBody>
                             </Table>
@@ -487,82 +520,21 @@ export default function AgentPerformanceDashboard() {
                 </CardContent>
             </Card>
 
-            {/* Drill-down Dialog */}
-            <Dialog open={showDrillDown} onOpenChange={setShowDrillDown}>
-                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <Users className="w-5 h-5" />
-                            פירוט מכירות - {selectedAgent?.agent_name}
-                        </DialogTitle>
-                    </DialogHeader>
-                    
-                    {selectedAgent && (
-                        <div className="space-y-4">
-                            {/* Summary */}
-                            <div className="grid grid-cols-4 gap-3">
-                                <div className="bg-blue-50 p-3 rounded-lg text-center">
-                                    <p className="text-xs text-gray-600">מכשירים</p>
-                                    <p className="text-xl font-bold text-blue-600">{selectedAgent.devices_units}</p>
-                                </div>
-                                <div className="bg-green-50 p-3 rounded-lg text-center">
-                                    <p className="text-xs text-gray-600">קווים</p>
-                                    <p className="text-xl font-bold text-green-600">{selectedAgent.lines_units}</p>
-                                </div>
-                                <div className="bg-purple-50 p-3 rounded-lg text-center">
-                                    <p className="text-xs text-gray-600">אביזרים</p>
-                                    <p className="text-xl font-bold text-purple-600">₪{selectedAgent.accessories_net.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                                </div>
-                                <div className="bg-orange-50 p-3 rounded-lg text-center">
-                                    <p className="text-xs text-gray-600">סה"כ</p>
-                                    <p className="text-xl font-bold text-orange-600">₪{selectedAgent.total_net.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                                </div>
-                            </div>
-
-                            {/* Sales Table */}
-                            <div className="border rounded-lg overflow-hidden">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>תאריך</TableHead>
-                                            <TableHead>מוצר</TableHead>
-                                            <TableHead>קטגוריה</TableHead>
-                                            <TableHead>קבוצה</TableHead>
-                                            <TableHead className="text-center">כמות</TableHead>
-                                            <TableHead className="text-left">נטו</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {drillDownSales.slice(0, 50).map((sale) => (
-                                            <TableRow key={sale.id}>
-                                                <TableCell className="text-sm">{sale.issue_date}</TableCell>
-                                                <TableCell className="text-sm max-w-[200px] truncate">{sale.product_name}</TableCell>
-                                                <TableCell><Badge variant="outline" className="text-xs">{sale.category}</Badge></TableCell>
-                                                <TableCell>
-                                                    {sale.commission_group_code ? (
-                                                        <Badge className={
-                                                            sale.commission_group_code === 'DEVICES' ? 'bg-blue-100 text-blue-800' :
-                                                            sale.commission_group_code === 'LINES' ? 'bg-green-100 text-green-800' :
-                                                            'bg-purple-100 text-purple-800'
-                                                        }>
-                                                            {sale.commission_group_code}
-                                                        </Badge>
-                                                    ) : '-'}
-                                                </TableCell>
-                                                <TableCell className="text-center font-medium">{sale.quantity}</TableCell>
-                                                <TableCell className="text-left">₪{(sale.price_ex_vat || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                            {drillDownSales.length > 50 && (
-                                <p className="text-sm text-gray-500 text-center">מציג 50 מתוך {drillDownSales.length} שורות</p>
-                            )}
-                        </div>
-                    )}
-                </DialogContent>
-            </Dialog>
+            {/* Drill-down Modal */}
+            {showDrillDown && selectedAgent && (
+                <SalesDrilldown
+                    isOpen={showDrillDown}
+                    onClose={() => setShowDrillDown(false)}
+                    title={drilldownTitle}
+                    agentName={selectedAgent.agent_name}
+                    filters={{
+                        sales_rep: selectedAgent.agent_name
+                    }}
+                    dateFrom={dateFrom}
+                    dateTo={dateTo}
+                    groupCode={drilldownGroupCode}
+                />
+            )}
         </div>
     );
 }
