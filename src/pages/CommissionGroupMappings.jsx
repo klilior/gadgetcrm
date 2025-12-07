@@ -47,7 +47,7 @@ export default function CommissionGroupMappings() {
             const [mappingsData, groupsData, salesData] = await Promise.all([
                 base44.entities.CommissionGroupMapping.list(null, 200),
                 base44.entities.CommissionGroup.filter({ is_active: true }),
-                base44.entities.SalesTransaction.list(null, 1000) // Sample to get categories
+                base44.entities.SalesTransaction.list(null, 10000) // Get all to extract all categories
             ]);
             
             setMappings(mappingsData.sort((a, b) => (b.priority || 0) - (a.priority || 0)));
