@@ -22,6 +22,7 @@ export default function CommissionGroupMappings() {
     const [isLoading, setIsLoading] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [editingMapping, setEditingMapping] = useState(null);
+    const [categorySearch, setCategorySearch] = useState('');
     
     // Form state
     const [formData, setFormData] = useState({
@@ -44,18 +45,37 @@ export default function CommissionGroupMappings() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [mappingsData, groupsData, salesData] = await Promise.all([
+            // Load all data in parallel
+            const [mappingsData, groupsData] = await Promise.all([
                 base44.entities.CommissionGroupMapping.list(null, 200),
-                base44.entities.CommissionGroup.filter({ is_active: true }),
-                base44.entities.SalesTransaction.list(null, 10000) // Get all to extract all categories
+                base44.entities.CommissionGroup.filter({ is_active: true })
             ]);
             
             setMappings(mappingsData.sort((a, b) => (b.priority || 0) - (a.priority || 0)));
             setGroups(groupsData);
             
-            // Extract unique categories
-            const uniqueCategories = [...new Set(salesData.map(s => s.category).filter(Boolean))];
-            setCategories(uniqueCategories.sort());
+            // Load ALL sales transactions to get ALL categories - no limit
+            let allCategories = new Set();
+            let skip = 0;
+            const limit = 5000;
+            let hasMore = true;
+            
+            while (hasMore) {
+                const batch = await base44.entities.SalesTransaction.list(null, limit, skip);
+                batch.forEach(s => {
+                    if (s.category) allCategories.add(s.category);
+                });
+                
+                if (batch.length < limit) {
+                    hasMore = false;
+                } else {
+                    skip += limit;
+                }
+            }
+            
+            const uniqueCategories = Array.from(allCategories).sort();
+            setCategories(uniqueCategories);
+            console.log(`✅ Loaded ${uniqueCategories.length} unique categories`);
         } catch (error) {
             console.error("Error loading data:", error);
         } finally {
@@ -64,6 +84,7 @@ export default function CommissionGroupMappings() {
     };
 
     const openModal = (mapping = null) => {
+        setCategorySearch(''); // Reset search
         if (mapping) {
             setEditingMapping(mapping);
             setFormData({
@@ -189,9 +210,8 @@ export default function CommissionGroupMappings() {
             <Card className="border-l-4 border-l-blue-500 bg-blue-50">
                 <CardContent className="p-4">
                     <p className="text-sm text-gray-700">
-                        💡 <strong>שים לב:</strong> המיפויים נבדקים לפי סדר עדיפות (Priority) מהגבוה לנמוך.
-                        המיפוי הראשון שתואם מכירה מסוימת - קובע את הקבוצה שלה.
-                        לכן, מיפויים ספציפיים יותר צריכים לקבל עדיפות גבוהה יותר.
+                        💡 <strong>שים לב:</strong> כל קבוצה מכילה קטגוריות ייחודיות.
+                        בחר את הקטגוריות המתאימות לכל קבוצה (מכשירים, קווים, אביזרים).
                     </p>
                 </CardContent>
             </Card>
@@ -220,7 +240,6 @@ export default function CommissionGroupMappings() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className="w-20">עדיפות</TableHead>
                                         <TableHead>קבוצה</TableHead>
                                         <TableHead>קטגוריות</TableHead>
                                         <TableHead>מכיל בשם מוצר</TableHead>
@@ -231,11 +250,6 @@ export default function CommissionGroupMappings() {
                                 <TableBody>
                                     {mappings.map((mapping) => (
                                         <TableRow key={mapping.id}>
-                                            <TableCell>
-                                                <Badge variant="outline" className="font-bold">
-                                                    {mapping.priority || 0}
-                                                </Badge>
-                                            </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
                                                     {getGroupIcon(mapping.commission_group_code)}
@@ -331,41 +345,35 @@ export default function CommissionGroupMappings() {
                             </Select>
                         </div>
 
-                        {/* Priority */}
-                        <div className="space-y-2">
-                            <Label>עדיפות (Priority) *</Label>
-                            <Input 
-                                type="number" 
-                                value={formData.priority}
-                                onChange={(e) => setFormData({...formData, priority: parseInt(e.target.value) || 0})}
-                                placeholder="גבוה יותר = נבדק קודם"
-                            />
-                            <p className="text-xs text-gray-500">
-                                ככל שהעדיפות גבוהה יותר, המיפוי ייבדק קודם. מומלץ: 100 למיפויים ספציפיים, 0 לכלליים.
-                            </p>
-                        </div>
-
                         {/* Category Selection */}
                         <div className="space-y-2">
-                            <Label>קטגוריות (רב-בחירה)</Label>
-                            <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                                <p className="text-xs text-gray-500 mb-2">
-                                    בחר קטגוריות שיתאימו למיפוי. אם לא נבחר כלום - כל הקטגוריות תואמות.
-                                </p>
-                                {categories.map(category => (
-                                    <div 
-                                        key={category}
-                                        className={`p-2 rounded cursor-pointer hover:bg-gray-100 ${
-                                            formData.filters_json?.category_in?.includes(category) ? 'bg-blue-50 border border-blue-200' : ''
-                                        }`}
-                                        onClick={() => handleCategoryToggle(category)}
-                                    >
-                                        <span className="text-sm">{category}</span>
-                                    </div>
-                                ))}
+                            <Label>קטגוריות (רב-בחירה) *</Label>
+                            <Input 
+                                placeholder="חפש קטגוריה..."
+                                value={categorySearch}
+                                onChange={(e) => setCategorySearch(e.target.value)}
+                                className="mb-2"
+                            />
+                            <div className="border rounded-lg p-3 max-h-64 overflow-y-auto space-y-2">
+                                {categories
+                                    .filter(cat => cat.toLowerCase().includes(categorySearch.toLowerCase()))
+                                    .map(category => (
+                                        <div 
+                                            key={category}
+                                            className={`p-2 rounded cursor-pointer hover:bg-gray-100 ${
+                                                formData.filters_json?.category_in?.includes(category) ? 'bg-blue-50 border border-blue-200' : ''
+                                            }`}
+                                            onClick={() => handleCategoryToggle(category)}
+                                        >
+                                            <span className="text-sm">{category}</span>
+                                        </div>
+                                    ))}
+                                {categories.filter(cat => cat.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
+                                    <p className="text-center text-gray-500 text-sm py-4">לא נמצאו תוצאות</p>
+                                )}
                             </div>
                             <p className="text-xs text-gray-600">
-                                נבחרו: {formData.filters_json?.category_in?.length || 0} קטגוריות
+                                נבחרו: {formData.filters_json?.category_in?.length || 0} מתוך {categories.length} קטגוריות
                             </p>
                         </div>
 
