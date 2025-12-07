@@ -91,13 +91,31 @@ export default function SalesDrilldown({
                 filteredData = data.filter(sale => getCommissionGroup(sale) === groupCode);
             }
             
+            // Remove duplicates based on unique ID (each record should have a unique id field)
+            const uniqueSales = [];
+            const seenIds = new Set();
+            
+            for (const sale of filteredData) {
+                if (!seenIds.has(sale.id)) {
+                    seenIds.add(sale.id);
+                    uniqueSales.push(sale);
+                }
+            }
+            
             // Calculate summary
-            const totalQty = filteredData.reduce((sum, s) => sum + Math.abs(s.quantity || 0), 0);
-            const totalNet = filteredData.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
+            const totalQty = uniqueSales.reduce((sum, s) => sum + Math.abs(s.quantity || 0), 0);
+            const totalNet = uniqueSales.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
 
-            setSales(filteredData);
+            console.log('🔍 Drilldown Debug:', {
+                totalRecords: data.length,
+                afterGroupFilter: filteredData.length,
+                afterDedup: uniqueSales.length,
+                duplicatesRemoved: filteredData.length - uniqueSales.length
+            });
+
+            setSales(uniqueSales);
             setSummary({
-                count: filteredData.length,
+                count: uniqueSales.length,
                 totalQty,
                 totalNet
             });
