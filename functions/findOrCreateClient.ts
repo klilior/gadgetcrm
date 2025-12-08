@@ -2,25 +2,36 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
 Deno.serve(async (req) => {
     try {
+        console.log('🔵 findOrCreateClient: Starting...');
         const base44 = createClientFromRequest(req);
         
         // Verify user is authenticated
+        console.log('🔵 Checking authentication...');
         const user = await base44.auth.me();
         if (!user) {
+            console.error('❌ User not authenticated');
             return Response.json({ error: 'Unauthorized' }, { status: 401 });
         }
+        console.log('✅ User authenticated:', user.email);
 
-        const { phone, full_name, email, city, full_address, preferred_channel, notes, woo_customer_id } = await req.json();
+        const bodyData = await req.json();
+        console.log('🔵 Received data:', { phone: bodyData.phone, full_name: bodyData.full_name });
+        
+        const { phone, full_name, email, city, full_address, preferred_channel, notes, woo_customer_id } = bodyData;
 
         if (!phone) {
+            console.error('❌ Phone number missing');
             return Response.json({ error: 'Phone number is required' }, { status: 400 });
         }
 
         // Normalize phone number (remove spaces, dashes, etc.)
         const normalizedPhone = phone.replace(/\D/g, '');
+        console.log('🔵 Normalized phone:', normalizedPhone);
 
         // Search for existing client by phone (using service role for admin access)
+        console.log('🔵 Searching for existing client...');
         let existingClients = await base44.asServiceRole.entities.Client.filter({ phone: phone });
+        console.log('✅ Found clients with exact phone match:', existingClients.length);
         
         // If not found, try with normalized phone
         if (existingClients.length === 0) {
@@ -69,6 +80,7 @@ Deno.serve(async (req) => {
         }
 
         // Client doesn't exist - create new one (using service role for admin access)
+        console.log('🔵 Creating new client with data:', { phone, full_name, email });
         const newClient = await base44.asServiceRole.entities.Client.create({
             phone: phone,
             full_name: full_name || 'לקוח חדש',
@@ -80,6 +92,7 @@ Deno.serve(async (req) => {
             woo_customer_id: woo_customer_id
         });
 
+        console.log('✅ New client created successfully:', newClient.id);
         return Response.json({
             client: newClient,
             isNew: true,
@@ -89,9 +102,11 @@ Deno.serve(async (req) => {
 
     } catch (error) {
         console.error('❌ Error in findOrCreateClient:', error);
+        console.error('❌ Error stack:', error.stack);
         return Response.json({ 
             error: error.message,
-            details: error.stack 
+            details: error.stack,
+            timestamp: new Date().toISOString()
         }, { status: 500 });
     }
 });
