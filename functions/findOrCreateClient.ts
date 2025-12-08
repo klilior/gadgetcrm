@@ -19,12 +19,12 @@ Deno.serve(async (req) => {
         // Normalize phone number (remove spaces, dashes, etc.)
         const normalizedPhone = phone.replace(/\D/g, '');
 
-        // Search for existing client by phone
-        let existingClients = await base44.entities.Client.filter({ phone: phone });
+        // Search for existing client by phone (using service role for admin access)
+        let existingClients = await base44.asServiceRole.entities.Client.filter({ phone: phone });
         
         // If not found, try with normalized phone
         if (existingClients.length === 0) {
-            const allClients = await base44.entities.Client.list();
+            const allClients = await base44.asServiceRole.entities.Client.list();
             existingClients = allClients.filter(c => {
                 if (!c.phone) return false;
                 const clientNormalizedPhone = c.phone.replace(/\D/g, '');
@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
             }
 
             if (Object.keys(updates).length > 0) {
-                const updatedClient = await base44.entities.Client.update(existingClient.id, updates);
+                const updatedClient = await base44.asServiceRole.entities.Client.update(existingClient.id, updates);
                 return Response.json({
                     client: updatedClient,
                     isNew: false,
@@ -68,8 +68,8 @@ Deno.serve(async (req) => {
             });
         }
 
-        // Client doesn't exist - create new one
-        const newClient = await base44.entities.Client.create({
+        // Client doesn't exist - create new one (using service role for admin access)
+        const newClient = await base44.asServiceRole.entities.Client.create({
             phone: phone,
             full_name: full_name || 'לקוח חדש',
             email: email,
