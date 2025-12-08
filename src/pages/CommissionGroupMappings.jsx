@@ -190,9 +190,9 @@ export default function CommissionGroupMappings() {
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
                         <Settings className="w-8 h-8 text-indigo-600" />
-                        מיפוי קבוצות עמלות
+                        קבוצות מכירה ועמלות
                     </h1>
-                    <p className="text-gray-600 mt-1">הגדר אילו קטגוריות ומוצרים נכנסים לכל קבוצה (מכשירים, קווים, אביזרים)</p>
+                    <p className="text-gray-600 mt-1">הגדר אילו קטגוריות ומוצרים שייכים לכל קבוצה - משמש למכירות, עמלות ויעדים</p>
                 </div>
                 <div className="flex gap-2">
                     <Button onClick={loadData} variant="outline" disabled={isLoading}>
@@ -210,8 +210,8 @@ export default function CommissionGroupMappings() {
             <Card className="border-l-4 border-l-blue-500 bg-blue-50">
                 <CardContent className="p-4">
                     <p className="text-sm text-gray-700">
-                        💡 <strong>שים לב:</strong> כל קבוצה מכילה קטגוריות ייחודיות.
-                        בחר את הקטגוריות המתאימות לכל קבוצה (מכשירים, קווים, אביזרים).
+                        💡 <strong>מקור אמת אחד:</strong> קבוצות אלו משמשות למכירות, חישובי עמלות, יעדים ודשבורדים.
+                        כל קטגוריה/מוצר שתוגדר כאן תשפיע על כל המערכת.
                     </p>
                 </CardContent>
             </Card>
