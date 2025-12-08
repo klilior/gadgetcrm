@@ -11,7 +11,17 @@ export default function Home() {
   useEffect(() => {
     if (!isLoading && currentUser) {
       // Redirect immediately based on role
-      const targetPage = currentUser.role === 'טכנאי' ? "RepairDashboard" : "SalesDashboard";
+      let targetPage;
+      
+      if (currentUser.role === 'טכנאי') {
+        targetPage = "RepairDashboard";
+      } else if (currentUser.role === 'מנהל') {
+        targetPage = "SalesDashboard";
+      } else {
+        // נציג או מנהל משמרת -> הדשבורד האישי
+        targetPage = "AgentDashboard";
+      }
+      
       window.location.href = createPageUrl(targetPage);
     }
   }, [currentUser, isLoading]);
