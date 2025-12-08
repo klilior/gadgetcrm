@@ -193,7 +193,7 @@ export default function GoalsDashboard() {
                         <Target className="w-8 h-8 text-amber-600" />
                         יעדים וביצועים
                     </h1>
-                    <p className="text-gray-600 mt-1">הגדרת ומעקב אחר יעדי מכירות</p>
+                    <p className="text-gray-600 mt-1">הגדר יעדים לפי הקבוצות: מכשירים, קווים, אביזרים (מוגדר ב"קבוצות מכירה ועמלות")</p>
                     <p className="text-xs text-gray-500 mt-1">
                         💡 יעדים מגדירים מטרות ביצועים (כמות מכשירים, קווים, סכום אביזרים). הבונוס על יעד מוגדר במסך "בונוס יעדים".
                     </p>

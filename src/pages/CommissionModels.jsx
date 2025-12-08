@@ -288,7 +288,7 @@ export default function CommissionModels() {
                         <Calculator className="w-8 h-8 text-purple-600" />
                         ניהול מודלי עמלות
                     </h1>
-                    <p className="text-gray-600 mt-1">הגדרת מודלים וחוקי עמלות לנציגים</p>
+                    <p className="text-gray-600 mt-1">הגדרת מודלים וחוקי עמלות - עובד על הקבוצות שהוגדרו ב"קבוצות מכירה ועמלות"</p>
                 </div>
                 
                 {!selectedModel && (
