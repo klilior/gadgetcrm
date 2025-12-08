@@ -25,6 +25,7 @@ function AppContent({ children, currentPageName }) {
   const location = useLocation();
   const [isScheduleMenuOpen, setIsScheduleMenuOpen] = useState(false);
   const [isAttendanceMenuOpen, setIsAttendanceMenuOpen] = useState(false);
+  const [isSalesMenuOpen, setIsSalesMenuOpen] = useState(false);
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [showUserSwitcher, setShowUserSwitcher] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -53,6 +54,7 @@ function AppContent({ children, currentPageName }) {
   let navigationItems = [];
   let scheduleMenuItems = [];
   let attendanceMenuItems = [];
+  let salesMenuItems = [];
   let settingsMenuItems = [];
 
   if (isTechnicianRole) {
@@ -85,14 +87,24 @@ function AppContent({ children, currentPageName }) {
         { title: "דוח נוכחות כללי", url: createPageUrl("AttendanceManagerReport") },
         { title: "בקשות לאישור", url: createPageUrl("ManageAttendance") },
       ];
-    } else {
+      } else {
       attendanceMenuItems = [
         { title: "שעון נוכחות", url: createPageUrl("AttendanceClock") },
         { title: "הדוח שלי", url: createPageUrl("AttendanceReport") },
       ];
-    }
+      }
 
-    if (isManager) {
+      if (isManager) {
+      salesMenuItems = [
+        { title: "קבוצות מכירה ועמלות", url: createPageUrl("CommissionGroupMappings") },
+        { title: "מודלי עמלות", url: createPageUrl("CommissionModels") },
+        { title: "שיוך עמלות לנציגים", url: createPageUrl("AgentCommissionAssignment") },
+        { title: "יעדים וביצועים", url: createPageUrl("GoalsDashboard") },
+        { title: "בונוס יעדים", url: createPageUrl("TargetBonusManagement") },
+        { title: "בונוס משמרות", url: createPageUrl("ShiftBonusManagement") },
+        { title: "חישוב עמלות", url: createPageUrl("CommissionCalculation") },
+      ];
+
       settingsMenuItems = [
         { title: "ניהול עובדים ומשתמשים", url: createPageUrl("ManageEmployees") },
         { title: "מודלי עמלות", url: createPageUrl("CommissionModels") },
@@ -116,14 +128,16 @@ function AppContent({ children, currentPageName }) {
 
   const isSchedulePageActive = scheduleMenuItems.some(item => location.pathname === item.url);
   const isAttendancePageActive = attendanceMenuItems.some(item => location.pathname === item.url);
+  const isSalesPageActive = salesMenuItems.some(item => location.pathname === item.url);
   const isSettingsPageActive = settingsMenuItems.some(item => location.pathname === item.url);
 
   // פתח את התפריטים אוטומטית אם הדף הנוכחי הוא בתת-תפריט
   useEffect(() => {
     if (isSchedulePageActive) setIsScheduleMenuOpen(true);
     if (isAttendancePageActive) setIsAttendanceMenuOpen(true);
+    if (isSalesPageActive) setIsSalesMenuOpen(true);
     if (isSettingsPageActive) setIsSettingsMenuOpen(true);
-  }, [isSchedulePageActive, isAttendancePageActive, isSettingsPageActive]);
+  }, [isSchedulePageActive, isAttendancePageActive, isSalesPageActive, isSettingsPageActive]);
 
   if (isLoading) {
     return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center"><div className="text-xl">טוען...</div></div>;
@@ -207,6 +221,39 @@ function AppContent({ children, currentPageName }) {
 
                     {!isTechnicianRole && (
                       <>
+                        {isManager && salesMenuItems.length > 0 && (
+                          <SidebarMenuItem>
+                            <SidebarMenuButton
+                              onClick={() => setIsSalesMenuOpen(!isSalesMenuOpen)}
+                              className={`glass-button p-3 md:p-4 rounded-2xl transition-all duration-300 ${
+                                isSalesPageActive ? 'bg-gradient-to-r from-blue-500/30 to-indigo-500/30 border-blue-400 shadow-lg' : 'hover:bg-white/25'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 md:gap-4 w-full">
+                                <BarChart3 className="w-4 h-4 md:w-5 md:h-5 text-gray-700 flex-shrink-0" />
+                                <span className="font-medium text-gray-800 flex-1 text-sm md:text-base">ניהול מכירות</span>
+                                {isSalesMenuOpen ? (
+                                  <ChevronDown className="w-3 h-3 md:w-4 md:h-4 text-gray-600 transition-transform" />
+                                ) : (
+                                  <ChevronRight className="w-3 h-3 md:w-4 md:h-4 text-gray-600 transition-transform" />
+                                )}
+                              </div>
+                            </SidebarMenuButton>
+
+                            <div className={`overflow-hidden transition-all duration-300 ${isSalesMenuOpen ? 'max-h-96 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                              <div className="pr-4 md:pr-6 pt-1 space-y-1">
+                                {salesMenuItems.map(child => (
+                                  <SidebarMenuButton key={child.title} asChild className={`glass-button w-full justify-start p-2 md:p-3 rounded-xl transition-all duration-300 ${ location.pathname === child.url ? 'bg-blue-500/30 border-blue-400 font-semibold' : 'hover:bg-white/25' }`}>
+                                    <Link to={child.url} className="text-xs md:text-sm font-medium text-gray-700">
+                                      {child.title}
+                                    </Link>
+                                  </SidebarMenuButton>
+                                ))}
+                              </div>
+                            </div>
+                          </SidebarMenuItem>
+                        )}
+
                         {scheduleMenuItems.length > 0 && (
                           <SidebarMenuItem>
                             <SidebarMenuButton
