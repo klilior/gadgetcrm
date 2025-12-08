@@ -5,7 +5,7 @@ import {
   Headphones, Phone, Ticket, Users, Package, BarChart3, Wrench,
   Settings, MessageCircle, Calendar, LogOut, UserPlus, SlidersHorizontal,
   ChevronDown, ChevronRight, UserSquare, Clock, FileText, Shield, Briefcase,
-  CreditCard // Added CreditCard icon
+  CreditCard, Trophy // Added CreditCard and Trophy icons
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -64,6 +64,7 @@ function AppContent({ children, currentPageName }) {
       ];
       } else if (currentUser) {
       navigationItems = [
+                  { title: "הדשבורד שלי", url: createPageUrl("AgentDashboard"), icon: Trophy },
                   { title: "דוח מכירות (Linet)", url: createPageUrl("SalesDashboard"), icon: BarChart3 },
                   { title: "ביצועי נציגים", url: createPageUrl("AgentPerformanceDashboard"), icon: Users },
       { title: "מרכז הודעות", url: createPageUrl("MessageCenter"), icon: MessageCircle },

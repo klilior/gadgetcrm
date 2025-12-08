@@ -37,6 +37,7 @@ import ShiftBonusManagement from './pages/ShiftBonusManagement';
 import TargetBonusManagement from './pages/TargetBonusManagement';
 import SyncManagement from './pages/SyncManagement';
 import CommissionGroupMappings from './pages/CommissionGroupMappings';
+import AgentDashboard from './pages/AgentDashboard';
 import __Layout from './Layout.jsx';
 
 
@@ -80,6 +81,7 @@ export const PAGES = {
     "TargetBonusManagement": TargetBonusManagement,
     "SyncManagement": SyncManagement,
     "CommissionGroupMappings": CommissionGroupMappings,
+    "AgentDashboard": AgentDashboard,
 }
 
 export const pagesConfig = {
