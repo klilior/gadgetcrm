@@ -107,13 +107,6 @@ function AppContent({ children, currentPageName }) {
 
       settingsMenuItems = [
         { title: "ניהול עובדים ומשתמשים", url: createPageUrl("ManageEmployees") },
-        { title: "מודלי עמלות", url: createPageUrl("CommissionModels") },
-        { title: "שיוך עמלות לנציגים", url: createPageUrl("AgentCommissionAssignment") },
-        { title: "קבוצות מכירה ועמלות", url: createPageUrl("CommissionGroupMappings") },
-        { title: "חישוב עמלות", url: createPageUrl("CommissionCalculation") },
-        { title: "יעדים וביצועים", url: createPageUrl("GoalsDashboard") },
-        { title: "בונוס יעדים", url: createPageUrl("TargetBonusManagement") },
-        { title: "בונוס משמרות", url: createPageUrl("ShiftBonusManagement") },
         { title: "ספקי וואטסאפ", url: createPageUrl("WhatsAppProviders") },
         { title: "🔧 דיבאג וואטסאפ", url: createPageUrl("WhatsAppDebug") },
         { title: "ספקי משלוחים", url: createPageUrl("ShippingProviders") },
