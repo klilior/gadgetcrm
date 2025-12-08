@@ -146,14 +146,17 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
         setError(null);
         try {
             // Use findOrCreateClient to prevent duplicates
-            const { data: clientResponse, error: clientError } = await base44.functions.invoke('findOrCreateClient', {
+            const response = await base44.functions.invoke('findOrCreateClient', {
                 phone: newClientData.phone,
                 full_name: newClientData.full_name,
                 email: newClientData.email || undefined
             });
 
-            if (clientError) {
-                throw new Error(clientError.message || 'שגיאה באימות לקוח');
+            // Check if response has data property (for platform v2)
+            const clientResponse = response.data || response;
+
+            if (clientResponse.error) {
+                throw new Error(clientResponse.error || 'שגיאה באימות לקוח');
             }
 
             const client = clientResponse.client;
@@ -168,6 +171,7 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
             
             setSelectedClient(client);
             setIsCreatingClient(false);
+            await loadClientDevices(client.id); // Load devices for the client
             setStep(2);
 
         } catch (err) {
