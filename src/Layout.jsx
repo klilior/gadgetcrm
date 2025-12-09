@@ -64,9 +64,10 @@ function AppContent({ children, currentPageName }) {
       ];
       } else if (currentUser) {
       navigationItems = [
-                  { title: "הדשבורד שלי", url: createPageUrl("AgentDashboard"), icon: Trophy },
-                  { title: "דוח מכירות (Linet)", url: createPageUrl("SalesDashboard"), icon: BarChart3 },
-                  { title: "ביצועי נציגים", url: createPageUrl("AgentPerformanceDashboard"), icon: Users },
+        { title: "הדשבורד שלי", url: createPageUrl("AgentDashboard"), icon: Trophy },
+        { title: "קווים לטיפול", url: createPageUrl("LinesToWorkOn"), icon: Phone },
+        { title: "דוח מכירות (Linet)", url: createPageUrl("SalesDashboard"), icon: BarChart3 },
+        { title: "ביצועי נציגים", url: createPageUrl("AgentPerformanceDashboard"), icon: Users },
       { title: "מרכז הודעות", url: createPageUrl("MessageCenter"), icon: MessageCircle },
       { title: "שיחות היום", url: createPageUrl("TodaysCalls"), icon: Phone },
       { title: "הטיקטים שלי", url: createPageUrl("Tickets"), icon: Ticket },
@@ -107,15 +108,16 @@ function AppContent({ children, currentPageName }) {
       ];
 
       settingsMenuItems = [
-        { title: "ניהול עובדים ומשתמשים", url: createPageUrl("ManageEmployees") },
-        { title: "ספקי וואטסאפ", url: createPageUrl("WhatsAppProviders") },
-        { title: "🔧 דיבאג וואטסאפ", url: createPageUrl("WhatsAppDebug") },
-        { title: "ספקי משלוחים", url: createPageUrl("ShippingProviders") },
-        { title: "הגדרות תשלום", url: createPageUrl("PaymentSettings") },
-        { title: "הגדרות נוכחות", url: createPageUrl("AttendanceSettings") },
-        { title: "ניהול נתוני מכירות", url: createPageUrl("SalesDataAdmin") },
-        { title: "🔄 סנכרון לינט", url: createPageUrl("SyncManagement") },
-        { title: "הגדרות כלליות", url: createPageUrl("Settings") },
+      { title: "ניהול עובדים ומשתמשים", url: createPageUrl("ManageEmployees") },
+      { title: "📲 ייבוא היסטוריית קווים", url: createPageUrl("LineContractImport") },
+      { title: "ספקי וואטסאפ", url: createPageUrl("WhatsAppProviders") },
+      { title: "🔧 דיבאג וואטסאפ", url: createPageUrl("WhatsAppDebug") },
+      { title: "ספקי משלוחים", url: createPageUrl("ShippingProviders") },
+      { title: "הגדרות תשלום", url: createPageUrl("PaymentSettings") },
+      { title: "הגדרות נוכחות", url: createPageUrl("AttendanceSettings") },
+      { title: "ניהול נתוני מכירות", url: createPageUrl("SalesDataAdmin") },
+      { title: "🔄 סנכרון לינט", url: createPageUrl("SyncManagement") },
+      { title: "הגדרות כלליות", url: createPageUrl("Settings") },
       ];
     }
   }
