@@ -99,6 +99,7 @@ function AppContent({ children, currentPageName }) {
       if (isManager) {
       salesMenuItems = [
         { title: "קבוצות מכירה ועמלות", url: createPageUrl("CommissionGroupMappings") },
+        { title: "ספקי סלולר", url: createPageUrl("CarrierManagement") },
         { title: "מודלי עמלות", url: createPageUrl("CommissionModels") },
         { title: "שיוך עמלות לנציגים", url: createPageUrl("AgentCommissionAssignment") },
         { title: "יעדים וביצועים", url: createPageUrl("GoalsDashboard") },

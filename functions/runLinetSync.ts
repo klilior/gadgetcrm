@@ -1,8 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
-import { format, subDays, parseISO } from 'npm:date-fns@2.30.0';
+import { format, subDays, parseISO, addMonths, addDays } from 'npm:date-fns@2.30.0';
 
 const BASE_URL = "https://app.linet.org.il/api";
 const SYNC_KEY = "linet_main_sync";
+const MAX_EXECUTION_TIME = 50000; // 50 seconds
+const BATCH_SIZE = 50;
+
+/**
+ * Core Linet sync function - used by hourly, nightly, and manual syncs
+ * Idempotent and safe to re-run
+ */
 
 function parseNum(value) {
     if (value === null || value === undefined) return 0;
@@ -32,6 +39,8 @@ async function getLinetCredentials(base44) {
 }
 
 async function loadCaches(base44) {
+    console.log("📥 Loading caches...");
+    
     // Category Translations
     const transList = await base44.asServiceRole.entities.LinetCategoryTranslation.list(null, 1000);
     const categoryTranslationMap = {};
@@ -66,6 +75,8 @@ async function loadCaches(base44) {
     const usersMap = {};
     usersList.forEach(u => usersMap[String(u.user_id)] = u.user_name);
 
+    console.log(`✅ Loaded ${Object.keys(productCache).length} products, ${Object.keys(categoryTranslationMap).length} categories, ${Object.keys(usersMap).length} users`);
+
     return { categoryTranslationMap, productCache, usersMap };
 }
 
@@ -87,8 +98,18 @@ async function fetchDocuments(credentials, dateFrom, dateTo, limit, offset) {
         body: JSON.stringify(payload)
     });
 
-    if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Linet API Error ${response.status}: ${errorText}`);
+    }
+    
     const apiResponse = await response.json();
+    
+    // Check for Linet-specific errors
+    if (apiResponse.errorCode && apiResponse.errorCode !== 0) {
+        throw new Error(`Linet Error ${apiResponse.errorCode}: ${apiResponse.text || 'Unknown error'}`);
+    }
+    
     return apiResponse.body || [];
 }
 
@@ -123,11 +144,11 @@ async function fetchProductCategory(credentials, sku, categoryTranslationMap) {
 }
 
 async function upsertTransaction(base44, txData) {
-    // Find existing by linet_doc_id + sku combination for uniqueness
+    // Unique key: linet_doc_id + sku (to handle multiple lines per document)
     const existing = await base44.asServiceRole.entities.SalesTransaction.filter({
         linet_doc_id: txData.linet_doc_id,
         sku: txData.sku || ""
-    });
+    }, null, 1);
 
     if (existing.length > 0) {
         await base44.asServiceRole.entities.SalesTransaction.update(existing[0].id, txData);
@@ -136,6 +157,68 @@ async function upsertTransaction(base44, txData) {
         await base44.asServiceRole.entities.SalesTransaction.create(txData);
         return 'created';
     }
+}
+
+async function createLineContractFromSale(base44, sale, carrierCode, carrierName, carrierPolicy) {
+    // Check if contract already exists for this invoice
+    const existing = await base44.asServiceRole.entities.LineContract.filter({
+        original_invoice_id: sale.linet_doc_id,
+        customer_name: sale.customer_name
+    }, null, 1);
+
+    if (existing.length > 0) {
+        return 'skipped'; // Already exists
+    }
+
+    // Calculate safe retarget date
+    const activationDate = new Date(sale.issue_date);
+    let safeDate = addMonths(activationDate, carrierPolicy.churn_window_months || 12);
+    safeDate = addDays(safeDate, carrierPolicy.safety_buffer_days || 30);
+    const safe_retarget_date = format(safeDate, 'yyyy-MM-dd');
+    const today = new Date();
+    const status = safeDate <= today ? 'ELIGIBLE' : 'LOCKED';
+
+    // Find or create customer
+    let customers = await base44.asServiceRole.entities.Client.filter({
+        full_name: sale.customer_name
+    }, null, 1);
+
+    let customer_id;
+    if (customers.length > 0) {
+        customer_id = customers[0].id;
+    } else {
+        const newCustomer = await base44.asServiceRole.entities.Client.create({
+            full_name: sale.customer_name,
+            source: 'LINET_SYNC'
+        });
+        customer_id = newCustomer.id;
+    }
+
+    // Get agent ID from LinetUsersMap
+    const agentMaps = await base44.asServiceRole.entities.LinetUsersMap.filter({
+        user_name: sale.sales_rep
+    }, null, 1);
+    
+    const agent_id = agentMaps.length > 0 ? agentMaps[0].user_id : sale.sales_rep;
+
+    await base44.asServiceRole.entities.LineContract.create({
+        customer_id,
+        customer_name: sale.customer_name,
+        carrier_code: carrierCode,
+        carrier_name: carrierName,
+        activation_date: sale.issue_date,
+        original_invoice_id: sale.linet_doc_id,
+        agent_id,
+        agent_name: sale.sales_rep,
+        account_owner_id: agent_id,
+        account_owner_name: sale.sales_rep,
+        safe_retarget_date,
+        status,
+        last_action_date: new Date().toISOString(),
+        last_action_type: 'SYNC_CREATED'
+    });
+
+    return 'created';
 }
 
 Deno.serve(async (req) => {
@@ -159,8 +242,9 @@ Deno.serve(async (req) => {
         const toDatetime = body.to_datetime || new Date().toISOString();
         const triggerType = body.trigger_type || "MANUAL";
         const updateLastSuccessful = body.update_last_successful !== false;
+        const createLineContracts = body.create_line_contracts !== false; // Auto-create line contracts
 
-        // If no from_datetime provided, default to 1 day ago
+        // If no from_datetime, default to 1 day ago
         if (!fromDatetime) {
             fromDatetime = subDays(new Date(), 1).toISOString();
             console.log(`ℹ️ No from_datetime provided, defaulting to 1 day ago: ${fromDatetime}`);
@@ -203,21 +287,29 @@ Deno.serve(async (req) => {
         const credentials = await getLinetCredentials(base44);
         const { categoryTranslationMap, productCache, usersMap } = await loadCaches(base44);
 
+        // Load carrier mappings for line contract creation
+        let carrierMappings = [];
+        let carrierPolicies = {};
+        if (createLineContracts) {
+            carrierMappings = await base44.asServiceRole.entities.CarrierProductMapping
+                .filter({ is_active: true }, '-priority', 200);
+            const policiesList = await base44.asServiceRole.entities.CarrierPolicy
+                .filter({ is_active: true });
+            policiesList.forEach(p => carrierPolicies[p.carrier_code] = p);
+        }
+
         // Date formatting for API
         const dateFrom = fromDatetime ? format(parseISO(fromDatetime), 'yyyy-MM-dd') : format(subDays(new Date(), 1), 'yyyy-MM-dd');
         const dateTo = format(parseISO(toDatetime), 'yyyy-MM-dd');
 
         let offset = 0;
-        const limit = 50;
         let moreData = true;
-        let stats = { fetched: 0, created: 0, updated: 0, skipped: 0 };
-        const MAX_TIME = 50000; // 50 seconds
+        let stats = { fetched: 0, created: 0, updated: 0, skipped: 0, line_contracts_created: 0 };
         const startTime = Date.now();
 
         while (moreData) {
-            if (Date.now() - startTime > MAX_TIME) {
+            if (Date.now() - startTime > MAX_EXECUTION_TIME) {
                 console.log(`⚠️ Time limit reached at offset ${offset}`);
-                // Update log as partial
                 await base44.asServiceRole.entities.SyncLog.update(syncLog.id, {
                     run_finished_at: new Date().toISOString(),
                     status: "PARTIAL",
@@ -225,7 +317,7 @@ Deno.serve(async (req) => {
                     records_created: stats.created,
                     records_updated: stats.updated,
                     records_skipped: stats.skipped,
-                    details_json: { stopped_at_offset: offset }
+                    details_json: { stopped_at_offset: offset, line_contracts: stats.line_contracts_created }
                 });
 
                 await base44.asServiceRole.entities.SyncMetadata.update(metadata.id, {
@@ -241,7 +333,7 @@ Deno.serve(async (req) => {
                 });
             }
 
-            const documents = await fetchDocuments(credentials, dateFrom, dateTo, limit, offset);
+            const documents = await fetchDocuments(credentials, dateFrom, dateTo, BATCH_SIZE, offset);
             
             if (!documents || documents.length === 0) {
                 moreData = false;
@@ -321,6 +413,27 @@ Deno.serve(async (req) => {
                             const result = await upsertTransaction(base44, txData);
                             if (result === 'created') stats.created++;
                             else stats.updated++;
+
+                            // Auto-create line contract if this is a line sale
+                            if (createLineContracts && !is_credit && quantity > 0) {
+                                const carrierCode = detectCarrier(sku, product_name, carrierMappings);
+                                if (carrierCode && carrierPolicies[carrierCode]) {
+                                    try {
+                                        const contractResult = await createLineContractFromSale(
+                                            base44,
+                                            { ...txData, linet_doc_id },
+                                            carrierCode,
+                                            carrierPolicies[carrierCode].carrier_name,
+                                            carrierPolicies[carrierCode]
+                                        );
+                                        if (contractResult === 'created') {
+                                            stats.line_contracts_created++;
+                                        }
+                                    } catch (contractErr) {
+                                        console.error(`Failed to create line contract: ${contractErr.message}`);
+                                    }
+                                }
+                            }
                         } catch (err) {
                             console.error(`Failed to upsert tx: ${err.message}`);
                             stats.skipped++;
@@ -329,10 +442,10 @@ Deno.serve(async (req) => {
                 }
             }
 
-            if (documents.length < limit) {
+            if (documents.length < BATCH_SIZE) {
                 moreData = false;
             } else {
-                offset += limit;
+                offset += BATCH_SIZE;
             }
         }
 
@@ -345,7 +458,8 @@ Deno.serve(async (req) => {
             records_fetched: stats.fetched,
             records_created: stats.created,
             records_updated: stats.updated,
-            records_skipped: stats.skipped
+            records_skipped: stats.skipped,
+            details_json: { line_contracts_created: stats.line_contracts_created }
         });
 
         const metadataUpdate = {
@@ -358,16 +472,16 @@ Deno.serve(async (req) => {
         }
         await base44.asServiceRole.entities.SyncMetadata.update(metadata.id, metadataUpdate);
 
-        console.log(`✅ Sync completed: ${stats.created} created, ${stats.updated} updated, ${stats.skipped} skipped`);
+        console.log(`✅ Sync completed: ${stats.created} created, ${stats.updated} updated, ${stats.skipped} skipped, ${stats.line_contracts_created} line contracts`);
 
         return Response.json({
             success: true,
             stats,
-            message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו`
+            message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים`
         });
 
     } catch (error) {
-        console.error("❌ Sync Error:", error.message);
+        console.error("❌ Sync Error:", error.message, error.stack);
 
         // Update log and metadata on failure
         if (base44 && syncLog) {
@@ -392,6 +506,39 @@ Deno.serve(async (req) => {
             }
         }
 
-        return Response.json({ success: false, error: error.message }, { status: 500 });
+        return Response.json({ 
+            success: false, 
+            error: error.message,
+            stack: error.stack 
+        }, { status: 500 });
     }
 });
+
+// Helper to detect carrier from product
+function detectCarrier(sku, productName, mappings) {
+    if (!mappings || mappings.length === 0) return null;
+
+    // Exact SKU
+    if (sku) {
+        const exactMatch = mappings.find(m => m.product_sku_exact === sku);
+        if (exactMatch) return exactMatch.carrier_code;
+    }
+
+    // SKU prefix
+    if (sku) {
+        const prefixMatch = mappings.find(m => 
+            m.product_sku_prefix && sku.startsWith(m.product_sku_prefix)
+        );
+        if (prefixMatch) return prefixMatch.carrier_code;
+    }
+
+    // Name contains
+    if (productName) {
+        const nameMatch = mappings.find(m => 
+            m.name_contains && productName.toLowerCase().includes(m.name_contains.toLowerCase())
+        );
+        if (nameMatch) return nameMatch.carrier_code;
+    }
+
+    return null;
+}

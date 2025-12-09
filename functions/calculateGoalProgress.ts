@@ -1,5 +1,9 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
+/**
+ * Calculate progress for goals
+ * Idempotent - safe to re-run
+ */
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
@@ -24,7 +28,8 @@ Deno.serve(async (req) => {
 
         const checkFilters = (sale, filters) => {
             if (!filters) return false;
-            // Support both category_in and categories_included
+            
+            // Support multiple filter formats
             if (filters.category_in && filters.category_in.length > 0) {
                 if (!filters.category_in.includes(sale.category)) return false;
             }
@@ -32,6 +37,14 @@ Deno.serve(async (req) => {
                 if (!filters.categories_included.includes(sale.category)) return false;
             }
             if (filters.category && sale.category !== filters.category) return false;
+            
+            // Product name filter
+            if (filters.product_name_contains) {
+                if (!sale.product_name || !sale.product_name.includes(filters.product_name_contains)) {
+                    return false;
+                }
+            }
+            
             return true;
         };
 
@@ -85,16 +98,17 @@ Deno.serve(async (req) => {
             }
 
             // Prevent division by zero
-            const progressPercent = (goal.target_value && goal.target_value > 0) ? (currentValue / goal.target_value) * 100 : 0;
+            const targetValue = goal.target_value || 0;
+            const progressPercent = targetValue > 0 ? (currentValue / targetValue) * 100 : 0;
 
-            // Find existing progress record or create new
+            // Upsert progress record (idempotent)
             const existingProgress = await base44.asServiceRole.entities.GoalProgress.filter({ goal_id: goal.id });
             
             const progressData = {
                 goal_id: goal.id,
                 goal_name: goal.name,
                 current_value: currentValue,
-                target_value: goal.target_value,
+                target_value: targetValue,
                 progress_percent: progressPercent,
                 last_calculated_at: new Date().toISOString()
             };
@@ -109,14 +123,21 @@ Deno.serve(async (req) => {
                 goal_id: goal.id,
                 goal_name: goal.name,
                 current_value: currentValue,
-                target_value: goal.target_value,
+                target_value: targetValue,
                 progress_percent: progressPercent
             });
         }
 
-        return Response.json({ success: true, results });
+        console.log(`✅ Calculated progress for ${results.length} goals`);
+
+        return Response.json({ 
+            success: true, 
+            results,
+            message: `חושב התקדמות עבור ${results.length} יעדים`
+        });
+
     } catch (error) {
-        console.error("Error:", error.message);
+        console.error("❌ Goal Progress Error:", error.message);
         return Response.json({ success: false, error: error.message }, { status: 500 });
     }
 });

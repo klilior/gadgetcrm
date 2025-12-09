@@ -40,6 +40,7 @@ import CommissionGroupMappings from './pages/CommissionGroupMappings';
 import AgentDashboard from './pages/AgentDashboard';
 import LinesToWorkOn from './pages/LinesToWorkOn';
 import LineContractImport from './pages/LineContractImport';
+import CarrierManagement from './pages/CarrierManagement';
 import __Layout from './Layout.jsx';
 
 
@@ -86,6 +87,7 @@ export const PAGES = {
     "AgentDashboard": AgentDashboard,
     "LinesToWorkOn": LinesToWorkOn,
     "LineContractImport": LineContractImport,
+    "CarrierManagement": CarrierManagement,
 }
 
 export const pagesConfig = {

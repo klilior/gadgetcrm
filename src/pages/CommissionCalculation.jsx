@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useUser } from "../components/UserAuth";
+import UnauthorizedRedirect from "../components/UnauthorizedRedirect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -313,11 +314,7 @@ export default function CommissionCalculation() {
     };
 
     if (!isManager) {
-        return (
-            <div className="p-6 text-center">
-                <h1 className="text-2xl font-bold text-red-600">אין הרשאה</h1>
-            </div>
-        );
+        return <UnauthorizedRedirect currentUser={currentUser} />;
     }
 
     const grandTotal = totalCommission + totalTargetBonus + totalShiftBonus;

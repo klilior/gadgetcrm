@@ -71,13 +71,13 @@ Deno.serve(async (req) => {
             }
 
             // Update all existing contracts for this customer to reflect new owner
-            await base44.asServiceRole.entities.LineContract.updateMultiple(
-                { customer_id },
-                { 
+            const existingCustomerContracts = await base44.asServiceRole.entities.LineContract.filter({ customer_id });
+            for (const contract of existingCustomerContracts) {
+                await base44.asServiceRole.entities.LineContract.update(contract.id, {
                     account_owner_id: agent_id,
                     account_owner_name: agent_name
-                }
-            );
+                });
+            }
         } else {
             // Not a Lines sale - keep existing ownership
             const existingContracts = await base44.asServiceRole.entities.LineContract

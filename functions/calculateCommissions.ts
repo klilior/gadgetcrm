@@ -1,5 +1,9 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
+/**
+ * Calculate commissions for sales transactions
+ * Idempotent - safe to re-run with recalculate=true
+ */
 Deno.serve(async (req) => {
     console.log("🧮 Starting Commission Calculation...");
     
@@ -17,7 +21,7 @@ Deno.serve(async (req) => {
 
         console.log(`📅 Calculating commissions from ${date_from} to ${date_to}`);
 
-        // 1. Load all commission models
+        // Load commission models
         const models = await base44.asServiceRole.entities.CommissionModel.filter({ is_active: true });
         const defaultModel = models.find(m => m.is_default);
         
@@ -25,10 +29,10 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'No active commission models found' }, { status: 400 });
         }
 
-        // 2. Load all agent-model assignments
+        // Load agent-model assignments
         const agentModelAssignments = await base44.asServiceRole.entities.AgentCommissionModel.filter({ is_active: true });
 
-        // 3. Load all commission rules (grouped by model)
+        // Load commission rules (grouped by model)
         const allRules = await base44.asServiceRole.entities.CommissionRule.filter({ is_active: true });
         const rulesByModel = {};
         allRules.forEach(rule => {
@@ -36,12 +40,7 @@ Deno.serve(async (req) => {
             rulesByModel[rule.model_id].push(rule);
         });
 
-        // 4. Load LinetUsersMap for agent name resolution
-        const usersMapList = await base44.asServiceRole.entities.LinetUsersMap.list(null, 1000);
-        const usersMap = {};
-        usersMapList.forEach(u => usersMap[String(u.user_id)] = u.user_name);
-
-        // 5. Fetch sales for the period
+        // Fetch sales for the period
         let salesQuery = {
             issue_date: { $gte: date_from, $lte: date_to }
         };
@@ -54,11 +53,11 @@ Deno.serve(async (req) => {
             return Response.json({ 
                 success: true, 
                 message: 'No sales found for the period',
-                stats: { sales: 0, entries: 0 }
+                stats: { sales: 0, entries: 0, totalCommission: 0 }
             });
         }
 
-        // 6. If recalculate, delete existing entries for the period
+        // If recalculate, delete existing entries for the period
         if (recalculate) {
             console.log(`🗑️ Deleting existing entries for period...`);
             const existingEntries = await base44.asServiceRole.entities.CommissionEntry.filter({
@@ -69,16 +68,30 @@ Deno.serve(async (req) => {
                 await base44.asServiceRole.entities.CommissionEntry.delete(entry.id);
             }
             console.log(`🗑️ Deleted ${existingEntries.length} existing entries`);
+        } else {
+            // Check for existing entries to avoid duplicates
+            const existingEntries = await base44.asServiceRole.entities.CommissionEntry.filter({
+                issue_date: { $gte: date_from, $lte: date_to }
+            }, null, 10000);
+            const existingSaleIds = new Set(existingEntries.map(e => e.sale_id));
+            
+            if (existingSaleIds.size > 0) {
+                console.log(`⚠️ Found ${existingSaleIds.size} existing commission entries. Use recalculate=true to recreate.`);
+            }
         }
 
-        // 7. Process each sale
+        // Process each sale
         let entriesCreated = 0;
         let totalCommission = 0;
         const statsByAgent = {};
         const statsByRule = {};
+        const processedSaleIds = new Set(); // Prevent duplicates within this run
 
         for (const sale of sales) {
-            // Get agent info
+            // Skip if already processed in this run
+            if (processedSaleIds.has(sale.id)) continue;
+            processedSaleIds.add(sale.id);
+
             const agentName = sale.sales_rep || 'Unknown';
             
             // Filter by agent_ids if specified
@@ -86,10 +99,9 @@ Deno.serve(async (req) => {
                 if (!agent_ids.includes(agentName)) continue;
             }
 
-            // Find the appropriate commission model for this agent and date
+            // Find commission model for this agent and date
             let selectedModel = null;
             
-            // Check for specific agent assignment
             const agentAssignment = agentModelAssignments.find(a => {
                 if (a.agent_name !== agentName && a.agent_id !== agentName) return false;
                 if (!a.is_active) return false;
@@ -105,7 +117,6 @@ Deno.serve(async (req) => {
                 selectedModel = models.find(m => m.id === agentAssignment.commission_model_id);
             }
 
-            // Fall back to default model
             if (!selectedModel) {
                 selectedModel = defaultModel;
             }
@@ -115,11 +126,12 @@ Deno.serve(async (req) => {
                 continue;
             }
 
-            // Get rules for the selected model
             const modelRules = rulesByModel[selectedModel.id] || [];
 
-            // Check each rule against the sale
-            for (const rule of modelRules) {
+            // Check each rule (but only apply first matching rule to avoid double-counting)
+            let matched = false;
+            for (const rule of modelRules.sort((a, b) => (b.priority || 0) - (a.priority || 0))) {
+                if (matched) break; // Only first match
                 if (!checkFilters(sale, rule.filters_json)) continue;
 
                 // Calculate commission based on rule type
@@ -130,7 +142,7 @@ Deno.serve(async (req) => {
                 switch (rule.rule_type) {
                     case 'PERCENT_OF_NET':
                         baseNetAmount = sale.price_ex_vat || 0;
-                        commissionAmount = baseNetAmount * (rule.percentage / 100);
+                        commissionAmount = baseNetAmount * ((rule.percentage || 0) / 100);
                         break;
                     
                     case 'PER_UNIT':
@@ -141,7 +153,6 @@ Deno.serve(async (req) => {
                         break;
                 }
 
-                // Skip if no commission
                 if (commissionAmount === 0) continue;
 
                 // Create commission entry
@@ -170,6 +181,7 @@ Deno.serve(async (req) => {
                 await base44.asServiceRole.entities.CommissionEntry.create(entry);
                 entriesCreated++;
                 totalCommission += commissionAmount;
+                matched = true;
 
                 // Update stats
                 if (!statsByAgent[agentName]) {
@@ -190,7 +202,7 @@ Deno.serve(async (req) => {
 
         return Response.json({
             success: true,
-            message: `Created ${entriesCreated} commission entries`,
+            message: `נוצרו ${entriesCreated} רשומות עמלה`,
             stats: {
                 sales: sales.length,
                 entries: entriesCreated,
@@ -210,55 +222,38 @@ Deno.serve(async (req) => {
 function checkFilters(sale, filters) {
     if (!filters) return true;
 
-    // Check categories_included
+    // Categories
     if (filters.categories_included && filters.categories_included.length > 0) {
-        if (!filters.categories_included.includes(sale.category)) {
-            return false;
-        }
+        if (!filters.categories_included.includes(sale.category)) return false;
     }
-
-    // Check specific category
-    if (filters.category && sale.category !== filters.category) {
-        return false;
+    if (filters.category_in && filters.category_in.length > 0) {
+        if (!filters.category_in.includes(sale.category)) return false;
     }
+    if (filters.category && sale.category !== filters.category) return false;
 
-    // Check product_sku
-    if (filters.product_sku && sale.sku !== filters.product_sku) {
-        return false;
-    }
-
-    // Check product_name contains
+    // Product
+    if (filters.product_sku && sale.sku !== filters.product_sku) return false;
     if (filters.product_name_contains) {
         if (!sale.product_name || !sale.product_name.includes(filters.product_name_contains)) {
             return false;
         }
     }
 
-    // Check line_type (for 4G/5G)
+    // Line type (4G/5G)
     if (filters.line_type) {
         const productName = (sale.product_name || '').toLowerCase();
         const sku = (sale.sku || '').toLowerCase();
         
         if (filters.line_type === '4G') {
-            if (!productName.includes('4g') && !sku.includes('4g')) {
-                return false;
-            }
+            if (productName.includes('5g') || sku.includes('5g')) return false;
         } else if (filters.line_type === '5G') {
-            if (!productName.includes('5g') && !sku.includes('5g')) {
-                return false;
-            }
+            if (!productName.includes('5g') && !sku.includes('5g')) return false;
         }
     }
 
-    // Check min_amount
-    if (filters.min_amount && (sale.price_ex_vat || 0) < filters.min_amount) {
-        return false;
-    }
-
-    // Check max_amount
-    if (filters.max_amount && (sale.price_ex_vat || 0) > filters.max_amount) {
-        return false;
-    }
+    // Amount range
+    if (filters.min_amount && (sale.price_ex_vat || 0) < filters.min_amount) return false;
+    if (filters.max_amount && (sale.price_ex_vat || 0) > filters.max_amount) return false;
 
     return true;
 }
