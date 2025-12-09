@@ -38,6 +38,7 @@ import TargetBonusManagement from './pages/TargetBonusManagement';
 import SyncManagement from './pages/SyncManagement';
 import CommissionGroupMappings from './pages/CommissionGroupMappings';
 import AgentDashboard from './pages/AgentDashboard';
+import LinesToWorkOn from './pages/LinesToWorkOn';
 import __Layout from './Layout.jsx';
 
 
@@ -82,6 +83,7 @@ export const PAGES = {
     "SyncManagement": SyncManagement,
     "CommissionGroupMappings": CommissionGroupMappings,
     "AgentDashboard": AgentDashboard,
+    "LinesToWorkOn": LinesToWorkOn,
 }
 
 export const pagesConfig = {
