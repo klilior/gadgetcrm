@@ -118,10 +118,10 @@ Deno.serve(async (req) => {
             'חברה': 'customer_name',
             'מספר מסמך': 'doc_number',
             'תאריך הפקה מקורי': 'issue_date',
-            'נציגים': 'agent_name',
-            'קוד מק"ט': 'product_sku',
-            'תיאור': 'product_name',
-            'כמות': 'quantity'
+            'יצ"מ': 'agent_name',  // נציג מופיע בעמודה יצ"מ
+            'ג\'מבו': 'product_sku',  // מק"ט המוצר
+            'מחיר פריט (ע"מ מחיר פריט לא מח"מ פריט)': 'product_name',  // שם המוצר
+            'בכמות': 'quantity'
         };
 
         // Process rows
@@ -170,12 +170,17 @@ Deno.serve(async (req) => {
                     }
                 }
 
-                // Validate required fields
-                if (!row.customer_name || !row.product_sku || !row.doc_number || !row.issue_date || !row.agent_name) {
-                    errorRows.push({ row: i + 1, error: 'חסרים שדות חובה' });
+                // Validate required fields - רק שדות שבאמת קיימים בקובץ
+                if (!row.customer_name || !row.doc_number || !row.issue_date) {
+                    console.log(`Row ${i + 1} missing fields:`, row);
+                    errorRows.push({ row: i + 1, error: 'חסרים שדות חובה (חברה, מספר מסמך, תאריך)' });
                     stats.errors++;
                     continue;
                 }
+                
+                // Default values for optional fields
+                if (!row.product_sku) row.product_sku = 'UNKNOWN';
+                if (!row.agent_name) row.agent_name = 'לא הוגדר';
 
                 // Detect carrier
                 const carrier_code = detectCarrier(row.product_sku, row.product_name);
@@ -210,13 +215,26 @@ Deno.serve(async (req) => {
                     customer_id = newCustomer.id;
                 }
 
-                // Find agent
-                const agentNameLower = row.agent_name.toLowerCase();
-                const agent_id = agentMap[agentNameLower];
+                // Find agent - use default if not found
+                let agent_id, agent_name;
+                if (row.agent_name && row.agent_name !== 'לא הוגדר') {
+                    const agentNameLower = row.agent_name.toLowerCase();
+                    agent_id = agentMap[agentNameLower];
+                    agent_name = row.agent_name;
+                }
+                
+                // If agent not found, use first available agent as default
                 if (!agent_id) {
-                    errorRows.push({ row: i + 1, error: `נציג לא נמצא: ${row.agent_name}` });
-                    stats.errors++;
-                    continue;
+                    const defaultAgent = agents[0];
+                    if (defaultAgent) {
+                        agent_id = defaultAgent.user_id;
+                        agent_name = defaultAgent.user_name;
+                        console.log(`Using default agent for row ${i + 1}: ${agent_name}`);
+                    } else {
+                        errorRows.push({ row: i + 1, error: 'אין נציגים במערכת' });
+                        stats.errors++;
+                        continue;
+                    }
                 }
 
                 // Check for duplicate
@@ -248,9 +266,9 @@ Deno.serve(async (req) => {
                     activation_date: row.issue_date,
                     original_invoice_id: row.doc_number,
                     agent_id,
-                    agent_name: row.agent_name,
+                    agent_name: agent_name,
                     account_owner_id: agent_id,
-                    account_owner_name: row.agent_name,
+                    account_owner_name: agent_name,
                     safe_retarget_date,
                     status,
                     last_action_date: new Date().toISOString(),
