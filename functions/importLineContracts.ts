@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
             else if (h.includes('תאריך הפקה')) columnMap[h] = 'issue_date';
             else if (h === 'יצ"מ' || h === 'יצמ') columnMap[h] = 'agent_name';
             else if (h.includes('מק"ט') || h.includes('מקט') || h === 'קוד מק"ט') columnMap[h] = 'product_sku';
-            else if (h.includes('תיאור') || h.includes('פריט')) columnMap[h] = 'product_name';
+            else if (h.includes('תיאור') || (h.includes('פריט') && !h.includes('מחיר'))) columnMap[h] = 'product_name';
             else if (h.includes('כמות')) columnMap[h] = 'quantity';
         });
         
