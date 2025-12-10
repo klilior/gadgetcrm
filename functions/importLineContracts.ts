@@ -24,18 +24,26 @@ Deno.serve(async (req) => {
 
         // Download file
         const fileResponse = await fetch(file_url);
-        const fileText = await fileResponse.text();
+        const arrayBuffer = await fileResponse.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
 
-        // Parse CSV (simple parser - assumes comma-separated, first row is headers)
-        const lines = fileText.split('\n').filter(l => l.trim());
-        if (lines.length < 2) {
+        // Import XLSX library
+        const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.0/package/xlsx.mjs');
+        
+        // Parse Excel
+        const workbook = XLSX.read(uint8Array, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        if (!data || data.length < 2) {
             return Response.json({ 
                 success: false, 
                 error: 'הקובץ ריק או לא תקין' 
             }, { status: 400 });
         }
 
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        const headers = data[0];
         console.log('📋 Headers found:', headers);
 
         // Load caches
@@ -81,38 +89,52 @@ Deno.serve(async (req) => {
             return null;
         };
 
+        // Column mapping from Hebrew headers
+        const columnMap = {
+            'חברה': 'customer_name',
+            'מספר מסמך': 'doc_number',
+            'תאריך הפקה מקורי': 'issue_date',
+            'נציגים': 'agent_name',
+            'קוד מק"ט': 'product_sku',
+            'תיאור': 'product_name',
+            'כמות': 'quantity'
+        };
+
         // Process rows
         const stats = { total: 0, created: 0, skipped: 0, errors: 0 };
         const errorRows = [];
 
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i];
-            if (!line.trim()) continue;
+        for (let i = 1; i < data.length; i++) {
+            const rowData = data[i];
+            if (!rowData || rowData.length === 0) continue;
 
             stats.total++;
             
             try {
-                // Parse CSV row (handle quotes)
-                const values = [];
-                let currentValue = '';
-                let inQuotes = false;
-                
-                for (let char of line) {
-                    if (char === '"') {
-                        inQuotes = !inQuotes;
-                    } else if (char === ',' && !inQuotes) {
-                        values.push(currentValue.trim());
-                        currentValue = '';
-                    } else {
-                        currentValue += char;
+                // Map Hebrew columns to English field names
+                const row = {};
+                headers.forEach((header, idx) => {
+                    const fieldName = columnMap[header];
+                    if (fieldName) {
+                        row[fieldName] = rowData[idx];
+                    }
+                });
+
+                // Parse and format date
+                if (row.issue_date) {
+                    // Handle Excel date (serial number) or string
+                    if (typeof row.issue_date === 'number') {
+                        // Excel serial date
+                        const date = new Date((row.issue_date - 25569) * 86400 * 1000);
+                        row.issue_date = date.toISOString().split('T')[0];
+                    } else if (typeof row.issue_date === 'string') {
+                        // Parse DD/MM/YYYY format
+                        const parts = row.issue_date.split('/');
+                        if (parts.length === 3) {
+                            row.issue_date = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                        }
                     }
                 }
-                values.push(currentValue.trim()); // Last value
-
-                const row = {};
-                headers.forEach((h, idx) => {
-                    row[h] = values[idx]?.replace(/"/g, '') || '';
-                });
 
                 // Validate required fields
                 if (!row.customer_name || !row.product_sku || !row.doc_number || !row.issue_date || !row.agent_name) {

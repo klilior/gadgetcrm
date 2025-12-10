@@ -110,18 +110,20 @@ export default function LineContractImport() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                     <div>
-                        <p className="font-medium mb-2">מבנה הקובץ הנדרש (CSV/Excel):</p>
+                        <p className="font-medium mb-2">מבנה הקובץ הנדרש (Excel):</p>
+                        <p className="text-sm text-gray-600 mb-2">העמודות הנדרשות בעברית:</p>
                         <ul className="text-sm space-y-1 mr-4 list-disc">
-                            <li><strong>customer_name</strong> - שם הלקוח (חובה)</li>
-                            <li><strong>customer_phone</strong> - טלפון ליצירת קשר</li>
-                            <li><strong>customer_id_number</strong> - תעודת זהות (למציאות מהירה)</li>
-                            <li><strong>msisdn</strong> - מספר הקו (אם ידוע)</li>
-                            <li><strong>product_sku</strong> - מק"ט המוצר (חובה)</li>
-                            <li><strong>product_name</strong> - שם המוצר (חובה)</li>
-                            <li><strong>doc_number</strong> - מספר חשבונית/מסמך (חובה - למניעת כפילויות)</li>
-                            <li><strong>issue_date</strong> - תאריך המכירה בפורמט YYYY-MM-DD (חובה)</li>
-                            <li><strong>agent_name</strong> - שם הנציג המוכר (חובה)</li>
+                            <li><strong>חברה</strong> - שם הלקוח (חובה)</li>
+                            <li><strong>מספר מסמך</strong> - מספר חשבונית (חובה - למניעת כפילויות)</li>
+                            <li><strong>תאריך הפקה מקורי</strong> - תאריך המכירה (חובה)</li>
+                            <li><strong>נציגים</strong> - שם הנציג המוכר (חובה)</li>
+                            <li><strong>קוד מק"ט</strong> - מק"ט המוצר (חובה)</li>
+                            <li><strong>תיאור</strong> - שם המוצר (חובה)</li>
+                            <li><strong>כמות</strong> - כמות (חובה)</li>
                         </ul>
+                        <p className="text-xs text-gray-500 mt-2">
+                            💡 ניתן לייצא ישירות מ-Linet עם העמודות האלה
+                        </p>
                     </div>
                     <Alert>
                         <AlertTriangle className="w-4 h-4" />
