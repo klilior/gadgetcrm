@@ -9,13 +9,22 @@ import { addMonths, addDays, format, parseISO } from 'npm:date-fns@2.30.0';
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
+        
+        // Check authentication
+        let user = null;
+        try {
+            user = await base44.auth.me();
+        } catch (authError) {
+            console.error('Auth error:', authError);
+            return Response.json({ success: false, error: 'לא מורשה - יש להתחבר למערכת' }, { status: 401 });
+        }
         
         if (!user || user.role !== 'מנהל') {
-            return Response.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+            return Response.json({ success: false, error: 'רק מנהלים יכולים לבצע ייבוא' }, { status: 403 });
         }
 
-        const { file_url } = await req.json();
+        const body = await req.json();
+        const { file_url } = body;
         if (!file_url) {
             return Response.json({ success: false, error: 'Missing file_url' }, { status: 400 });
         }
