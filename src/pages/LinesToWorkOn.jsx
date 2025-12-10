@@ -86,7 +86,8 @@ export default function LinesToWorkOn() {
                 query.account_owner_id = agentFilter;
             }
 
-            const data = await base44.entities.LineContract.filter(query, '-safe_retarget_date', 500);
+            // Remove sort to ensure all records appear even if safe_retarget_date is null
+            const data = await base44.entities.LineContract.filter(query, null, 500);
             console.log('📊 Loaded contracts:', data.length, 'Query:', JSON.stringify(query));
             if (data.length > 0) {
                 console.log('Sample contract:', data[0]);
