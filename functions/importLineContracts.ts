@@ -203,9 +203,12 @@ Deno.serve(async (req) => {
                 // Detect carrier
                 const carrier_code = detectCarrier(row.product_sku, row.product_name);
                 if (!carrier_code) {
+                    console.log(`Row ${i + 1} - No carrier detected for SKU: ${row.product_sku}, Name: ${row.product_name}`);
                     stats.skipped++;
                     continue; // Not a line product
                 }
+                
+                console.log(`Row ${i + 1} - Carrier detected: ${carrier_code}`);
 
                 const policy = carrierMap[carrier_code];
                 if (!policy) {
@@ -295,6 +298,7 @@ Deno.serve(async (req) => {
 
                 existingKeys.add(duplicateKey);
                 stats.created++;
+                console.log(`✅ Row ${i + 1} - Created contract for ${row.customer_name}, carrier: ${carrier_code}`);
 
             } catch (error) {
                 console.error(`Error processing row ${i + 1}:`, error);
