@@ -22,24 +22,38 @@ Deno.serve(async (req) => {
 
         console.log('📥 Starting line contracts import from:', file_url);
 
+        console.log('📥 Downloading file from:', file_url);
+        
         // Download file
         const fileResponse = await fetch(file_url);
+        if (!fileResponse.ok) {
+            throw new Error(`Failed to download file: ${fileResponse.statusText}`);
+        }
+        
         const arrayBuffer = await fileResponse.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
+        console.log(`📦 Downloaded ${arrayBuffer.byteLength} bytes`);
 
-        // Import XLSX library
-        const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.0/package/xlsx.mjs');
+        // Import XLSX library from npm
+        const XLSX = await import('npm:xlsx@0.18.5');
         
         // Parse Excel
+        const uint8Array = new Uint8Array(arrayBuffer);
         const workbook = XLSX.read(uint8Array, { type: 'array' });
+        
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+            throw new Error('No sheets found in Excel file');
+        }
+        
         const sheetName = workbook.SheetNames[0];
+        console.log(`📄 Reading sheet: ${sheetName}`);
+        
         const worksheet = workbook.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
         if (!data || data.length < 2) {
             return Response.json({ 
                 success: false, 
-                error: 'הקובץ ריק או לא תקין' 
+                error: 'הקובץ ריק או לא תקין - נדרשות לפחות שורת כותרות ושורת נתונים אחת' 
             }, { status: 400 });
         }
 
@@ -122,17 +136,27 @@ Deno.serve(async (req) => {
 
                 // Parse and format date
                 if (row.issue_date) {
-                    // Handle Excel date (serial number) or string
-                    if (typeof row.issue_date === 'number') {
-                        // Excel serial date
-                        const date = new Date((row.issue_date - 25569) * 86400 * 1000);
-                        row.issue_date = date.toISOString().split('T')[0];
-                    } else if (typeof row.issue_date === 'string') {
-                        // Parse DD/MM/YYYY format
-                        const parts = row.issue_date.split('/');
-                        if (parts.length === 3) {
-                            row.issue_date = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                    try {
+                        // Handle Excel date (serial number) or string
+                        if (typeof row.issue_date === 'number') {
+                            // Excel serial date (days since 1900-01-01)
+                            const date = new Date((row.issue_date - 25569) * 86400 * 1000);
+                            row.issue_date = format(date, 'yyyy-MM-dd');
+                        } else if (typeof row.issue_date === 'string' && row.issue_date.includes('/')) {
+                            // Parse DD/MM/YYYY format
+                            const parts = row.issue_date.split('/');
+                            if (parts.length === 3) {
+                                const day = parts[0].padStart(2, '0');
+                                const month = parts[1].padStart(2, '0');
+                                const year = parts[2];
+                                row.issue_date = `${year}-${month}-${day}`;
+                            }
                         }
+                    } catch (dateErr) {
+                        console.error(`Date parsing error for row ${i + 1}:`, dateErr);
+                        errorRows.push({ row: i + 1, error: `שגיאה בפורמט התאריך: ${row.issue_date}` });
+                        stats.errors++;
+                        continue;
                     }
                 }
 
@@ -244,9 +268,11 @@ Deno.serve(async (req) => {
 
     } catch (error) {
         console.error('❌ Import error:', error);
+        console.error('Stack trace:', error.stack);
         return Response.json({
             success: false,
-            error: error.message
+            error: error.message,
+            details: error.stack
         }, { status: 500 });
     }
 });
