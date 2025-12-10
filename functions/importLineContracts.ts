@@ -19,7 +19,8 @@ Deno.serve(async (req) => {
             return Response.json({ success: false, error: 'לא מורשה - יש להתחבר למערכת' }, { status: 401 });
         }
         
-        if (!user || user.role !== 'מנהל') {
+        const isManager = user.role === 'מנהל' || user.role === 'admin';
+        if (!isManager) {
             return Response.json({ success: false, error: 'רק מנהלים יכולים לבצע ייבוא' }, { status: 403 });
         }
 
