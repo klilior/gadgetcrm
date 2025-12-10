@@ -275,8 +275,8 @@ Deno.serve(async (req) => {
                 const today = new Date();
                 const status = safeDate <= today ? 'ELIGIBLE' : 'LOCKED';
 
-                // Create contract
-                await base44.asServiceRole.entities.LineContract.create({
+                // Create contract object
+                const contractData = {
                     customer_id,
                     customer_name: row.customer_name,
                     customer_phone: row.customer_phone || null,
@@ -294,7 +294,9 @@ Deno.serve(async (req) => {
                     status,
                     last_action_date: new Date().toISOString(),
                     last_action_type: 'IMPORTED'
-                });
+                };
+
+                await base44.asServiceRole.entities.LineContract.create(contractData);
 
                 existingKeys.add(duplicateKey);
                 stats.created++;
