@@ -99,12 +99,13 @@ Deno.serve(async (req) => {
 
         // Detect carrier function (inline)
         const detectCarrier = (sku, productName) => {
-            if (sku) {
-                const exactMatch = mappings.find(m => m.product_sku_exact === sku);
+            const skuStr = String(sku || '').trim(); // Ensure string
+            if (skuStr && skuStr !== 'UNKNOWN') {
+                const exactMatch = mappings.find(m => m.product_sku_exact === skuStr);
                 if (exactMatch) return exactMatch.carrier_code;
 
                 const prefixMatch = mappings.find(m => 
-                    m.product_sku_prefix && sku.startsWith(m.product_sku_prefix)
+                    m.product_sku_prefix && skuStr.startsWith(m.product_sku_prefix)
                 );
                 if (prefixMatch) return prefixMatch.carrier_code;
             }
@@ -198,6 +199,7 @@ Deno.serve(async (req) => {
                 
                 // Default values for optional fields
                 if (!row.product_sku) row.product_sku = 'UNKNOWN';
+                row.product_sku = String(row.product_sku).trim(); // Ensure string
                 if (!row.agent_name) row.agent_name = 'לא הוגדר';
 
                 // Detect carrier
