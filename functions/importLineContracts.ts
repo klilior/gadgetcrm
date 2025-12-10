@@ -207,7 +207,27 @@ Deno.serve(async (req) => {
                     stats.skipped++;
                     continue; // Not a line product
                 }
-                
+
+                // LEARN: If SKU exists but wasn't mapped, create a mapping for future use
+                if (row.product_sku && row.product_sku !== 'UNKNOWN') {
+                    const existingSkuMap = mappings.find(m => m.product_sku_exact === row.product_sku);
+                    if (!existingSkuMap) {
+                        try {
+                            await base44.asServiceRole.entities.CarrierProductMapping.create({
+                                carrier_code,
+                                product_sku_exact: row.product_sku,
+                                priority: 100, // High priority for exact match
+                                is_active: true
+                            });
+                            // Add to local cache to avoid re-creating in this loop
+                            mappings.push({ carrier_code, product_sku_exact: row.product_sku });
+                            console.log(`🧠 Learned new SKU mapping: ${row.product_sku} -> ${carrier_code}`);
+                        } catch (e) {
+                            console.error('Failed to save learned mapping:', e);
+                        }
+                    }
+                }
+
                 console.log(`Row ${i + 1} - Carrier detected: ${carrier_code}`);
 
                 const policy = carrierMap[carrier_code];
