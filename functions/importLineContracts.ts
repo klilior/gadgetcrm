@@ -68,7 +68,13 @@ Deno.serve(async (req) => {
         }
 
         const headers = data[0];
-        console.log('📋 Headers found:', headers);
+        console.log('📋 Headers found:', JSON.stringify(headers));
+        console.log('📋 Headers count:', headers.length);
+        
+        // Show first data row for debugging
+        if (data.length > 1) {
+            console.log('📋 First data row:', JSON.stringify(data[1]));
+        }
 
         // Load caches
         const [carriers, mappings, agents, existingContracts] = await Promise.all([
@@ -143,6 +149,11 @@ Deno.serve(async (req) => {
                         row[fieldName] = rowData[idx];
                     }
                 });
+                
+                // Debug: log mapped row for first few rows
+                if (i <= 3) {
+                    console.log(`Row ${i + 1} mapped:`, JSON.stringify(row));
+                }
 
                 // Parse and format date
                 if (row.issue_date) {
