@@ -119,16 +119,23 @@ Deno.serve(async (req) => {
             return null;
         };
 
-        // Column mapping from Hebrew headers
-        const columnMap = {
-            'חברה': 'customer_name',
-            'מספר מסמך': 'doc_number',
-            'תאריך הפקה מקורי': 'issue_date',
-            'יצ"מ': 'agent_name',  // נציג מופיע בעמודה יצ"מ
-            'ג\'מבו': 'product_sku',  // מק"ט המוצר
-            'מחיר פריט (ע"מ מחיר פריט לא מח"מ פריט)': 'product_name',  // שם המוצר
-            'בכמות': 'quantity'
-        };
+        // Column mapping from Hebrew headers (exact match from Excel)
+        const columnMap = {};
+        
+        // Build flexible column mapping
+        headers.forEach((header, idx) => {
+            const h = String(header || '').trim();
+            
+            if (h === 'חברה') columnMap[h] = 'customer_name';
+            else if (h === 'מספר מסמך') columnMap[h] = 'doc_number';
+            else if (h.includes('תאריך הפקה')) columnMap[h] = 'issue_date';
+            else if (h === 'יצ"מ' || h === 'יצמ') columnMap[h] = 'agent_name';
+            else if (h.includes('מק"ט') || h.includes('מקט') || h === 'קוד מק"ט') columnMap[h] = 'product_sku';
+            else if (h.includes('תיאור') || h.includes('פריט')) columnMap[h] = 'product_name';
+            else if (h.includes('כמות')) columnMap[h] = 'quantity';
+        });
+        
+        console.log('📋 Column mapping built:', JSON.stringify(columnMap));
 
         // Process rows
         const stats = { total: 0, created: 0, skipped: 0, errors: 0 };
