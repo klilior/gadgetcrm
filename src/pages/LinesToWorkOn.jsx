@@ -22,8 +22,8 @@ export default function LinesToWorkOn() {
     const [selectedContract, setSelectedContract] = useState(null);
     
     // Filters
-    const [viewMode, setViewMode] = useState("my_portfolio"); // my_portfolio | all_agents
-    const [statusFilter, setStatusFilter] = useState("eligible"); // eligible | in_progress | all
+    const [viewMode, setViewMode] = useState("all_agents"); // my_portfolio | all_agents
+    const [statusFilter, setStatusFilter] = useState("all"); // eligible | in_progress | all
     const [carrierFilter, setCarrierFilter] = useState("all");
     const [agentFilter, setAgentFilter] = useState("all");
     
@@ -87,6 +87,10 @@ export default function LinesToWorkOn() {
             }
 
             const data = await base44.entities.LineContract.filter(query, '-safe_retarget_date', 500);
+            console.log('📊 Loaded contracts:', data.length, 'Query:', JSON.stringify(query));
+            if (data.length > 0) {
+                console.log('Sample contract:', data[0]);
+            }
             setContracts(data);
         } catch (error) {
             console.error("Error loading contracts:", error);

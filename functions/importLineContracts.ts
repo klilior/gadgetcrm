@@ -298,7 +298,14 @@ Deno.serve(async (req) => {
 
                 existingKeys.add(duplicateKey);
                 stats.created++;
-                console.log(`✅ Row ${i + 1} - Created contract for ${row.customer_name}, carrier: ${carrier_code}`);
+                console.log(`✅ Row ${i + 1} - Created contract:`, {
+                    customer: row.customer_name,
+                    carrier: carrier_code,
+                    status: contractData.status,
+                    account_owner_id: contractData.account_owner_id,
+                    agent_id: contractData.agent_id,
+                    safe_retarget_date: contractData.safe_retarget_date
+                });
 
             } catch (error) {
                 console.error(`Error processing row ${i + 1}:`, error);
