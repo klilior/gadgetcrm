@@ -204,6 +204,7 @@ async function createLineContractFromSale(base44, sale, carrierCode, carrierName
     await base44.asServiceRole.entities.LineContract.create({
         customer_id,
         customer_name: sale.customer_name,
+        linet_account_id: sale.linet_account_id,
         carrier_code: carrierCode,
         carrier_name: carrierName,
         activation_date: sale.issue_date,
@@ -355,6 +356,7 @@ Deno.serve(async (req) => {
                 const issue_date = doc.issue_date ? doc.issue_date.split(' ')[0] : null;
                 const sales_rep_name = usersMap[String(doc.owner)] || String(doc.owner);
                 const customer_name = doc.company_name || doc.account_name || doc.company || "General Customer";
+                const linet_account_id = doc.account_id ? Number(doc.account_id) : null;
                 const is_credit = (raw_doctype === 4);
                 const doc_type_name = is_credit ? "חשבונית זיכוי" : "חשבונית מס קבלה";
 
@@ -399,6 +401,7 @@ Deno.serve(async (req) => {
                             issue_date,
                             sales_rep: sales_rep_name,
                             customer_name,
+                            linet_account_id,
                             sku,
                             product_name,
                             quantity,
@@ -474,10 +477,34 @@ Deno.serve(async (req) => {
 
         console.log(`✅ Sync completed: ${stats.created} created, ${stats.updated} updated, ${stats.skipped} skipped, ${stats.line_contracts_created} line contracts`);
 
+        // Sync customers for all account_ids seen in this sync
+        let customerSyncStats = null;
+        try {
+            const uniqueAccountIds = [...new Set(
+                documents
+                    .map(doc => doc.account_id)
+                    .filter(id => id && !isNaN(Number(id)))
+                    .map(id => Number(id))
+            )];
+
+            if (uniqueAccountIds.length > 0) {
+                console.log(`👥 Syncing ${uniqueAccountIds.length} customers...`);
+                const customerSync = await base44.asServiceRole.functions.invoke('syncLinetCustomers', {
+                    account_ids: uniqueAccountIds,
+                    force_refresh: false
+                });
+                customerSyncStats = customerSync.stats;
+                console.log(`✅ Customer sync: ${customerSyncStats?.created || 0} created, ${customerSyncStats?.updated || 0} updated`);
+            }
+        } catch (customerErr) {
+            console.error('⚠️ Customer sync failed:', customerErr.message);
+        }
+
         return Response.json({
             success: true,
             stats,
-            message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים`
+            customer_sync: customerSyncStats,
+            message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים${customerSyncStats ? `, ${customerSyncStats.created + customerSyncStats.updated} לקוחות` : ''}`
         });
 
     } catch (error) {
