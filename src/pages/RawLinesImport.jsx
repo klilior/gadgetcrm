@@ -103,6 +103,44 @@ export default function RawLinesImport() {
         }
     };
 
+    const handleProcessBatch = async (batchId) => {
+        if (!confirm('זה יעבד את כל השורות התקינות ל-LineContracts. להמשיך?')) return;
+
+        setIsProcessing(true);
+        try {
+            const response = await base44.functions.invoke('processLineImportBatch', {
+                batch_id: batchId
+            });
+
+            if (response.data.success) {
+                const { stats, unmapped_skus } = response.data;
+                let msg = `✅ ${response.data.message}\n\n`;
+                msg += `סה"כ: ${stats.total}\n`;
+                msg += `נוצרו: ${stats.created}\n`;
+                msg += `עודכנו: ${stats.updated}\n`;
+                msg += `דולגו (לא ממופים): ${stats.skipped_unmapped}\n`;
+                msg += `שגיאות: ${stats.errors}`;
+                
+                if (unmapped_skus && unmapped_skus.length > 0) {
+                    msg += `\n\nמק״טים לא ממופים (${unmapped_skus.length}):\n`;
+                    msg += unmapped_skus.slice(0, 10).join(', ');
+                    if (unmapped_skus.length > 10) msg += '...';
+                }
+                
+                alert(msg);
+                await loadBatches();
+            } else {
+                throw new Error(response.data.error || 'Processing failed');
+            }
+
+        } catch (error) {
+            console.error('Processing error:', error);
+            alert('שגיאה בעיבוד: ' + error.message);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
     const getStatusBadge = (status) => {
         const configs = {
             UPLOADED: { label: 'הועלה', color: 'bg-blue-500' },
@@ -196,6 +234,7 @@ export default function RawLinesImport() {
                                     <TableHead>תאריך העלאה</TableHead>
                                     <TableHead>שם קובץ</TableHead>
                                     <TableHead>שורות</TableHead>
+                                    <TableHead>עובדו</TableHead>
                                     <TableHead>שגיאות</TableHead>
                                     <TableHead>סטטוס</TableHead>
                                     <TableHead>פעולות</TableHead>
@@ -207,6 +246,7 @@ export default function RawLinesImport() {
                                         <TableCell>{format(new Date(batch.uploaded_at), 'dd/MM/yyyy HH:mm')}</TableCell>
                                         <TableCell className="font-medium">{batch.file_name}</TableCell>
                                         <TableCell>{batch.total_rows}</TableCell>
+                                        <TableCell>{batch.processed_rows || 0}</TableCell>
                                         <TableCell>
                                             {batch.error_count > 0 ? (
                                                 <Badge variant="destructive">{batch.error_count}</Badge>
@@ -216,14 +256,25 @@ export default function RawLinesImport() {
                                         </TableCell>
                                         <TableCell>{getStatusBadge(batch.status)}</TableCell>
                                         <TableCell>
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => loadPreview(batch.id)}
-                                            >
-                                                <Eye className="w-4 h-4 ml-2" />
-                                                צפה
-                                            </Button>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => loadPreview(batch.id)}
+                                                >
+                                                    <Eye className="w-4 h-4 ml-2" />
+                                                    צפה
+                                                </Button>
+                                                {batch.status === 'UPLOADED' && (
+                                                    <Button
+                                                        size="sm"
+                                                        className="bg-green-600 hover:bg-green-700 text-white"
+                                                        onClick={() => handleProcessBatch(batch.id)}
+                                                    >
+                                                        עבד לקווי ניהול
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}
