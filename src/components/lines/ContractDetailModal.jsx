@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
     CheckCircle, XCircle, Clock, PhoneOff, Calendar, 
-    StickyNote, User, Phone
+    StickyNote, User, Phone, Edit, Save, Download
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { format, addHours, addDays } from "date-fns";
 
 export default function ContractDetailModal({ isOpen, onClose, contract, onUpdate, currentUser }) {
@@ -16,6 +17,9 @@ export default function ContractDetailModal({ isOpen, onClose, contract, onUpdat
     const [newNote, setNewNote] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [showSnoozeOptions, setShowSnoozeOptions] = useState(false);
+    const [isEditingPhone, setIsEditingPhone] = useState(false);
+    const [editedPhone, setEditedPhone] = useState(contract?.customer_phone || "");
+    const [isFetchingPhone, setIsFetchingPhone] = useState(false);
 
     useEffect(() => {
         if (isOpen && contract) {
@@ -54,6 +58,57 @@ export default function ContractDetailModal({ isOpen, onClose, contract, onUpdat
             alert("שגיאה בשמירת הערה");
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleUpdatePhone = async () => {
+        if (!editedPhone || editedPhone.trim().length < 9) {
+            alert('נא להזין מספר טלפון תקין');
+            return;
+        }
+
+        try {
+            await base44.entities.LineContract.update(contract.id, {
+                customer_phone: editedPhone.trim()
+            });
+
+            await base44.entities.Client.update(contract.customer_id, {
+                phone: editedPhone.trim()
+            });
+
+            alert('מספר הטלפון עודכן');
+            setIsEditingPhone(false);
+            onUpdate();
+        } catch (error) {
+            alert('שגיאה בעדכון: ' + error.message);
+        }
+    };
+
+    const handleFetchFromLinet = async () => {
+        setIsFetchingPhone(true);
+        try {
+            const response = await base44.functions.invoke('linetApi', {
+                action: 'searchClient',
+                params: { company_name: contract.customer_name }
+            });
+
+            if (response.data.success && response.data.data.body && response.data.data.body.length > 0) {
+                const client = response.data.data.body[0];
+                const phone = client.phone || client.mobile || client.phone1 || client.phone2;
+                
+                if (phone) {
+                    setEditedPhone(phone);
+                    alert('מספר טלפון נמצא בלינט!');
+                } else {
+                    alert('לא נמצא מספר טלפון בלינט ללקוח זה');
+                }
+            } else {
+                alert('לא נמצא לקוח בלינט');
+            }
+        } catch (error) {
+            alert('שגיאה בשליפה מלינט: ' + error.message);
+        } finally {
+            setIsFetchingPhone(false);
         }
     };
 
@@ -177,9 +232,44 @@ export default function ContractDetailModal({ isOpen, onClose, contract, onUpdat
                             <p className="text-sm text-gray-600">שם לקוח</p>
                             <p className="font-bold">{contract.customer_name}</p>
                         </div>
-                        <div>
-                            <p className="text-sm text-gray-600">טלפון</p>
-                            <p className="font-mono">{contract.customer_phone || '-'}</p>
+                        <div className="col-span-2">
+                            <p className="text-sm text-gray-600 mb-1">טלפון</p>
+                            {isEditingPhone ? (
+                                <div className="flex gap-2 items-center">
+                                    <Input
+                                        value={editedPhone}
+                                        onChange={(e) => setEditedPhone(e.target.value)}
+                                        placeholder="05X-XXXXXXX"
+                                        className="w-40 h-8"
+                                    />
+                                    <Button size="sm" onClick={handleUpdatePhone} className="h-8">
+                                        <Save className="w-3 h-3 ml-1" />
+                                        שמור
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => setIsEditingPhone(false)} className="h-8">
+                                        ביטול
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-2 items-center">
+                                    <p className="font-mono">{contract.customer_phone || 'אין מידע'}</p>
+                                    <Button size="sm" variant="ghost" onClick={() => { setEditedPhone(contract.customer_phone || ""); setIsEditingPhone(true); }}>
+                                        <Edit className="w-3 h-3" />
+                                    </Button>
+                                    {!contract.customer_phone && (
+                                        <Button 
+                                            size="sm" 
+                                            variant="outline" 
+                                            onClick={handleFetchFromLinet}
+                                            disabled={isFetchingPhone}
+                                            className="text-xs h-8"
+                                        >
+                                            <Download className="w-3 h-3 ml-1" />
+                                            {isFetchingPhone ? 'מחפש...' : 'שלוף מלינט'}
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
                         </div>
                         <div>
                             <p className="text-sm text-gray-600">מספר קו</p>
