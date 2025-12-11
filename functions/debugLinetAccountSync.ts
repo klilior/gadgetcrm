@@ -142,9 +142,8 @@ Deno.serve(async (req) => {
         };
 
         result.comparison = {
-            contract_has_phone: !!sampleContract.customer_phone,
             linet_has_phone: !!(account.phone || account.phone1 || account.mobile),
-            phone_match: sampleContract.customer_phone === (account.phone || account.phone1 || account.mobile)
+            best_phone: account.phone || account.phone1 || account.mobile || 'אין טלפון'
         };
 
         console.log('\n✅ SUCCESS - Account data retrieved from Linet');
