@@ -11,15 +11,11 @@ Deno.serve(async (req) => {
 
         console.log('🔍 מחפש באצ׳ אחרון...');
 
-        // Get latest batch
-        const batches = await base44.asServiceRole.entities.LineImportBatch.filter(
-            { status: 'UPLOADED' },
-            '-created_date',
-            1
-        );
+        // Get latest batch (any status)
+        const batches = await base44.asServiceRole.entities.LineImportBatch.list('-created_date', 1);
 
         if (batches.length === 0) {
-            return Response.json({ error: 'לא נמצא באצ׳ מתאים' }, { status: 404 });
+            return Response.json({ error: 'לא נמצא באצ׳' }, { status: 404 });
         }
 
         const batch = batches[0];
