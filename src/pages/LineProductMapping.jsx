@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { 
-    Settings, Download, Edit, Save, X, CheckCircle, XCircle, RefreshCw
+    Settings, Download, Edit, Save, X, CheckCircle, XCircle, RefreshCw, Plus
 } from "lucide-react";
 
 const CARRIERS = [
@@ -39,6 +39,10 @@ export default function LineProductMapping() {
     // Edit modal
     const [editingDef, setEditingDef] = useState(null);
     const [showEditModal, setShowEditModal] = useState(false);
+    
+    // Add modal
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [newSku, setNewSku] = useState({ item_sku: '', item_name_sample: '', is_line: false });
 
     const isManager = currentUser?.role === 'מנהל';
 
@@ -148,6 +152,29 @@ export default function LineProductMapping() {
         }
     };
 
+    const handleAddNew = async () => {
+        if (!newSku.item_sku.trim()) {
+            alert('נא להזין מק"ט');
+            return;
+        }
+
+        try {
+            await base44.entities.LineProductDefinition.create({
+                item_sku: newSku.item_sku.trim(),
+                item_name_sample: newSku.item_name_sample.trim() || 'הוזן ידנית',
+                is_line: newSku.is_line,
+                is_active: true,
+                safety_buffer_days: 5
+            });
+
+            setShowAddModal(false);
+            setNewSku({ item_sku: '', item_name_sample: '', is_line: false });
+            await loadDefinitions();
+        } catch (error) {
+            alert('שגיאה בהוספה: ' + error.message);
+        }
+    };
+
     if (!isManager) {
         return <UnauthorizedRedirect currentUser={currentUser} />;
     }
@@ -188,7 +215,7 @@ export default function LineProductMapping() {
                     </CardContent>
                 </Card>
                 <Card className="bg-white">
-                    <CardContent className="p-4">
+                    <CardContent className="p-4 space-y-2">
                         <Button
                             onClick={handleLoadSkus}
                             disabled={isLoadingSkus}
@@ -199,7 +226,15 @@ export default function LineProductMapping() {
                             ) : (
                                 <Download className="w-4 h-4 ml-2" />
                             )}
-                            טען מק״טים מהקובץ האחרון
+                            טען מק״טים מהקובץ
+                        </Button>
+                        <Button
+                            onClick={() => setShowAddModal(true)}
+                            variant="outline"
+                            className="w-full"
+                        >
+                            <Plus className="w-4 h-4 ml-2" />
+                            הוסף מק״ט ידנית
                         </Button>
                     </CardContent>
                 </Card>
@@ -322,6 +357,56 @@ export default function LineProductMapping() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Add Modal */}
+            {showAddModal && (
+                <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>הוספת מק״ט חדש</DialogTitle>
+                        </DialogHeader>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <Label>מק״ט *</Label>
+                                <Input
+                                    value={newSku.item_sku}
+                                    onChange={(e) => setNewSku({...newSku, item_sku: e.target.value})}
+                                    placeholder="הזן מק״ט"
+                                    className="font-mono"
+                                />
+                            </div>
+
+                            <div>
+                                <Label>שם פריט (אופציונלי)</Label>
+                                <Input
+                                    value={newSku.item_name_sample}
+                                    onChange={(e) => setNewSku({...newSku, item_name_sample: e.target.value})}
+                                    placeholder="תיאור"
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    checked={newSku.is_line}
+                                    onCheckedChange={(checked) => setNewSku({...newSku, is_line: checked})}
+                                />
+                                <Label>זהו קו סלולר</Label>
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-4">
+                                <Button variant="outline" onClick={() => setShowAddModal(false)}>
+                                    ביטול
+                                </Button>
+                                <Button onClick={handleAddNew} className="bg-green-600 hover:bg-green-700">
+                                    <Plus className="w-4 h-4 ml-2" />
+                                    הוסף
+                                </Button>
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            )}
 
             {/* Edit Modal */}
             {showEditModal && editingDef && (
