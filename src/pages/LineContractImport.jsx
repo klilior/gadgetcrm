@@ -59,7 +59,7 @@ export default function LineContractImport() {
             }, 1000);
 
             // Call import function
-            const response = await base44.functions.invoke('importLineContracts', {
+            const response = await base44.functions.invoke('importLineContractsSimple', {
                 file_url
             });
 

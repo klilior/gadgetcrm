@@ -23,7 +23,7 @@ export default function LinesToWorkOn() {
     
     // Filters
     const [viewMode, setViewMode] = useState("all_agents"); // my_portfolio | all_agents
-    const [statusFilter, setStatusFilter] = useState("all"); // eligible | in_progress | all
+    const [statusFilter, setStatusFilter] = useState("all"); // all מראה את הכל בברירת מחדל
     const [carrierFilter, setCarrierFilter] = useState("all");
     const [agentFilter, setAgentFilter] = useState("all");
     
@@ -64,10 +64,9 @@ export default function LinesToWorkOn() {
                 query.account_owner_id = currentUser.id;
             }
             
-            // Status filter
+            // Status filter - ברירת מחדל מראה הכל
             if (statusFilter === "eligible") {
                 query.status = { $in: ['ELIGIBLE', 'IN_PROGRESS'] };
-                // Exclude snoozed contracts
                 query.$or = [
                     { snooze_until: null },
                     { snooze_until: { $lte: new Date().toISOString() } }
@@ -75,6 +74,7 @@ export default function LinesToWorkOn() {
             } else if (statusFilter !== "all") {
                 query.status = statusFilter.toUpperCase();
             }
+            // אם statusFilter === "all" - לא מוסיפים שום תנאי סטטוס
             
             // Carrier filter
             if (carrierFilter !== "all") {
@@ -86,12 +86,8 @@ export default function LinesToWorkOn() {
                 query.account_owner_id = agentFilter;
             }
 
-            // Remove sort to ensure all records appear even if safe_retarget_date is null
-            const data = await base44.entities.LineContract.filter(query, null, 500);
-            console.log('📊 Loaded contracts:', data.length, 'Query:', JSON.stringify(query));
-            if (data.length > 0) {
-                console.log('Sample contract:', data[0]);
-            }
+            const data = await base44.entities.LineContract.filter(query, '-created_date', 1000);
+            console.log('📊 טעון:', data.length, 'חוזים');
             setContracts(data);
         } catch (error) {
             console.error("Error loading contracts:", error);
