@@ -75,7 +75,11 @@ Deno.serve(async (req) => {
 
         console.log('🔄 עיבוד שורות...');
 
-        // First pass: collect unique clients
+        // Load existing clients
+        const existingClients = await base44.asServiceRole.entities.Client.list(null, 10000);
+        const clientIdMap = Object.fromEntries(existingClients.map(c => [c.full_name?.trim() || '', c.id]));
+
+        // First pass: collect unique NEW clients
         for (let i = 1; i < data.length; i++) {
             stats.total++;
             const rowData = data[i];
@@ -91,23 +95,28 @@ Deno.serve(async (req) => {
             }
 
             const name = String(row.customer_name).trim();
-            if (!clientsToCreate.has(name)) {
+            if (!clientIdMap[name] && !clientsToCreate.has(name)) {
                 clientsToCreate.set(name, { full_name: name, source: 'LINE_IMPORT' });
             }
         }
 
         console.log(`👥 יוצר ${clientsToCreate.size} לקוחות חדשים...`);
         
-        // Create all clients in batch
-        const clientRecords = Array.from(clientsToCreate.values());
-        let createdClients = [];
-        for (let i = 0; i < clientRecords.length; i += 50) {
-            const chunk = clientRecords.slice(i, i + 50);
-            const batch = await base44.asServiceRole.entities.Client.bulkCreate(chunk);
-            createdClients = createdClients.concat(batch);
+        // Create all NEW clients in batch
+        if (clientsToCreate.size > 0) {
+            const clientRecords = Array.from(clientsToCreate.values());
+            let createdClients = [];
+            for (let i = 0; i < clientRecords.length; i += 50) {
+                const chunk = clientRecords.slice(i, i + 50);
+                const batch = await base44.asServiceRole.entities.Client.bulkCreate(chunk);
+                createdClients = createdClients.concat(batch);
+            }
+            
+            // Add to map
+            createdClients.forEach(c => {
+                clientIdMap[c.full_name.trim()] = c.id;
+            });
         }
-        
-        const clientIdMap = Object.fromEntries(createdClients.map(c => [c.full_name.trim(), c.id]));
 
         console.log('📝 יוצר חוזים...');
 
@@ -150,7 +159,10 @@ Deno.serve(async (req) => {
             if (!policy) continue;
 
             const customer_id = clientIdMap[String(row.customer_name).trim()];
-            if (!customer_id) continue;
+            if (!customer_id) {
+                console.log(`❌ לא נמצא לקוח: ${row.customer_name}`);
+                continue;
+            }
 
             const agent_id = agentMap[String(row.agent_name || '').toLowerCase()] || defaultAgent?.user_id;
             const agent_name = row.agent_name || defaultAgent?.user_name;
@@ -183,10 +195,14 @@ Deno.serve(async (req) => {
         console.log(`💾 שומר ${contractsToCreate.length} חוזים...`);
 
         // Save contracts in batches
-        for (let i = 0; i < contractsToCreate.length; i += 50) {
-            await base44.asServiceRole.entities.LineContract.bulkCreate(contractsToCreate.slice(i, i + 50));
+        if (contractsToCreate.length > 0) {
+            for (let i = 0; i < contractsToCreate.length; i += 50) {
+                const chunk = contractsToCreate.slice(i, i + 50);
+                await base44.asServiceRole.entities.LineContract.bulkCreate(chunk);
+                console.log(`✅ נשמרו ${i + chunk.length}/${contractsToCreate.length}`);
+            }
+            stats.created = contractsToCreate.length;
         }
-        stats.created = contractsToCreate.length;
 
         // Save learned mappings
         if (newMappings.size > 0) {
