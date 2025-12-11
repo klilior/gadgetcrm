@@ -113,13 +113,32 @@ export default function RawLinesImport() {
             });
 
             if (response.data.success) {
-                const { stats, unmapped_skus } = response.data;
+                const { stats, unmapped_skus, error_breakdown, error_samples } = response.data;
                 let msg = `✅ ${response.data.message}\n\n`;
                 msg += `סה"כ: ${stats.total}\n`;
                 msg += `נוצרו: ${stats.created}\n`;
                 msg += `עודכנו: ${stats.updated}\n`;
                 msg += `דולגו (לא ממופים): ${stats.skipped_unmapped}\n`;
                 msg += `שגיאות: ${stats.errors}`;
+                
+                if (stats.errors > 0 && error_breakdown) {
+                    msg += `\n\nפירוט שגיאות:`;
+                    if (error_breakdown.no_customer > 0) {
+                        msg += `\n- לקוח לא נמצא: ${error_breakdown.no_customer}`;
+                        if (error_samples.no_customer?.length > 0) {
+                            msg += `\n  דוגמאות: ${error_samples.no_customer.map(e => e.customer).join(', ')}`;
+                        }
+                    }
+                    if (error_breakdown.no_date > 0) {
+                        msg += `\n- תאריך לא תקין: ${error_breakdown.no_date}`;
+                        if (error_samples.no_date?.length > 0) {
+                            msg += `\n  דוגמאות: ${error_samples.no_date.map(e => e.date_raw).join(', ')}`;
+                        }
+                    }
+                    if (error_breakdown.other > 0) {
+                        msg += `\n- שגיאות אחרות: ${error_breakdown.other}`;
+                    }
+                }
                 
                 if (unmapped_skus && unmapped_skus.length > 0) {
                     msg += `\n\nמק״טים לא ממופים (${unmapped_skus.length}):\n`;

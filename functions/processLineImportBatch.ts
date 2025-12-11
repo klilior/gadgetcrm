@@ -47,11 +47,20 @@ Deno.serve(async (req) => {
             updated: 0,
             skipped_unmapped: 0,
             skipped_invalid: 0,
-            errors: 0
+            errors: 0,
+            error_no_customer: 0,
+            error_no_date: 0,
+            error_no_agent: 0
         };
 
         const unmappedSkus = new Set();
         const errors = [];
+        const errorSamples = {
+            no_customer: [],
+            no_date: [],
+            no_agent: [],
+            other: []
+        };
         const clientsToCreate = new Map();
         const contractsToCreate = [];
         const contractsToUpdate = [];
@@ -124,7 +133,15 @@ Deno.serve(async (req) => {
                 const activationDate = parseDate(row.issue_date);
                 if (!activationDate) {
                     stats.errors++;
-                    errors.push({ row_id: row.id, error: 'תאריך לא תקין' });
+                    stats.error_no_date++;
+                    if (errorSamples.no_date.length < 5) {
+                        errorSamples.no_date.push({ 
+                            doc: row.doc_number, 
+                            date_raw: row.issue_date,
+                            customer: row.customer_name 
+                        });
+                    }
+                    errors.push({ row_id: row.id, error: 'תאריך לא תקין', date: row.issue_date });
                     continue;
                 }
 
@@ -145,6 +162,14 @@ Deno.serve(async (req) => {
                 const customerId = clientMap[row.customer_name?.trim() || ''];
                 if (!customerId) {
                     stats.errors++;
+                    stats.error_no_customer++;
+                    if (errorSamples.no_customer.length < 5) {
+                        errorSamples.no_customer.push({ 
+                            doc: row.doc_number,
+                            customer: row.customer_name 
+                        });
+                    }
+                    errors.push({ row_id: row.id, error: 'לקוח לא נמצא', customer: row.customer_name });
                     continue;
                 }
 
@@ -186,6 +211,12 @@ Deno.serve(async (req) => {
 
             } catch (error) {
                 stats.errors++;
+                if (errorSamples.other.length < 5) {
+                    errorSamples.other.push({ 
+                        doc: row.doc_number,
+                        error: error.message 
+                    });
+                }
                 errors.push({ row_id: row.id, error: error.message });
                 console.error('Row processing error:', error);
             }
@@ -220,7 +251,13 @@ Deno.serve(async (req) => {
             success: true,
             stats,
             unmapped_skus: Array.from(unmappedSkus),
-            error_samples: errors.slice(0, 10),
+            error_samples: errorSamples,
+            error_breakdown: {
+                no_customer: stats.error_no_customer,
+                no_date: stats.error_no_date,
+                no_agent: stats.error_no_agent,
+                other: stats.errors - stats.error_no_customer - stats.error_no_date - stats.error_no_agent
+            },
             message: `✅ ${stats.created} נוצרו, ${stats.updated} עודכנו`
         });
 
