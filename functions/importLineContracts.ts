@@ -3,8 +3,7 @@ import { addMonths, addDays, format, parseISO } from 'npm:date-fns@2.30.0';
 
 /**
  * Imports historical line contracts from uploaded CSV/Excel file
- * Expected columns: customer_name, customer_phone, customer_id_number, msisdn, 
- *                   product_sku, product_name, doc_number, issue_date, agent_name
+ * Optimized with batch processing and caching to prevent timeouts
  */
 Deno.serve(async (req) => {
     try {
@@ -30,9 +29,7 @@ Deno.serve(async (req) => {
             return Response.json({ success: false, error: 'Missing file_url' }, { status: 400 });
         }
 
-        console.log('📥 Starting line contracts import from:', file_url);
-
-        console.log('📥 Downloading file from:', file_url);
+        console.log('📥 Starting optimized import from:', file_url);
         
         // Download file
         const fileResponse = await fetch(file_url);
@@ -41,9 +38,8 @@ Deno.serve(async (req) => {
         }
         
         const arrayBuffer = await fileResponse.arrayBuffer();
-        console.log(`📦 Downloaded ${arrayBuffer.byteLength} bytes`);
-
-        // Import XLSX library from npm
+        
+        // Import XLSX library
         const XLSX = await import('npm:xlsx@0.18.5');
         
         // Parse Excel
@@ -55,51 +51,47 @@ Deno.serve(async (req) => {
         }
         
         const sheetName = workbook.SheetNames[0];
-        console.log(`📄 Reading sheet: ${sheetName}`);
-        
         const worksheet = workbook.Sheets[sheetName];
         const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
         if (!data || data.length < 2) {
-            return Response.json({ 
-                success: false, 
-                error: 'הקובץ ריק או לא תקין - נדרשות לפחות שורת כותרות ושורת נתונים אחת' 
-            }, { status: 400 });
+            return Response.json({ success: false, error: 'הקובץ ריק או לא תקין' }, { status: 400 });
         }
 
         const headers = data[0];
-        console.log('📋 Headers found:', JSON.stringify(headers));
-        console.log('📋 Headers count:', headers.length);
         
-        // Show first data row for debugging
-        if (data.length > 1) {
-            console.log('📋 First data row:', JSON.stringify(data[1]));
-        }
-
-        // Load caches
-        const [carriers, mappings, agents, existingContracts] = await Promise.all([
+        // Load initial data (Caching)
+        console.log('🔄 Loading system data for cache...');
+        const [carriers, mappings, agents, existingContracts, clientsList] = await Promise.all([
             base44.asServiceRole.entities.CarrierPolicy.filter({ is_active: true }),
-            base44.asServiceRole.entities.CarrierProductMapping.filter({ is_active: true }, '-priority', 200),
+            base44.asServiceRole.entities.CarrierProductMapping.filter({ is_active: true }, '-priority', 1000),
             base44.asServiceRole.entities.LinetUsersMap.list(null, 200),
-            base44.asServiceRole.entities.LineContract.list(null, 5000) // Load existing to check duplicates
+            base44.asServiceRole.entities.LineContract.list(null, 10000), // Increased limit
+            base44.asServiceRole.entities.Client.list(null, 10000) // Load clients to cache
         ]);
 
+        // Build Caches
         const carrierMap = {};
         carriers.forEach(c => carrierMap[c.carrier_code] = c);
 
         const agentMap = {};
         agents.forEach(a => agentMap[a.user_name.toLowerCase()] = a.user_id);
 
-        // Build duplicate check set
+        const clientMap = {}; // Name -> ID
+        clientsList.forEach(c => {
+            if (c.full_name) clientMap[c.full_name.trim()] = c.id;
+        });
+
+        // Duplicate check set
         const existingKeys = new Set();
         existingContracts.forEach(c => {
             const key = `${c.original_invoice_id}_${c.customer_id}`;
             existingKeys.add(key);
         });
 
-        // Detect carrier function (inline)
+        // Helper: Detect carrier
         const detectCarrier = (sku, productName) => {
-            const skuStr = String(sku || '').trim(); // Ensure string
+            const skuStr = String(sku || '').trim();
             if (skuStr && skuStr !== 'UNKNOWN') {
                 const exactMatch = mappings.find(m => m.product_sku_exact === skuStr);
                 if (exactMatch) return exactMatch.carrier_code;
@@ -116,17 +108,13 @@ Deno.serve(async (req) => {
                 );
                 if (nameMatch) return nameMatch.carrier_code;
             }
-
             return null;
         };
 
-        // Column mapping from Hebrew headers (exact match from Excel)
+        // Build column map
         const columnMap = {};
-        
-        // Build flexible column mapping
         headers.forEach((header, idx) => {
             const h = String(header || '').trim();
-            
             if (h === 'חברה') columnMap[h] = 'customer_name';
             else if (h === 'מספר מסמך') columnMap[h] = 'doc_number';
             else if (h.includes('תאריך הפקה')) columnMap[h] = 'issue_date';
@@ -134,13 +122,19 @@ Deno.serve(async (req) => {
             else if (h.includes('מק"ט') || h.includes('מקט') || h === 'קוד מק"ט') columnMap[h] = 'product_sku';
             else if (h.includes('תיאור') || (h.includes('פריט') && !h.includes('מחיר'))) columnMap[h] = 'product_name';
             else if (h.includes('כמות')) columnMap[h] = 'quantity';
+            else if (h.includes('טלפון')) columnMap[h] = 'customer_phone';
+            else if (h.includes('ח.פ') || h.includes('ת.ז')) columnMap[h] = 'customer_id_number';
+            else if (h.includes('מספר קו') || h.includes('נייד')) columnMap[h] = 'msisdn';
         });
-        
-        console.log('📋 Column mapping built:', JSON.stringify(columnMap));
 
-        // Process rows
-        const stats = { total: 0, created: 0, skipped: 0, errors: 0 };
+        // Batch storage
+        const contractsToCreate = [];
+        const newMappingsToCreate = [];
         const errorRows = [];
+        const stats = { total: 0, created: 0, skipped: 0, errors: 0 };
+        const processedSkus = new Set(); // To avoid duplicates in new mappings
+
+        console.log('🚀 Processing rows...');
 
         for (let i = 1; i < data.length; i++) {
             const rowData = data[i];
@@ -149,88 +143,55 @@ Deno.serve(async (req) => {
             stats.total++;
             
             try {
-                // Map Hebrew columns to English field names
+                // Map row
                 const row = {};
                 headers.forEach((header, idx) => {
                     const fieldName = columnMap[header];
-                    if (fieldName) {
-                        row[fieldName] = rowData[idx];
-                    }
+                    if (fieldName) row[fieldName] = rowData[idx];
                 });
-                
-                // Debug: log mapped row for first few rows
-                if (i <= 3) {
-                    console.log(`Row ${i + 1} mapped:`, JSON.stringify(row));
-                }
 
-                // Parse and format date
-                if (row.issue_date) {
-                    try {
-                        // Handle Excel date (serial number) or string
-                        if (typeof row.issue_date === 'number') {
-                            // Excel serial date (days since 1900-01-01)
-                            const date = new Date((row.issue_date - 25569) * 86400 * 1000);
-                            row.issue_date = format(date, 'yyyy-MM-dd');
-                        } else if (typeof row.issue_date === 'string' && row.issue_date.includes('/')) {
-                            // Parse DD/MM/YYYY format
-                            const parts = row.issue_date.split('/');
-                            if (parts.length === 3) {
-                                const day = parts[0].padStart(2, '0');
-                                const month = parts[1].padStart(2, '0');
-                                const year = parts[2];
-                                row.issue_date = `${year}-${month}-${day}`;
-                            }
-                        }
-                    } catch (dateErr) {
-                        console.error(`Date parsing error for row ${i + 1}:`, dateErr);
-                        errorRows.push({ row: i + 1, error: `שגיאה בפורמט התאריך: ${row.issue_date}` });
-                        stats.errors++;
-                        continue;
-                    }
-                }
-
-                // Validate required fields - רק שדות שבאמת קיימים בקובץ
+                // Validate
                 if (!row.customer_name || !row.doc_number || !row.issue_date) {
-                    console.log(`Row ${i + 1} missing fields:`, row);
-                    errorRows.push({ row: i + 1, error: 'חסרים שדות חובה (חברה, מספר מסמך, תאריך)' });
+                    errorRows.push({ row: i + 1, error: 'חסרים שדות חובה' });
                     stats.errors++;
                     continue;
                 }
-                
-                // Default values for optional fields
-                if (!row.product_sku) row.product_sku = 'UNKNOWN';
-                row.product_sku = String(row.product_sku).trim(); // Ensure string
-                if (!row.agent_name) row.agent_name = 'לא הוגדר';
 
-                // Detect carrier
+                // Format Date
+                let issueDate = row.issue_date;
+                if (typeof issueDate === 'number') {
+                    issueDate = format(new Date((issueDate - 25569) * 86400 * 1000), 'yyyy-MM-dd');
+                } else if (typeof issueDate === 'string' && issueDate.includes('/')) {
+                    const parts = issueDate.split('/');
+                    if (parts.length === 3) issueDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                }
+                row.issue_date = issueDate;
+
+                // Defaults
+                row.product_sku = String(row.product_sku || 'UNKNOWN').trim();
+                row.agent_name = row.agent_name || 'לא הוגדר';
+
+                // Carrier Detection
                 const carrier_code = detectCarrier(row.product_sku, row.product_name);
                 if (!carrier_code) {
-                    console.log(`Row ${i + 1} - No carrier detected for SKU: ${row.product_sku}, Name: ${row.product_name}`);
                     stats.skipped++;
-                    continue; // Not a line product
+                    continue;
                 }
 
-                // LEARN: If SKU exists but wasn't mapped, create a mapping for future use
-                if (row.product_sku && row.product_sku !== 'UNKNOWN') {
+                // Learning: Queue new mapping
+                if (row.product_sku !== 'UNKNOWN') {
                     const existingSkuMap = mappings.find(m => m.product_sku_exact === row.product_sku);
-                    if (!existingSkuMap) {
-                        try {
-                            await base44.asServiceRole.entities.CarrierProductMapping.create({
-                                carrier_code,
-                                product_sku_exact: row.product_sku,
-                                priority: 100, // High priority for exact match
-                                is_active: true
-                            });
-                            // Add to local cache to avoid re-creating in this loop
-                            mappings.push({ carrier_code, product_sku_exact: row.product_sku });
-                            console.log(`🧠 Learned new SKU mapping: ${row.product_sku} -> ${carrier_code}`);
-                        } catch (e) {
-                            console.error('Failed to save learned mapping:', e);
-                        }
+                    if (!existingSkuMap && !processedSkus.has(row.product_sku)) {
+                        newMappingsToCreate.push({
+                            carrier_code,
+                            product_sku_exact: row.product_sku,
+                            priority: 100,
+                            is_active: true
+                        });
+                        mappings.push({ carrier_code, product_sku_exact: row.product_sku }); // Add to local cache
+                        processedSkus.add(row.product_sku);
                     }
                 }
-
-                console.log(`Row ${i + 1} - Carrier detected: ${carrier_code}`);
 
                 const policy = carrierMap[carrier_code];
                 if (!policy) {
@@ -239,66 +200,53 @@ Deno.serve(async (req) => {
                     continue;
                 }
 
-                // Find or create customer
-                let customers = await base44.asServiceRole.entities.Client.filter({
-                    full_name: row.customer_name
-                }, null, 1);
+                // Client Handling (Cache Check)
+                const clientName = row.customer_name.trim();
+                let customer_id = clientMap[clientName];
 
-                let customer_id;
-                if (customers.length > 0) {
-                    customer_id = customers[0].id;
-                } else {
-                    // Create new customer
-                    const newCustomer = await base44.asServiceRole.entities.Client.create({
-                        full_name: row.customer_name,
-                        phone: row.customer_phone || '',
-                        id_number: row.customer_id_number || '',
-                        source: 'LINE_IMPORT'
-                    });
-                    customer_id = newCustomer.id;
-                }
-
-                // Find agent - use default if not found
-                let agent_id, agent_name;
-                if (row.agent_name && row.agent_name !== 'לא הוגדר') {
-                    const agentNameLower = row.agent_name.toLowerCase();
-                    agent_id = agentMap[agentNameLower];
-                    agent_name = row.agent_name;
-                }
-                
-                // If agent not found, use first available agent as default
-                if (!agent_id) {
-                    const defaultAgent = agents[0];
-                    if (defaultAgent) {
-                        agent_id = defaultAgent.user_id;
-                        agent_name = defaultAgent.user_name;
-                        console.log(`Using default agent for row ${i + 1}: ${agent_name}`);
-                    } else {
-                        errorRows.push({ row: i + 1, error: 'אין נציגים במערכת' });
-                        stats.errors++;
+                if (!customer_id) {
+                    // Create Client Immediately (Cannot be easily batched if we need the ID now)
+                    // But we can optimistically assume it won't fail or handle it one by one.
+                    // To be safe and since Clients are fewer than lines, we'll create them one by one but cache result.
+                    try {
+                        const newClient = await base44.asServiceRole.entities.Client.create({
+                            full_name: row.customer_name,
+                            phone: row.customer_phone || '',
+                            id_number: row.customer_id_number || '',
+                            source: 'LINE_IMPORT'
+                        });
+                        customer_id = newClient.id;
+                        clientMap[clientName] = customer_id; // Update cache
+                    } catch (err) {
+                        console.error('Error creating client:', err);
                         continue;
                     }
                 }
 
-                // Check for duplicate
+                // Check Duplicates
                 const duplicateKey = `${row.doc_number}_${customer_id}`;
                 if (existingKeys.has(duplicateKey)) {
                     stats.skipped++;
                     continue;
                 }
 
-                // Calculate safe retarget date
+                // Agent Logic
+                let agent_id = agentMap[row.agent_name.toLowerCase()];
+                let agent_name = row.agent_name;
+                if (!agent_id && agents.length > 0) {
+                    agent_id = agents[0].user_id;
+                    agent_name = agents[0].user_name;
+                }
+
+                // Calculate Dates
                 const activationDate = parseISO(row.issue_date);
                 let safeDate = addMonths(activationDate, policy.churn_window_months || 12);
                 safeDate = addDays(safeDate, policy.safety_buffer_days || 30);
                 const safe_retarget_date = format(safeDate, 'yyyy-MM-dd');
+                const status = safeDate <= new Date() ? 'ELIGIBLE' : 'LOCKED';
 
-                // Determine status
-                const today = new Date();
-                const status = safeDate <= today ? 'ELIGIBLE' : 'LOCKED';
-
-                // Create contract object
-                const contractData = {
+                // Queue Contract
+                contractsToCreate.push({
                     customer_id,
                     customer_name: row.customer_name,
                     customer_phone: row.customer_phone || null,
@@ -309,51 +257,56 @@ Deno.serve(async (req) => {
                     activation_date: row.issue_date,
                     original_invoice_id: row.doc_number,
                     agent_id,
-                    agent_name: agent_name,
+                    agent_name,
                     account_owner_id: agent_id,
                     account_owner_name: agent_name,
                     safe_retarget_date,
                     status,
                     last_action_date: new Date().toISOString(),
                     last_action_type: 'IMPORTED'
-                };
-
-                await base44.asServiceRole.entities.LineContract.create(contractData);
-
-                existingKeys.add(duplicateKey);
-                stats.created++;
-                console.log(`✅ Row ${i + 1} - Created contract:`, {
-                    customer: row.customer_name,
-                    carrier: carrier_code,
-                    status: contractData.status,
-                    account_owner_id: contractData.account_owner_id,
-                    agent_id: contractData.agent_id,
-                    safe_retarget_date: contractData.safe_retarget_date
                 });
 
-            } catch (error) {
-                console.error(`Error processing row ${i + 1}:`, error);
-                errorRows.push({ row: i + 1, error: error.message });
+                existingKeys.add(duplicateKey);
+
+            } catch (err) {
+                console.error('Row error:', err);
+                errorRows.push({ row: i + 1, error: err.message });
                 stats.errors++;
             }
         }
 
-        console.log('✅ Import completed:', stats);
+        console.log(`💾 Saving ${contractsToCreate.length} contracts and ${newMappingsToCreate.length} new mappings...`);
+
+        // Batch Write Mappings
+        if (newMappingsToCreate.length > 0) {
+            // Split into chunks of 100
+            for (let i = 0; i < newMappingsToCreate.length; i += 100) {
+                const chunk = newMappingsToCreate.slice(i, i + 100);
+                await base44.asServiceRole.entities.CarrierProductMapping.bulkCreate(chunk);
+            }
+            console.log('✅ Mappings saved');
+        }
+
+        // Batch Write Contracts
+        if (contractsToCreate.length > 0) {
+            // Split into chunks of 100
+            for (let i = 0; i < contractsToCreate.length; i += 100) {
+                const chunk = contractsToCreate.slice(i, i + 100);
+                await base44.asServiceRole.entities.LineContract.bulkCreate(chunk);
+            }
+            stats.created = contractsToCreate.length;
+            console.log('✅ Contracts saved');
+        }
 
         return Response.json({
             success: true,
             stats,
-            errorRows: errorRows.slice(0, 50), // Return first 50 errors
-            message: `יובאו ${stats.created} חוזים מתוך ${stats.total} שורות`
+            errorRows: errorRows.slice(0, 50),
+            message: `יובאו ${stats.created} חוזים (חדשים), ${newMappingsToCreate.length} מק"טים נלמדו`
         });
 
     } catch (error) {
         console.error('❌ Import error:', error);
-        console.error('Stack trace:', error.stack);
-        return Response.json({
-            success: false,
-            error: error.message,
-            details: error.stack
-        }, { status: 500 });
+        return Response.json({ success: false, error: error.message }, { status: 500 });
     }
 });
