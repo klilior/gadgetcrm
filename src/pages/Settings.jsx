@@ -1385,6 +1385,47 @@ GADGET-TEAM`);
                             </p>
                         </CardHeader>
                         <CardContent className="space-y-6">
+                            {/* Test Button */}
+                            <div className="bg-yellow-50 p-4 rounded-lg">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h4 className="font-semibold text-yellow-800 mb-1">בדיקת חיבור ללינט</h4>
+                                        <p className="text-sm text-yellow-700">בדוק שהנתונים שלינט מחזירה תקינים</p>
+                                    </div>
+                                    <Button
+                                        onClick={async () => {
+                                            try {
+                                                toast.info("מבצע בדיקה...");
+                                                const { debugLinetAccountSync } = await import("@/functions/debugLinetAccountSync");
+                                                const result = await debugLinetAccountSync({});
+                                                
+                                                if (result.data?.success) {
+                                                    const data = result.data;
+                                                    toast.success(
+                                                        <div className="text-sm">
+                                                            <p className="font-bold mb-2">✅ לינט מחזירה נתונים!</p>
+                                                            <p>לקוח: {data.contract_sample?.customer_name}</p>
+                                                            <p>טלפון מלינט: {data.linet_account?.phone_1 || data.linet_account?.mobile || 'אין'}</p>
+                                                        </div>,
+                                                        { duration: 8000 }
+                                                    );
+                                                    console.log("Linet Test Result:", data);
+                                                } else {
+                                                    toast.error("❌ לינט לא מחזירה נתונים: " + (result.data?.error || "Unknown"));
+                                                    console.error("Linet Error:", result.data);
+                                                }
+                                            } catch (error) {
+                                                toast.error("שגיאה בבדיקה: " + error.message);
+                                                console.error("Test error:", error);
+                                            }
+                                        }}
+                                        className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                                    >
+                                        <Play className="w-4 h-4 ml-2" />
+                                        בדוק עכשיו
+                                    </Button>
+                                </div>
+                            </div>
                             <div className="grid gap-4">
                                 <div>
                                     <Label htmlFor="linet-login-id" className="text-sm font-medium">Login ID</Label>
