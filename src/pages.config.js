@@ -41,6 +41,7 @@ import AgentDashboard from './pages/AgentDashboard';
 import LinesToWorkOn from './pages/LinesToWorkOn';
 import LineContractImport from './pages/LineContractImport';
 import CarrierManagement from './pages/CarrierManagement';
+import RawLinesImport from './pages/RawLinesImport';
 import __Layout from './Layout.jsx';
 
 
@@ -88,6 +89,7 @@ export const PAGES = {
     "LinesToWorkOn": LinesToWorkOn,
     "LineContractImport": LineContractImport,
     "CarrierManagement": CarrierManagement,
+    "RawLinesImport": RawLinesImport,
 }
 
 export const pagesConfig = {
