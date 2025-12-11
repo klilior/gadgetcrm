@@ -340,8 +340,8 @@ function AppContent({ children, currentPageName }) {
                           </div>
                         </SidebarMenuButton>
 
-                        <div className={`overflow-hidden transition-all duration-300 ${isSettingsMenuOpen ? 'max-h-80 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
-                          <div className="pr-4 md:pr-6 pt-1 space-y-1">
+                        <div className={`overflow-hidden transition-all duration-300 ${isSettingsMenuOpen ? 'max-h-96 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                          <div className="pr-4 md:pr-6 pt-1 space-y-1 overflow-y-auto max-h-80">
                             {settingsMenuItems.map(child => (
                               <SidebarMenuButton key={child.title} asChild className={`glass-button w-full justify-start p-2 md:p-3 rounded-xl transition-all duration-300 ${ location.pathname === child.url ? 'bg-gray-500/30 border-gray-400 font-semibold' : 'hover:bg-white/25' }`}>
                                 <Link to={child.url} className="text-xs md:text-sm font-medium text-gray-700">
