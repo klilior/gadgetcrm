@@ -11,42 +11,59 @@ Deno.serve(async (req) => {
 
         console.log('🗑️ מוחק נתוני ייבוא...');
 
-        // Delete all rows
-        const rows = await base44.asServiceRole.entities.LineImportRow.list(null, 10000);
-        console.log(`📊 ${rows.length} שורות למחיקה`);
-        
-        for (let i = 0; i < rows.length; i += 100) {
-            const chunk = rows.slice(i, i + 100);
-            for (const row of chunk) {
-                await base44.asServiceRole.entities.LineImportRow.delete(row.id);
+        let rowsDeleted = 0, batchesDeleted = 0, defsDeleted = 0;
+
+        // Delete all product definitions first (smaller table)
+        try {
+            const defs = await base44.asServiceRole.entities.LineProductDefinition.list(null, 1000);
+            console.log(`🔧 ${defs.length} הגדרות מוצר למחיקה`);
+            for (const def of defs) {
+                await base44.asServiceRole.entities.LineProductDefinition.delete(def.id);
+                defsDeleted++;
             }
-            console.log(`✅ ${Math.min(i + 100, rows.length)}/${rows.length}`);
+        } catch (e) {
+            console.error('Error deleting definitions:', e);
         }
 
-        // Delete all batches
-        const batches = await base44.asServiceRole.entities.LineImportBatch.list(null, 1000);
-        console.log(`📦 ${batches.length} באצ'ים למחיקה`);
-        
-        for (const batch of batches) {
-            await base44.asServiceRole.entities.LineImportBatch.delete(batch.id);
+        // Delete rows in smaller batches
+        try {
+            let hasMore = true;
+            while (hasMore) {
+                const rows = await base44.asServiceRole.entities.LineImportRow.list(null, 100);
+                if (rows.length === 0) {
+                    hasMore = false;
+                } else {
+                    for (const row of rows) {
+                        await base44.asServiceRole.entities.LineImportRow.delete(row.id);
+                        rowsDeleted++;
+                    }
+                    console.log(`✅ נמחקו ${rowsDeleted} שורות...`);
+                }
+            }
+        } catch (e) {
+            console.error('Error deleting rows:', e);
         }
 
-        // Delete all product definitions
-        const defs = await base44.asServiceRole.entities.LineProductDefinition.list(null, 10000);
-        console.log(`🔧 ${defs.length} הגדרות מוצר למחיקה`);
-        
-        for (const def of defs) {
-            await base44.asServiceRole.entities.LineProductDefinition.delete(def.id);
+        // Delete batches last
+        try {
+            const batches = await base44.asServiceRole.entities.LineImportBatch.list(null, 100);
+            console.log(`📦 ${batches.length} באצ'ים למחיקה`);
+            for (const batch of batches) {
+                await base44.asServiceRole.entities.LineImportBatch.delete(batch.id);
+                batchesDeleted++;
+            }
+        } catch (e) {
+            console.error('Error deleting batches:', e);
         }
 
         return Response.json({
             success: true,
             deleted: {
-                rows: rows.length,
-                batches: batches.length,
-                definitions: defs.length
+                rows: rowsDeleted,
+                batches: batchesDeleted,
+                definitions: defsDeleted
             },
-            message: `✅ נמחקו ${rows.length} שורות, ${batches.length} באצ'ים, ${defs.length} הגדרות`
+            message: `✅ נמחקו ${rowsDeleted} שורות, ${batchesDeleted} באצ'ים, ${defsDeleted} הגדרות`
         });
 
     } catch (error) {
