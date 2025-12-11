@@ -87,10 +87,11 @@ Deno.serve(async (req) => {
 
         // Analyze what we got
         const result = {
-            contract_sample: {
-                customer_name: sampleContract.customer_name,
+            transaction_sample: {
+                customer_name: sampleTx.customer_name,
+                doc_number: sampleTx.doc_number,
                 linet_account_id: accountId,
-                current_phone: sampleContract.customer_phone
+                sync_date: sampleTx.sync_timestamp
             },
             linet_api_response: {
                 status: response.status,
