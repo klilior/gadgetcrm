@@ -20,12 +20,30 @@ export default function ContractDetailModal({ isOpen, onClose, contract, onUpdat
     const [isEditingPhone, setIsEditingPhone] = useState(false);
     const [editedPhone, setEditedPhone] = useState(contract?.customer_phone || "");
     const [isFetchingPhone, setIsFetchingPhone] = useState(false);
+    const [linetCustomer, setLinetCustomer] = useState(null);
 
     useEffect(() => {
         if (isOpen && contract) {
             loadNotes();
+            loadLinetCustomer();
         }
     }, [isOpen, contract]);
+
+    const loadLinetCustomer = async () => {
+        if (!contract?.linet_account_id) return;
+        
+        try {
+            const customers = await base44.entities.LinetCustomer.filter({
+                linet_account_id: contract.linet_account_id
+            }, null, 1);
+            
+            if (customers.length > 0) {
+                setLinetCustomer(customers[0]);
+            }
+        } catch (error) {
+            console.error('Error loading Linet customer:', error);
+        }
+    };
 
     const loadNotes = async () => {
         try {
@@ -251,22 +269,25 @@ export default function ContractDetailModal({ isOpen, onClose, contract, onUpdat
                                     </Button>
                                 </div>
                             ) : (
-                                <div className="flex gap-2 items-center">
-                                    <p className="font-mono">{contract.customer_phone || 'אין מידע'}</p>
-                                    <Button size="sm" variant="ghost" onClick={() => { setEditedPhone(contract.customer_phone || ""); setIsEditingPhone(true); }}>
-                                        <Edit className="w-3 h-3" />
-                                    </Button>
-                                    {!contract.customer_phone && (
-                                        <Button 
-                                            size="sm" 
-                                            variant="outline" 
-                                            onClick={handleFetchFromLinet}
-                                            disabled={isFetchingPhone}
-                                            className="text-xs h-8"
-                                        >
-                                            <Download className="w-3 h-3 ml-1" />
-                                            {isFetchingPhone ? 'מחפש...' : 'שלוף מלינט'}
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex gap-2 items-center">
+                                        <p className="font-mono">
+                                            {linetCustomer?.phone_1 || contract.customer_phone || 'אין מידע'}
+                                        </p>
+                                        <Button size="sm" variant="ghost" onClick={() => { setEditedPhone(contract.customer_phone || ""); setIsEditingPhone(true); }}>
+                                            <Edit className="w-3 h-3" />
                                         </Button>
+                                    </div>
+                                    {linetCustomer && (linetCustomer.phone_2 || linetCustomer.mobile) && (
+                                        <p className="text-xs text-gray-500">
+                                            {linetCustomer.phone_2 && `נוסף: ${linetCustomer.phone_2}`}
+                                            {linetCustomer.mobile && ` | נייד: ${linetCustomer.mobile}`}
+                                        </p>
+                                    )}
+                                    {linetCustomer?.email && (
+                                        <p className="text-xs text-gray-500">
+                                            📧 {linetCustomer.email}
+                                        </p>
                                     )}
                                 </div>
                             )}
