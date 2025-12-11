@@ -69,18 +69,37 @@ Deno.serve(async (req) => {
         const parseDate = (dateStr) => {
             if (!dateStr) return null;
             try {
-                // Try different formats
-                if (dateStr.includes('/')) {
-                    const parts = dateStr.split('/');
+                const str = String(dateStr).trim();
+                
+                // Format: d.m.yyyy or dd.mm.yyyy
+                if (str.includes('.')) {
+                    const parts = str.split('.');
                     if (parts.length === 3) {
-                        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                        const day = parts[0].padStart(2, '0');
+                        const month = parts[1].padStart(2, '0');
+                        const year = parts[2];
+                        return `${year}-${month}-${day}`;
                     }
                 }
-                if (dateStr.includes('-')) {
-                    return dateStr.substring(0, 10);
+                
+                // Format: d/m/yyyy or dd/mm/yyyy
+                if (str.includes('/')) {
+                    const parts = str.split('/');
+                    if (parts.length === 3) {
+                        const day = parts[0].padStart(2, '0');
+                        const month = parts[1].padStart(2, '0');
+                        const year = parts[2];
+                        return `${year}-${month}-${day}`;
+                    }
                 }
+                
+                // Already in ISO format
+                if (str.includes('-') && str.length >= 10) {
+                    return str.substring(0, 10);
+                }
+                
                 // Excel date number
-                const num = parseFloat(dateStr);
+                const num = parseFloat(str);
                 if (!isNaN(num) && num > 40000) {
                     return format(new Date((num - 25569) * 86400 * 1000), 'yyyy-MM-dd');
                 }
