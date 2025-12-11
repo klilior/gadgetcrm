@@ -23,26 +23,26 @@ Deno.serve(async (req) => {
         const base44 = createClientFromRequest(req);
         const user = await base44.auth.me();
 
-        console.log('🔍 Step 1: Looking for recent contracts with account_id...');
+        console.log('🔍 Step 1: Looking for recent sales transactions with account_id...');
 
-        // Get recent contracts
-        const contracts = await base44.asServiceRole.entities.LineContract.filter(
+        // Get recent sales transactions from Linet sync
+        const transactions = await base44.asServiceRole.entities.SalesTransaction.filter(
             { linet_account_id: { $exists: true } },
-            '-created_date',
+            '-sync_timestamp',
             10
         );
 
-        if (contracts.length === 0) {
+        if (transactions.length === 0) {
             return Response.json({
                 success: false,
-                error: 'No contracts with linet_account_id found'
+                error: 'No sales transactions with linet_account_id found'
             });
         }
 
-        const sampleContract = contracts[0];
-        const accountId = sampleContract.linet_account_id;
+        const sampleTx = transactions[0];
+        const accountId = sampleTx.linet_account_id;
 
-        console.log(`✅ Found contract: ${sampleContract.customer_name}`);
+        console.log(`✅ Found transaction: ${sampleTx.customer_name} (Doc: ${sampleTx.doc_number})`);
         console.log(`   Account ID: ${accountId}`);
 
         // Try to fetch from Linet
