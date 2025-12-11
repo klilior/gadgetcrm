@@ -141,6 +141,31 @@ export default function RawLinesImport() {
         }
     };
 
+    const handleClearData = async () => {
+        if (!confirm('⚠️ זה ימחק לצמיתות את כל:\n- באצ\'ים\n- שורות גולמיות\n- הגדרות מק״טים\n\nהאם להמשיך?')) return;
+        if (!confirm('בטוח בטוח? פעולה זו בלתי הפיכה!')) return;
+
+        setIsProcessing(true);
+        try {
+            const response = await base44.functions.invoke('clearImportData', {});
+
+            if (response.data.success) {
+                alert(response.data.message);
+                await loadBatches();
+                setPreviewRows([]);
+                setSelectedBatch(null);
+            } else {
+                throw new Error(response.data.error || 'Clear failed');
+            }
+
+        } catch (error) {
+            console.error('Clear error:', error);
+            alert('שגיאה במחיקה: ' + error.message);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
     const getStatusBadge = (status) => {
         const configs = {
             UPLOADED: { label: 'הועלה', color: 'bg-blue-500' },
@@ -170,8 +195,16 @@ export default function RawLinesImport() {
 
             {/* Upload Section */}
             <Card className="glass-card border-0">
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>העלאת קובץ חדש</CardTitle>
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleClearData}
+                        disabled={isProcessing}
+                    >
+                        🗑️ מחק את כל נתוני הייבוא
+                    </Button>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <Alert>

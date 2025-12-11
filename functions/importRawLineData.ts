@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
             issue_date: findCol(['תאריך', 'הפקה']),
             customer_name: findCol(['חברה', 'לקוח', 'שם לקוח']),
             customer_id_external: findCol(['מזהה לקוח', 'ח.פ', 'עוסק']),
-            item_sku: findCol(['מק"ט', 'קוד', 'SKU']),
+            item_sku: findCol(['sku', 'SKU', 'מק"ט', 'קוד']),
             item_name: findCol(['תיאור', 'פריט', 'שם פריט']),
             quantity: findCol(['כמות', 'יחידות']),
             owner_name: findCol(['יצ"מ', 'יצמ', 'נציג', 'מוכר', 'owner']),
