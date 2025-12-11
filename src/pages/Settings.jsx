@@ -1396,23 +1396,21 @@ GADGET-TEAM`);
                                         onClick={async () => {
                                             try {
                                                 toast.info("מבצע בדיקה...");
-                                                const { debugLinetAccountSync } = await import("@/functions/debugLinetAccountSync");
-                                                const result = await debugLinetAccountSync({});
+                                                const result = await base44.functions.invoke('debugLinetAccountSync', {});
                                                 
-                                                if (result.data?.success) {
-                                                    const data = result.data;
+                                                if (result?.success) {
                                                     toast.success(
                                                         <div className="text-sm">
                                                             <p className="font-bold mb-2">✅ לינט מחזירה נתונים!</p>
-                                                            <p>לקוח: {data.contract_sample?.customer_name}</p>
-                                                            <p>טלפון מלינט: {data.linet_account?.phone_1 || data.linet_account?.mobile || 'אין'}</p>
+                                                            <p>לקוח: {result.transaction_sample?.customer_name}</p>
+                                                            <p>טלפון מלינט: {result.linet_account?.phone || result.linet_account?.mobile || 'אין'}</p>
                                                         </div>,
                                                         { duration: 8000 }
                                                     );
-                                                    console.log("Linet Test Result:", data);
+                                                    console.log("Linet Test Result:", result);
                                                 } else {
-                                                    toast.error("❌ לינט לא מחזירה נתונים: " + (result.data?.error || "Unknown"));
-                                                    console.error("Linet Error:", result.data);
+                                                    toast.error("❌ לינט לא מחזירה נתונים: " + (result?.error || "Unknown"));
+                                                    console.error("Linet Error:", result);
                                                 }
                                             } catch (error) {
                                                 toast.error("שגיאה בבדיקה: " + error.message);
