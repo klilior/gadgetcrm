@@ -62,13 +62,15 @@ Deno.serve(async (req) => {
         
         // Load initial data (Caching)
         console.log('🔄 Loading system data for cache...');
-        const [carriers, mappings, agents, existingContracts, clientsList] = await Promise.all([
+        const [carriers, mappings, agents, existingContracts] = await Promise.all([
             base44.asServiceRole.entities.CarrierPolicy.filter({ is_active: true }),
             base44.asServiceRole.entities.CarrierProductMapping.filter({ is_active: true }, '-priority', 1000),
             base44.asServiceRole.entities.LinetUsersMap.list(null, 200),
-            base44.asServiceRole.entities.LineContract.list(null, 10000), // Increased limit
-            base44.asServiceRole.entities.Client.list(null, 10000) // Load clients to cache
+            base44.asServiceRole.entities.LineContract.list(null, 2000) // Reduced limit to prevent OOM
         ]);
+        
+        // Don't load all clients to memory to prevent OOM. We will look them up as needed or use a smaller cache if needed.
+        const clientsList = [];
 
         // Build Caches
         const carrierMap = {};
@@ -102,9 +104,11 @@ Deno.serve(async (req) => {
                 if (prefixMatch) return prefixMatch.carrier_code;
             }
 
-            if (productName) {
+            const nameStr = String(productName || '').trim();
+            if (nameStr) {
+                const nameLower = nameStr.toLowerCase();
                 const nameMatch = mappings.find(m => 
-                    m.name_contains && productName.toLowerCase().includes(m.name_contains.toLowerCase())
+                    m.name_contains && nameLower.includes(m.name_contains.toLowerCase())
                 );
                 if (nameMatch) return nameMatch.carrier_code;
             }
