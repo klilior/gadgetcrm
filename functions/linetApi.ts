@@ -128,6 +128,22 @@ Deno.serve(async (req) => {
                 break;
             }
 
+            case 'searchClient': {
+                // Params: company_name (string) or client_id (number)
+                const { company_name, client_id } = params || {};
+
+                if (!company_name && !client_id) {
+                    throw new Error("Missing required param: company_name or client_id");
+                }
+
+                const query = {};
+                if (client_id) query.id = client_id;
+                if (company_name) query.company_name = company_name;
+
+                result = await genericNewsearch(base44, 'client', query, 10, 0);
+                break;
+            }
+
             default:
                 return Response.json({ success: false, error: `Unknown action: ${action}` }, { status: 400 });
         }
