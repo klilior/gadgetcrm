@@ -317,13 +317,14 @@ export default function RawLinesImport() {
                                                     <Eye className="w-4 h-4 ml-2" />
                                                     צפה
                                                 </Button>
-                                                {batch.status === 'UPLOADED' && (
+                                                {(batch.status === 'UPLOADED' || batch.status === 'PROCESSED') && (
                                                     <Button
                                                         size="sm"
                                                         className="bg-green-600 hover:bg-green-700 text-white"
                                                         onClick={() => handleProcessBatch(batch.id)}
+                                                        disabled={isProcessing}
                                                     >
-                                                        עבד לקווי ניהול
+                                                        {batch.status === 'PROCESSED' ? '🔄 עבד מחדש' : 'עבד לקווי ניהול'}
                                                     </Button>
                                                 )}
                                             </div>
