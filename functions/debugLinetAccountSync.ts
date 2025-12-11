@@ -76,8 +76,8 @@ Deno.serve(async (req) => {
                 success: false,
                 error: 'Failed to parse Linet response',
                 raw_response: responseText,
-                contract: {
-                    customer_name: sampleContract.customer_name,
+                transaction: {
+                    customer_name: sampleTx.customer_name,
                     linet_account_id: accountId
                 }
             });
