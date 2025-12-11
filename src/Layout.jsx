@@ -111,6 +111,7 @@ function AppContent({ children, currentPageName }) {
       settingsMenuItems = [
       { title: "ניהול עובדים ומשתמשים", url: createPageUrl("ManageEmployees") },
       { title: "📥 ייבוא גולמי - קווים", url: createPageUrl("RawLinesImport") },
+      { title: "🔧 מיפוי מק״טי קווים", url: createPageUrl("LineProductMapping") },
       { title: "ספקי וואטסאפ", url: createPageUrl("WhatsAppProviders") },
       { title: "🔧 דיבאג וואטסאפ", url: createPageUrl("WhatsAppDebug") },
       { title: "ספקי משלוחים", url: createPageUrl("ShippingProviders") },

@@ -42,6 +42,7 @@ import LinesToWorkOn from './pages/LinesToWorkOn';
 import LineContractImport from './pages/LineContractImport';
 import CarrierManagement from './pages/CarrierManagement';
 import RawLinesImport from './pages/RawLinesImport';
+import LineProductMapping from './pages/LineProductMapping';
 import __Layout from './Layout.jsx';
 
 
@@ -90,6 +91,7 @@ export const PAGES = {
     "LineContractImport": LineContractImport,
     "CarrierManagement": CarrierManagement,
     "RawLinesImport": RawLinesImport,
+    "LineProductMapping": LineProductMapping,
 }
 
 export const pagesConfig = {
