@@ -1,99 +1,99 @@
-import Settings from './pages/Settings';
-import TodaysCalls from './pages/TodaysCalls';
-import Tickets from './pages/Tickets';
-import Customers from './pages/Customers';
-import Shifts from './pages/Shifts';
-import ManagerDashboard from './pages/ManagerDashboard';
-import ManageEmployees from './pages/ManageEmployees';
-import ShiftPreferences from './pages/ShiftPreferences';
-import BuildSchedule from './pages/BuildSchedule';
-import WeeklySchedule from './pages/WeeklySchedule';
-import RepairDashboard from './pages/RepairDashboard';
-import TechnicianReport from './pages/TechnicianReport';
-import VendorReport from './pages/VendorReport';
-import WhatsAppProviders from './pages/WhatsAppProviders';
-import Orders from './pages/Orders';
-import AttendanceClock from './pages/AttendanceClock';
-import AttendanceSettings from './pages/AttendanceSettings';
-import MessageCenter from './pages/MessageCenter';
-import AttendanceReport from './pages/AttendanceReport';
-import ManageAttendance from './pages/ManageAttendance';
-import AttendanceManagerReport from './pages/AttendanceManagerReport';
-import PaymentSettings from './pages/PaymentSettings';
-import DebugSchedule from './pages/DebugSchedule';
-import WhatsAppDebug from './pages/WhatsAppDebug';
-import ShippingProviders from './pages/ShippingProviders';
-import PaymentReturn from './pages/PaymentReturn';
-import Products from './pages/Products';
-import SalesDataAdmin from './pages/SalesDataAdmin';
-import Home from './pages/Home';
-import SalesDashboard from './pages/SalesDashboard';
-import CommissionModels from './pages/CommissionModels';
-import CommissionCalculation from './pages/CommissionCalculation';
 import AgentCommissionAssignment from './pages/AgentCommissionAssignment';
-import AgentPerformanceDashboard from './pages/AgentPerformanceDashboard';
-import GoalsDashboard from './pages/GoalsDashboard';
-import ShiftBonusManagement from './pages/ShiftBonusManagement';
-import TargetBonusManagement from './pages/TargetBonusManagement';
-import SyncManagement from './pages/SyncManagement';
-import CommissionGroupMappings from './pages/CommissionGroupMappings';
 import AgentDashboard from './pages/AgentDashboard';
-import LinesToWorkOn from './pages/LinesToWorkOn';
-import LineContractImport from './pages/LineContractImport';
+import AgentPerformanceDashboard from './pages/AgentPerformanceDashboard';
+import AttendanceClock from './pages/AttendanceClock';
+import AttendanceManagerReport from './pages/AttendanceManagerReport';
+import AttendanceReport from './pages/AttendanceReport';
+import AttendanceSettings from './pages/AttendanceSettings';
+import BuildSchedule from './pages/BuildSchedule';
 import CarrierManagement from './pages/CarrierManagement';
-import RawLinesImport from './pages/RawLinesImport';
-import LineProductMapping from './pages/LineProductMapping';
+import CommissionCalculation from './pages/CommissionCalculation';
+import CommissionGroupMappings from './pages/CommissionGroupMappings';
+import CommissionModels from './pages/CommissionModels';
 import CustomerSync from './pages/CustomerSync';
+import Customers from './pages/Customers';
+import DebugSchedule from './pages/DebugSchedule';
+import GoalsDashboard from './pages/GoalsDashboard';
+import Home from './pages/Home';
+import LineContractImport from './pages/LineContractImport';
+import LineProductMapping from './pages/LineProductMapping';
+import LinesToWorkOn from './pages/LinesToWorkOn';
+import ManageAttendance from './pages/ManageAttendance';
+import ManageEmployees from './pages/ManageEmployees';
+import ManagerDashboard from './pages/ManagerDashboard';
+import MessageCenter from './pages/MessageCenter';
+import Orders from './pages/Orders';
+import PaymentReturn from './pages/PaymentReturn';
+import PaymentSettings from './pages/PaymentSettings';
+import Products from './pages/Products';
+import RawLinesImport from './pages/RawLinesImport';
+import RepairDashboard from './pages/RepairDashboard';
+import SalesDashboard from './pages/SalesDashboard';
+import SalesDataAdmin from './pages/SalesDataAdmin';
+import Settings from './pages/Settings';
+import ShiftBonusManagement from './pages/ShiftBonusManagement';
+import ShiftPreferences from './pages/ShiftPreferences';
+import Shifts from './pages/Shifts';
+import ShippingProviders from './pages/ShippingProviders';
+import SyncManagement from './pages/SyncManagement';
+import TargetBonusManagement from './pages/TargetBonusManagement';
+import TechnicianReport from './pages/TechnicianReport';
+import Tickets from './pages/Tickets';
+import TodaysCalls from './pages/TodaysCalls';
+import VendorReport from './pages/VendorReport';
+import WeeklySchedule from './pages/WeeklySchedule';
+import WhatsAppDebug from './pages/WhatsAppDebug';
+import WhatsAppProviders from './pages/WhatsAppProviders';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "Settings": Settings,
-    "TodaysCalls": TodaysCalls,
-    "Tickets": Tickets,
-    "Customers": Customers,
-    "Shifts": Shifts,
-    "ManagerDashboard": ManagerDashboard,
-    "ManageEmployees": ManageEmployees,
-    "ShiftPreferences": ShiftPreferences,
-    "BuildSchedule": BuildSchedule,
-    "WeeklySchedule": WeeklySchedule,
-    "RepairDashboard": RepairDashboard,
-    "TechnicianReport": TechnicianReport,
-    "VendorReport": VendorReport,
-    "WhatsAppProviders": WhatsAppProviders,
-    "Orders": Orders,
-    "AttendanceClock": AttendanceClock,
-    "AttendanceSettings": AttendanceSettings,
-    "MessageCenter": MessageCenter,
-    "AttendanceReport": AttendanceReport,
-    "ManageAttendance": ManageAttendance,
-    "AttendanceManagerReport": AttendanceManagerReport,
-    "PaymentSettings": PaymentSettings,
-    "DebugSchedule": DebugSchedule,
-    "WhatsAppDebug": WhatsAppDebug,
-    "ShippingProviders": ShippingProviders,
-    "PaymentReturn": PaymentReturn,
-    "Products": Products,
-    "SalesDataAdmin": SalesDataAdmin,
-    "Home": Home,
-    "SalesDashboard": SalesDashboard,
-    "CommissionModels": CommissionModels,
-    "CommissionCalculation": CommissionCalculation,
     "AgentCommissionAssignment": AgentCommissionAssignment,
-    "AgentPerformanceDashboard": AgentPerformanceDashboard,
-    "GoalsDashboard": GoalsDashboard,
-    "ShiftBonusManagement": ShiftBonusManagement,
-    "TargetBonusManagement": TargetBonusManagement,
-    "SyncManagement": SyncManagement,
-    "CommissionGroupMappings": CommissionGroupMappings,
     "AgentDashboard": AgentDashboard,
-    "LinesToWorkOn": LinesToWorkOn,
-    "LineContractImport": LineContractImport,
+    "AgentPerformanceDashboard": AgentPerformanceDashboard,
+    "AttendanceClock": AttendanceClock,
+    "AttendanceManagerReport": AttendanceManagerReport,
+    "AttendanceReport": AttendanceReport,
+    "AttendanceSettings": AttendanceSettings,
+    "BuildSchedule": BuildSchedule,
     "CarrierManagement": CarrierManagement,
-    "RawLinesImport": RawLinesImport,
-    "LineProductMapping": LineProductMapping,
+    "CommissionCalculation": CommissionCalculation,
+    "CommissionGroupMappings": CommissionGroupMappings,
+    "CommissionModels": CommissionModels,
     "CustomerSync": CustomerSync,
+    "Customers": Customers,
+    "DebugSchedule": DebugSchedule,
+    "GoalsDashboard": GoalsDashboard,
+    "Home": Home,
+    "LineContractImport": LineContractImport,
+    "LineProductMapping": LineProductMapping,
+    "LinesToWorkOn": LinesToWorkOn,
+    "ManageAttendance": ManageAttendance,
+    "ManageEmployees": ManageEmployees,
+    "ManagerDashboard": ManagerDashboard,
+    "MessageCenter": MessageCenter,
+    "Orders": Orders,
+    "PaymentReturn": PaymentReturn,
+    "PaymentSettings": PaymentSettings,
+    "Products": Products,
+    "RawLinesImport": RawLinesImport,
+    "RepairDashboard": RepairDashboard,
+    "SalesDashboard": SalesDashboard,
+    "SalesDataAdmin": SalesDataAdmin,
+    "Settings": Settings,
+    "ShiftBonusManagement": ShiftBonusManagement,
+    "ShiftPreferences": ShiftPreferences,
+    "Shifts": Shifts,
+    "ShippingProviders": ShippingProviders,
+    "SyncManagement": SyncManagement,
+    "TargetBonusManagement": TargetBonusManagement,
+    "TechnicianReport": TechnicianReport,
+    "Tickets": Tickets,
+    "TodaysCalls": TodaysCalls,
+    "VendorReport": VendorReport,
+    "WeeklySchedule": WeeklySchedule,
+    "WhatsAppDebug": WhatsAppDebug,
+    "WhatsAppProviders": WhatsAppProviders,
 }
 
 export const pagesConfig = {

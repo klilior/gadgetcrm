@@ -48,7 +48,14 @@ export default function SalesDashboard() {
         const autoSync = async () => {
             try {
                 console.log("🔄 Auto-syncing sales data...");
-                await base44.functions.invoke('syncLinetSalesData', { offset: 0 });
+                const now = new Date();
+                const fromDatetime = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(); // Last 2 hours
+                const toDatetime = now.toISOString();
+                await base44.functions.invoke('runLinetSync', { 
+                    from_datetime: fromDatetime,
+                    to_datetime: toDatetime,
+                    trigger_type: "MANUAL"
+                });
             } catch (e) {
                 console.log("Auto-sync error:", e.message);
             }
@@ -224,15 +231,25 @@ export default function SalesDashboard() {
                         onClick={async () => {
                             setIsLoading(true);
                             try {
-                                await base44.functions.invoke('syncLinetSalesData', { offset: 0 });
+                                const now = new Date();
+                                const fromDatetime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(); // Last 7 days
+                                const toDatetime = now.toISOString();
+                                const result = await base44.functions.invoke('runLinetSync', { 
+                                    from_datetime: fromDatetime,
+                                    to_datetime: toDatetime,
+                                    trigger_type: "MANUAL"
+                                });
+                                console.log('Sync result:', result);
                                 await loadData();
                             } catch (e) {
                                 console.error("Sync error:", e);
+                                alert("❌ שגיאה בסנכרון: " + e.message);
+                            } finally {
                                 setIsLoading(false);
                             }
                         }} 
                         disabled={isLoading} 
-                        className="flex-1 md:flex-none bg-blue-600 text-white hover:bg-blue-700 shadow-md text-sm"
+                        className="flex-1 md:flex-none bg-green-600 text-white hover:bg-green-700 shadow-md text-sm"
                     >
                         <RefreshCw className={`w-4 h-4 ml-1 md:ml-2 ${isLoading ? 'animate-spin' : ''}`} />
                         סנכרן עכשיו
