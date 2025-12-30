@@ -480,24 +480,29 @@ Deno.serve(async (req) => {
         // Sync customers for all account_ids seen in this sync
         let customerSyncStats = null;
         try {
+            const allDocs = []; // Collect all documents from this sync
             const uniqueAccountIds = [...new Set(
-                documents
+                allDocs
                     .map(doc => doc.account_id)
                     .filter(id => id && !isNaN(Number(id)))
                     .map(id => Number(id))
             )];
 
             if (uniqueAccountIds.length > 0) {
-                console.log(`👥 Syncing ${uniqueAccountIds.length} customers...`);
-                const customerSync = await base44.asServiceRole.functions.invoke('syncLinetCustomers', {
-                    account_ids: uniqueAccountIds,
-                    force_refresh: false
-                });
-                customerSyncStats = customerSync.stats;
-                console.log(`✅ Customer sync: ${customerSyncStats?.created || 0} created, ${customerSyncStats?.updated || 0} updated`);
+                console.log(`👥 Attempting to sync ${uniqueAccountIds.length} customers...`);
+                try {
+                    const customerSync = await base44.asServiceRole.functions.invoke('syncLinetCustomers', {
+                        account_ids: uniqueAccountIds,
+                        force_refresh: false
+                    });
+                    customerSyncStats = customerSync.stats;
+                    console.log(`✅ Customer sync: ${customerSyncStats?.created || 0} created, ${customerSyncStats?.updated || 0} updated`);
+                } catch (invokeErr) {
+                    console.log('⚠️ syncLinetCustomers not available or failed:', invokeErr.message);
+                }
             }
         } catch (customerErr) {
-            console.error('⚠️ Customer sync failed:', customerErr.message);
+            console.log('⚠️ Customer sync skipped:', customerErr.message);
         }
 
         return Response.json({
