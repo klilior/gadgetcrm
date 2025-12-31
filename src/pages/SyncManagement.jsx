@@ -24,6 +24,15 @@ export default function SyncManagement() {
     // Manual sync form
     const [manualDateFrom, setManualDateFrom] = useState(format(startOfDay(new Date()), 'yyyy-MM-dd'));
     const [manualDateTo, setManualDateTo] = useState(format(new Date(), 'yyyy-MM-dd'));
+    
+    // Progress tracking for December sync
+    const [decemberProgress, setDecemberProgress] = useState({
+        isRunning: false,
+        currentDay: 0,
+        totalDays: 0,
+        currentDate: '',
+        results: []
+    });
 
     const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
@@ -80,39 +89,93 @@ export default function SyncManagement() {
     };
 
     const handleCatchUpDecember = async () => {
+        const startDate = new Date('2024-12-09');
+        const endDate = new Date('2024-12-30');
+        const days = [];
+        
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            days.push(format(d, 'yyyy-MM-dd'));
+        }
+        
+        setDecemberProgress({
+            isRunning: true,
+            currentDay: 0,
+            totalDays: days.length,
+            currentDate: '',
+            results: []
+        });
+        
         setIsSyncing(true);
-        try {
-            toast.loading('🚀 מתחיל סנכרון של 22 ימים בדצמבר...', { duration: 2000 });
-
-            const result = await base44.functions.invoke('catchUpSync', {
-                from_date: '2024-12-09',
-                to_date: '2024-12-30'
-            });
-
-            if (result.data?.success || result.data?.started) {
-                toast.success(`✅ ${result.data.message || 'הסנכרון התחיל!'}\n\n⏳ זה ייקח כ-5 דקות. רענן את הדף בעוד כמה דקות לראות את התוצאות.`, {
-                    duration: 10000
+        
+        let totalCreated = 0;
+        let totalUpdated = 0;
+        let failedDays = [];
+        
+        for (let i = 0; i < days.length; i++) {
+            const day = days[i];
+            
+            setDecemberProgress(prev => ({
+                ...prev,
+                currentDay: i + 1,
+                currentDate: day
+            }));
+            
+            try {
+                const result = await base44.functions.invoke('runLinetSync', {
+                    from_datetime: `${day}T00:00:00Z`,
+                    to_datetime: `${day}T23:59:59Z`,
+                    trigger_type: 'MANUAL',
+                    update_last_successful: false
                 });
                 
-                // Auto-refresh after 2 minutes
-                setTimeout(() => {
-                    loadData();
-                    toast.info('מרענן נתונים...', { duration: 1000 });
-                }, 120000);
-            } else {
-                const errorMsg = result.data?.error || result.error || 'שגיאה לא ידועה';
-                console.error('Sync failed:', result);
-                toast.error('סנכרון דצמבר נכשל: ' + errorMsg);
+                if (result.data?.success) {
+                    const stats = result.data.stats || {};
+                    totalCreated += stats.created || 0;
+                    totalUpdated += stats.updated || 0;
+                    
+                    setDecemberProgress(prev => ({
+                        ...prev,
+                        results: [...prev.results, {
+                            date: day,
+                            success: true,
+                            created: stats.created,
+                            updated: stats.updated
+                        }]
+                    }));
+                } else {
+                    failedDays.push(day);
+                    setDecemberProgress(prev => ({
+                        ...prev,
+                        results: [...prev.results, {
+                            date: day,
+                            success: false,
+                            error: result.data?.error || 'שגיאה'
+                        }]
+                    }));
+                }
+            } catch (error) {
+                failedDays.push(day);
+                setDecemberProgress(prev => ({
+                    ...prev,
+                    results: [...prev.results, {
+                        date: day,
+                        success: false,
+                        error: error.message
+                    }]
+                }));
             }
-
-            loadData();
-        } catch (error) {
-            console.error('Catch-up error:', error);
-            const errorMsg = error?.message || error?.toString() || 'שגיאה לא ידועה';
-            toast.error('שגיאה בסנכרון: ' + errorMsg);
-        } finally {
-            setIsSyncing(false);
+            
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
+        
+        setDecemberProgress(prev => ({ ...prev, isRunning: false }));
+        setIsSyncing(false);
+        
+        toast.success(`✅ סנכרון דצמבר הושלם!\n${totalCreated} נוצרו, ${totalUpdated} עודכנו\n${failedDays.length > 0 ? `⚠️ ${failedDays.length} ימים נכשלו` : ''}`, {
+            duration: 8000
+        });
+        
+        loadData();
     };
 
     const handleQuickSync = async (days) => {
@@ -262,13 +325,48 @@ export default function SyncManagement() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
+                    {decemberProgress.isRunning && (
+                        <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border-2 border-purple-300">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="font-bold text-lg text-purple-900">מסנכרן דצמבר...</h3>
+                                    <p className="text-sm text-purple-700">
+                                        יום {decemberProgress.currentDay} מתוך {decemberProgress.totalDays} 
+                                        {decemberProgress.currentDate && ` - ${format(new Date(decemberProgress.currentDate), 'dd/MM/yyyy')}`}
+                                    </p>
+                                </div>
+                                <div className="text-3xl font-bold text-purple-600">
+                                    {Math.round((decemberProgress.currentDay / decemberProgress.totalDays) * 100)}%
+                                </div>
+                            </div>
+                            <div className="w-full bg-white rounded-full h-4 overflow-hidden shadow-inner">
+                                <div 
+                                    className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 flex items-center justify-end px-2"
+                                    style={{ width: `${(decemberProgress.currentDay / decemberProgress.totalDays) * 100}%` }}
+                                >
+                                    <RefreshCw className="w-3 h-3 text-white animate-spin" />
+                                </div>
+                            </div>
+                            {decemberProgress.results.length > 0 && (
+                                <div className="mt-4 text-xs space-y-1 max-h-32 overflow-y-auto">
+                                    {decemberProgress.results.slice(-5).reverse().map((r, i) => (
+                                        <div key={i} className={`flex justify-between ${r.success ? 'text-green-700' : 'text-red-700'}`}>
+                                            <span>{format(new Date(r.date), 'dd/MM')}</span>
+                                            <span>{r.success ? `✅ ${r.created} נוצרו, ${r.updated} עודכנו` : `❌ ${r.error}`}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div className="flex flex-wrap gap-3">
                         <Button 
                             onClick={handleCatchUpDecember}
-                            disabled={isSyncing}
+                            disabled={isSyncing || decemberProgress.isRunning}
                             className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold"
                         >
-                            {isSyncing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+                            {isSyncing || decemberProgress.isRunning ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
                             🎯 סנכרן דצמבר מלא (9-30)
                         </Button>
                         <Button 
