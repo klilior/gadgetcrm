@@ -79,6 +79,34 @@ export default function SyncManagement() {
         }
     };
 
+    const handleCatchUpDecember = async () => {
+        setIsSyncing(true);
+        try {
+            toast.info('מתחיל סנכרון יום-אחר-יום על דצמבר...', { duration: 3000 });
+
+            const result = await base44.functions.invoke('catchUpSync', {
+                from_date: '2024-12-09',
+                to_date: '2024-12-30'
+            });
+
+            if (result.data?.success) {
+                const s = result.data.summary;
+                toast.success(`✅ סנכרון דצמבר הושלם!\n${s.successful_days}/${s.total_days} ימים\n${s.total_created} נוצרו, ${s.total_updated} עודכנו`, {
+                    duration: 8000
+                });
+            } else {
+                toast.error('סנכרון דצמבר נכשל: ' + (result.data?.error || 'שגיאה'));
+            }
+
+            loadData();
+        } catch (error) {
+            console.error('Catch-up error:', error);
+            toast.error('שגיאה בסנכרון: ' + error.message);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     const handleQuickSync = async (days) => {
         setIsSyncing(true);
         try {
@@ -227,6 +255,14 @@ export default function SyncManagement() {
                 </CardHeader>
                 <CardContent>
                     <div className="flex flex-wrap gap-3">
+                        <Button 
+                            onClick={handleCatchUpDecember}
+                            disabled={isSyncing}
+                            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold"
+                        >
+                            {isSyncing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+                            🎯 סנכרן דצמבר מלא (9-30)
+                        </Button>
                         <Button 
                             onClick={() => handleQuickSync(1)}
                             disabled={isSyncing}
