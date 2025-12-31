@@ -3,6 +3,7 @@ import { format, eachDayOfInterval, parseISO } from 'npm:date-fns@2.30.0';
 
 /**
  * Catch-up sync for a date range - runs day by day to ensure completion
+ * This starts the process and returns immediately, then continues in background
  */
 Deno.serve(async (req) => {
     try {
@@ -12,6 +13,8 @@ Deno.serve(async (req) => {
         if (user?.role !== 'מנהל') {
             return Response.json({ error: 'Unauthorized - Admin only' }, { status: 403 });
         }
+        
+        console.log('🚀 Starting catch-up sync process...');
 
         let body = {};
         try {
@@ -34,13 +37,27 @@ Deno.serve(async (req) => {
 
         console.log(`📅 Will sync ${days.length} days`);
 
-        const results = [];
-        let totalCreated = 0;
-        let totalUpdated = 0;
-        let totalFailed = 0;
+        // Return immediately and continue in background
+        const responsePromise = new Promise((resolve) => {
+            resolve(Response.json({
+                success: true,
+                started: true,
+                days_to_sync: days.length,
+                from_date: fromDate,
+                to_date: toDate,
+                message: `התחלתי סנכרון של ${days.length} ימים - זה יקח כמה דקות. תוכל לרענן את הדף כדי לראות את ההתקדמות.`
+            }));
+        });
 
-        // Sync each day
-        for (const day of days) {
+        // Continue syncing in background
+        (async () => {
+            const results = [];
+            let totalCreated = 0;
+            let totalUpdated = 0;
+            let totalFailed = 0;
+
+            // Sync each day
+            for (const day of days) {
             const dayStr = format(day, 'yyyy-MM-dd');
             console.log(`\n🔄 Syncing ${dayStr}...`);
 
@@ -86,22 +103,19 @@ Deno.serve(async (req) => {
             }
         }
 
-        const summary = {
-            total_days: days.length,
-            successful_days: days.length - totalFailed,
-            failed_days: totalFailed,
-            total_created: totalCreated,
-            total_updated: totalUpdated
-        };
+            const summary = {
+                total_days: days.length,
+                successful_days: days.length - totalFailed,
+                failed_days: totalFailed,
+                total_created: totalCreated,
+                total_updated: totalUpdated
+            };
 
-        console.log('\n📊 Catch-up Summary:', summary);
+            console.log('\n✅ Catch-up Summary:', summary);
+            console.log(`סנכרון ${days.length} ימים הושלם: ${totalCreated} נוצרו, ${totalUpdated} עודכנו, ${totalFailed} נכשלו`);
+        })();
 
-        return Response.json({
-            success: totalFailed === 0,
-            summary,
-            results,
-            message: `סנכרון ${days.length} ימים הושלם: ${totalCreated} נוצרו, ${totalUpdated} עודכנו, ${totalFailed} נכשלו`
-        });
+        return responsePromise;
 
     } catch (error) {
         console.error('❌ Catch-up error:', error);
