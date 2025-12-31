@@ -375,6 +375,7 @@ export default function SyncManagement() {
                                         <TableHead>התחלה</TableHead>
                                         <TableHead>סיום</TableHead>
                                         <TableHead>טריגר</TableHead>
+                                        <TableHead>טווח תאריכים</TableHead>
                                         <TableHead>סטטוס</TableHead>
                                         <TableHead className="text-center">נשלפו</TableHead>
                                         <TableHead className="text-center">נוצרו</TableHead>
@@ -397,6 +398,15 @@ export default function SyncManagement() {
                                             </TableCell>
                                             <TableCell className="text-sm">
                                                 {getTriggerLabel(log.trigger_type)}
+                                            </TableCell>
+                                            <TableCell className="text-xs text-gray-600">
+                                                {log.from_datetime && log.to_datetime ? (
+                                                    <div>
+                                                        <div>{format(new Date(log.from_datetime), 'dd/MM')}</div>
+                                                        <div className="text-gray-400">עד</div>
+                                                        <div>{format(new Date(log.to_datetime), 'dd/MM')}</div>
+                                                    </div>
+                                                ) : '-'}
                                             </TableCell>
                                             <TableCell>
                                                 {getStatusBadge(log.status)}
