@@ -228,13 +228,16 @@ Deno.serve(async (req) => {
     let base44 = null;
 
     try {
+        console.log("🚀 Starting runLinetSync handler");
         base44 = createClientFromRequest(req);
+        console.log("✅ Base44 client created");
 
         // Parse request
         let body = {};
         try {
             const text = await req.text();
             if (text && text.trim()) body = JSON.parse(text);
+            console.log("✅ Request body parsed:", body);
         } catch (e) {
             console.log("No request body, using defaults");
         }
@@ -254,6 +257,7 @@ Deno.serve(async (req) => {
         console.log(`🚀 Starting Linet Sync: ${fromDatetime} → ${toDatetime} (${triggerType})`);
 
         // Create SyncLog entry
+        console.log("📝 Creating SyncLog entry...");
         syncLog = await base44.asServiceRole.entities.SyncLog.create({
             sync_key: SYNC_KEY,
             run_started_at: runStartedAt,
@@ -268,8 +272,10 @@ Deno.serve(async (req) => {
         });
 
         // Update SyncMetadata to RUNNING
+        console.log("📊 Loading metadata...");
         const metadataList = await base44.asServiceRole.entities.SyncMetadata.filter({ sync_key: SYNC_KEY });
         let metadata = metadataList[0];
+        console.log("✅ Metadata loaded:", metadata ? "exists" : "creating new");
         if (metadata) {
             await base44.asServiceRole.entities.SyncMetadata.update(metadata.id, {
                 status: "RUNNING",
@@ -285,8 +291,13 @@ Deno.serve(async (req) => {
         }
 
         // Get credentials and caches
+        console.log("🔑 Getting Linet credentials...");
         const credentials = await getLinetCredentials(base44);
+        console.log("✅ Credentials loaded");
+
+        console.log("💾 Loading caches...");
         const { categoryTranslationMap, productCache, usersMap } = await loadCaches(base44);
+        console.log("✅ Caches loaded");
 
         // Load carrier mappings for line contract creation
         let carrierMappings = [];
@@ -308,6 +319,8 @@ Deno.serve(async (req) => {
         let stats = { fetched: 0, created: 0, updated: 0, skipped: 0, line_contracts_created: 0 };
         const startTime = Date.now();
         const allDocuments = []; // Collect all documents for customer sync
+
+        console.log(`📅 Fetching documents from ${dateFrom} to ${dateTo}`);
 
         while (moreData) {
             if (Date.now() - startTime > MAX_EXECUTION_TIME) {
@@ -335,8 +348,10 @@ Deno.serve(async (req) => {
                 });
             }
 
+            console.log(`📡 Fetching batch at offset ${offset}...`);
             const documents = await fetchDocuments(credentials, dateFrom, dateTo, BATCH_SIZE, offset);
-            
+            console.log(`✅ Received ${documents?.length || 0} documents`);
+
             if (!documents || documents.length === 0) {
                 moreData = false;
                 break;
