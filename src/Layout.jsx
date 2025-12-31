@@ -27,6 +27,7 @@ function AppContent({ children, currentPageName }) {
   const [isAttendanceMenuOpen, setIsAttendanceMenuOpen] = useState(false);
   const [isSalesMenuOpen, setIsSalesMenuOpen] = useState(false);
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+  const [isPurchasesMenuOpen, setIsPurchasesMenuOpen] = useState(false);
   const [showUserSwitcher, setShowUserSwitcher] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false); // Added showPaymentModal state
@@ -50,12 +51,14 @@ function AppContent({ children, currentPageName }) {
   const isShiftManager = currentUser?.employee_name === "דניאל קריידן" || currentUser?.role === "מנהל משמרת" || isManager;
   const isTechnicianRole = currentUser?.role === "טכנאי";
   const isAgent = currentUser?.role === "נציג";
+  const isRepresentative = currentUser?.role === "נציג";
 
   let navigationItems = [];
   let scheduleMenuItems = [];
   let attendanceMenuItems = [];
   let salesMenuItems = [];
   let settingsMenuItems = [];
+  let purchasesMenuItems = [];
 
   if (isTechnicianRole) {
     navigationItems = [
@@ -125,10 +128,32 @@ function AppContent({ children, currentPageName }) {
     }
   }
 
+  // Build purchases menu by roles
+  if (currentUser) {
+    if (isManager || currentUser?.role === 'admin') {
+      purchasesMenuItems = [
+        { title: "תיבת קליטה", url: createPageUrl("IntakeInbox") },
+        { title: "העלאת חשבונית מהנייד", url: createPageUrl("MobileInvoiceUpload") },
+        { title: "חשבוניות לאימות", url: createPageUrl("InvoicesToReview") },
+        { title: "דשבורד רכישות", url: createPageUrl("PurchasesDashboard") },
+      ];
+    } else if (isShiftManager) {
+      purchasesMenuItems = [
+        { title: "תיבת קליטה", url: createPageUrl("IntakeInbox") },
+        { title: "העלאת חשבונית מהנייד", url: createPageUrl("MobileInvoiceUpload") },
+      ];
+    } else if (isRepresentative) {
+      purchasesMenuItems = [
+        { title: "העלאת חשבונית מהנייד", url: createPageUrl("MobileInvoiceUpload") },
+      ];
+    }
+  }
+
   const isSchedulePageActive = scheduleMenuItems.some(item => location.pathname === item.url);
   const isAttendancePageActive = attendanceMenuItems.some(item => location.pathname === item.url);
   const isSalesPageActive = salesMenuItems.some(item => location.pathname === item.url);
   const isSettingsPageActive = settingsMenuItems.some(item => location.pathname === item.url);
+  const isPurchasesPageActive = purchasesMenuItems.some(item => location.pathname === item.url);
 
   // פתח את התפריטים אוטומטית אם הדף הנוכחי הוא בתת-תפריט
   useEffect(() => {
@@ -136,7 +161,8 @@ function AppContent({ children, currentPageName }) {
     if (isAttendancePageActive) setIsAttendanceMenuOpen(true);
     if (isSalesPageActive) setIsSalesMenuOpen(true);
     if (isSettingsPageActive) setIsSettingsMenuOpen(true);
-  }, [isSchedulePageActive, isAttendancePageActive, isSalesPageActive, isSettingsPageActive]);
+    if (isPurchasesPageActive) setIsPurchasesMenuOpen(true);
+  }, [isSchedulePageActive, isAttendancePageActive, isSalesPageActive, isSettingsPageActive, isPurchasesPageActive]);
 
   if (isLoading) {
     return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center"><div className="text-xl">טוען...</div></div>;
@@ -276,6 +302,38 @@ function AppContent({ children, currentPageName }) {
                               <div className="pr-4 md:pr-6 pt-1 space-y-1">
                                 {scheduleMenuItems.map(child => (
                                   <SidebarMenuButton key={child.title} asChild className={`glass-button w-full justify-start p-2 md:p-3 rounded-xl transition-all duration-300 ${ location.pathname === child.url ? 'bg-green-500/30 border-green-400 font-semibold' : 'hover:bg-white/25' }`}>
+                                    <Link to={child.url} className="text-xs md:text-sm font-medium text-gray-700">
+                                      {child.title}
+                                    </Link>
+                                  </SidebarMenuButton>
+                                ))}
+                              </div>
+                            </div>
+                          </SidebarMenuItem>
+                        )}
+
+                        {purchasesMenuItems.length > 0 && (
+                          <SidebarMenuItem>
+                            <SidebarMenuButton
+                              onClick={() => setIsPurchasesMenuOpen(!isPurchasesMenuOpen)}
+                              className={`glass-button p-3 md:p-4 rounded-2xl transition-all duration-300 ${
+                                isPurchasesPageActive ? 'bg-gradient-to-r from-fuchsia-500/30 to-rose-500/30 border-fuchsia-400 shadow-lg' : 'hover:bg-white/25'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 md:gap-4 w-full">
+                                <FileText className="w-4 h-4 md:w-5 md:h-5 text-gray-700 flex-shrink-0" />
+                                <span className="font-medium text-gray-800 flex-1 text-sm md:text-base">חשבוניות ספקים</span>
+                                {isPurchasesMenuOpen ? (
+                                  <ChevronDown className="w-3 h-3 md:w-4 md:h-4 text-gray-600 transition-transform" />
+                                ) : (
+                                  <ChevronRight className="w-3 h-3 md:w-4 md:h-4 text-gray-600 transition-transform" />
+                                )}
+                              </div>
+                            </SidebarMenuButton>
+                            <div className={`overflow-hidden transition-all duration-300 ${isPurchasesMenuOpen ? 'max-h-96 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                              <div className="pr-4 md:pr-6 pt-1 space-y-1">
+                                {purchasesMenuItems.map(child => (
+                                  <SidebarMenuButton key={child.title} asChild className={`glass-button w-full justify-start p-2 md:p-3 rounded-xl transition-all duration-300 ${ location.pathname === child.url ? 'bg-fuchsia-500/30 border-fuchsia-400 font-semibold' : 'hover:bg-white/25' }`}>
                                     <Link to={child.url} className="text-xs md:text-sm font-medium text-gray-700">
                                       {child.title}
                                     </Link>

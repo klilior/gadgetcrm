@@ -6,6 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RefreshCcw, FileText, Eye } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { useUser } from "../components/UserAuth";
 
 const statuses = ["הכל", "חדש", "מוכן לניתוח", "כפילות", "דולג", "עובד"];
 
@@ -14,6 +19,8 @@ export default function IntakeInbox() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("הכל");
   const [selected, setSelected] = useState(null);
+  const { currentUser } = useUser();
+  const canEdit = currentUser?.role === 'מנהל' || currentUser?.role === 'admin' || currentUser?.role === 'מנהל משמרת';
 
   const load = async () => {
     setLoading(true);
@@ -118,13 +125,51 @@ export default function IntakeInbox() {
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div><span className="font-semibold">סטטוס:</span> {selected.status || "-"}</div>
-                <div><span className="font-semibold">סיבת סטטוס:</span> {selected.status_reason || "-"}</div>
+                {!canEdit && (<>
+                  <div><span className="font-semibold">סטטוס:</span> {selected.status || "-"}</div>
+                  <div><span className="font-semibold">סיבת סטטוס:</span> {selected.status_reason || "-"}</div>
+                </>)}
+                {canEdit && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>סטטוס</Label>
+                      <Select value={selected.status || ''} onValueChange={(v) => setSelected({ ...selected, status: v })}>
+                        <SelectTrigger><SelectValue placeholder="בחר סטטוס" /></SelectTrigger>
+                        <SelectContent>
+                          {['חדש','מוכן לניתוח','כפילות','דולג','עובד'].map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>סיבת סטטוס</Label>
+                      <Textarea value={selected.status_reason || ''} onChange={(e) => setSelected({ ...selected, status_reason: e.target.value })} rows={3} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>חשבונית מקושרת (ID)</Label>
+                      <Input value={selected.linked_invoice || ''} onChange={(e) => setSelected({ ...selected, linked_invoice: e.target.value })} />
+                    </div>
+                  </>
+                )}
                 <div><span className="font-semibold">Gmail From:</span> {selected.gmail_from || "-"}</div>
                 <div><span className="font-semibold">Gmail Subject:</span> {selected.gmail_subject || "-"}</div>
                 <div><span className="font-semibold">Message ID:</span> {selected.gmail_message_id || "-"}</div>
                 <div><span className="font-semibold">חשבונית מקושרת:</span> {selected.linked_invoice || "-"}</div>
               </div>
+
+              {canEdit && (
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button onClick={async () => {
+                    await base44.entities.InvoiceIntakeRaw.update(selected.id, {
+                      status: selected.status,
+                      status_reason: selected.status_reason || undefined,
+                      linked_invoice: selected.linked_invoice || undefined
+                    });
+                    try { await base44.functions.invoke('processIntake', { intake_id: selected.id }); } catch (_) {}
+                    setSelected(null);
+                    load();
+                  }}>שמור</Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

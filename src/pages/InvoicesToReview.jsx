@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useUser } from "../components/UserAuth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +18,8 @@ export default function InvoicesToReview() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
+  const { currentUser } = useUser();
+  const canApprove = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
   const load = async () => {
     setLoading(true);
@@ -195,14 +198,28 @@ export default function InvoicesToReview() {
                 </div>
               </div>
 
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm">
-                פעולה של "אשר חשבונית"/"דחה" תיושם במסגרת משימת Task 3 (ללא אוטומציה בשלב זה).
-              </div>
+              {!canApprove && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm">
+                  פעולה של "אשר חשבונית"/"דחה" זמינה רק למנהלים, ותיושם אוטומטית בכפתורים אלו.
+                </div>
+              )}
 
               <div className="flex items-center gap-2 justify-between">
                 <div className="flex gap-2">
-                  <Button disabled variant="secondary">אשר חשבונית</Button>
-                  <Button disabled variant="destructive">דחה</Button>
+                  {canApprove && (
+                    <>
+                      <Button onClick={async () => {
+                        await base44.functions.invoke('updateInvoiceStatus', { invoice_id: selected.id, action: 'approve' });
+                        setSelected(null);
+                        load();
+                      }} variant="secondary">אשר חשבונית</Button>
+                      <Button onClick={async () => {
+                        await base44.functions.invoke('updateInvoiceStatus', { invoice_id: selected.id, action: 'reject' });
+                        setSelected(null);
+                        load();
+                      }} variant="destructive">דחה</Button>
+                    </>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setSelected(null)}>סגור</Button>

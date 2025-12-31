@@ -52,7 +52,9 @@ export default function MobileInvoiceUpload() {
         status_reason: statusReason || undefined,
       };
 
-      await base44.entities.InvoiceIntakeRaw.create(payload);
+      const created = await base44.entities.InvoiceIntakeRaw.create(payload);
+      // עיבוד ואוטומציה
+      try { await base44.functions.invoke('processIntake', { intake_id: created.id }); } catch (_) {}
       toast.success("המסמך נקלט בהצלחה.");
       setFile(null);
       setStatusReason("");

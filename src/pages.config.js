@@ -47,6 +47,7 @@ import WhatsAppProviders from './pages/WhatsAppProviders';
 import MobileInvoiceUpload from './pages/MobileInvoiceUpload';
 import IntakeInbox from './pages/IntakeInbox';
 import InvoicesToReview from './pages/InvoicesToReview';
+import PurchasesDashboard from './pages/PurchasesDashboard';
 import __Layout from './Layout.jsx';
 
 
@@ -100,6 +101,7 @@ export const PAGES = {
     "MobileInvoiceUpload": MobileInvoiceUpload,
     "IntakeInbox": IntakeInbox,
     "InvoicesToReview": InvoicesToReview,
+    "PurchasesDashboard": PurchasesDashboard,
 }
 
 export const pagesConfig = {
