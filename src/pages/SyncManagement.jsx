@@ -82,18 +82,23 @@ export default function SyncManagement() {
     const handleCatchUpDecember = async () => {
         setIsSyncing(true);
         try {
-            toast.info('מתחיל סנכרון יום-אחר-יום על דצמבר...', { duration: 3000 });
+            toast.loading('🚀 מתחיל סנכרון של 22 ימים בדצמבר...', { duration: 2000 });
 
             const result = await base44.functions.invoke('catchUpSync', {
                 from_date: '2024-12-09',
                 to_date: '2024-12-30'
             });
 
-            if (result.data?.success) {
-                const s = result.data.summary;
-                toast.success(`✅ סנכרון דצמבר הושלם!\n${s.successful_days}/${s.total_days} ימים\n${s.total_created} נוצרו, ${s.total_updated} עודכנו`, {
-                    duration: 8000
+            if (result.data?.success || result.data?.started) {
+                toast.success(`✅ ${result.data.message || 'הסנכרון התחיל!'}\n\n⏳ זה ייקח כ-5 דקות. רענן את הדף בעוד כמה דקות לראות את התוצאות.`, {
+                    duration: 10000
                 });
+                
+                // Auto-refresh after 2 minutes
+                setTimeout(() => {
+                    loadData();
+                    toast.info('מרענן נתונים...', { duration: 1000 });
+                }, 120000);
             } else {
                 toast.error('סנכרון דצמבר נכשל: ' + (result.data?.error || 'שגיאה'));
             }
