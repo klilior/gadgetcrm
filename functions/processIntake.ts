@@ -57,17 +57,36 @@ Deno.serve(async (req) => {
       }
     }
 
-    // C3: create invoice shell when ready and not linked
+    // C3 (reliable): ensure invoice shell exists exactly once when intake is created with a valid file
     let createdInvoice = null;
-    if (intake.status === 'מוכן לניתוח' && !intake.linked_invoice) {
-      createdInvoice = await base44.asServiceRole.entities.Invoices.create({
-        source_intake: intake.id,
-        extraction_status: 'ממתין לאימות',
-        notes: 'נוצר אוטומטית ממסמך שנקלט. ממתין לניתוח/הזנה.'
-      });
-      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { linked_invoice: createdInvoice.id });
-      // Trigger AI pipeline on the invoice (Option A)
-      try { await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: createdInvoice.id }); } catch (_) {}
+
+    // If link already exists, enforce both-way link and trigger pipeline idempotently
+    if (intake.linked_invoice) {
+      try { await base44.asServiceRole.entities.Invoices.update(intake.linked_invoice, { source_intake: intake.id }); } catch (_) {}
+      try { await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: intake.linked_invoice }); } catch (_) {}
+    } else {
+      // Avoid duplicates by checking existing invoice with this intake
+      const existing = await base44.asServiceRole.entities.Invoices.filter({ source_intake: intake.id }, undefined, 1);
+      let invoiceId = existing?.[0]?.id || null;
+
+      const validForCreation = isValidFile(intake) && intake.status !== 'דולג' && intake.status !== 'כפילות';
+
+      if (!invoiceId && validForCreation) {
+        const created = await base44.asServiceRole.entities.Invoices.create({
+          source_intake: intake.id,
+          extraction_status: 'ממתין לאימות',
+          notes: 'נוצר אוטומטית ממסמך שנקלט. ממתין לניתוח/הזנה.'
+        });
+        invoiceId = created.id;
+        createdInvoice = created;
+      }
+
+      if (invoiceId) {
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { linked_invoice: invoiceId });
+        try { await base44.asServiceRole.entities.Invoices.update(invoiceId, { source_intake: intake.id }); } catch (_) {}
+        // Trigger AI pipeline on the invoice (Option A, idempotent)
+        try { await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: invoiceId }); } catch (_) {}
+      }
     }
 
     return Response.json({ success: true, updates_applied: updates, created_invoice_id: createdInvoice?.id || null, intake_id: intake.id });
