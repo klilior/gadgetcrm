@@ -514,7 +514,10 @@ Deno.serve(async (req) => {
         });
 
     } catch (error) {
-        console.error("❌ Sync Error:", error.message, error.stack);
+        console.error("❌ Sync Error:", error);
+
+        const errorMessage = error?.message || error?.toString() || String(error);
+        console.error("Error details:", errorMessage);
 
         // Update log and metadata on failure
         if (base44 && syncLog) {
@@ -522,7 +525,7 @@ Deno.serve(async (req) => {
                 await base44.asServiceRole.entities.SyncLog.update(syncLog.id, {
                     run_finished_at: new Date().toISOString(),
                     status: "FAILED",
-                    error_message: error.message
+                    error_message: errorMessage
                 });
 
                 const metadataList = await base44.asServiceRole.entities.SyncMetadata.filter({ sync_key: SYNC_KEY });
@@ -530,21 +533,21 @@ Deno.serve(async (req) => {
                     const currentFailures = metadataList[0].consecutive_failures || 0;
                     await base44.asServiceRole.entities.SyncMetadata.update(metadataList[0].id, {
                         status: "FAILED",
-                        last_error_message: error.message,
+                        last_error_message: errorMessage,
                         consecutive_failures: currentFailures + 1
                     });
                 }
-            } catch (e) {
-                console.error("Failed to update sync status:", e.message);
-            }
-        }
+                } catch (e) {
+                console.error("Failed to update sync status:", e);
+                }
+                }
 
-        return Response.json({ 
-            success: false, 
-            error: error.message,
-            stack: error.stack 
-        }, { status: 500 });
-    }
+                return Response.json({ 
+                success: false, 
+                error: errorMessage,
+                details: error?.stack || ''
+                }, { status: 500 });
+                }
 });
 
 // Helper to detect carrier from product
