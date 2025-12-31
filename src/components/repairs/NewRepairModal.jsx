@@ -152,14 +152,20 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
                 email: newClientData.email || undefined
             });
 
-            // Check if response has data property (for platform v2)
-            const clientResponse = response.data || response;
+            console.log('findOrCreateClient response:', response);
 
-            if (clientResponse.error) {
-                throw new Error(clientResponse.error || 'שגיאה באימות לקוח');
+            // Check if response has data property (for platform v2)
+            const clientResponse = response?.data || response;
+
+            if (!clientResponse || clientResponse.error) {
+                throw new Error(clientResponse?.error || 'שגיאה באימות לקוח');
             }
 
             const client = clientResponse.client;
+            
+            if (!client || !client.id) {
+                throw new Error('לא התקבל לקוח מהשרת');
+            }
             
             if (clientResponse.isNew) {
                 setError("✅ לקוח חדש נוצר בהצלחה!");
