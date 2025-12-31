@@ -68,6 +68,13 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { linked_invoice: createdInvoice.id });
     }
 
+    // If ready with linked invoice, trigger AI extraction pipeline
+    if (intake.status === 'מוכן לניתוח' && (intake.linked_invoice || createdInvoice?.id)) {
+      try {
+        await base44.asServiceRole.functions.invoke('runInvoiceExtraction', { intake_id: intake.id });
+      } catch (_) {}
+    }
+
     return Response.json({ success: true, updates_applied: updates, created_invoice_id: createdInvoice?.id || null, intake_id: intake.id });
   } catch (error) {
     return Response.json({ success: false, error: error?.message || String(error) }, { status: 500 });
