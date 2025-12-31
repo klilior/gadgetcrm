@@ -121,7 +121,8 @@ Deno.serve(async (req) => {
         console.error('❌ Catch-up error:', error);
         return Response.json({
             success: false,
-            error: error.message
+            error: error?.message || error?.toString() || 'שגיאה לא ידועה',
+            details: error?.stack || ''
         }, { status: 500 });
     }
 });

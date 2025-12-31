@@ -100,13 +100,16 @@ export default function SyncManagement() {
                     toast.info('מרענן נתונים...', { duration: 1000 });
                 }, 120000);
             } else {
-                toast.error('סנכרון דצמבר נכשל: ' + (result.data?.error || 'שגיאה'));
+                const errorMsg = result.data?.error || result.error || 'שגיאה לא ידועה';
+                console.error('Sync failed:', result);
+                toast.error('סנכרון דצמבר נכשל: ' + errorMsg);
             }
 
             loadData();
         } catch (error) {
             console.error('Catch-up error:', error);
-            toast.error('שגיאה בסנכרון: ' + error.message);
+            const errorMsg = error?.message || error?.toString() || 'שגיאה לא ידועה';
+            toast.error('שגיאה בסנכרון: ' + errorMsg);
         } finally {
             setIsSyncing(false);
         }
