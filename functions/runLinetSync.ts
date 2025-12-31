@@ -307,6 +307,7 @@ Deno.serve(async (req) => {
         let moreData = true;
         let stats = { fetched: 0, created: 0, updated: 0, skipped: 0, line_contracts_created: 0 };
         const startTime = Date.now();
+        const allDocuments = []; // Collect all documents for customer sync
 
         while (moreData) {
             if (Date.now() - startTime > MAX_EXECUTION_TIME) {
@@ -342,6 +343,7 @@ Deno.serve(async (req) => {
             }
 
             stats.fetched += documents.length;
+            allDocuments.push(...documents); // Save documents for customer sync
             console.log(`📦 Processing ${documents.length} documents at offset ${offset}`);
 
             for (const doc of documents) {
@@ -480,9 +482,8 @@ Deno.serve(async (req) => {
         // Sync customers for all account_ids seen in this sync
         let customerSyncStats = null;
         try {
-            const allDocs = []; // Collect all documents from this sync
             const uniqueAccountIds = [...new Set(
-                allDocs
+                allDocuments
                     .map(doc => doc.account_id)
                     .filter(id => id && !isNaN(Number(id)))
                     .map(id => Number(id))
