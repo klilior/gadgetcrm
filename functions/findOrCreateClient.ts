@@ -104,8 +104,8 @@ Deno.serve(async (req) => {
         console.error('❌ Error in findOrCreateClient:', error);
         console.error('❌ Error stack:', error.stack);
         return Response.json({ 
-            error: error.message,
-            details: error.stack,
+            error: error.message || String(error),
+            details: error.stack || 'No stack trace available',
             timestamp: new Date().toISOString()
         }, { status: 500 });
     }
