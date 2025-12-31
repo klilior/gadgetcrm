@@ -552,17 +552,17 @@ Deno.serve(async (req) => {
                         consecutive_failures: currentFailures + 1
                     });
                 }
-                } catch (e) {
+            } catch (e) {
                 console.error("Failed to update sync status:", e);
-                }
-                }
+            }
+        }
 
-                return Response.json({ 
-                success: false, 
-                error: errorMessage,
-                details: error?.stack || ''
-                }, { status: 500 });
-                }
+        return Response.json({ 
+            success: false, 
+            error: errorMessage,
+            details: error?.stack || ''
+        }, { status: 500 });
+    }
 });
 
 // Helper to detect carrier from product
