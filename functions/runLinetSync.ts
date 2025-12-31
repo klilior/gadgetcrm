@@ -462,10 +462,13 @@ Deno.serve(async (req) => {
                 }
             }
 
+            console.log(`📊 Batch stats: received ${documents.length}, BATCH_SIZE is ${BATCH_SIZE}`);
             if (documents.length < BATCH_SIZE) {
+                console.log(`✅ Last batch - stopping (${documents.length} < ${BATCH_SIZE})`);
                 moreData = false;
             } else {
                 offset += BATCH_SIZE;
+                console.log(`➡️ Moving to next batch, new offset: ${offset}`);
             }
         }
 
