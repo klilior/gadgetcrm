@@ -161,10 +161,63 @@ export default function PurchasesDashboard() {
 
   return (
     <div className="p-4 space-y-4" dir="rtl">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold flex items-center gap-2"><BarChart3 className="w-6 h-6"/> דשבורד רכישות</h1>
         <Button variant="outline" onClick={load} className="gap-2"><RefreshCcw className="w-4 h-4"/>רענן</Button>
       </div>
+
+      {/* Date Range Filter */}
+      <Card className="glass-card border-0 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-indigo-600" />
+            <span className="font-medium">סינון תאריך:</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { value: "today", label: "היום" },
+              { value: "yesterday", label: "אתמול" },
+              { value: "week", label: "השבוע" },
+              { value: "month", label: "החודש" },
+              { value: "lastMonth", label: "חודש שעבר" },
+              { value: "year", label: "השנה" },
+              { value: "lastYear", label: "שנה שעברה" },
+              { value: "custom", label: "מותאם" }
+            ].map(opt => (
+              <Button
+                key={opt.value}
+                variant={dateRange === opt.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDateRange(opt.value)}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+          {dateRange === "custom" && (
+            <div className="flex items-center gap-2 mt-2 md:mt-0">
+              <div className="flex items-center gap-1">
+                <Label className="text-sm">מ:</Label>
+                <Input
+                  type="date"
+                  value={customFrom}
+                  onChange={e => setCustomFrom(e.target.value)}
+                  className="w-36"
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <Label className="text-sm">עד:</Label>
+                <Input
+                  type="date"
+                  value={customTo}
+                  onChange={e => setCustomTo(e.target.value)}
+                  className="w-36"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* Status summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
