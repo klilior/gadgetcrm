@@ -484,7 +484,15 @@ Deno.serve(async (req) => {
     }
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status_reason: intakeReason });
 
-    return Response.json({ success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction, validation });
+    return Response.json({ 
+      success: true, 
+      invoice_id: invoice.id, 
+      supplier_id: supplierId, 
+      line_items_count: lineItems.length,
+      price_alerts: priceAlerts,
+      extraction, 
+      validation 
+    });
   } catch (error) {
     try {
       const text2 = await req.text().catch(() => null);
