@@ -8,7 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { RefreshCcw, Plus, Pencil, Trash2, Building } from "lucide-react";
+import { RefreshCcw, Plus, Pencil, Trash2, Building, Package } from "lucide-react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useUser } from "../components/UserAuth";
 
@@ -120,7 +122,7 @@ export default function SuppliersManagement() {
                   <TableHead>סטטוס</TableHead>
                   <TableHead>מקור</TableHead>
                   <TableHead>הערות</TableHead>
-                  {canManage && <TableHead>פעולות</TableHead>}
+                  <TableHead>פעולות</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -147,16 +149,23 @@ export default function SuppliersManagement() {
                         )}
                       </TableCell>
                       <TableCell className="text-sm text-gray-600 max-w-[200px] truncate">{s.notes || "-"}</TableCell>
-                      {canManage && (
-                        <TableCell className="space-x-1">
-                          <Button size="sm" variant="ghost" onClick={() => openEdit(s)}>
-                            <Pencil className="w-4 h-4" />
+                      <TableCell className="space-x-1">
+                        <Link to={`${createPageUrl("SupplierProducts")}?supplier_id=${s.id}`}>
+                          <Button size="sm" variant="ghost" title="מוצרים">
+                            <Package className="w-4 h-4 text-indigo-600" />
                           </Button>
-                          <Button size="sm" variant="ghost" className="text-red-600" onClick={() => deleteSupplier(s.id)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      )}
+                        </Link>
+                        {canManage && (
+                          <>
+                            <Button size="sm" variant="ghost" onClick={() => openEdit(s)}>
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="text-red-600" onClick={() => deleteSupplier(s.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
