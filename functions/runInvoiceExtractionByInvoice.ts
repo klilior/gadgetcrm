@@ -119,20 +119,20 @@ DECISION RULES
 const EXTRACT_SCHEMA = {
   type: 'object',
   properties: {
-    classification: { enum: ['TAX_INVOICE', 'CREDIT_NOTE', 'OTHER'] },
+    classification: { type: 'string', enum: ['TAX_INVOICE', 'CREDIT_NOTE', 'OTHER'] },
     should_skip: { type: 'boolean' },
-    skip_reason_he: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    supplier_name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    supplier_name_normalized: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    supplier_vat_id: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    doc_type_he: { anyOf: [{ enum: ['חשבונית מס', 'חשבונית זיכוי'] }, { type: 'null' }] },
-    doc_number: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    doc_date: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    currency: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    subtotal_before_vat: { anyOf: [{ type: 'number' }, { type: 'null' }] },
-    vat_amount: { anyOf: [{ type: 'number' }, { type: 'null' }] },
-    total_with_vat: { anyOf: [{ type: 'number' }, { type: 'null' }] },
-    credit_sign: { anyOf: [{ enum: ['NEGATIVE', 'POSITIVE'] }, { type: 'null' }] },
+    skip_reason_he: { type: 'string' },
+    supplier_name: { type: 'string' },
+    supplier_name_normalized: { type: 'string' },
+    supplier_vat_id: { type: 'string' },
+    doc_type_he: { type: 'string' },
+    doc_number: { type: 'string' },
+    doc_date: { type: 'string' },
+    currency: { type: 'string' },
+    subtotal_before_vat: { type: 'number' },
+    vat_amount: { type: 'number' },
+    total_with_vat: { type: 'number' },
+    credit_sign: { type: 'string', enum: ['NEGATIVE', 'POSITIVE'] },
     line_items: {
       type: 'array',
       items: {
@@ -160,14 +160,12 @@ const EXTRACT_SCHEMA = {
         subtotal_before_vat: { type: 'number' },
         vat_amount: { type: 'number' },
         total_with_vat: { type: 'number' },
-        doc_type_he: { type: 'number' },
-      },
-      additionalProperties: true,
+        doc_type_he: { type: 'number' }
+      }
     },
-    display_summary_he: { type: 'string' },
+    display_summary_he: { type: 'string' }
   },
-  required: ['classification', 'should_skip', 'overall_confidence', 'field_confidence', 'display_summary_he'],
-  additionalProperties: true,
+  required: ['classification', 'should_skip', 'overall_confidence', 'display_summary_he']
 };
 
 const VALIDATE_PROMPT = `SYSTEM / INSTRUCTION
