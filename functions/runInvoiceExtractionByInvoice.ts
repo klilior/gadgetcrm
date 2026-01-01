@@ -272,13 +272,28 @@ Deno.serve(async (req) => {
 
     // Step 3: Validation
     const validationPrompt = `${VALIDATE_PROMPT}\n\nHere is the extracted JSON (use as input):\n\n${JSON.stringify(extraction)}`;
-    const validation = await base44.integrations.Core.InvokeLLM({
-      prompt: validationPrompt,
-      add_context_from_internet: false,
-      response_json_schema: VALIDATE_SCHEMA,
-    });
+    let validation;
+    try {
+      validation = await base44.integrations.Core.InvokeLLM({
+        prompt: validationPrompt,
+        add_context_from_internet: false,
+        response_json_schema: VALIDATE_SCHEMA,
+      });
+    } catch (valErr) {
+      const errMsg = `שגיאת AI בולידציה: ${valErr?.message || String(valErr)}`;
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_error_he: errMsg });
+      throw valErr;
+    }
 
-    if (!validation || typeof validation !== 'object') throw new Error('Invalid validation response');
+    if (!validation || typeof validation !== 'object') {
+      const errMsg = 'תגובת ולידציה לא תקינה או ריקה';
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_error_he: errMsg });
+      throw new Error('Invalid validation response');
+    }
+
+    // DEBUG: Save raw validation JSON
+    const validationJson = JSON.stringify(validation);
+    await base44.asServiceRole.entities.Invoices.update(invoice.id, { ai_debug_last_validation_json: validationJson });
 
     // Step 4: Supplier linking
     let supplierId = null;
