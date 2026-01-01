@@ -84,8 +84,21 @@ Deno.serve(async (req) => {
       if (invoiceId) {
         await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { linked_invoice: invoiceId });
         try { await base44.asServiceRole.entities.Invoices.update(invoiceId, { source_intake: intake.id }); } catch (_) {}
-        // Trigger AI pipeline on the invoice (Option A, idempotent)
-        try { await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: invoiceId }); } catch (_) {}
+        // Trigger AI pipeline on the invoice (Option A, idempotent) - await to ensure it runs
+        let extractionResult = null;
+        try { 
+          extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: invoiceId }); 
+        } catch (extractErr) {
+          console.error('Extraction pipeline error:', extractErr);
+        }
+        return Response.json({ 
+          success: true, 
+          updates_applied: updates, 
+          created_invoice_id: createdInvoice?.id || invoiceId, 
+          intake_id: intake.id,
+          extraction_triggered: true,
+          extraction_result: extractionResult?.data || null
+        });
       }
     }
 
