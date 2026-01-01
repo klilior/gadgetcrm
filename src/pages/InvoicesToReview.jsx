@@ -24,7 +24,7 @@ export default function InvoicesToReview() {
   const load = async () => {
     setLoading(true);
     try {
-      const invoices = await base44.entities.Invoices.filter({ extraction_status: "ממתין לאימות" }, "-doc_date", 200);
+      const invoices = await base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200);
       setRows(invoices || []);
       const sups = await base44.entities.Suppliers.list(200);
       const map = {};
@@ -102,6 +102,7 @@ export default function InvoicesToReview() {
                   <TableHead>סה״כ כולל מע״מ</TableHead>
                   <TableHead>מטבע</TableHead>
                   <TableHead>ציון ודאות</TableHead>
+                  <TableHead>סטטוס ניתוח</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -119,6 +120,7 @@ export default function InvoicesToReview() {
                       <TableCell>{r.total_with_vat != null ? r.total_with_vat : "-"}</TableCell>
                       <TableCell><Badge variant="outline">{r.currency || "-"}</Badge></TableCell>
                       <TableCell>{r.confidence_score != null ? r.confidence_score : "-"}</TableCell>
+                      <TableCell><Badge variant="outline">{r.extraction_status || "-"}</Badge></TableCell>
                     </TableRow>
                   ))
                 )}

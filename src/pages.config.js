@@ -15,6 +15,8 @@ import Customers from './pages/Customers';
 import DebugSchedule from './pages/DebugSchedule';
 import GoalsDashboard from './pages/GoalsDashboard';
 import Home from './pages/Home';
+import IntakeInbox from './pages/IntakeInbox';
+import InvoicesToReview from './pages/InvoicesToReview';
 import LineContractImport from './pages/LineContractImport';
 import LineProductMapping from './pages/LineProductMapping';
 import LinesToWorkOn from './pages/LinesToWorkOn';
@@ -22,10 +24,12 @@ import ManageAttendance from './pages/ManageAttendance';
 import ManageEmployees from './pages/ManageEmployees';
 import ManagerDashboard from './pages/ManagerDashboard';
 import MessageCenter from './pages/MessageCenter';
+import MobileInvoiceUpload from './pages/MobileInvoiceUpload';
 import Orders from './pages/Orders';
 import PaymentReturn from './pages/PaymentReturn';
 import PaymentSettings from './pages/PaymentSettings';
 import Products from './pages/Products';
+import PurchasesDashboard from './pages/PurchasesDashboard';
 import RawLinesImport from './pages/RawLinesImport';
 import RepairDashboard from './pages/RepairDashboard';
 import SalesDashboard from './pages/SalesDashboard';
@@ -44,10 +48,6 @@ import VendorReport from './pages/VendorReport';
 import WeeklySchedule from './pages/WeeklySchedule';
 import WhatsAppDebug from './pages/WhatsAppDebug';
 import WhatsAppProviders from './pages/WhatsAppProviders';
-import MobileInvoiceUpload from './pages/MobileInvoiceUpload';
-import IntakeInbox from './pages/IntakeInbox';
-import InvoicesToReview from './pages/InvoicesToReview';
-import PurchasesDashboard from './pages/PurchasesDashboard';
 import __Layout from './Layout.jsx';
 
 
@@ -69,6 +69,8 @@ export const PAGES = {
     "DebugSchedule": DebugSchedule,
     "GoalsDashboard": GoalsDashboard,
     "Home": Home,
+    "IntakeInbox": IntakeInbox,
+    "InvoicesToReview": InvoicesToReview,
     "LineContractImport": LineContractImport,
     "LineProductMapping": LineProductMapping,
     "LinesToWorkOn": LinesToWorkOn,
@@ -76,10 +78,12 @@ export const PAGES = {
     "ManageEmployees": ManageEmployees,
     "ManagerDashboard": ManagerDashboard,
     "MessageCenter": MessageCenter,
+    "MobileInvoiceUpload": MobileInvoiceUpload,
     "Orders": Orders,
     "PaymentReturn": PaymentReturn,
     "PaymentSettings": PaymentSettings,
     "Products": Products,
+    "PurchasesDashboard": PurchasesDashboard,
     "RawLinesImport": RawLinesImport,
     "RepairDashboard": RepairDashboard,
     "SalesDashboard": SalesDashboard,
@@ -98,10 +102,6 @@ export const PAGES = {
     "WeeklySchedule": WeeklySchedule,
     "WhatsAppDebug": WhatsAppDebug,
     "WhatsAppProviders": WhatsAppProviders,
-    "MobileInvoiceUpload": MobileInvoiceUpload,
-    "IntakeInbox": IntakeInbox,
-    "InvoicesToReview": InvoicesToReview,
-    "PurchasesDashboard": PurchasesDashboard,
 }
 
 export const pagesConfig = {
