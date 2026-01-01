@@ -100,12 +100,26 @@ Deno.serve(async (req) => {
       if (invoiceId) {
         await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { linked_invoice: invoiceId });
         try { await base44.asServiceRole.entities.Invoices.update(invoiceId, { source_intake: intake.id }); } catch (_) {}
-        // Trigger AI pipeline on the invoice (Option A, idempotent) - await to ensure it runs
+        
+        // Update intake status to show processing
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'עובד' });
+        
+        // Trigger AI pipeline on the invoice - await to ensure it runs
         let extractionResult = null;
+        let extractionError = null;
         try { 
           extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: invoiceId }); 
+          // Update intake status based on result
+          if (extractionResult?.data?.success) {
+            await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'עובד', status_reason: 'ניתוח AI הושלם בהצלחה' });
+          }
         } catch (extractErr) {
-          console.error('Extraction pipeline error:', extractErr);
+          extractionError = extractErr?.message || String(extractErr);
+          console.error('Extraction pipeline error:', extractionError);
+          await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { 
+            status: 'מוכן לניתוח', 
+            status_reason: `שגיאה בניתוח אוטומטי: ${extractionError}` 
+          });
         }
         return Response.json({ 
           success: true, 
@@ -113,7 +127,8 @@ Deno.serve(async (req) => {
           created_invoice_id: createdInvoice?.id || invoiceId, 
           intake_id: intake.id,
           extraction_triggered: true,
-          extraction_result: extractionResult?.data || null
+          extraction_result: extractionResult?.data || null,
+          extraction_error: extractionError
         });
       }
     }
