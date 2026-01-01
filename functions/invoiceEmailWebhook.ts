@@ -2,56 +2,60 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
  * Webhook for receiving invoice emails from Make.com
+ * Supports both multipart/form-data (with file) and JSON (with file_url)
  * 
- * Expected payload from Make:
- * {
- *   "token": "GMAIL_INBOUND_WEBHOOK_TOKEN",
- *   "from": "supplier@example.com",
- *   "subject": "חשבונית מס 12345",
- *   "date": "2024-01-15T10:30:00Z",
- *   "message_id": "unique-message-id",
- *   "file_url": "https://...",  // URL of uploaded file from Make
- *   "file_name": "invoice.pdf",
- *   "file_mime": "application/pdf"
- * }
+ * FormData fields:
+ * - token: GMAIL_INBOUND_WEBHOOK_TOKEN
+ * - from: sender email
+ * - subject: email subject
+ * - date: email date
+ * - message_id: unique message id
+ * - attachment_id: attachment id for idempotency
+ * - file: binary file (PDF/image)
+ * - file_name: original filename (optional)
  */
 
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   
   try {
-    // Handle both JSON and FormData
-    let payload;
+    let token, from, subject, date, message_id, attachment_id, file_url, file_name, file_mime;
+    
     const contentType = req.headers.get('content-type') || '';
     
     if (contentType.includes('multipart/form-data')) {
+      // Handle FormData with binary file
       const formData = await req.formData();
-      payload = {};
-      for (const [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          // Upload file to Base44
-          const { file_url } = await base44.integrations.Core.UploadFile({ file: value });
-          payload.file_url = file_url;
-          payload.file_name = value.name;
-          payload.file_mime = value.type;
-        } else {
-          payload[key] = value;
-        }
+      
+      token = formData.get('token');
+      from = formData.get('from');
+      subject = formData.get('subject');
+      date = formData.get('date');
+      message_id = formData.get('message_id');
+      attachment_id = formData.get('attachment_id');
+      file_name = formData.get('file_name');
+      
+      const fileField = formData.get('file');
+      if (fileField && fileField instanceof File) {
+        // Upload binary file to Base44
+        const uploadResult = await base44.integrations.Core.UploadFile({ file: fileField });
+        file_url = uploadResult.file_url;
+        file_name = file_name || fileField.name;
+        file_mime = fileField.type;
       }
     } else {
-      payload = await req.json();
+      // Handle JSON payload
+      const payload = await req.json();
+      token = payload.token;
+      from = payload.from;
+      subject = payload.subject;
+      date = payload.date;
+      message_id = payload.message_id;
+      attachment_id = payload.attachment_id;
+      file_url = payload.file_url;
+      file_name = payload.file_name;
+      file_mime = payload.file_mime;
     }
-    
-    const { 
-      token, 
-      from, 
-      subject, 
-      date, 
-      message_id, 
-      file_url, 
-      file_name, 
-      file_mime 
-    } = payload;
     
     // Validate token
     const expectedToken = Deno.env.get('GMAIL_INBOUND_WEBHOOK_TOKEN');
@@ -65,27 +69,38 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, error: 'No file provided' }, { status: 400 });
     }
     
-    // Check for duplicate by message_id
-    if (message_id) {
-      const existing = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({
-        gmail_message_id: message_id
-      }, undefined, 1);
+    // Check for duplicate by attachment_id (primary) or message_id
+    const dedupeId = attachment_id || message_id;
+    if (dedupeId) {
+      const filterQuery = attachment_id 
+        ? { gmail_message_id: { $regex: attachment_id } }
+        : { gmail_message_id: message_id };
+      
+      const existing = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter(
+        filterQuery, undefined, 1
+      );
       
       if (existing.length > 0) {
-        console.log(`Duplicate message_id: ${message_id}`);
+        console.log(`Duplicate detected: ${dedupeId}`);
         return Response.json({ 
           success: true, 
           skipped: true, 
-          reason: 'Duplicate message',
-          intake_id: existing[0].id 
+          reason: 'Duplicate attachment',
+          intake_id: existing[0].id,
+          linked_invoice_id: existing[0].linked_invoice || null
         });
       }
     }
     
-    // Generate file hash from URL (simple hash for dedup)
-    const fileHash = await generateSimpleHash(file_url + (file_name || ''));
+    // Generate file hash
+    const fileHash = await generateSimpleHash(file_url + (file_name || '') + (attachment_id || ''));
     
-    // Create intake record
+    // Store combined ID for future dedup
+    const storedMessageId = attachment_id 
+      ? `${message_id || 'msg'}__${attachment_id}` 
+      : message_id;
+    
+    // Create intake record with status "מוכן לניתוח"
     const intake = await base44.asServiceRole.entities.InvoiceIntakeRaw.create({
       source: 'GMAIL',
       received_at: date || new Date().toISOString(),
@@ -94,22 +109,23 @@ Deno.serve(async (req) => {
       file_hash: fileHash,
       file_name: file_name || 'invoice',
       file_mime: file_mime || 'application/pdf',
-      gmail_message_id: message_id || null,
+      gmail_message_id: storedMessageId || null,
       gmail_from: from || null,
       gmail_subject: subject || null,
       gmail_date: date || null,
-      status: 'חדש'
+      status: 'מוכן לניתוח'
     });
     
     console.log(`Created intake: ${intake.id}`);
     
     // Trigger processing pipeline
-    let processingResult = null;
+    let linkedInvoiceId = null;
     try {
-      processingResult = await base44.asServiceRole.functions.invoke('processIntake', { 
+      const processingResult = await base44.asServiceRole.functions.invoke('processIntake', { 
         intake_id: intake.id 
       });
-      console.log(`Processing triggered for intake: ${intake.id}`);
+      linkedInvoiceId = processingResult?.data?.invoice_id || null;
+      console.log(`Processing completed for intake: ${intake.id}, invoice: ${linkedInvoiceId}`);
     } catch (procErr) {
       console.error(`Processing error: ${procErr.message}`);
     }
@@ -117,7 +133,7 @@ Deno.serve(async (req) => {
     return Response.json({ 
       success: true, 
       intake_id: intake.id,
-      processing: processingResult?.data || null
+      linked_invoice_id: linkedInvoiceId
     });
     
   } catch (error) {
