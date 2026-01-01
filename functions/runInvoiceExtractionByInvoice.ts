@@ -133,6 +133,21 @@ const EXTRACT_SCHEMA = {
     vat_amount: { anyOf: [{ type: 'number' }, { type: 'null' }] },
     total_with_vat: { anyOf: [{ type: 'number' }, { type: 'null' }] },
     credit_sign: { anyOf: [{ enum: ['NEGATIVE', 'POSITIVE'] }, { type: 'null' }] },
+    line_items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          line_number: { type: 'number' },
+          sku: { type: 'string' },
+          product_name: { type: 'string' },
+          quantity: { type: 'number' },
+          unit_price_before_vat: { type: 'number' },
+          line_total_before_vat: { type: 'number' }
+        },
+        required: ['line_number', 'sku', 'product_name', 'quantity']
+      }
+    },
     overall_confidence: { type: 'number' },
     field_confidence: {
       type: 'object',
