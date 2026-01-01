@@ -105,17 +105,28 @@ export default function PurchasesDashboard() {
   const purchasesSum = sum(purchases);
   const creditsSum = sum(credits);
 
-  // Status counts
+  // Status counts (in selected date range)
   const statusCounts = useMemo(() => {
     const counts = { pending: 0, approved: 0, rejected: 0, read: 0 };
-    rows.forEach(r => {
+    rows.filter(r => inDateRange(r)).forEach(r => {
       if (r.extraction_status === 'ממתין לאימות') counts.pending++;
       else if (r.extraction_status === 'אושר') counts.approved++;
       else if (r.extraction_status === 'נדחה') counts.rejected++;
       else if (r.extraction_status === 'נקרא בהצלחה') counts.read++;
     });
     return counts;
-  }, [rows]);
+  }, [rows, dateRange, customFrom, customTo]);
+
+  const dateRangeLabel = {
+    today: "היום",
+    yesterday: "אתמול",
+    week: "השבוע",
+    month: "החודש",
+    lastMonth: "חודש שעבר",
+    year: "השנה",
+    lastYear: "שנה שעברה",
+    custom: "טווח מותאם"
+  }[dateRange];
 
   // Top 10 suppliers (from approved invoices)
   const topSuppliers = useMemo(() => {
