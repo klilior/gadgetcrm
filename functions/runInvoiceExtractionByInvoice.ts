@@ -208,14 +208,13 @@ const VALIDATE_SCHEMA = {
   type: 'object',
   properties: {
     is_math_consistent: { type: 'boolean' },
-    math_delta: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+    math_delta: { type: 'number' },
     missing_critical_fields: { type: 'array', items: { type: 'string' } },
-    recommended_extraction_status_he: { enum: ['נקרא בהצלחה', 'ממתין לאימות'] },
+    recommended_extraction_status_he: { type: 'string', enum: ['נקרא בהצלחה', 'ממתין לאימות'] },
     review_reasons_he: { type: 'array', items: { type: 'string' } },
-    display_validation_he: { type: 'string' },
+    display_validation_he: { type: 'string' }
   },
-  required: ['is_math_consistent', 'missing_critical_fields', 'recommended_extraction_status_he', 'review_reasons_he', 'display_validation_he'],
-  additionalProperties: true,
+  required: ['is_math_consistent', 'missing_critical_fields', 'recommended_extraction_status_he', 'display_validation_he']
 };
 
 Deno.serve(async (req) => {
