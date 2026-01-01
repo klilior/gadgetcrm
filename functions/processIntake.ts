@@ -63,7 +63,23 @@ Deno.serve(async (req) => {
     // If link already exists, enforce both-way link and trigger pipeline idempotently
     if (intake.linked_invoice) {
       try { await base44.asServiceRole.entities.Invoices.update(intake.linked_invoice, { source_intake: intake.id }); } catch (_) {}
-      try { await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: intake.linked_invoice }); } catch (_) {}
+      let extractionResult = null;
+      let extractionError = null;
+      try { 
+        extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: intake.linked_invoice }); 
+      } catch (err) {
+        extractionError = err?.message || String(err);
+        console.error('Extraction error (existing link):', extractionError);
+      }
+      return Response.json({ 
+        success: true, 
+        updates_applied: updates, 
+        invoice_id: intake.linked_invoice, 
+        intake_id: intake.id,
+        extraction_triggered: true,
+        extraction_result: extractionResult?.data || null,
+        extraction_error: extractionError
+      });
     } else {
       // Avoid duplicates by checking existing invoice with this intake
       const existing = await base44.asServiceRole.entities.Invoices.filter({ source_intake: intake.id }, undefined, 1);
