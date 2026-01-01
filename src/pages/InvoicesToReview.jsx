@@ -225,6 +225,17 @@ export default function InvoicesToReview() {
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setSelected(null)}>סגור</Button>
+                  <Button variant="secondary" onClick={async () => {
+                    try {
+                      toast.info("מריץ חילוץ AI...");
+                      await base44.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: selected.id });
+                      toast.success("חילוץ הושלם");
+                    } catch (e) {
+                      toast.error("שגיאה בחילוץ: " + (e?.message || "שגיאה"));
+                    }
+                    setSelected(null);
+                    load();
+                  }}>🤖 הרץ AI</Button>
                   <Button onClick={saveRecord} disabled={saving}>{saving ? "שומר..." : "שמור"}</Button>
                 </div>
               </div>
