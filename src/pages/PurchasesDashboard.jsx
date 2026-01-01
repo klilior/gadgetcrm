@@ -97,10 +97,10 @@ export default function PurchasesDashboard() {
 
   const now = new Date();
 
-  // Stats for approved invoices only
-  const approvedRows = rows.filter(r => r.extraction_status === 'אושר');
-  const purchases = approvedRows.filter(r => r.doc_type === 'חשבונית מס' && inMonth(r));
-  const credits = approvedRows.filter(r => r.doc_type === 'חשבונית זיכוי' && inMonth(r));
+  // Stats for approved invoices only (in selected date range)
+  const approvedRows = rows.filter(r => r.extraction_status === 'אושר' && inDateRange(r));
+  const purchases = approvedRows.filter(r => r.doc_type === 'חשבונית מס');
+  const credits = approvedRows.filter(r => r.doc_type === 'חשבונית זיכוי');
   const sum = (arr) => arr.reduce((acc, r) => acc + (Number(r.total_with_vat) || 0), 0);
   const purchasesSum = sum(purchases);
   const creditsSum = sum(credits);
