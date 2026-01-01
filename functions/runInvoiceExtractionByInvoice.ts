@@ -414,16 +414,24 @@ Deno.serve(async (req) => {
       if (existingPrice && existingPrice.length > 0) {
         const oldPriceRecord = existingPrice[0];
         const oldPrice = oldPriceRecord.last_price_before_vat;
-        
+
+        // Calculate min/max prices
+        const currentMin = oldPriceRecord.min_price_before_vat || oldPrice || newPrice;
+        const currentMax = oldPriceRecord.max_price_before_vat || oldPrice || newPrice;
+        const newMin = newPrice ? Math.min(currentMin, newPrice) : currentMin;
+        const newMax = newPrice ? Math.max(currentMax, newPrice) : currentMax;
+
         // Check for price change
         if (oldPrice && newPrice && oldPrice !== newPrice) {
           const changePercent = ((newPrice - oldPrice) / oldPrice) * 100;
           const direction = newPrice > oldPrice ? 'עלה' : 'ירד';
-          
+
           // Update price record
           await base44.asServiceRole.entities.SupplierProductPrice.update(oldPriceRecord.id, {
             previous_price_before_vat: oldPrice,
             last_price_before_vat: newPrice,
+            min_price_before_vat: newMin,
+            max_price_before_vat: newMax,
             price_change_percent: Math.round(changePercent * 100) / 100,
             price_change_direction: direction,
             last_invoice_id: invoice.id,
@@ -447,28 +455,32 @@ Deno.serve(async (req) => {
             priceAlerts.push({ sku: item.sku, from: oldPrice, to: newPrice, change: `${changePercent.toFixed(1)}%` });
           }
         } else if (newPrice) {
-          // No change, just update last invoice
+          // No change, just update last invoice and min/max
           await base44.asServiceRole.entities.SupplierProductPrice.update(oldPriceRecord.id, {
             last_invoice_id: invoice.id,
             last_invoice_date: extraction.doc_date || null,
+            min_price_before_vat: newMin,
+            max_price_before_vat: newMax,
             purchase_count: (oldPriceRecord.purchase_count || 0) + 1,
             price_change_direction: 'ללא שינוי'
           });
         }
-      } else if (newPrice) {
+        } else if (newPrice) {
         // New product - create price record
         await base44.asServiceRole.entities.SupplierProductPrice.create({
           supplier_id: supplierId,
           sku: item.sku,
           product_name: item.product_name,
           last_price_before_vat: newPrice,
+          min_price_before_vat: newPrice,
+          max_price_before_vat: newPrice,
           last_invoice_id: invoice.id,
           last_invoice_date: extraction.doc_date || null,
           first_seen_date: extraction.doc_date || new Date().toISOString().split('T')[0],
           purchase_count: 1,
           price_change_direction: 'ללא שינוי'
         });
-      }
+        }
     }
 
     // Step 7: Update intake status_reason
