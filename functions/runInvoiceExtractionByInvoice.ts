@@ -387,7 +387,94 @@ Deno.serve(async (req) => {
 
     await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
 
-    // Step 6: Update intake status_reason
+    // Step 6: Create InvoiceLine records and update SupplierProductPrice + PriceAlert
+    const lineItems = extraction.line_items || [];
+    const priceAlerts = [];
+    
+    for (const item of lineItems) {
+      if (!item.sku || !item.product_name) continue;
+      
+      // Create InvoiceLine
+      await base44.asServiceRole.entities.InvoiceLine.create({
+        invoice_id: invoice.id,
+        line_number: item.line_number || 1,
+        sku: item.sku,
+        product_name: item.product_name,
+        quantity: item.quantity || 1,
+        unit_price_before_vat: item.unit_price_before_vat || null,
+        line_total_before_vat: item.line_total_before_vat || null,
+        supplier_id: supplierId
+      });
+      
+      // Check/update SupplierProductPrice
+      const existingPrice = await base44.asServiceRole.entities.SupplierProductPrice.filter({
+        supplier_id: supplierId,
+        sku: item.sku
+      }, undefined, 1);
+      
+      const newPrice = item.unit_price_before_vat || (item.line_total_before_vat && item.quantity ? item.line_total_before_vat / item.quantity : null);
+      
+      if (existingPrice && existingPrice.length > 0) {
+        const oldPriceRecord = existingPrice[0];
+        const oldPrice = oldPriceRecord.last_price_before_vat;
+        
+        // Check for price change
+        if (oldPrice && newPrice && oldPrice !== newPrice) {
+          const changePercent = ((newPrice - oldPrice) / oldPrice) * 100;
+          const direction = newPrice > oldPrice ? 'עלה' : 'ירד';
+          
+          // Update price record
+          await base44.asServiceRole.entities.SupplierProductPrice.update(oldPriceRecord.id, {
+            previous_price_before_vat: oldPrice,
+            last_price_before_vat: newPrice,
+            price_change_percent: Math.round(changePercent * 100) / 100,
+            price_change_direction: direction,
+            last_invoice_id: invoice.id,
+            last_invoice_date: extraction.doc_date || null,
+            purchase_count: (oldPriceRecord.purchase_count || 0) + 1
+          });
+          
+          // Create PriceAlert
+          if (Math.abs(changePercent) >= 1) {
+            await base44.asServiceRole.entities.PriceAlert.create({
+              supplier_id: supplierId,
+              sku: item.sku,
+              product_name: item.product_name,
+              invoice_id: invoice.id,
+              old_price: oldPrice,
+              new_price: newPrice,
+              change_percent: Math.round(changePercent * 100) / 100,
+              direction: direction,
+              status: 'חדש'
+            });
+            priceAlerts.push({ sku: item.sku, from: oldPrice, to: newPrice, change: `${changePercent.toFixed(1)}%` });
+          }
+        } else if (newPrice) {
+          // No change, just update last invoice
+          await base44.asServiceRole.entities.SupplierProductPrice.update(oldPriceRecord.id, {
+            last_invoice_id: invoice.id,
+            last_invoice_date: extraction.doc_date || null,
+            purchase_count: (oldPriceRecord.purchase_count || 0) + 1,
+            price_change_direction: 'ללא שינוי'
+          });
+        }
+      } else if (newPrice) {
+        // New product - create price record
+        await base44.asServiceRole.entities.SupplierProductPrice.create({
+          supplier_id: supplierId,
+          sku: item.sku,
+          product_name: item.product_name,
+          last_price_before_vat: newPrice,
+          last_invoice_id: invoice.id,
+          last_invoice_date: extraction.doc_date || null,
+          first_seen_date: extraction.doc_date || new Date().toISOString().split('T')[0],
+          purchase_count: 1,
+          price_change_direction: 'ללא שינוי'
+        });
+      }
+    }
+
+    // Step 7: Update intake status_reason
     let intakeReason = '';
     if (validation.recommended_extraction_status_he === 'נקרא בהצלחה') {
       intakeReason = 'המסמך נותח ונקלט לחשבונית. ממתין לאישור סופי לפי הצורך.';
