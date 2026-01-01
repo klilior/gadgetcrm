@@ -49,22 +49,53 @@ export default function PurchasesDashboard() {
     );
   }
 
+  // Calculate date range
+  const getDateRangeBounds = () => {
+    const now = new Date();
+    switch (dateRange) {
+      case "today":
+        return { start: startOfDay(now), end: endOfDay(now) };
+      case "yesterday":
+        return { start: startOfDay(subDays(now, 1)), end: endOfDay(subDays(now, 1)) };
+      case "week":
+        return { start: startOfWeek(now, { weekStartsOn: 0 }), end: endOfWeek(now, { weekStartsOn: 0 }) };
+      case "month":
+        return { start: startOfMonth(now), end: endOfMonth(now) };
+      case "lastMonth":
+        return { start: startOfMonth(subMonths(now, 1)), end: endOfMonth(subMonths(now, 1)) };
+      case "year":
+        return { start: startOfYear(now), end: endOfYear(now) };
+      case "lastYear":
+        return { start: startOfYear(subYears(now, 1)), end: endOfYear(subYears(now, 1)) };
+      case "custom":
+        return {
+          start: customFrom ? startOfDay(new Date(customFrom)) : new Date(0),
+          end: customTo ? endOfDay(new Date(customTo)) : now
+        };
+      default:
+        return { start: startOfMonth(now), end: endOfMonth(now) };
+    }
+  };
+
+  const { start: rangeStart, end: rangeEnd } = getDateRangeBounds();
+
+  const inDateRange = (r) => {
+    if (!r.doc_date) return false;
+    const d = new Date(r.doc_date);
+    return !isBefore(d, rangeStart) && !isAfter(d, rangeEnd);
+  };
+
   // Filter rows
   const filteredRows = useMemo(() => {
     return rows.filter(r => {
       if (filterSupplier !== "all" && r.supplier !== filterSupplier) return false;
       if (filterStatus !== "all" && r.extraction_status !== filterStatus) return false;
+      if (!inDateRange(r)) return false;
       return true;
     });
-  }, [rows, filterSupplier, filterStatus]);
+  }, [rows, filterSupplier, filterStatus, dateRange, customFrom, customTo]);
 
   const now = new Date();
-  const mStart = startOfMonth(now); const mEnd = endOfMonth(now);
-  const inMonth = (r) => {
-    if (!r.doc_date) return false;
-    const d = new Date(r.doc_date);
-    return !isBefore(d, mStart) && !isAfter(d, mEnd);
-  };
 
   // Stats for approved invoices only
   const approvedRows = rows.filter(r => r.extraction_status === 'אושר');
