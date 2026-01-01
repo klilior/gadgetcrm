@@ -118,12 +118,7 @@ export default function IntakeInbox() {
                 )}
               </div>
 
-              {selected.file && selected.file_mime?.includes("pdf") && (
-                <iframe title="preview" src={selected.file} className="w-full h-72 rounded-md border" />
-              )}
-              {selected.file && selected.file_mime?.startsWith?.("image") && (
-                <img src={selected.file} alt="preview" className="max-h-72 rounded-md border" />
-              )}
+              {/* Preview removed - use download link instead */}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 {!canEdit && (<>
