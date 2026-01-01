@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { RefreshCcw, FileText, Eye } from "lucide-react";
+import { RefreshCcw, FileText, Eye, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -157,26 +158,46 @@ export default function IntakeInbox() {
               </div>
 
               {canEdit && (
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button onClick={async () => {
-                    await base44.entities.InvoiceIntakeRaw.update(selected.id, {
-                      status: selected.status,
-                      status_reason: selected.status_reason || undefined,
-                      linked_invoice: selected.linked_invoice || undefined
-                    });
-                    try { await base44.functions.invoke('processIntake', { intake_id: selected.id }); } catch (_) {}
-                    setSelected(null);
-                    load();
-                  }}>שמור</Button>
-                  {selected.linked_invoice && (
-                    <Button variant="secondary" onClick={async () => {
-                      try {
-                        await base44.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: selected.linked_invoice });
-                      } catch (_) {}
+                <div className="flex justify-between gap-2 pt-2">
+                  <Button variant="destructive" onClick={async () => {
+                    if (!confirm("האם למחוק את המסמך הזה? פעולה זו לא ניתנת לביטול.")) return;
+                    try {
+                      // Delete linked invoice if exists
+                      if (selected.linked_invoice) {
+                        try { await base44.entities.Invoices.delete(selected.linked_invoice); } catch (_) {}
+                      }
+                      await base44.entities.InvoiceIntakeRaw.delete(selected.id);
+                      toast.success("המסמך נמחק בהצלחה");
                       setSelected(null);
                       load();
-                    }}>הרץ חילוץ AI</Button>
-                  )}
+                    } catch (e) {
+                      toast.error("שגיאה במחיקה");
+                    }
+                  }} className="gap-1">
+                    <Trash2 className="w-4 h-4" />
+                    מחק
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button onClick={async () => {
+                      await base44.entities.InvoiceIntakeRaw.update(selected.id, {
+                        status: selected.status,
+                        status_reason: selected.status_reason || undefined,
+                        linked_invoice: selected.linked_invoice || undefined
+                      });
+                      try { await base44.functions.invoke('processIntake', { intake_id: selected.id }); } catch (_) {}
+                      setSelected(null);
+                      load();
+                    }}>שמור</Button>
+                    {selected.linked_invoice && (
+                      <Button variant="secondary" onClick={async () => {
+                        try {
+                          await base44.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: selected.linked_invoice });
+                        } catch (_) {}
+                        setSelected(null);
+                        load();
+                      }}>הרץ חילוץ AI</Button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
