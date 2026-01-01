@@ -49,6 +49,7 @@ import WeeklySchedule from './pages/WeeklySchedule';
 import WhatsAppDebug from './pages/WhatsAppDebug';
 import WhatsAppProviders from './pages/WhatsAppProviders';
 import PriceAlerts from './pages/PriceAlerts';
+import SuppliersManagement from './pages/SuppliersManagement';
 import __Layout from './Layout.jsx';
 
 
@@ -104,6 +105,7 @@ export const PAGES = {
     "WhatsAppDebug": WhatsAppDebug,
     "WhatsAppProviders": WhatsAppProviders,
     "PriceAlerts": PriceAlerts,
+    "SuppliersManagement": SuppliersManagement,
 }
 
 export const pagesConfig = {

@@ -136,6 +136,7 @@ function AppContent({ children, currentPageName }) {
           { title: "העלאת חשבונית מהנייד", url: createPageUrl("MobileInvoiceUpload") },
           { title: "חשבוניות לאימות", url: createPageUrl("InvoicesToReview") },
           { title: "התראות מחיר", url: createPageUrl("PriceAlerts") },
+          { title: "ניהול ספקים", url: createPageUrl("SuppliersManagement") },
           { title: "דשבורד רכישות", url: createPageUrl("PurchasesDashboard") },
         ];
     } else if (isShiftManager) {

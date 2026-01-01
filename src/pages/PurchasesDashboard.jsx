@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart3, RefreshCcw } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BarChart3, RefreshCcw, FileText, CheckCircle, Clock, AlertTriangle } from "lucide-react";
 import { useUser } from "../components/UserAuth";
 import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, isBefore } from "date-fns";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { Badge } from "@/components/ui/badge";
 
 export default function PurchasesDashboard() {
   const { currentUser } = useUser();
@@ -13,16 +15,21 @@ export default function PurchasesDashboard() {
 
   const [rows, setRows] = useState([]);
   const [suppliers, setSuppliers] = useState({});
+  const [suppliersList, setSuppliersList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filterSupplier, setFilterSupplier] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
 
   const load = async () => {
     setLoading(true);
     try {
-      const list = await base44.entities.Invoices.filter({ extraction_status: 'אושר' }, '-doc_date', 1000);
+      // Load ALL invoices, not just approved
+      const list = await base44.entities.Invoices.filter({}, '-doc_date', 1000);
       setRows(list || []);
-      const sups = await base44.entities.Suppliers.list(500);
+      const sups = await base44.entities.Suppliers.filter({}, undefined, 500);
       const map = {}; (sups || []).forEach(s => { map[s.id] = s; });
       setSuppliers(map);
+      setSuppliersList(sups || []);
     } finally { setLoading(false); }
   };
 
@@ -37,6 +44,15 @@ export default function PurchasesDashboard() {
     );
   }
 
+  // Filter rows
+  const filteredRows = useMemo(() => {
+    return rows.filter(r => {
+      if (filterSupplier !== "all" && r.supplier !== filterSupplier) return false;
+      if (filterStatus !== "all" && r.extraction_status !== filterStatus) return false;
+      return true;
+    });
+  }, [rows, filterSupplier, filterStatus]);
+
   const now = new Date();
   const mStart = startOfMonth(now); const mEnd = endOfMonth(now);
   const inMonth = (r) => {
@@ -45,13 +61,27 @@ export default function PurchasesDashboard() {
     return !isBefore(d, mStart) && !isAfter(d, mEnd);
   };
 
-  const purchases = rows.filter(r => r.doc_type === 'חשבונית מס' && inMonth(r));
-  const credits = rows.filter(r => r.doc_type === 'חשבונית זיכוי' && inMonth(r));
+  // Stats for approved invoices only
+  const approvedRows = rows.filter(r => r.extraction_status === 'אושר');
+  const purchases = approvedRows.filter(r => r.doc_type === 'חשבונית מס' && inMonth(r));
+  const credits = approvedRows.filter(r => r.doc_type === 'חשבונית זיכוי' && inMonth(r));
   const sum = (arr) => arr.reduce((acc, r) => acc + (Number(r.total_with_vat) || 0), 0);
   const purchasesSum = sum(purchases);
   const creditsSum = sum(credits);
 
-  // Top 10 suppliers
+  // Status counts
+  const statusCounts = useMemo(() => {
+    const counts = { pending: 0, approved: 0, rejected: 0, read: 0 };
+    rows.forEach(r => {
+      if (r.extraction_status === 'ממתין לאימות') counts.pending++;
+      else if (r.extraction_status === 'אושר') counts.approved++;
+      else if (r.extraction_status === 'נדחה') counts.rejected++;
+      else if (r.extraction_status === 'נקרא בהצלחה') counts.read++;
+    });
+    return counts;
+  }, [rows]);
+
+  // Top 10 suppliers (from approved invoices)
   const topSuppliers = useMemo(() => {
     const agg = {};
     for (const r of purchases) {
@@ -62,6 +92,11 @@ export default function PurchasesDashboard() {
     items.sort((a,b) => b.total - a.total);
     return items.slice(0, 10);
   }, [purchases, suppliers]);
+
+  // Recent invoices table (filtered)
+  const recentInvoices = useMemo(() => {
+    return filteredRows.slice(0, 20);
+  }, [filteredRows]);
 
   // Weekly trend - last 8 weeks
   const weeks = Array.from({ length: 8 }, (_, i) => {
@@ -84,13 +119,53 @@ export default function PurchasesDashboard() {
         <Button variant="outline" onClick={load} className="gap-2"><RefreshCcw className="w-4 h-4"/>רענן</Button>
       </div>
 
+      {/* Status summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="glass-card border-0 p-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-orange-500" />
+            <div>
+              <div className="text-xs text-gray-600">ממתינות לאימות</div>
+              <div className="text-xl font-bold text-orange-600">{statusCounts.pending}</div>
+            </div>
+          </div>
+        </Card>
+        <Card className="glass-card border-0 p-3">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-500" />
+            <div>
+              <div className="text-xs text-gray-600">נקראו בהצלחה</div>
+              <div className="text-xl font-bold text-blue-600">{statusCounts.read}</div>
+            </div>
+          </div>
+        </Card>
+        <Card className="glass-card border-0 p-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-500" />
+            <div>
+              <div className="text-xs text-gray-600">אושרו</div>
+              <div className="text-xl font-bold text-green-600">{statusCounts.approved}</div>
+            </div>
+          </div>
+        </Card>
+        <Card className="glass-card border-0 p-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-500" />
+            <div>
+              <div className="text-xs text-gray-600">נדחו</div>
+              <div className="text-xl font-bold text-red-600">{statusCounts.rejected}</div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="glass-card border-0">
-          <CardHeader><CardTitle>סה״כ רכישות החודש (כולל מע״מ)</CardTitle></CardHeader>
+          <CardHeader><CardTitle>סה״כ רכישות החודש (מאושרות)</CardTitle></CardHeader>
           <CardContent className="text-3xl font-bold text-emerald-700">₪ {purchasesSum.toLocaleString()}</CardContent>
         </Card>
         <Card className="glass-card border-0">
-          <CardHeader><CardTitle>סה״כ זיכויים החודש</CardTitle></CardHeader>
+          <CardHeader><CardTitle>סה״כ זיכויים החודש (מאושרים)</CardTitle></CardHeader>
           <CardContent className="text-3xl font-bold text-rose-700">₪ {creditsSum.toLocaleString()}</CardContent>
         </Card>
       </div>
@@ -123,6 +198,79 @@ export default function PurchasesDashboard() {
               <Line type="monotone" dataKey="total" stroke="#10b981" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Recent invoices table with filters */}
+      <Card className="glass-card border-0">
+        <CardHeader>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <CardTitle>חשבוניות אחרונות ({filteredRows.length})</CardTitle>
+            <div className="flex gap-2">
+              <Select value={filterSupplier} onValueChange={setFilterSupplier}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="כל הספקים" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">כל הספקים</SelectItem>
+                  {suppliersList.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="כל הסטטוסים" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">כל הסטטוסים</SelectItem>
+                  <SelectItem value="ממתין לאימות">ממתין לאימות</SelectItem>
+                  <SelectItem value="נקרא בהצלחה">נקרא בהצלחה</SelectItem>
+                  <SelectItem value="אושר">אושר</SelectItem>
+                  <SelectItem value="נדחה">נדחה</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-right py-2 px-2">ספק</th>
+                  <th className="text-right py-2 px-2">סוג</th>
+                  <th className="text-right py-2 px-2">מספר</th>
+                  <th className="text-right py-2 px-2">תאריך</th>
+                  <th className="text-right py-2 px-2">סכום</th>
+                  <th className="text-right py-2 px-2">סטטוס</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentInvoices.length === 0 ? (
+                  <tr><td colSpan={6} className="text-center py-4 text-gray-500">אין חשבוניות</td></tr>
+                ) : recentInvoices.map(inv => (
+                  <tr key={inv.id} className="border-b hover:bg-gray-50">
+                    <td className="py-2 px-2">{suppliers[inv.supplier]?.name || inv.supplier || "-"}</td>
+                    <td className="py-2 px-2">{inv.doc_type || "-"}</td>
+                    <td className="py-2 px-2 font-mono">{inv.doc_number || "-"}</td>
+                    <td className="py-2 px-2">{inv.doc_date || "-"}</td>
+                    <td className="py-2 px-2 font-semibold">{inv.total_with_vat ? `₪${inv.total_with_vat.toLocaleString()}` : "-"}</td>
+                    <td className="py-2 px-2">
+                      <Badge variant="outline" className={
+                        inv.extraction_status === 'אושר' ? 'bg-green-100 text-green-800' :
+                        inv.extraction_status === 'נדחה' ? 'bg-red-100 text-red-800' :
+                        inv.extraction_status === 'נקרא בהצלחה' ? 'bg-blue-100 text-blue-800' :
+                        'bg-orange-100 text-orange-800'
+                      }>
+                        {inv.extraction_status || "לא ידוע"}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
     </div>
