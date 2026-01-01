@@ -131,12 +131,13 @@ function AppContent({ children, currentPageName }) {
   // Build purchases menu by roles
   if (currentUser) {
     if (isManager || currentUser?.role === 'admin') {
-      purchasesMenuItems = [
-        { title: "תיבת קליטה", url: createPageUrl("IntakeInbox") },
-        { title: "העלאת חשבונית מהנייד", url: createPageUrl("MobileInvoiceUpload") },
-        { title: "חשבוניות לאימות", url: createPageUrl("InvoicesToReview") },
-        { title: "דשבורד רכישות", url: createPageUrl("PurchasesDashboard") },
-      ];
+        purchasesMenuItems = [
+          { title: "תיבת קליטה", url: createPageUrl("IntakeInbox") },
+          { title: "העלאת חשבונית מהנייד", url: createPageUrl("MobileInvoiceUpload") },
+          { title: "חשבוניות לאימות", url: createPageUrl("InvoicesToReview") },
+          { title: "התראות מחיר", url: createPageUrl("PriceAlerts") },
+          { title: "דשבורד רכישות", url: createPageUrl("PurchasesDashboard") },
+        ];
     } else if (isShiftManager) {
       purchasesMenuItems = [
         { title: "תיבת קליטה", url: createPageUrl("IntakeInbox") },
