@@ -199,14 +199,11 @@ Deno.serve(async (req) => {
     const invoice = invList?.[0];
     if (!invoice) return Response.json({ error: 'Invoice not found' }, { status: 404 });
 
-    // Conditions (Option A)
-    if (invoice.extraction_status !== 'ממתין לאימות') {
-      return Response.json({ success: true, skipped: true, reason: 'Extraction status not pending' });
-    }
+    // Conditions (Option A - updated)
     if (invoice.extraction_status === 'אושר' || invoice.extraction_status === 'נדחה') {
       return Response.json({ success: true, skipped: true, reason: 'Finalized' });
     }
-    if (!(invoice.source_intake)) {
+    if (!invoice.source_intake) {
       return Response.json({ success: true, skipped: true, reason: 'No source intake' });
     }
 
