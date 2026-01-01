@@ -3,9 +3,11 @@ import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart3, RefreshCcw, FileText, CheckCircle, Clock, AlertTriangle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { BarChart3, RefreshCcw, FileText, CheckCircle, Clock, AlertTriangle, Calendar } from "lucide-react";
 import { useUser } from "../components/UserAuth";
-import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, isBefore } from "date-fns";
+import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, isBefore, startOfDay, endOfDay, subDays, startOfYear, endOfYear, subMonths, subYears, format } from "date-fns";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Badge } from "@/components/ui/badge";
 
