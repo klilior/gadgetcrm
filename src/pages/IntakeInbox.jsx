@@ -168,6 +168,15 @@ export default function IntakeInbox() {
                     setSelected(null);
                     load();
                   }}>שמור</Button>
+                  {selected.linked_invoice && (
+                    <Button variant="secondary" onClick={async () => {
+                      try {
+                        await base44.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: selected.linked_invoice });
+                      } catch (_) {}
+                      setSelected(null);
+                      load();
+                    }}>הרץ חילוץ AI</Button>
+                  )}
                 </div>
               )}
             </div>
