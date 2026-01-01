@@ -21,6 +21,9 @@ export default function PurchasesDashboard() {
   const [loading, setLoading] = useState(true);
   const [filterSupplier, setFilterSupplier] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [dateRange, setDateRange] = useState("month"); // today, yesterday, week, month, lastMonth, year, lastYear, custom
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   const load = async () => {
     setLoading(true);
