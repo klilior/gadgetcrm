@@ -275,8 +275,21 @@ Deno.serve(async (req) => {
       supplierId = created.id;
     }
 
-    // Step 5: Update invoice
-    const notes = `${extraction.display_summary_he || ''}\n${validation.display_validation_he || ''}`.trim();
+    // Step 5: Update invoice (mapping + safe auto-approval)
+    const baseNotes = `${extraction.display_summary_he || ''}\n${validation.display_validation_he || ''}`.trim();
+
+    // Determine final status and notes
+    const fieldsComplete = !!(extraction.doc_type_he && extraction.doc_number && extraction.doc_date && (typeof extraction.total_with_vat === 'number'));
+    const canAutoApprove = (
+      validation.recommended_extraction_status_he === 'נקרא בהצלחה' &&
+      (typeof extraction.overall_confidence === 'number' ? extraction.overall_confidence >= 90 : false) &&
+      validation.is_math_consistent === true &&
+      fieldsComplete
+    );
+
+    const finalStatus = canAutoApprove ? 'אושר' : validation.recommended_extraction_status_he;
+    const finalNotes = canAutoApprove ? `${baseNotes}\nאושר אוטומטית (ודאות גבוהה).` : baseNotes;
+
     const updatePayload = {
       supplier: supplierId,
       doc_type: extraction.doc_type_he || undefined,
@@ -287,8 +300,8 @@ Deno.serve(async (req) => {
       vat_amount: extraction.vat_amount ?? undefined,
       total_with_vat: extraction.total_with_vat ?? undefined,
       confidence_score: extraction.overall_confidence ?? undefined,
-      extraction_status: validation.recommended_extraction_status_he,
-      notes: notes
+      extraction_status: finalStatus,
+      notes: finalNotes
     };
 
     await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
