@@ -43,6 +43,16 @@ Do not inflate confidence if key fields are missing.
 CRITICAL FIELDS
 supplier_name, doc_number, doc_date, total_with_vat, doc_type_he
 
+ADDITIONAL: EXTRACT LINE ITEMS
+You MUST also extract ALL line items (products/services) from the invoice.
+Each line item should include:
+- line_number: sequential number (1, 2, 3...)
+- sku: product code/SKU/מק"ט (exactly as appears)
+- product_name: product description/name
+- quantity: number of units
+- unit_price_before_vat: price per unit before VAT (number)
+- line_total_before_vat: total for this line before VAT (number)
+
 OUTPUT SCHEMA (EXACT)
 {
   "classification": "TAX_INVOICE" | "CREDIT_NOTE" | "OTHER",
@@ -63,6 +73,17 @@ OUTPUT SCHEMA (EXACT)
   "total_with_vat": number | null,
 
   "credit_sign": "NEGATIVE" | "POSITIVE" | null,
+
+  "line_items": [
+    {
+      "line_number": number,
+      "sku": string,
+      "product_name": string,
+      "quantity": number,
+      "unit_price_before_vat": number,
+      "line_total_before_vat": number
+    }
+  ],
 
   "overall_confidence": number,
   "field_confidence": {
