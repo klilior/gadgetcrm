@@ -261,11 +261,11 @@ export default function PurchasesDashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="glass-card border-0">
-          <CardHeader><CardTitle>סה״כ רכישות החודש (מאושרות)</CardTitle></CardHeader>
+          <CardHeader><CardTitle>סה״כ רכישות - {dateRangeLabel} (מאושרות)</CardTitle></CardHeader>
           <CardContent className="text-3xl font-bold text-emerald-700">₪ {purchasesSum.toLocaleString()}</CardContent>
         </Card>
         <Card className="glass-card border-0">
-          <CardHeader><CardTitle>סה״כ זיכויים החודש (מאושרים)</CardTitle></CardHeader>
+          <CardHeader><CardTitle>סה״כ זיכויים - {dateRangeLabel} (מאושרים)</CardTitle></CardHeader>
           <CardContent className="text-3xl font-bold text-rose-700">₪ {creditsSum.toLocaleString()}</CardContent>
         </Card>
       </div>
