@@ -210,7 +210,19 @@ Deno.serve(async (req) => {
     const intakeList = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ id: invoice.source_intake });
     const intake = intakeList?.[0];
     if (!intake) return Response.json({ success: false, error: 'Source intake not found' }, { status: 404 });
-    if (!intake.file) return Response.json({ success: true, skipped: true, reason: 'No file on intake' });
+
+    // DEBUG: Check file presence
+    const filePresent = !!(intake.file && typeof intake.file === 'string' && intake.file.trim().length > 0);
+    await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_input_file_present: filePresent });
+
+    if (!filePresent) {
+      const errMsg = 'אין קובץ בשדה file בקליטה / הקובץ לא זמין ל-AI';
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
+        status: 'דולג',
+        ai_debug_last_error_he: errMsg
+      });
+      return Response.json({ success: false, skipped: true, reason: 'No file on intake', ai_debug_last_error_he: errMsg });
+    }
 
     // Idempotency: run only if doc_number OR total_with_vat missing
     const hasDocNumber = !!(invoice.doc_number && String(invoice.doc_number).trim());
@@ -220,22 +232,40 @@ Deno.serve(async (req) => {
     }
 
     // Step 1: Extraction
-    const extraction = await base44.integrations.Core.InvokeLLM({
-      prompt: EXTRACT_PROMPT,
-      add_context_from_internet: false,
-      response_json_schema: EXTRACT_SCHEMA,
-      file_urls: [intake.file]
-    });
+    let extraction;
+    try {
+      extraction = await base44.integrations.Core.InvokeLLM({
+        prompt: EXTRACT_PROMPT,
+        add_context_from_internet: false,
+        response_json_schema: EXTRACT_SCHEMA,
+        file_urls: [intake.file]
+      });
+    } catch (llmErr) {
+      const errMsg = `שגיאת AI בחילוץ: ${llmErr?.message || String(llmErr)}`;
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_error_he: errMsg });
+      throw llmErr;
+    }
 
-    if (!extraction || typeof extraction !== 'object') throw new Error('Invalid extraction response');
+    if (!extraction || typeof extraction !== 'object') {
+      const errMsg = 'תגובת AI לא תקינה או ריקה';
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_error_he: errMsg });
+      throw new Error('Invalid extraction response');
+    }
+
+    // DEBUG: Save raw extraction JSON
+    const extractionJson = JSON.stringify(extraction);
+    await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_extraction_json: extractionJson });
+    await base44.asServiceRole.entities.Invoices.update(invoice.id, { ai_debug_last_extraction_json: extractionJson });
 
     // Step 2: Skip handling
     if (extraction.classification === 'OTHER' || extraction.should_skip === true) {
+      const skipReason = extraction.skip_reason_he || 'המסמך אינו חשבונית/זיכוי ולכן דולג.';
       await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
         status: 'דולג',
-        status_reason: extraction.skip_reason_he || 'המסמך אינו חשבונית/זיכוי ולכן דולג.'
+        status_reason: skipReason,
+        ai_debug_last_error_he: skipReason
       });
-      const newNotes = `מסמך דולג: ${extraction.skip_reason_he || 'לא סופק'}`;
+      const newNotes = `מסמך דולג: ${skipReason}`;
       await base44.asServiceRole.entities.Invoices.update(invoice.id, { notes: (invoice.notes ? invoice.notes + '\n' : '') + newNotes });
       return Response.json({ success: true, skipped: true, reason: 'OTHER', extraction });
     }
