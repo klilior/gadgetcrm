@@ -53,9 +53,25 @@ export default function MobileInvoiceUpload() {
       };
 
       const created = await base44.entities.InvoiceIntakeRaw.create(payload);
-      // עיבוד ואוטומציה
-      try { await base44.functions.invoke('processIntake', { intake_id: created.id }); } catch (_) {}
-      toast.success("המסמך נקלט בהצלחה.");
+      
+      // עיבוד ואוטומציה - עם הודעות סטטוס
+      toast.info("מעבד את המסמך...");
+      try {
+        const processResult = await base44.functions.invoke('processIntake', { intake_id: created.id });
+        console.log("processIntake result:", processResult);
+        
+        if (processResult?.data?.created_invoice_id) {
+          toast.success("המסמך נקלט וניתוח AI הופעל בהצלחה!");
+        } else if (processResult?.data?.success) {
+          toast.success("המסמך נקלט בהצלחה, ממתין לניתוח.");
+        } else {
+          toast.success("המסמך נקלט בהצלחה.");
+        }
+      } catch (procErr) {
+        console.error("processIntake error:", procErr);
+        toast.warning("המסמך נקלט, אך העיבוד האוטומטי נכשל. יש להריץ ניתוח ידנית.");
+      }
+      
       setFile(null);
       setStatusReason("");
       setSource("MOBILE");
