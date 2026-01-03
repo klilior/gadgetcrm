@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
     const intake = await base44.asServiceRole.entities.InvoiceIntakeRaw.create({
       source: 'GMAIL',
       received_at: date || new Date().toISOString(),
-      uploaded_by: 'מערכת (Make.com)',
+      uploaded_by: 'מערכת (Gmail Auto)',
       file: file_url,
       file_hash: fileHash,
       file_name: file_name || 'invoice',
