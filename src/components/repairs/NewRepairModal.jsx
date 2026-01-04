@@ -256,7 +256,7 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
                 repair_type: repairData.repair_type, // Updated state name
                 vendor_id: repairData.repair_type === 'מעבדת יבואן' ? repairData.vendor_id : undefined, // Updated state name
                 lock_code: repairData.lock_code, // Updated state name
-                issue_category: repairData.issue_category, // Updated state name
+                issue_category: repairData.issue_categories.join(', '), // Join multiple categories
                 issue_description: repairData.issue_description, // Updated state name
                 existing_damage: repairData.existing_damage || undefined, // Updated state name
                 expected_price: parseFloat(repairData.expected_price) || 0, // Updated state name
