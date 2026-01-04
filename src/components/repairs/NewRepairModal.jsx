@@ -78,7 +78,7 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
             setNewClientData({ full_name: '', phone: '', email: '' }); // Updated state name
             setNewDeviceData({ manufacturer: '', model: '', serial_imei: '', color: '' }); // Updated state name
             setRepairData({ // Updated state name
-                repair_type: '', vendor_id: '', lock_code: '', issue_category: '',
+                repair_type: '', vendor_id: '', lock_code: '', issue_categories: [],
                 issue_description: '', existing_damage: '', expected_price: ''
             });
             setError(null); // Updated state name
