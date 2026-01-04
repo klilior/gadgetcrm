@@ -227,8 +227,8 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
             return;
         }
 
-        if (!repairData.lock_code || !repairData.issue_category || !repairData.issue_description) { // Updated state name
-            setError('נא למלא את כל השדות הנדרשים'); // Updated error state
+        if (!repairData.lock_code || repairData.issue_categories.length === 0 || !repairData.issue_description) { // Updated state name
+            setError('נא למלא את כל השדות הנדרשים (כולל לפחות תקלה אחת)'); // Updated error state
             return;
         }
         
