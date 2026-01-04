@@ -52,7 +52,7 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
         repair_type: '',
         vendor_id: '',
         lock_code: '',
-        issue_category: '',
+        issue_categories: [], // Changed to array for multiple selection
         issue_description: '',
         existing_damage: '',
         expected_price: ''
