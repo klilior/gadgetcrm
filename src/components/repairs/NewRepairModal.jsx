@@ -632,21 +632,39 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
                                         />
                                     </div>
 
-                                    <div>
-                                        <Label htmlFor="issue-category">נושא התקלה *</Label>
-                                        <Select 
-                                            value={repairData.issue_category} // Updated state name
-                                            onValueChange={(value) => setRepairData({...repairData, issue_category: value})} // Updated state name
-                                        >
-                                            <SelectTrigger id="issue-category">
-                                                <SelectValue placeholder="בחר נושא..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {issueCategories.map(category => (
-                                                    <SelectItem key={category} value={category}>{category}</SelectItem>
+                                    <div className="col-span-2">
+                                        <Label>נושאי התקלה * (ניתן לבחור מספר תקלות)</Label>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2 p-3 border rounded-lg bg-gray-50">
+                                            {issueCategories.map(category => (
+                                                <div key={category} className="flex items-center gap-2">
+                                                    <Checkbox
+                                                        id={`issue-${category}`}
+                                                        checked={repairData.issue_categories.includes(category)}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) {
+                                                                setRepairData({...repairData, issue_categories: [...repairData.issue_categories, category]});
+                                                            } else {
+                                                                setRepairData({...repairData, issue_categories: repairData.issue_categories.filter(c => c !== category)});
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Label htmlFor={`issue-${category}`} className="text-sm cursor-pointer">{category}</Label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {repairData.issue_categories.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-2">
+                                                {repairData.issue_categories.map(cat => (
+                                                    <Badge key={cat} variant="secondary" className="flex items-center gap-1">
+                                                        {cat}
+                                                        <X 
+                                                            className="w-3 h-3 cursor-pointer hover:text-red-500" 
+                                                            onClick={() => setRepairData({...repairData, issue_categories: repairData.issue_categories.filter(c => c !== cat)})}
+                                                        />
+                                                    </Badge>
                                                 ))}
-                                            </SelectContent>
-                                        </Select>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div>
