@@ -81,16 +81,23 @@ Deno.serve(async (req) => {
 
         // Client doesn't exist - create new one (using service role for admin access)
         console.log('🔵 Creating new client with data:', { phone, full_name, email });
-        const newClient = await base44.asServiceRole.entities.Client.create({
+        
+        // Build create payload - only include non-empty fields to avoid unique constraint issues
+        const createPayload = {
             phone: phone,
             full_name: full_name || 'לקוח חדש',
-            email: email,
-            city: city,
-            full_address: full_address,
-            preferred_channel: preferred_channel || 'whatsapp',
-            notes: notes,
-            woo_customer_id: woo_customer_id
-        });
+            preferred_channel: preferred_channel || 'whatsapp'
+        };
+        
+        // Only add optional fields if they have actual values
+        if (email && email.trim()) createPayload.email = email.trim();
+        if (city && city.trim()) createPayload.city = city.trim();
+        if (full_address && full_address.trim()) createPayload.full_address = full_address.trim();
+        if (notes && notes.trim()) createPayload.notes = notes.trim();
+        if (woo_customer_id) createPayload.woo_customer_id = woo_customer_id;
+        
+        console.log('🔵 Final create payload:', createPayload);
+        const newClient = await base44.asServiceRole.entities.Client.create(createPayload);
 
         console.log('✅ New client created successfully:', newClient.id);
         return Response.json({
