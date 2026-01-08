@@ -1,37 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useUser } from "../components/UserAuth";
-import UnauthorizedRedirect from "../components/UnauthorizedRedirect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Target, Plus, RefreshCw, Edit, Trash2, TrendingUp, Users, Smartphone, Radio, ShoppingBag } from "lucide-react";
+import { Target, Plus, RefreshCw, Edit, Trash2, TrendingUp, Smartphone, Radio, ShoppingBag, Save, Calendar } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-
-const METRIC_LABELS = {
-    'UNITS': 'כמות יחידות',
-    'NET_AMOUNT': 'סכום נטו (₪)',
-    'LINES_4G_UNITS': 'קווים 4G',
-    'LINES_5G_UNITS': 'קווים 5G'
-};
-
-const GROUP_LABELS = {
-    'DEVICES': 'מכשירים',
-    'LINES': 'קווים',
-    'ACCESSORIES_GROUP': 'אביזרים'
-};
-
-const GROUP_ICONS = {
-    'DEVICES': Smartphone,
-    'LINES': Radio,
-    'ACCESSORIES_GROUP': ShoppingBag
-};
+import { he } from "date-fns/locale";
 
 export default function GoalsDashboard() {
     const { currentUser } = useUser();
@@ -39,47 +19,42 @@ export default function GoalsDashboard() {
     const [progress, setProgress] = useState({});
     const [agents, setAgents] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isCalculating, setIsCalculating] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     
     const [showModal, setShowModal] = useState(false);
-    const [editingGoal, setEditingGoal] = useState(null);
-    const [form, setForm] = useState({
-        name: "",
-        scope_type: "AGENT",
-        agent_name: "",
-        commission_group_code: "DEVICES",
-        metric_type: "UNITS",
-        period_type: "MONTHLY",
-        period_start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
-        period_end: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
-        target_value: 0,
-        is_active: true
+    const [editingAgent, setEditingAgent] = useState(null);
+    const [periodStart, setPeriodStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+    const [periodEnd, setPeriodEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+    
+    // Form for all targets of one agent
+    const [agentTargets, setAgentTargets] = useState({
+        agent_name: '',
+        devices: 0,
+        accessories: 0,
+        lines: 0
     });
-
-    // Filters
-    const [filterAgent, setFilterAgent] = useState("all");
-    const [filterActiveOnly, setFilterActiveOnly] = useState(true);
 
     const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [periodStart, periodEnd]);
 
     const loadData = async () => {
         setIsLoading(true);
         try {
             const [goalsData, progressData, agentsData] = await Promise.all([
-                base44.entities.GoalDefinition.list('-created_date', 100),
+                base44.entities.GoalDefinition.filter({ is_active: true }),
                 base44.entities.GoalProgress.list(null, 500),
                 base44.entities.LinetUsersMap.list(null, 100)
             ]);
-            setGoals(goalsData);
-            setAgents(agentsData.map(a => a.user_name));
+            
+            setGoals(goalsData || []);
+            setAgents(agentsData?.map(a => a.user_name) || []);
             
             // Map progress by goal_id
             const progressMap = {};
-            progressData.forEach(p => { progressMap[p.goal_id] = p; });
+            (progressData || []).forEach(p => { progressMap[p.goal_id] = p; });
             setProgress(progressMap);
         } catch (error) {
             console.error("Error loading data:", error);
@@ -88,146 +63,225 @@ export default function GoalsDashboard() {
         }
     };
 
-    const handleCalculateAll = async () => {
-        setIsCalculating(true);
-        try {
-            const res = await base44.functions.invoke('calculateGoalProgress', { calculate_all: true });
-            if (res.data.success) {
-                alert(`✅ חישוב הושלם ל-${res.data.results.length} יעדים`);
-                loadData();
-            } else {
-                alert('❌ שגיאה: ' + res.data.error);
+    // Group goals by agent for the current period
+    const getAgentGoals = () => {
+        const agentMap = {};
+        
+        goals.forEach(goal => {
+            // Filter by period
+            if (goal.period_start !== periodStart || goal.period_end !== periodEnd) return;
+            
+            const agentName = goal.agent_name || 'צוות';
+            if (!agentMap[agentName]) {
+                agentMap[agentName] = {
+                    agent_name: agentName,
+                    devices: { target: 0, actual: 0, goalId: null },
+                    accessories: { target: 0, actual: 0, goalId: null },
+                    lines: { target: 0, actual: 0, goalId: null }
+                };
             }
-        } catch (error) {
-            alert('❌ שגיאה: ' + error.message);
-        } finally {
-            setIsCalculating(false);
-        }
-    };
-
-    const handleCalculateOne = async (goalId) => {
-        try {
-            await base44.functions.invoke('calculateGoalProgress', { goal_id: goalId });
-            loadData();
-        } catch (error) {
-            alert('שגיאה: ' + error.message);
-        }
-    };
-
-    const handleSave = async () => {
-        try {
-            if (editingGoal) {
-                await base44.entities.GoalDefinition.update(editingGoal.id, form);
-            } else {
-                await base44.entities.GoalDefinition.create(form);
+            
+            const prog = progress[goal.id];
+            
+            if (goal.commission_group_code === 'DEVICES') {
+                agentMap[agentName].devices = {
+                    target: goal.target_value,
+                    actual: prog?.current_value || 0,
+                    goalId: goal.id
+                };
+            } else if (goal.commission_group_code === 'ACCESSORIES_GROUP') {
+                agentMap[agentName].accessories = {
+                    target: goal.target_value,
+                    actual: prog?.current_value || 0,
+                    goalId: goal.id
+                };
+            } else if (goal.commission_group_code === 'LINES') {
+                agentMap[agentName].lines = {
+                    target: goal.target_value,
+                    actual: prog?.current_value || 0,
+                    goalId: goal.id
+                };
             }
-            setShowModal(false);
-            resetForm();
-            loadData();
-        } catch (error) {
-            alert("שגיאה: " + error.message);
-        }
+        });
+        
+        return Object.values(agentMap);
     };
 
-    const handleDelete = async (goal) => {
-        if (!confirm('למחוק יעד זה?')) return;
-        try {
-            await base44.entities.GoalDefinition.delete(goal.id);
-            loadData();
-        } catch (error) {
-            alert("שגיאה: " + error.message);
-        }
-    };
-
-    const openModal = (goal = null) => {
-        if (goal) {
-            setEditingGoal(goal);
-            setForm({
-                name: goal.name || "",
-                scope_type: goal.scope_type || "AGENT",
-                agent_name: goal.agent_name || "",
-                commission_group_code: goal.commission_group_code || "DEVICES",
-                metric_type: goal.metric_type || "UNITS",
-                period_type: goal.period_type || "MONTHLY",
-                period_start: goal.period_start || "",
-                period_end: goal.period_end || "",
-                target_value: goal.target_value || 0,
-                is_active: goal.is_active !== false
+    const openEditModal = (agentData = null) => {
+        if (agentData) {
+            setEditingAgent(agentData.agent_name);
+            setAgentTargets({
+                agent_name: agentData.agent_name,
+                devices: agentData.devices?.target || 0,
+                accessories: agentData.accessories?.target || 0,
+                lines: agentData.lines?.target || 0
             });
         } else {
-            resetForm();
+            setEditingAgent(null);
+            setAgentTargets({
+                agent_name: '',
+                devices: 0,
+                accessories: 0,
+                lines: 0
+            });
         }
         setShowModal(true);
     };
 
-    const resetForm = () => {
-        setForm({
-            name: "",
-            scope_type: "AGENT",
-            agent_name: "",
-            commission_group_code: "DEVICES",
-            metric_type: "UNITS",
-            period_type: "MONTHLY",
-            period_start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
-            period_end: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
-            target_value: 0,
-            is_active: true
-        });
-        setEditingGoal(null);
+    const handleSave = async () => {
+        if (!agentTargets.agent_name) {
+            alert('נא לבחור נציג');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            // Find existing goals for this agent and period
+            const existingGoals = goals.filter(g => 
+                g.agent_name === agentTargets.agent_name &&
+                g.period_start === periodStart &&
+                g.period_end === periodEnd
+            );
+
+            const goalConfigs = [
+                { code: 'DEVICES', value: agentTargets.devices, metric: 'UNITS', name: 'מכשירים' },
+                { code: 'ACCESSORIES_GROUP', value: agentTargets.accessories, metric: 'NET_AMOUNT', name: 'אביזרים' },
+                { code: 'LINES', value: agentTargets.lines, metric: 'UNITS', name: 'קווים' }
+            ];
+
+            for (const config of goalConfigs) {
+                const existing = existingGoals.find(g => g.commission_group_code === config.code);
+                
+                if (config.value > 0) {
+                    const goalData = {
+                        name: config.name,
+                        scope_type: 'AGENT',
+                        agent_name: agentTargets.agent_name,
+                        commission_group_code: config.code,
+                        metric_type: config.metric,
+                        period_type: 'MONTHLY',
+                        period_start: periodStart,
+                        period_end: periodEnd,
+                        target_value: config.value,
+                        is_active: true
+                    };
+
+                    if (existing) {
+                        await base44.entities.GoalDefinition.update(existing.id, goalData);
+                    } else {
+                        await base44.entities.GoalDefinition.create(goalData);
+                    }
+                } else if (existing) {
+                    // Delete if value is 0
+                    await base44.entities.GoalDefinition.delete(existing.id);
+                }
+            }
+
+            setShowModal(false);
+            loadData();
+        } catch (error) {
+            alert("שגיאה: " + error.message);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
-    const filteredGoals = goals.filter(g => {
-        if (filterActiveOnly && !g.is_active) return false;
-        if (filterAgent !== "all" && g.agent_name !== filterAgent) return false;
-        return true;
+    const handleDeleteAgent = async (agentName) => {
+        if (!confirm(`למחוק את כל היעדים של ${agentName} לתקופה הנוכחית?`)) return;
+        
+        try {
+            const agentGoals = goals.filter(g => 
+                g.agent_name === agentName &&
+                g.period_start === periodStart &&
+                g.period_end === periodEnd
+            );
+            
+            for (const goal of agentGoals) {
+                await base44.entities.GoalDefinition.delete(goal.id);
+            }
+            loadData();
+        } catch (error) {
+            alert("שגיאה: " + error.message);
+        }
+    };
+
+    const calcPercent = (actual, target) => target > 0 ? Math.round((actual / target) * 100) : 0;
+    
+    const getProgressColor = (percent) => {
+        if (percent >= 100) return 'bg-green-500';
+        if (percent >= 60) return 'bg-amber-500';
+        return 'bg-red-500';
+    };
+
+    const agentGoals = getAgentGoals();
+
+    // Calculate totals
+    const totals = agentGoals.reduce((acc, agent) => ({
+        devices: { target: acc.devices.target + agent.devices.target, actual: acc.devices.actual + agent.devices.actual },
+        accessories: { target: acc.accessories.target + agent.accessories.target, actual: acc.accessories.actual + agent.accessories.actual },
+        lines: { target: acc.lines.target + agent.lines.target, actual: acc.lines.actual + agent.lines.actual }
+    }), {
+        devices: { target: 0, actual: 0 },
+        accessories: { target: 0, actual: 0 },
+        lines: { target: 0, actual: 0 }
     });
 
     if (!isManager) {
         return <div className="p-6 text-center"><h1 className="text-2xl font-bold text-red-600">אין הרשאה</h1></div>;
     }
 
+    const formatPeriod = () => {
+        try {
+            const start = new Date(periodStart);
+            return format(start, 'MMMM yyyy', { locale: he });
+        } catch {
+            return '';
+        }
+    };
+
     return (
         <div className="p-4 md:p-6 space-y-6" style={{ background: 'linear-gradient(135deg, #F8F9FB 0%, #E8ECFF 100%)', minHeight: '100vh' }}>
+            {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
                         <Target className="w-8 h-8 text-amber-600" />
-                        יעדים וביצועים
+                        יעדים חודשיים
                     </h1>
-                    <p className="text-gray-600 mt-1">הגדר יעדים לפי הקבוצות: מכשירים, קווים, אביזרים (מוגדר ב"קבוצות מכירה ועמלות")</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                        💡 יעדים מגדירים מטרות ביצועים (כמות מכשירים, קווים, סכום אביזרים). הבונוס על יעד מוגדר במסך "בונוס יעדים".
-                    </p>
+                    <p className="text-gray-600 mt-1">הגדרת יעדים לנציגים - מכשירים, אביזרים וקווים</p>
                 </div>
-                <div className="flex gap-2">
-                    <Button onClick={handleCalculateAll} disabled={isCalculating} variant="outline">
-                        <RefreshCw className={`w-4 h-4 ml-2 ${isCalculating ? 'animate-spin' : ''}`} />
-                        חשב הכל
-                    </Button>
-                    <Button onClick={() => openModal()} className="bg-amber-600 hover:bg-amber-700 text-white">
-                        <Plus className="w-4 h-4 ml-2" />
-                        יעד חדש
-                    </Button>
-                </div>
+                <Button onClick={() => openEditModal()} className="bg-amber-600 hover:bg-amber-700 text-white">
+                    <Plus className="w-4 h-4 ml-2" />
+                    הוסף נציג
+                </Button>
             </div>
 
-            {/* Filters */}
+            {/* Period Selector */}
             <Card className="glass-card border-0">
                 <CardContent className="p-4 flex flex-wrap gap-4 items-center">
                     <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium">נציג:</label>
-                        <Select value={filterAgent} onValueChange={setFilterAgent}>
-                            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">כל הנציגים</SelectItem>
-                                {agents.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
+                        <Calendar className="w-5 h-5 text-gray-500" />
+                        <label className="text-sm font-medium">תקופה:</label>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Switch checked={filterActiveOnly} onCheckedChange={setFilterActiveOnly} />
-                        <label className="text-sm">פעילים בלבד</label>
-                    </div>
+                    <Input 
+                        type="date" 
+                        value={periodStart} 
+                        onChange={(e) => setPeriodStart(e.target.value)}
+                        className="w-40"
+                    />
+                    <span>עד</span>
+                    <Input 
+                        type="date" 
+                        value={periodEnd} 
+                        onChange={(e) => setPeriodEnd(e.target.value)}
+                        className="w-40"
+                    />
+                    <Button variant="outline" onClick={loadData} disabled={isLoading}>
+                        <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    </Button>
+                    <Badge variant="outline" className="text-lg px-4 py-1">
+                        {formatPeriod()}
+                    </Badge>
                 </CardContent>
             </Card>
 
@@ -236,90 +290,109 @@ export default function GoalsDashboard() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-amber-600" />
-                        רשימת יעדים ({filteredGoals.length})
+                        יעדים וביצועים ({agentGoals.length} נציגים)
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? (
-                        <div className="text-center py-12"><RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400" /></div>
-                    ) : filteredGoals.length === 0 ? (
+                        <div className="text-center py-12">
+                            <RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400" />
+                        </div>
+                    ) : agentGoals.length === 0 ? (
                         <div className="text-center py-12 text-gray-500">
                             <Target className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                            <p>אין יעדים להצגה</p>
+                            <p>אין יעדים לתקופה זו</p>
+                            <Button onClick={() => openEditModal()} className="mt-4">
+                                <Plus className="w-4 h-4 ml-2" />
+                                הוסף יעדים
+                            </Button>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <Table>
                                 <TableHeader>
-                                    <TableRow>
-                                        <TableHead>שם יעד</TableHead>
-                                        <TableHead>נציג/צוות</TableHead>
-                                        <TableHead>קבוצה</TableHead>
-                                        <TableHead>מדד</TableHead>
-                                        <TableHead>תקופה</TableHead>
-                                        <TableHead className="text-center">יעד</TableHead>
-                                        <TableHead className="text-center">ביצוע</TableHead>
-                                        <TableHead>התקדמות</TableHead>
-                                        <TableHead>פעולות</TableHead>
+                                    <TableRow className="bg-gray-50">
+                                        <TableHead className="font-bold">נציג</TableHead>
+                                        <TableHead className="text-center">
+                                            <div className="flex items-center justify-center gap-1">
+                                                <Smartphone className="w-4 h-4" />
+                                                מכשירים
+                                            </div>
+                                        </TableHead>
+                                        <TableHead className="text-center">
+                                            <div className="flex items-center justify-center gap-1">
+                                                <ShoppingBag className="w-4 h-4" />
+                                                אביזרים (₪)
+                                            </div>
+                                        </TableHead>
+                                        <TableHead className="text-center">
+                                            <div className="flex items-center justify-center gap-1">
+                                                <Radio className="w-4 h-4" />
+                                                קווים
+                                            </div>
+                                        </TableHead>
+                                        <TableHead className="text-center">פעולות</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredGoals.map((goal) => {
-                                        const prog = progress[goal.id];
-                                        const progressPercent = prog?.progress_percent || 0;
-                                        const Icon = GROUP_ICONS[goal.commission_group_code] || Target;
-                                        
-                                        return (
-                                            <TableRow key={goal.id}>
-                                                <TableCell className="font-medium">{goal.name}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline">
-                                                        {goal.scope_type === 'TEAM' ? 'צוות' : goal.agent_name || '-'}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <Icon className="w-4 h-4" />
-                                                        {GROUP_LABELS[goal.commission_group_code]}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-sm">{METRIC_LABELS[goal.metric_type]}</TableCell>
-                                                <TableCell className="text-sm">
-                                                    {goal.period_start} - {goal.period_end}
-                                                </TableCell>
-                                                <TableCell className="text-center font-bold">
-                                                    {goal.metric_type === 'NET_AMOUNT' ? `₪${goal.target_value.toLocaleString()}` : goal.target_value}
-                                                </TableCell>
-                                                <TableCell className="text-center font-bold text-blue-600">
-                                                    {prog ? (goal.metric_type === 'NET_AMOUNT' ? `₪${prog.current_value.toLocaleString(undefined, {maximumFractionDigits: 0})}` : prog.current_value) : '-'}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="w-32">
-                                                        <div className="flex justify-between text-xs mb-1">
-                                                            <span>{progressPercent.toFixed(0)}%</span>
-                                                        </div>
-                                                        <Progress 
-                                                            value={Math.min(progressPercent, 100)} 
-                                                            className={`h-2 ${progressPercent >= 100 ? '[&>div]:bg-green-500' : ''}`}
-                                                        />
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex gap-1">
-                                                        <Button size="sm" variant="ghost" onClick={() => handleCalculateOne(goal.id)} title="חשב">
-                                                            <RefreshCw className="w-4 h-4" />
-                                                        </Button>
-                                                        <Button size="sm" variant="ghost" onClick={() => openModal(goal)}>
-                                                            <Edit className="w-4 h-4" />
-                                                        </Button>
-                                                        <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleDelete(goal)}>
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
+                                    {agentGoals.map((agent) => (
+                                        <TableRow key={agent.agent_name} className="hover:bg-gray-50">
+                                            <TableCell className="font-bold text-lg">{agent.agent_name}</TableCell>
+                                            
+                                            {/* Devices */}
+                                            <TableCell>
+                                                <TargetCell 
+                                                    actual={agent.devices.actual} 
+                                                    target={agent.devices.target}
+                                                    isAmount={false}
+                                                />
+                                            </TableCell>
+                                            
+                                            {/* Accessories */}
+                                            <TableCell>
+                                                <TargetCell 
+                                                    actual={agent.accessories.actual} 
+                                                    target={agent.accessories.target}
+                                                    isAmount={true}
+                                                />
+                                            </TableCell>
+                                            
+                                            {/* Lines */}
+                                            <TableCell>
+                                                <TargetCell 
+                                                    actual={agent.lines.actual} 
+                                                    target={agent.lines.target}
+                                                    isAmount={false}
+                                                />
+                                            </TableCell>
+                                            
+                                            <TableCell className="text-center">
+                                                <div className="flex justify-center gap-1">
+                                                    <Button size="sm" variant="ghost" onClick={() => openEditModal(agent)}>
+                                                        <Edit className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleDeleteAgent(agent.agent_name)}>
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    
+                                    {/* Totals Row */}
+                                    <TableRow className="bg-purple-50 font-bold border-t-2">
+                                        <TableCell className="font-bold text-lg">סה״כ</TableCell>
+                                        <TableCell>
+                                            <TargetCell actual={totals.devices.actual} target={totals.devices.target} isAmount={false} />
+                                        </TableCell>
+                                        <TableCell>
+                                            <TargetCell actual={totals.accessories.actual} target={totals.accessories.target} isAmount={true} />
+                                        </TableCell>
+                                        <TableCell>
+                                            <TargetCell actual={totals.lines.actual} target={totals.lines.target} isAmount={false} />
+                                        </TableCell>
+                                        <TableCell></TableCell>
+                                    </TableRow>
                                 </TableBody>
                             </Table>
                         </div>
@@ -327,97 +400,125 @@ export default function GoalsDashboard() {
                 </CardContent>
             </Card>
 
-            {/* Create/Edit Modal */}
+            {/* Edit Modal */}
             <Dialog open={showModal} onOpenChange={setShowModal}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="max-w-md" dir="rtl">
                     <DialogHeader>
-                        <DialogTitle>{editingGoal ? "עריכת יעד" : "יעד חדש"}</DialogTitle>
+                        <DialogTitle className="text-xl">
+                            {editingAgent ? `עריכת יעדים - ${editingAgent}` : 'הוספת יעדים לנציג'}
+                        </DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div>
-                            <label className="text-sm font-medium mb-1 block">שם היעד *</label>
-                            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="לדוגמה: יעד מכשירים חודשי" />
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
+                    
+                    <div className="space-y-5 py-4">
+                        {!editingAgent && (
                             <div>
-                                <label className="text-sm font-medium mb-1 block">סוג *</label>
-                                <Select value={form.scope_type} onValueChange={(v) => setForm({ ...form, scope_type: v })}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                <label className="text-sm font-medium mb-2 block">בחר נציג</label>
+                                <Select value={agentTargets.agent_name} onValueChange={(v) => setAgentTargets({ ...agentTargets, agent_name: v })}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="בחר נציג..." />
+                                    </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="AGENT">נציג</SelectItem>
-                                        <SelectItem value="TEAM">צוות</SelectItem>
+                                        {agents.map(a => (
+                                            <SelectItem key={a} value={a}>{a}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
-                            {form.scope_type === 'AGENT' && (
-                                <div>
-                                    <label className="text-sm font-medium mb-1 block">נציג</label>
-                                    <Select value={form.agent_name} onValueChange={(v) => setForm({ ...form, agent_name: v })}>
-                                        <SelectTrigger><SelectValue placeholder="בחר נציג" /></SelectTrigger>
-                                        <SelectContent>
-                                            {agents.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                        )}
+
+                        <div className="space-y-4">
+                            <div className="bg-blue-50 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Smartphone className="w-5 h-5 text-blue-600" />
+                                    <label className="font-medium">יעד מכשירים</label>
                                 </div>
-                            )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">קבוצת עמלות *</label>
-                                <Select value={form.commission_group_code} onValueChange={(v) => setForm({ ...form, commission_group_code: v })}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="DEVICES">מכשירים</SelectItem>
-                                        <SelectItem value="LINES">קווים</SelectItem>
-                                        <SelectItem value="ACCESSORIES_GROUP">אביזרים</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <Input 
+                                    type="number" 
+                                    value={agentTargets.devices || ''} 
+                                    onChange={(e) => setAgentTargets({ ...agentTargets, devices: Number(e.target.value) })}
+                                    placeholder="כמות יחידות"
+                                    className="text-lg"
+                                />
                             </div>
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">סוג מדד *</label>
-                                <Select value={form.metric_type} onValueChange={(v) => setForm({ ...form, metric_type: v })}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="UNITS">כמות יחידות</SelectItem>
-                                        <SelectItem value="NET_AMOUNT">סכום נטו (₪)</SelectItem>
-                                        <SelectItem value="LINES_4G_UNITS">קווים 4G</SelectItem>
-                                        <SelectItem value="LINES_5G_UNITS">קווים 5G</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">מתאריך *</label>
-                                <Input type="date" value={form.period_start} onChange={(e) => setForm({ ...form, period_start: e.target.value })} />
+                            <div className="bg-green-50 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <ShoppingBag className="w-5 h-5 text-green-600" />
+                                    <label className="font-medium">יעד אביזרים (₪)</label>
+                                </div>
+                                <Input 
+                                    type="number" 
+                                    value={agentTargets.accessories || ''} 
+                                    onChange={(e) => setAgentTargets({ ...agentTargets, accessories: Number(e.target.value) })}
+                                    placeholder="סכום בש״ח"
+                                    className="text-lg"
+                                />
                             </div>
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">עד תאריך *</label>
-                                <Input type="date" value={form.period_end} onChange={(e) => setForm({ ...form, period_end: e.target.value })} />
+
+                            <div className="bg-purple-50 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Radio className="w-5 h-5 text-purple-600" />
+                                    <label className="font-medium">יעד קווים</label>
+                                </div>
+                                <Input 
+                                    type="number" 
+                                    value={agentTargets.lines || ''} 
+                                    onChange={(e) => setAgentTargets({ ...agentTargets, lines: Number(e.target.value) })}
+                                    placeholder="כמות קווים"
+                                    className="text-lg"
+                                />
                             </div>
-                        </div>
-
-                        <div>
-                            <label className="text-sm font-medium mb-1 block">ערך יעד *</label>
-                            <Input type="number" value={form.target_value} onChange={(e) => setForm({ ...form, target_value: Number(e.target.value) })} />
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">יעד פעיל</label>
-                            <Switch checked={form.is_active} onCheckedChange={(checked) => setForm({ ...form, is_active: checked })} />
                         </div>
                     </div>
+
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowModal(false)}>ביטול</Button>
-                        <Button onClick={handleSave} className="bg-amber-600 hover:bg-amber-700 text-white" disabled={!form.name || form.target_value <= 0 || !form.period_start || !form.period_end}>
-                            {editingGoal ? "שמור" : "צור יעד"}
+                        <Button 
+                            onClick={handleSave} 
+                            disabled={isSaving || !agentTargets.agent_name}
+                            className="bg-amber-600 hover:bg-amber-700 text-white"
+                        >
+                            {isSaving ? (
+                                <RefreshCw className="w-4 h-4 ml-2 animate-spin" />
+                            ) : (
+                                <Save className="w-4 h-4 ml-2" />
+                            )}
+                            שמור יעדים
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+        </div>
+    );
+}
+
+// Target Cell Component
+function TargetCell({ actual, target, isAmount }) {
+    if (target === 0 && actual === 0) {
+        return <div className="text-center text-gray-400">-</div>;
+    }
+
+    const percent = target > 0 ? Math.round((actual / target) * 100) : 0;
+    const colorClass = percent >= 100 ? 'text-green-600' : percent >= 60 ? 'text-amber-600' : 'text-red-600';
+    const bgClass = percent >= 100 ? 'bg-green-500' : percent >= 60 ? 'bg-amber-500' : 'bg-red-500';
+
+    const formatValue = (val) => isAmount ? `₪${val.toLocaleString()}` : val;
+
+    return (
+        <div className="space-y-1">
+            <div className="flex justify-between items-center text-sm">
+                <span className="font-medium">{formatValue(actual)}</span>
+                <span className="text-gray-500">/ {formatValue(target)}</span>
+            </div>
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                    className={`h-full ${bgClass} transition-all duration-500`}
+                    style={{ width: `${Math.min(percent, 100)}%` }}
+                />
+            </div>
+            <div className={`text-center text-sm font-bold ${colorClass}`}>
+                {percent}%
+            </div>
         </div>
     );
 }
