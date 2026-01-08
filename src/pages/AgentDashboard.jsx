@@ -86,7 +86,7 @@ export default function AgentDashboard() {
       }
 
       // Load all data in parallel
-      const [allLeads, allTargets, allActivities, allEmployees, allRepairs, allGoals, allGoalProgress, allSalesTransactions] = await Promise.all([
+      const [allLeads, allTargets, allActivities, allEmployees, allRepairs, allGoals, allGoalProgress, allSalesTransactions, allLinetUsersMap] = await Promise.all([
         Lead.filter({ status: { $ne: 'Deleted' } }),
         Target.list(),
         SalesActivity.list(),
@@ -94,8 +94,12 @@ export default function AgentDashboard() {
         isManager ? Repair.list() : Promise.resolve([]),
         GoalDefinition.filter({ is_active: true }),
         GoalProgress.list(),
-        SalesTransaction.list()
+        SalesTransaction.list(),
+        LinetUsersMap.list()
       ]);
+      
+      // Build employee map with all aliases for matching
+      const employeeMap = buildEmployeeMap(allEmployees || [], allLinetUsersMap || []);
 
       setEmployees(allEmployees || []);
 
