@@ -576,6 +576,8 @@ export default function AgentDashboard() {
                     onStatusChange={handleStatusChange}
                     onMarkReminderDone={handleMarkReminderDone}
                     onAssignChange={handleAssignChange}
+                    onEdit={handleOpenEdit}
+                    onDelete={(id) => handleStatusChange(id, 'Deleted')}
                     employees={employees}
                     showAssignee={true}
                     isManager={true}
@@ -660,6 +662,7 @@ export default function AgentDashboard() {
                 leads={myLeads}
                 onStatusChange={handleStatusChange}
                 onMarkReminderDone={handleMarkReminderDone}
+                onEdit={handleOpenEdit}
                 employees={employees}
                 showAssignee={false}
                 isManager={false}

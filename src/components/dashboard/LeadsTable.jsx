@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Phone, Clock, AlertTriangle, CheckCircle, Bell, Play, X } from 'lucide-react';
+import { Phone, Clock, AlertTriangle, CheckCircle, Bell, Play, Edit, Trash2 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { he } from 'date-fns/locale';
 
@@ -71,6 +71,8 @@ export default function LeadsTable({
   onStatusChange, 
   onMarkReminderDone,
   onAssignChange,
+  onEdit,
+  onDelete,
   employees = [],
   showAssignee = false,
   isManager = false
@@ -206,13 +208,23 @@ export default function LeadsTable({
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs text-purple-600 hover:bg-purple-50"
+                      onClick={() => onEdit?.(lead)}
+                      title="ערוך"
+                    >
+                      <Edit className="w-3 h-3" />
+                    </Button>
                     {lead.status !== 'Closed' && lead.status !== 'Deleted' && (
                       <>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-7 px-2 text-xs"
+                          className="h-7 px-2 text-xs text-blue-600 hover:bg-blue-50"
                           onClick={() => onStatusChange?.(lead.id, 'InProgress')}
+                          title="התחל טיפול"
                         >
                           <Play className="w-3 h-3" />
                         </Button>
@@ -221,6 +233,7 @@ export default function LeadsTable({
                           variant="outline"
                           className="h-7 px-2 text-xs text-green-600 hover:bg-green-50"
                           onClick={() => onStatusChange?.(lead.id, 'Closed')}
+                          title="טופל"
                         >
                           <CheckCircle className="w-3 h-3" />
                         </Button>
@@ -230,10 +243,22 @@ export default function LeadsTable({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-7 px-2 text-xs"
+                        className="h-7 px-2 text-xs text-amber-600 hover:bg-amber-50"
                         onClick={() => onMarkReminderDone?.(lead.id)}
+                        title="סמן תזכורת בוצעה"
                       >
                         <Bell className="w-3 h-3" />
+                      </Button>
+                    )}
+                    {isManager && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs text-red-600 hover:bg-red-50"
+                        onClick={() => onDelete?.(lead.id)}
+                        title="מחק"
+                      >
+                        <Trash2 className="w-3 h-3" />
                       </Button>
                     )}
                   </div>
