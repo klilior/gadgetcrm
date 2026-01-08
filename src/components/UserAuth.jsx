@@ -168,6 +168,7 @@ export function UserProvider({ children }) {
         localStorage.setItem("managerId", user.id);
         localStorage.removeItem("activeShiftUsers");
         localStorage.removeItem("currentUserId");
+        updateLastActivity(); // Start session timer
         
         await retryApiCall(() => 
           Employee.update(user.id, { last_login: new Date().toISOString() })
