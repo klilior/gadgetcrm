@@ -704,6 +704,9 @@ export default function SalesDataAdmin() {
                 <TabsContent value="employeeSync" className="mt-6">
                     <EmployeeSyncPanel />
                 </TabsContent>
+                <TabsContent value="targetsAudit" className="mt-6">
+                    <EmployeeTargetsAudit />
+                </TabsContent>
             </Tabs>
         </div>
     );
