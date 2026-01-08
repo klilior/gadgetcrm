@@ -1,544 +1,530 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
-import { useUser } from "../components/UserAuth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import React, { useState, useEffect, useCallback } from 'react';
+import { Lead, Target, SalesActivity, Employee, Repair } from '@/entities/all';
+import { useUser } from '../components/UserAuth';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { 
-    TrendingUp, Smartphone, Radio, ShoppingBag, Award, 
-    Trophy, Calendar, RefreshCw, Target, Zap
-} from "lucide-react";
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths } from "date-fns";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Legend } from 'recharts';
-import SalesDrilldown from "../components/drilldown/SalesDrilldown";
+  Trophy, Phone, AlertTriangle, Clock, Users, Filter, Eye, 
+  Smartphone, ShoppingBag, Signal, Zap, DollarSign, Wrench,
+  RefreshCw, Calendar
+} from 'lucide-react';
+import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, isWithinInterval, differenceInDays } from 'date-fns';
+import { he } from 'date-fns/locale';
+
+import KPIStrip from '../components/dashboard/KPIStrip';
+import TargetProgress from '../components/dashboard/TargetProgress';
+import LeadsTable from '../components/dashboard/LeadsTable';
+import RemindersAlert from '../components/dashboard/RemindersAlert';
+import TeamPerformanceTable from '../components/dashboard/TeamPerformanceTable';
+import QuickLeadButton from '../components/leads/QuickLeadButton';
+
+// Helper to calculate SLA status
+const getSlaStatus = (lead) => {
+  if (!lead.sla_due_at || lead.status === 'Closed' || lead.status === 'Deleted') return 'OK';
+  const now = new Date();
+  const slaDue = new Date(lead.sla_due_at);
+  const fifteenMinBefore = new Date(slaDue.getTime() - 15 * 60 * 1000);
+  if (now > slaDue) return 'Overdue';
+  if (now >= fifteenMinBefore) return 'DueSoon';
+  return 'OK';
+};
 
 export default function AgentDashboard() {
-    const { currentUser } = useUser();
-    const [isLoading, setIsLoading] = useState(false);
-    const [sales, setSales] = useState([]);
-    const [commissions, setCommissions] = useState([]);
-    const [bonuses, setBonuses] = useState([]);
-    const [goals, setGoals] = useState([]);
-    const [progress, setProgress] = useState({});
-    const [mappings, setMappings] = useState([]);
-    
-    // Filters
-    const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-    const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
-    const [selectedAgent, setSelectedAgent] = useState(null);
-    
-    // Drilldown
-    const [showDrillDown, setShowDrillDown] = useState(false);
-    const [drilldownGroupCode, setDrilldownGroupCode] = useState(null);
-    const [drilldownTitle, setDrilldownTitle] = useState('');
-    
-    const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
-    const currentAgentName = currentUser?.employee_name;
+  const { currentUser } = useUser();
+  const [isLoading, setIsLoading] = useState(true);
+  const [period, setPeriod] = useState('today'); // today, week, month
+  const [focusMode, setFocusMode] = useState(false);
+  
+  // Data states
+  const [leads, setLeads] = useState([]);
+  const [myLeads, setMyLeads] = useState([]);
+  const [targets, setTargets] = useState({});
+  const [actuals, setActuals] = useState({});
+  const [kpiData, setKpiData] = useState({});
+  const [employees, setEmployees] = useState([]);
+  const [teamData, setTeamData] = useState([]);
+  const [repairs, setRepairs] = useState([]);
+  const [reminders, setReminders] = useState([]);
 
-    useEffect(() => {
-        loadInitialData();
-    }, []);
+  const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'מנהל משמרת';
+  const userId = currentUser?.id;
 
-    useEffect(() => {
-        if (mappings.length > 0) {
-            loadData();
-        }
-    }, [dateFrom, dateTo, mappings]);
+  const loadData = useCallback(async () => {
+    if (!currentUser) return;
+    setIsLoading(true);
 
-    const loadInitialData = async () => {
-        setIsLoading(true);
-        try {
-            const [mappingsData, goalsData] = await Promise.all([
-                base44.entities.CommissionGroupMapping.filter({ is_active: true }),
-                base44.entities.GoalDefinition.filter({ is_active: true })
-            ]);
-            setMappings(mappingsData);
-            setGoals(goalsData);
-        } catch (error) {
-            console.error("Error loading initial data:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    try {
+      const now = new Date();
+      let dateStart, dateEnd;
 
-    const loadData = async () => {
-        setIsLoading(true);
-        try {
-            const [salesData, commissionsData, bonusesData, progressData] = await Promise.all([
-                base44.entities.SalesTransaction.filter({
-                    issue_date: { $gte: dateFrom, $lte: dateTo }
-                }, '-issue_date', 10000),
-                base44.entities.CommissionEntry.filter({
-                    issue_date: { $gte: dateFrom, $lte: dateTo }
-                }),
-                base44.entities.BonusEntry.filter({
-                    period_start: { $lte: dateTo },
-                    period_end: { $gte: dateFrom }
-                }),
-                base44.entities.GoalProgress.list(null, 500)
-            ]);
-            
-            setSales(salesData);
-            setCommissions(commissionsData);
-            setBonuses(bonusesData);
-            
-            const progressMap = {};
-            progressData.forEach(p => { progressMap[p.goal_id] = p; });
-            setProgress(progressMap);
-        } catch (error) {
-            console.error("Error loading data:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+      if (period === 'today') {
+        dateStart = startOfDay(now);
+        dateEnd = endOfDay(now);
+      } else if (period === 'week') {
+        dateStart = new Date(now);
+        dateStart.setDate(now.getDate() - 7);
+        dateEnd = endOfDay(now);
+      } else {
+        dateStart = startOfMonth(now);
+        dateEnd = endOfMonth(now);
+      }
 
-    const getCommissionGroup = (sale) => {
-        for (const mapping of mappings.sort((a, b) => (b.priority || 0) - (a.priority || 0))) {
-            if (checkFilters(sale, mapping.filters_json)) {
-                return mapping.commission_group_code;
-            }
-        }
-        return null;
-    };
+      // Load all data in parallel
+      const [allLeads, allTargets, allActivities, allEmployees, allRepairs] = await Promise.all([
+        Lead.filter({ status: { $ne: 'Deleted' } }),
+        Target.list(),
+        SalesActivity.list(),
+        Employee.filter({ is_active: true }),
+        isManager ? Repair.list() : Promise.resolve([])
+      ]);
 
-    const checkFilters = (sale, filters) => {
-        if (!filters) return false;
-        if (filters.category_in && filters.category_in.length > 0) {
-            if (!filters.category_in.includes(sale.category)) return false;
-        }
-        if (filters.category && sale.category !== filters.category) return false;
-        if (filters.product_name_contains) {
-            if (!sale.product_name || !sale.product_name.includes(filters.product_name_contains)) return false;
-        }
-        return true;
-    };
+      setEmployees(allEmployees || []);
 
-    // Calculate agent performance
-    const agentPerformance = useMemo(() => {
-        const uniqueSales = [];
-        const seenKeys = new Set();
-        
-        for (const sale of sales) {
-            const uniqueKey = `${sale.doc_number || ''}_${sale.sku || ''}_${sale.product_name || ''}`;
-            if (!seenKeys.has(uniqueKey)) {
-                seenKeys.add(uniqueKey);
-                uniqueSales.push(sale);
-            }
-        }
-        
-        const perfMap = {};
+      // Filter leads
+      const activeLeads = (allLeads || []).filter(l => l.status !== 'Deleted');
+      setLeads(activeLeads);
 
-        uniqueSales.forEach(sale => {
-            const agent = sale.sales_rep || 'Unknown';
-            if (!perfMap[agent]) {
-                perfMap[agent] = {
-                    agent_name: agent,
-                    devices_units: 0,
-                    lines_units: 0,
-                    lines_4g_units: 0,
-                    lines_5g_units: 0,
-                    accessories_net: 0,
-                    accessories_units: 0
-                };
-            }
+      // My leads (for rep view)
+      const myOpenLeads = activeLeads.filter(l => 
+        l.assigned_to === userId && 
+        (l.status === 'New' || l.status === 'InProgress')
+      );
+      setMyLeads(myOpenLeads);
 
-            const groupCode = getCommissionGroup(sale);
-            const qty = Math.abs(sale.quantity || 0);
-            const net = sale.price_ex_vat || 0;
+      // Reminders (within next hour or overdue)
+      const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+      const activeReminders = activeLeads.filter(l => 
+        l.assigned_to === userId &&
+        l.reminder_at && 
+        !l.reminder_done &&
+        l.status !== 'Closed' &&
+        new Date(l.reminder_at) <= oneHourFromNow
+      );
+      setReminders(activeReminders);
 
-            if (groupCode === 'DEVICES') {
-                perfMap[agent].devices_units += qty;
-            } else if (groupCode === 'LINES') {
-                perfMap[agent].lines_units += qty;
-                const productName = (sale.product_name || '').toLowerCase();
-                if (productName.includes('5g')) {
-                    perfMap[agent].lines_5g_units += qty;
-                } else {
-                    perfMap[agent].lines_4g_units += qty;
-                }
-            } else if (groupCode === 'ACCESSORIES_GROUP') {
-                perfMap[agent].accessories_net += net;
-                perfMap[agent].accessories_units += qty;
-            }
-        });
+      // Filter activities by period
+      const periodActivities = (allActivities || []).filter(a => {
+        const actDate = new Date(a.activity_date);
+        return isWithinInterval(actDate, { start: dateStart, end: dateEnd });
+      });
 
-        return Object.values(perfMap);
-    }, [sales, mappings]);
+      // Calculate actuals for current user
+      const myActivities = periodActivities.filter(a => a.user_id === userId);
+      const myActuals = {
+        Devices: myActivities.filter(a => a.metric_type === 'Devices').reduce((s, a) => s + (a.metric_value || 0), 0),
+        AccessoriesRevenue: myActivities.filter(a => a.metric_type === 'AccessoriesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+        Lines4G: myActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0),
+        Lines5G: myActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
+        TotalSalesRevenue: myActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+      };
+      setActuals(myActuals);
 
-    // Current agent data
-    const currentAgentData = useMemo(() => {
-        const agent = agentPerformance.find(a => a.agent_name === currentAgentName);
-        if (!agent) return null;
+      // Calculate targets for current user
+      const myTargets = (allTargets || []).filter(t => 
+        t.user_id === userId &&
+        new Date(t.period_start) <= dateEnd &&
+        new Date(t.period_end) >= dateStart
+      );
+      const targetMap = {};
+      myTargets.forEach(t => {
+        targetMap[t.target_type] = (targetMap[t.target_type] || 0) + t.target_value;
+      });
+      setTargets(targetMap);
 
-        const agentCommissions = commissions.filter(c => c.agent_name === currentAgentName);
-        const agentBonuses = bonuses.filter(b => b.agent_name === currentAgentName);
-        
-        const totalCommissions = agentCommissions.reduce((sum, c) => sum + (c.commission_amount || 0), 0);
-        const totalBonuses = agentBonuses.reduce((sum, b) => sum + (b.bonus_amount || 0), 0);
-        
-        return {
-            ...agent,
-            total_commissions: totalCommissions,
-            total_bonuses: totalBonuses,
-            total_earnings: totalCommissions + totalBonuses,
-            accessories_per_device: agent.devices_units > 0 ? (agent.accessories_net / agent.devices_units) : 0
+      // KPI data
+      if (isManager) {
+        // Team KPIs
+        const teamKpis = {
+          devices: periodActivities.filter(a => a.metric_type === 'Devices').reduce((s, a) => s + (a.metric_value || 0), 0),
+          accessories: periodActivities.filter(a => a.metric_type === 'AccessoriesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+          lines4g: periodActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0),
+          lines5g: periodActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
+          total: periodActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+          openLeads: activeLeads.filter(l => l.status === 'New' || l.status === 'InProgress').length,
+          overdueLeads: activeLeads.filter(l => getSlaStatus(l) === 'Overdue').length,
         };
-    }, [agentPerformance, commissions, bonuses, currentAgentName]);
+        setKpiData(teamKpis);
 
-    // Agent goals
-    const agentGoals = useMemo(() => {
-        return goals.filter(g => 
-            g.agent_name === currentAgentName &&
-            g.period_start <= dateTo && 
-            g.period_end >= dateFrom
-        );
-    }, [goals, currentAgentName, dateFrom, dateTo]);
-
-    // Team sorted by total earnings
-    const teamSorted = useMemo(() => {
-        return agentPerformance.map(agent => {
-            const agentCommissions = commissions.filter(c => c.agent_name === agent.agent_name);
-            const agentBonuses = bonuses.filter(b => b.agent_name === agent.agent_name);
+        // Team performance data
+        const teamPerf = allEmployees
+          .filter(e => e.role === 'נציג' || e.role === 'מנהל משמרת')
+          .map(emp => {
+            const empActivities = periodActivities.filter(a => a.user_id === emp.id);
+            const empTargets = (allTargets || []).filter(t => 
+              t.user_id === emp.id &&
+              new Date(t.period_start) <= dateEnd &&
+              new Date(t.period_end) >= dateStart
+            );
             
-            const totalCommissions = agentCommissions.reduce((sum, c) => sum + (c.commission_amount || 0), 0);
-            const totalBonuses = agentBonuses.reduce((sum, b) => sum + (b.bonus_amount || 0), 0);
-            
-            return {
-                ...agent,
-                total_earnings: totalCommissions + totalBonuses,
-                accessories_per_device: agent.devices_units > 0 ? (agent.accessories_net / agent.devices_units) : 0
+            const empActuals = {
+              Devices: empActivities.filter(a => a.metric_type === 'Devices').reduce((s, a) => s + (a.metric_value || 0), 0),
+              AccessoriesRevenue: empActivities.filter(a => a.metric_type === 'AccessoriesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+              Lines4G: empActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0),
+              Lines5G: empActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
+              TotalSalesRevenue: empActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
             };
-        }).sort((a, b) => b.total_earnings - a.total_earnings);
-    }, [agentPerformance, commissions, bonuses]);
 
-    // Daily trend data
-    const dailyTrend = useMemo(() => {
-        const dailyMap = {};
-        
-        sales.forEach(sale => {
-            if (!sale.issue_date) return;
-            const date = sale.issue_date;
-            if (!dailyMap[date]) {
-                dailyMap[date] = { date, devices: 0, lines: 0, accessories: 0 };
-            }
-            
-            if (sale.sales_rep === currentAgentName) {
-                const groupCode = getCommissionGroup(sale);
-                const qty = Math.abs(sale.quantity || 0);
-                const net = sale.price_ex_vat || 0;
-                
-                if (groupCode === 'DEVICES') dailyMap[date].devices += qty;
-                else if (groupCode === 'LINES') dailyMap[date].lines += qty;
-                else if (groupCode === 'ACCESSORIES_GROUP') dailyMap[date].accessories += net;
-            }
+            const empTargetMap = {};
+            empTargets.forEach(t => {
+              empTargetMap[t.target_type] = (empTargetMap[t.target_type] || 0) + t.target_value;
+            });
+
+            const empLeads = activeLeads.filter(l => l.assigned_to === emp.id);
+
+            return {
+              userId: emp.id,
+              userName: emp.employee_name,
+              actuals: empActuals,
+              targets: empTargetMap,
+              openLeads: empLeads.filter(l => l.status === 'New' || l.status === 'InProgress').length,
+              overdueLeads: empLeads.filter(l => getSlaStatus(l) === 'Overdue').length,
+            };
+          });
+        setTeamData(teamPerf);
+
+        // Repairs data
+        const repairsList = allRepairs || [];
+        setRepairs(repairsList);
+      } else {
+        // Rep KPIs
+        setKpiData({
+          devices: myActuals.Devices,
+          accessories: myActuals.AccessoriesRevenue,
+          lines4g: myActuals.Lines4G,
+          lines5g: myActuals.Lines5G,
+          total: myActuals.TotalSalesRevenue,
         });
-        
-        return Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
-    }, [sales, currentAgentName, mappings]);
+      }
 
-    const handleDatePreset = (preset) => {
-        const today = new Date();
-        let from, to;
-        switch (preset) {
-            case 'today':
-                from = startOfDay(today);
-                to = endOfDay(today);
-                break;
-            case 'thisWeek':
-                from = startOfWeek(today, { weekStartsOn: 0 });
-                to = endOfWeek(today, { weekStartsOn: 0 });
-                break;
-            case 'thisMonth':
-                from = startOfMonth(today);
-                to = endOfMonth(today);
-                break;
-            case 'lastMonth':
-                from = startOfMonth(subMonths(today, 1));
-                to = endOfMonth(subMonths(today, 1));
-                break;
-            default: return;
-        }
-        setDateFrom(format(from, 'yyyy-MM-dd'));
-        setDateTo(format(to, 'yyyy-MM-dd'));
-    };
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentUser, period, isManager, userId]);
 
-    const getGoalProgress = (metricType, groupCode) => {
-        const goal = agentGoals.find(g => 
-            g.metric_type === metricType && 
-            g.commission_group_code === groupCode
-        );
-        if (!goal) return null;
+  useEffect(() => {
+    loadData();
+    // Auto-refresh every 60 seconds
+    const interval = setInterval(loadData, 60000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
-        const prog = progress[goal.id];
-        if (!prog) return { goal, actual: 0, progress: 0, target: goal.target_value };
+  const handleStatusChange = async (leadId, newStatus) => {
+    try {
+      const updateData = { status: newStatus };
+      if (newStatus === 'Deleted') {
+        updateData.deleted_at = new Date().toISOString();
+      }
+      await Lead.update(leadId, updateData);
+      loadData();
+    } catch (error) {
+      console.error('Error updating lead status:', error);
+    }
+  };
 
-        return {
-            goal,
-            actual: prog.current_value,
-            progress: Math.min(prog.progress_percent, 100),
-            target: goal.target_value
-        };
-    };
+  const handleMarkReminderDone = async (leadId) => {
+    try {
+      await Lead.update(leadId, { reminder_done: true });
+      loadData();
+    } catch (error) {
+      console.error('Error marking reminder done:', error);
+    }
+  };
 
-    const openDrillDown = (groupCode, metricLabel) => {
-        setDrilldownGroupCode(groupCode);
-        setDrilldownTitle(`${metricLabel} - ${currentAgentName}`);
-        setShowDrillDown(true);
-    };
+  const handleAssignChange = async (leadId, newAssigneeId) => {
+    try {
+      const emp = employees.find(e => e.id === newAssigneeId);
+      await Lead.update(leadId, { 
+        assigned_to: newAssigneeId,
+        assigned_to_name: emp?.employee_name || ''
+      });
+      loadData();
+    } catch (error) {
+      console.error('Error reassigning lead:', error);
+    }
+  };
 
+  const handleCall = (phone) => {
+    window.location.href = `tel:${phone}`;
+  };
+
+  // Calculate overdue repairs
+  const overdueRepairs = repairs.filter(r => {
+    if (!r.created_date || r.status === 'תיקון נסגר') return false;
+    const daysOpen = differenceInDays(new Date(), new Date(r.created_date));
+    const slaDays = r.sla_days || 14;
+    return daysOpen > slaDays;
+  });
+
+  const dueSoonRepairs = repairs.filter(r => {
+    if (!r.created_date || r.status === 'תיקון נסגר') return false;
+    const daysOpen = differenceInDays(new Date(), new Date(r.created_date));
+    const slaDays = r.sla_days || 14;
+    return daysOpen >= slaDays * 0.8 && daysOpen <= slaDays;
+  });
+
+  // Filtered leads for focus mode
+  const overdueLeads = leads.filter(l => getSlaStatus(l) === 'Overdue');
+  const displayLeads = focusMode 
+    ? overdueLeads 
+    : (isManager ? leads.filter(l => l.status !== 'Closed') : myLeads);
+
+  const periodLabels = {
+    today: 'היום',
+    week: 'השבוע',
+    month: 'החודש'
+  };
+
+  if (isLoading && leads.length === 0) {
     return (
-        <div className="p-4 md:p-6 space-y-6" style={{ background: 'linear-gradient(135deg, #F8F9FB 0%, #E8ECFF 100%)', minHeight: '100vh' }}>
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
-                        <Trophy className="w-8 h-8 text-amber-600" />
-                        הדשבורד שלי
-                    </h1>
-                    <p className="text-gray-600 mt-1">ביצועים, יעדים והשוואה מול הצוות</p>
-                </div>
-                <Button onClick={loadData} disabled={isLoading} variant="outline">
-                    <RefreshCw className={`w-4 h-4 ml-2 ${isLoading ? 'animate-spin' : ''}`} />
-                    רענן
-                </Button>
-            </div>
+      <div className="p-6 space-y-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 w-48 bg-gray-200 rounded"></div>
+          <div className="flex gap-4">
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="h-24 flex-1 bg-gray-200 rounded-xl"></div>
+            ))}
+          </div>
+          <div className="h-64 bg-gray-200 rounded-xl"></div>
+        </div>
+      </div>
+    );
+  }
 
-            {/* Date Filters */}
-            <Card className="glass-card border-0">
-                <CardContent className="p-4">
-                    <div className="flex flex-wrap gap-3 items-end">
-                        <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => handleDatePreset('today')}>היום</Button>
-                            <Button variant="outline" size="sm" onClick={() => handleDatePreset('thisWeek')}>השבוע</Button>
-                            <Button variant="outline" size="sm" onClick={() => handleDatePreset('thisMonth')}>החודש</Button>
-                            <Button variant="outline" size="sm" onClick={() => handleDatePreset('lastMonth')}>חודש שעבר</Button>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-gray-700">מתאריך</label>
-                            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40" />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-gray-700">עד תאריך</label>
-                            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40" />
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+  return (
+    <div className="p-4 md:p-6 space-y-6 pb-24">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <Trophy className="w-8 h-8 text-purple-600" />
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+              {isManager ? 'דשבורד מנהל משמרת' : 'הדשבורד שלי'}
+            </h1>
+            <p className="text-sm text-gray-500">
+              {format(new Date(), 'EEEE, d בMMMM yyyy', { locale: he })}
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-32">
+              <Calendar className="w-4 h-4 ml-2" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">היום</SelectItem>
+              <SelectItem value="week">השבוע</SelectItem>
+              <SelectItem value="month">החודש</SelectItem>
+            </SelectContent>
+          </Select>
 
-            {/* Personal Card */}
-            {currentAgentData && (
-                <Card className="border-0 shadow-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-white">
-                            <Award className="w-6 h-6" />
-                            הביצועים שלי - {currentAgentName}
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {/* Metrics Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div 
-                                className="bg-white/10 backdrop-blur-sm p-4 rounded-lg cursor-pointer hover:bg-white/20 transition-all"
-                                onClick={() => openDrillDown('DEVICES', 'מכשירים')}
-                            >
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Smartphone className="w-5 h-5" />
-                                    <span className="text-sm font-medium">מכשירים</span>
-                                </div>
-                                <p className="text-3xl font-bold">{currentAgentData.devices_units}</p>
-                            </div>
-                            <div 
-                                className="bg-white/10 backdrop-blur-sm p-4 rounded-lg cursor-pointer hover:bg-white/20 transition-all"
-                                onClick={() => openDrillDown('LINES', 'קווים')}
-                            >
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Radio className="w-5 h-5" />
-                                    <span className="text-sm font-medium">קווים</span>
-                                </div>
-                                <p className="text-3xl font-bold">{currentAgentData.lines_units}</p>
-                                <p className="text-xs opacity-80 mt-1">4G: {currentAgentData.lines_4g_units} | 5G: {currentAgentData.lines_5g_units}</p>
-                            </div>
-                            <div 
-                                className="bg-white/10 backdrop-blur-sm p-4 rounded-lg cursor-pointer hover:bg-white/20 transition-all"
-                                onClick={() => openDrillDown('ACCESSORIES_GROUP', 'אביזרים')}
-                            >
-                                <div className="flex items-center gap-2 mb-2">
-                                    <ShoppingBag className="w-5 h-5" />
-                                    <span className="text-sm font-medium">אביזרים (נטו)</span>
-                                </div>
-                                <p className="text-3xl font-bold">₪{currentAgentData.accessories_net.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
-                            </div>
-                        </div>
+          {isManager && (
+            <Button
+              variant={focusMode ? 'default' : 'outline'}
+              onClick={() => setFocusMode(!focusMode)}
+              className={focusMode ? 'bg-red-600 hover:bg-red-700' : ''}
+            >
+              <Eye className="w-4 h-4 ml-2" />
+              {focusMode ? 'מצב Focus פעיל' : 'מצב Focus'}
+            </Button>
+          )}
 
-                        {/* Ratio & Earnings */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-white/20">
-                            <div className="bg-white/10 backdrop-blur-sm p-4 rounded-lg">
-                                <p className="text-sm opacity-80 mb-1">יחס אביזרים למכשיר</p>
-                                <p className="text-2xl font-bold">₪{currentAgentData.accessories_per_device.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm p-4 rounded-lg">
-                                <p className="text-sm opacity-80 mb-1">עמלות בסיס</p>
-                                <p className="text-2xl font-bold">₪{currentAgentData.total_commissions.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm p-4 rounded-lg">
-                                <p className="text-sm opacity-80 mb-1">בונוסים</p>
-                                <p className="text-2xl font-bold">₪{currentAgentData.total_bonuses.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
-                            </div>
-                        </div>
+          <Button variant="outline" onClick={loadData} disabled={isLoading}>
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+      </div>
 
-                        {/* Total Earnings */}
-                        <div className="bg-white/20 backdrop-blur-sm p-4 rounded-lg">
-                            <p className="text-sm opacity-90 mb-1">סה"כ עמלות לתקופה</p>
-                            <p className="text-4xl font-bold">₪{currentAgentData.total_earnings.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
-                        </div>
+      {/* KPI Strip */}
+      <KPIStrip data={kpiData} showTeamStats={isManager} />
 
-                        {/* Goals Progress */}
-                        {agentGoals.length > 0 && (
-                            <div className="space-y-3 pt-4 border-t border-white/20">
-                                <h3 className="text-lg font-semibold flex items-center gap-2">
-                                    <Target className="w-5 h-5" />
-                                    היעדים שלי
-                                </h3>
-                                {['DEVICES', 'LINES', 'ACCESSORIES_GROUP'].map(groupCode => {
-                                    const goalData = getGoalProgress('UNITS', groupCode) || getGoalProgress('NET_AMOUNT', groupCode);
-                                    if (!goalData) return null;
-                                    
-                                    const progressColor = goalData.progress >= 100 ? 'bg-green-500' : goalData.progress >= 70 ? 'bg-amber-500' : 'bg-red-500';
-                                    const groupLabel = groupCode === 'DEVICES' ? 'מכשירים' : groupCode === 'LINES' ? 'קווים' : 'אביזרים';
-                                    
-                                    return (
-                                        <div key={groupCode} className="bg-white/10 backdrop-blur-sm p-3 rounded-lg">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="text-sm font-medium">{groupLabel}</span>
-                                                <span className="text-sm">
-                                                    {goalData.actual} / {goalData.target} ({goalData.progress.toFixed(0)}%)
-                                                </span>
-                                            </div>
-                                            <Progress value={goalData.progress} className={`h-2 [&>div]:${progressColor}`} />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
+      {/* Reminders Alert */}
+      {reminders.length > 0 && (
+        <RemindersAlert 
+          reminders={reminders} 
+          onMarkDone={handleMarkReminderDone}
+          onCall={handleCall}
+        />
+      )}
 
-            {/* Team Comparison Table */}
-            <Card className="glass-card border-0">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-indigo-600" />
-                        השוואת ביצועים - כל הצוות
+      {/* Main Content */}
+      {isManager ? (
+        // Manager View
+        <div className="space-y-6">
+          {/* Focus Mode Alerts */}
+          {focusMode && (
+            <div className="space-y-4">
+              {overdueLeads.length > 0 && (
+                <Card className="border-red-200 bg-red-50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-red-800 flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5" />
+                      לידים בחריגת SLA ({overdueLeads.length})
                     </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <LeadsTable
+                      leads={overdueLeads}
+                      onStatusChange={handleStatusChange}
+                      onMarkReminderDone={handleMarkReminderDone}
+                      onAssignChange={handleAssignChange}
+                      employees={employees}
+                      showAssignee={true}
+                      isManager={true}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {overdueRepairs.length > 0 && (
+                <Card className="border-red-200 bg-red-50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-red-800 flex items-center gap-2">
+                      <Wrench className="w-5 h-5" />
+                      תיקונים בחריגה ({overdueRepairs.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {overdueRepairs.slice(0, 5).map(r => (
+                        <div key={r.id} className="bg-white rounded-lg p-3 flex justify-between items-center">
+                          <div>
+                            <p className="font-medium">{r.repair_id}</p>
+                            <p className="text-sm text-gray-600">{r.customer?.full_name || 'לקוח'} - {r.device?.model || 'מכשיר'}</p>
+                          </div>
+                          <Badge className="bg-red-500 text-white">
+                            {differenceInDays(new Date(), new Date(r.created_date))} ימים
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {!focusMode && (
+            <>
+              {/* Team Performance */}
+              <TeamPerformanceTable teamData={teamData} />
+
+              {/* Team Leads */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Phone className="w-5 h-5 text-purple-600" />
+                    לידים צוותיים
+                    <Badge variant="outline" className="mr-2">{displayLeads.length}</Badge>
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    {isLoading ? (
-                        <div className="text-center py-12">
-                            <RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400" />
-                        </div>
-                    ) : teamSorted.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">
-                            <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                            <p>אין נתונים לתקופה זו</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-12">#</TableHead>
-                                        <TableHead>נציג</TableHead>
-                                        <TableHead className="text-center">מכשירים</TableHead>
-                                        <TableHead className="text-center">קווים</TableHead>
-                                        <TableHead className="text-left">אביזרים</TableHead>
-                                        <TableHead className="text-center">יחס א׳/מ׳</TableHead>
-                                        <TableHead className="text-left font-bold">סה״כ עמלות</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {teamSorted.map((agent, idx) => (
-                                        <TableRow 
-                                            key={agent.agent_name} 
-                                            className={`hover:bg-gray-50 ${agent.agent_name === currentAgentName ? 'bg-blue-50 border-2 border-blue-400' : ''}`}
-                                        >
-                                            <TableCell>
-                                                {idx === 0 && <Trophy className="w-5 h-5 text-amber-500" />}
-                                                {idx === 1 && <Trophy className="w-5 h-5 text-gray-400" />}
-                                                {idx === 2 && <Trophy className="w-5 h-5 text-orange-600" />}
-                                                {idx > 2 && <span className="text-gray-500">{idx + 1}</span>}
-                                            </TableCell>
-                                            <TableCell className="font-medium">
-                                                {agent.agent_name}
-                                                {agent.agent_name === currentAgentName && (
-                                                    <Badge className="mr-2 bg-blue-500 text-white">אני</Badge>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-center font-bold text-blue-600">{agent.devices_units}</TableCell>
-                                            <TableCell className="text-center font-bold text-green-600">{agent.lines_units}</TableCell>
-                                            <TableCell className="text-left text-purple-600 font-bold">
-                                                ₪{agent.accessories_net.toLocaleString(undefined, {maximumFractionDigits: 0})}
-                                            </TableCell>
-                                            <TableCell className="text-center text-gray-600">
-                                                ₪{agent.accessories_per_device.toLocaleString(undefined, {maximumFractionDigits: 0})}
-                                            </TableCell>
-                                            <TableCell className="text-left font-bold text-lg">
-                                                ₪{agent.total_earnings.toLocaleString(undefined, {maximumFractionDigits: 0})}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
+                  <LeadsTable
+                    leads={displayLeads}
+                    onStatusChange={handleStatusChange}
+                    onMarkReminderDone={handleMarkReminderDone}
+                    onAssignChange={handleAssignChange}
+                    employees={employees}
+                    showAssignee={true}
+                    isManager={true}
+                  />
                 </CardContent>
-            </Card>
+              </Card>
 
-            {/* Daily Trend Chart */}
-            {dailyTrend.length > 0 && (
-                <Card className="glass-card border-0">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Zap className="w-5 h-5 text-amber-600" />
-                            מגמת ביצועים יומית
+              {/* Repairs Alerts */}
+              {(overdueRepairs.length > 0 || dueSoonRepairs.length > 0) && (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {overdueRepairs.length > 0 && (
+                    <Card className="border-red-200">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-red-700 text-lg flex items-center gap-2">
+                          <AlertTriangle className="w-5 h-5" />
+                          תיקונים חורגים ({overdueRepairs.length})
                         </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="h-[300px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={dailyTrend}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="date" fontSize={12} />
-                                    <YAxis fontSize={12} />
-                                    <RechartsTooltip />
-                                    <Legend />
-                                    <Line type="monotone" dataKey="devices" stroke="#3B82F6" strokeWidth={2} name="מכשירים" />
-                                    <Line type="monotone" dataKey="lines" stroke="#10B981" strokeWidth={2} name="קווים" />
-                                    <Line type="monotone" dataKey="accessories" stroke="#8B5CF6" strokeWidth={2} name="אביזרים (₪)" />
-                                </LineChart>
-                            </ResponsiveContainer>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {overdueRepairs.map(r => (
+                            <div key={r.id} className="bg-red-50 rounded p-2 text-sm flex justify-between">
+                              <span>{r.repair_id}</span>
+                              <span className="text-red-600 font-medium">
+                                {differenceInDays(new Date(), new Date(r.created_date))} ימים
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                    </CardContent>
-                </Card>
-            )}
+                      </CardContent>
+                    </Card>
+                  )}
 
-            {/* Drilldown Modal */}
-            {showDrillDown && (
-                <SalesDrilldown
-                    isOpen={showDrillDown}
-                    onClose={() => setShowDrillDown(false)}
-                    title={drilldownTitle}
-                    agentName={currentAgentName}
-                    filters={{ sales_rep: currentAgentName }}
-                    dateFrom={dateFrom}
-                    dateTo={dateTo}
-                    groupCode={drilldownGroupCode}
-                    mappings={mappings}
-                />
-            )}
+                  {dueSoonRepairs.length > 0 && (
+                    <Card className="border-orange-200">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-orange-700 text-lg flex items-center gap-2">
+                          <Clock className="w-5 h-5" />
+                          תיקונים מתקרבים לחריגה ({dueSoonRepairs.length})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {dueSoonRepairs.map(r => (
+                            <div key={r.id} className="bg-orange-50 rounded p-2 text-sm flex justify-between">
+                              <span>{r.repair_id}</span>
+                              <span className="text-orange-600 font-medium">
+                                {differenceInDays(new Date(), new Date(r.created_date))} ימים
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
-    );
+      ) : (
+        // Rep View
+        <div className="space-y-6">
+          {/* Target Progress */}
+          <TargetProgress 
+            targets={targets} 
+            actuals={actuals} 
+            period={periodLabels[period]}
+          />
+
+          {/* My Leads */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Phone className="w-5 h-5 text-purple-600" />
+                הלידים שלי
+                <Badge variant="outline" className="mr-2">{myLeads.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LeadsTable
+                leads={myLeads}
+                onStatusChange={handleStatusChange}
+                onMarkReminderDone={handleMarkReminderDone}
+                employees={employees}
+                showAssignee={false}
+                isManager={false}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Quick Lead FAB */}
+      <QuickLeadButton />
+    </div>
+  );
 }
