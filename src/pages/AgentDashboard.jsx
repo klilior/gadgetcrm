@@ -289,12 +289,16 @@ export default function AgentDashboard() {
             const empLines5g = empLineSales.filter(s => is5GLine(s)).reduce((sum, s) => sum + (s.quantity || 1), 0);
             const empTotal = empSales.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
             
+            // Calculate lines - use total if 4g/5g not specified
+            const finalEmpLines4g = empLines4g > 0 ? empLines4g : (empLines > 0 && empLines5g === 0 ? empLines : 0);
+            const finalEmpLines5g = empLines5g;
+            
             // Fallback to SalesActivity if no SalesTransactions
             const empActuals = {
               Devices: empDevices > 0 ? empDevices : empActivities.filter(a => a.metric_type === 'Devices').reduce((s, a) => s + (a.metric_value || 0), 0),
               AccessoriesRevenue: empAccessories > 0 ? empAccessories : empActivities.filter(a => a.metric_type === 'AccessoriesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
-              Lines4G: empLines > 0 ? empLines : (empLines4g > 0 ? empLines4g : empActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0)),
-              Lines5G: empLines5g > 0 ? empLines5g : empActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
+              Lines4G: finalEmpLines4g > 0 ? finalEmpLines4g : empActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0),
+              Lines5G: finalEmpLines5g > 0 ? finalEmpLines5g : empActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
               TotalSalesRevenue: empTotal > 0 ? empTotal : empActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
             };
 
