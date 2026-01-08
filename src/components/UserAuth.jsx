@@ -24,13 +24,45 @@ const retryApiCall = async (fn, retries = 3, delay = 1000) => {
   }
 };
 
+const SESSION_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+
 export function UserProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeUsers, setActiveUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Check if session has expired
+  const isSessionExpired = () => {
+    const lastActivity = localStorage.getItem("lastActivityTime");
+    if (!lastActivity) return true;
+    return Date.now() - parseInt(lastActivity) > SESSION_TIMEOUT_MS;
+  };
+
+  // Update last activity time
+  const updateLastActivity = () => {
+    localStorage.setItem("lastActivityTime", Date.now().toString());
+  };
+
+  // Clear session on expiry
+  const clearExpiredSession = () => {
+    localStorage.removeItem("currentUserId");
+    localStorage.removeItem("activeShiftUsers");
+    localStorage.removeItem("managerId");
+    localStorage.removeItem("lastActivityTime");
+    setCurrentUser(null);
+    setActiveUsers([]);
+  };
+
   useEffect(() => {
     const initializeSystem = async () => {
+      // Check if session expired due to inactivity
+      if (isSessionExpired()) {
+        console.log('⏰ Session expired due to 3 hours inactivity');
+        clearExpiredSession();
+        setIsLoading(false);
+        return;
+      }
+
       const savedActiveUsers = localStorage.getItem("activeShiftUsers");
       const savedCurrentUserId = localStorage.getItem("currentUserId");
       const savedManagerId = localStorage.getItem("managerId");
@@ -42,6 +74,7 @@ export function UserProvider({ children }) {
           );
           if (managers.length > 0 && managers[0].role === 'מנהל') {
             setCurrentUser(managers[0]);
+            updateLastActivity();
             setIsLoading(false);
             return;
           }
@@ -61,12 +94,45 @@ export function UserProvider({ children }) {
         } else if (users.length > 0) {
           setCurrentUser(users[0]);
         }
+        updateLastActivity();
       }
       setIsLoading(false);
     };
     
     initializeSystem();
   }, []);
+
+  // Track user activity and check for session expiry
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Update activity on user interactions
+    const handleActivity = () => {
+      updateLastActivity();
+    };
+
+    // Check for session expiry periodically (every 5 minutes)
+    const checkInterval = setInterval(() => {
+      if (isSessionExpired()) {
+        console.log('⏰ Session expired - logging out');
+        clearExpiredSession();
+      }
+    }, 5 * 60 * 1000);
+
+    // Listen for user activity
+    window.addEventListener('click', handleActivity);
+    window.addEventListener('keypress', handleActivity);
+    window.addEventListener('scroll', handleActivity);
+    window.addEventListener('mousemove', handleActivity);
+
+    return () => {
+      clearInterval(checkInterval);
+      window.removeEventListener('click', handleActivity);
+      window.removeEventListener('keypress', handleActivity);
+      window.removeEventListener('scroll', handleActivity);
+      window.removeEventListener('mousemove', handleActivity);
+    };
+  }, [currentUser]);
 
   const login = async (identifier, password) => {
     try {
