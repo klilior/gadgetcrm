@@ -291,12 +291,12 @@ export default function AgentDashboard() {
             );
             
             // Calculate from SalesTransactions first - use category-based detection
-            const empDevices = empSales.filter(s => isDeviceCategory(s.category)).reduce((sum, s) => sum + (s.quantity || 1), 0);
+            const empDevices = empSales.filter(s => isDeviceCategory(s.category, s.product_name)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
             const empAccessories = empSales.filter(s => isAccessoryCategory(s.category)).reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
-            const empLineSales = empSales.filter(s => isLineCategory(s.category));
-            const empLines = empLineSales.reduce((sum, s) => sum + (s.quantity || 1), 0);
-            const empLines4g = empLineSales.filter(s => is4GLine(s)).reduce((sum, s) => sum + (s.quantity || 1), 0);
-            const empLines5g = empLineSales.filter(s => is5GLine(s)).reduce((sum, s) => sum + (s.quantity || 1), 0);
+            const empLineSales = empSales.filter(s => isLineCategory(s.category, s.product_name));
+            const empLines = empLineSales.reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
+            const empLines4g = empLineSales.filter(s => is4GLine(s)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
+            const empLines5g = empLineSales.filter(s => is5GLine(s)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
             const empTotal = empSales.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
             
             // Calculate lines - use total if 4g/5g not specified
