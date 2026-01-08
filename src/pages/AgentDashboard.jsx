@@ -198,25 +198,31 @@ export default function AgentDashboard() {
       };
       
       // Helper to identify category type from Linet category field
-      const isDeviceCategory = (cat) => {
-        if (!cat) return false;
-        const lower = cat.toLowerCase();
-        return lower.includes('מכשיר') || lower.includes('סמארטפון') || lower.includes('טלפון') || 
-               lower.includes('device') || lower.includes('phone') || lower.includes('סלולר');
+      const isDeviceCategory = (cat, productName) => {
+        if (!cat && !productName) return false;
+        const catLower = (cat || '').toLowerCase();
+        const prodLower = (productName || '').toLowerCase();
+        // Match "טלפונים סלולרים" category from Linet
+        return catLower.includes('טלפון') || catLower.includes('סמארטפון') ||
+               catLower === 'טלפונים סלולרים' || 
+               prodLower.includes('galaxy') || prodLower.includes('iphone') || 
+               prodLower.includes('סמסונג') || prodLower.includes('אייפון');
       };
       
       const isAccessoryCategory = (cat) => {
         if (!cat) return false;
         const lower = cat.toLowerCase();
-        return lower.includes('אביזר') || lower.includes('accessory') || lower.includes('כיסוי') || 
-               lower.includes('מגן') || lower.includes('מטען') || lower.includes('אוזני');
+        // Match "אביזרים סלולריים" category from Linet
+        return lower.includes('אביזר') || lower === 'אביזרים סלולריים';
       };
       
-      const isLineCategory = (cat) => {
-        if (!cat) return false;
-        const lower = cat.toLowerCase();
-        return lower.includes('קו') || lower.includes('sim') || lower.includes('line') || 
-               lower.includes('חבילה') || lower.includes('מנוי');
+      const isLineCategory = (cat, productName) => {
+        if (!cat && !productName) return false;
+        const catLower = (cat || '').toLowerCase();
+        const prodLower = (productName || '').toLowerCase();
+        return catLower.includes('קו') || catLower.includes('sim') || catLower.includes('line') || 
+               catLower.includes('חבילה') || catLower.includes('מנוי') ||
+               prodLower.includes('sim') || prodLower.includes('קו') || prodLower.includes('חבילה');
       };
       
       const is4GLine = (tx) => {
