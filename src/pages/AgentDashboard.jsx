@@ -240,12 +240,12 @@ export default function AgentDashboard() {
       const mySales = periodSales.filter(s => matchSalesRep(s.sales_rep, currentUser?.employee_name));
       
       // Calculate from sales transactions
-      const devicesCount = mySales.filter(s => isDeviceCategory(s.category)).reduce((sum, s) => sum + (s.quantity || 1), 0);
+      const devicesCount = mySales.filter(s => isDeviceCategory(s.category, s.product_name)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
       const accessoriesRevenue = mySales.filter(s => isAccessoryCategory(s.category)).reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
-      const lineSales = mySales.filter(s => isLineCategory(s.category));
-      const linesCount = lineSales.reduce((sum, s) => sum + (s.quantity || 1), 0);
-      const lines4gCount = lineSales.filter(s => is4GLine(s)).reduce((sum, s) => sum + (s.quantity || 1), 0);
-      const lines5gCount = lineSales.filter(s => is5GLine(s)).reduce((sum, s) => sum + (s.quantity || 1), 0);
+      const lineSales = mySales.filter(s => isLineCategory(s.category, s.product_name));
+      const linesCount = lineSales.reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
+      const lines4gCount = lineSales.filter(s => is4GLine(s)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
+      const lines5gCount = lineSales.filter(s => is5GLine(s)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
       const totalRevenue = mySales.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
 
       // Calculate lines - use total if 4g/5g not specified
