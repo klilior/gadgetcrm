@@ -33,13 +33,16 @@ function AppContent({ children, currentPageName }) {
     const isTechnicianRole = currentUser?.role === "טכנאי";
     
     // Only redirect if on root or Settings page (which might be default)
-    if (currentPath === '/' || currentPath === '/Settings' || currentPath === '/settings') {
-      if (isTechnicianRole) {
-        // Technicians go to Repair Dashboard
-        window.location.href = createPageUrl('RepairDashboard');
-      } else {
-        // All other users (נציג, מנהל, מנהל משמרת) go to Agent Dashboard
-        window.location.href = createPageUrl('AgentDashboard');
+    const isRootOrSettings = currentPath === '/' || currentPath === '' || 
+                             currentPath.toLowerCase() === '/settings';
+    
+    if (isRootOrSettings) {
+      const targetPage = isTechnicianRole ? 'RepairDashboard' : 'AgentDashboard';
+      const targetUrl = createPageUrl(targetPage);
+      
+      // Use replace to avoid back button issues
+      if (currentPath !== targetUrl) {
+        window.location.replace(targetUrl);
       }
     }
   }, [currentUser, isLoading, location.pathname]);
