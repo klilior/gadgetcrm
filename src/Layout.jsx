@@ -199,7 +199,7 @@ function AppContent({ children, currentPageName }) {
   }
 
   return (
-    <div dir="rtl" className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 font-sans">
+    <div dir="rtl" className="h-[100dvh] min-h-0 overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 font-sans">
       <style dangerouslySetInnerHTML={{ __html: `
           .glass-card { background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 24px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); }
           .glass-button { background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 16px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
@@ -489,7 +489,7 @@ function AppContent({ children, currentPageName }) {
             )}
           </Sidebar>
 
-          <main className="flex-1 flex flex-col min-w-0 min-h-0">
+          <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
             <header className="glass-card m-2 md:m-4 p-3 md:p-4 flex justify-between items-center">
                <div className="flex items-center gap-2 md:gap-4 min-w-0">
                   <SidebarTrigger className="glass-button p-2 rounded-xl md:hidden flex-shrink-0" />
@@ -538,7 +538,7 @@ function AppContent({ children, currentPageName }) {
                   </Button>
                 </div>
             </header>
-            <div className="flex-1 min-h-0 overflow-y-auto p-2 md:p-4 pt-0">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 md:p-4 pt-0" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
               {children}
             </div>
           </main>
