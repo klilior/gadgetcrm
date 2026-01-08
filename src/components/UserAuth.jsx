@@ -242,6 +242,7 @@ export function UserProvider({ children }) {
     localStorage.removeItem("currentUserId");
     localStorage.removeItem("activeShiftUsers");
     localStorage.removeItem("managerId");
+    localStorage.removeItem("lastActivityTime");
   };
 
   const endShift = () => {
@@ -250,6 +251,7 @@ export function UserProvider({ children }) {
     localStorage.removeItem("currentUserId");
     localStorage.removeItem("activeShiftUsers");
     localStorage.removeItem("managerId");
+    localStorage.removeItem("lastActivityTime");
   };
 
   return (
