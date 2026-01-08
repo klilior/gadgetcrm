@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Lead, Target, SalesActivity, Employee, Repair } from '@/entities/all';
+import { Lead, Target, SalesActivity, Employee, Repair, GoalDefinition, GoalProgress, SalesTransaction } from '@/entities/all';
 import { useUser } from '../components/UserAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -77,12 +77,15 @@ export default function AgentDashboard() {
       }
 
       // Load all data in parallel
-      const [allLeads, allTargets, allActivities, allEmployees, allRepairs] = await Promise.all([
+      const [allLeads, allTargets, allActivities, allEmployees, allRepairs, allGoals, allGoalProgress, allSalesTransactions] = await Promise.all([
         Lead.filter({ status: { $ne: 'Deleted' } }),
         Target.list(),
         SalesActivity.list(),
         Employee.filter({ is_active: true }),
-        isManager ? Repair.list() : Promise.resolve([])
+        isManager ? Repair.list() : Promise.resolve([]),
+        GoalDefinition.filter({ is_active: true }),
+        GoalProgress.list(),
+        SalesTransaction.list()
       ]);
 
       setEmployees(allEmployees || []);
@@ -135,7 +138,7 @@ export default function AgentDashboard() {
       };
       setActuals(myActuals);
 
-      // Calculate targets for current user
+      // Calculate targets for current user - check both Target and GoalDefinition
       const myTargets = (allTargets || []).filter(t => 
         t.user_id === userId &&
         new Date(t.period_start) <= dateEnd &&
@@ -145,7 +148,65 @@ export default function AgentDashboard() {
       myTargets.forEach(t => {
         targetMap[t.target_type] = (targetMap[t.target_type] || 0) + t.target_value;
       });
+
+      // Also check GoalDefinition for targets
+      const myGoals = (allGoals || []).filter(g => {
+        const matchesPeriod = new Date(g.period_start) <= dateEnd && new Date(g.period_end) >= dateStart;
+        const matchesUser = g.scope_type === 'TEAM' || g.agent_name === currentUser?.employee_name;
+        return matchesPeriod && matchesUser && g.is_active;
+      });
+
+      // Map GoalDefinition to Target format
+      myGoals.forEach(g => {
+        let targetType = null;
+        if (g.commission_group_code === 'DEVICES' && g.metric_type === 'UNITS') {
+          targetType = 'Devices';
+        } else if (g.commission_group_code === 'ACCESSORIES_GROUP' && g.metric_type === 'NET_AMOUNT') {
+          targetType = 'AccessoriesRevenue';
+        } else if (g.commission_group_code === 'LINES' && g.metric_type === 'LINES_4G_UNITS') {
+          targetType = 'Lines4G';
+        } else if (g.commission_group_code === 'LINES' && g.metric_type === 'LINES_5G_UNITS') {
+          targetType = 'Lines5G';
+        } else if (g.commission_group_code === 'LINES' && g.metric_type === 'UNITS') {
+          // Total lines - split to Lines4G if no specific type
+          targetType = 'Lines4G';
+        } else if (g.metric_type === 'NET_AMOUNT') {
+          targetType = 'TotalSalesRevenue';
+        }
+        
+        if (targetType && !targetMap[targetType]) {
+          targetMap[targetType] = g.target_value;
+        }
+      });
+
       setTargets(targetMap);
+
+      // Calculate actuals from SalesTransactions if SalesActivity is empty
+      if (periodActivities.length === 0 && allSalesTransactions && allSalesTransactions.length > 0) {
+        const periodSales = (allSalesTransactions || []).filter(s => {
+          const saleDate = new Date(s.sale_date || s.created_date);
+          return isWithinInterval(saleDate, { start: dateStart, end: dateEnd });
+        });
+        
+        const mySales = periodSales.filter(s => s.agent_name === currentUser?.employee_name);
+        
+        // Calculate from sales transactions
+        const devicesCount = mySales.filter(s => s.commission_group_code === 'DEVICES').reduce((sum, s) => sum + (s.quantity || 1), 0);
+        const accessoriesRevenue = mySales.filter(s => s.commission_group_code === 'ACCESSORIES_GROUP').reduce((sum, s) => sum + (s.net_amount || 0), 0);
+        const lines4gCount = mySales.filter(s => s.is_line_4g).reduce((sum, s) => sum + (s.quantity || 1), 0);
+        const lines5gCount = mySales.filter(s => s.is_line_5g).reduce((sum, s) => sum + (s.quantity || 1), 0);
+        const totalRevenue = mySales.reduce((sum, s) => sum + (s.net_amount || 0), 0);
+
+        if (devicesCount > 0 || accessoriesRevenue > 0 || lines4gCount > 0 || lines5gCount > 0 || totalRevenue > 0) {
+          setActuals({
+            Devices: devicesCount,
+            AccessoriesRevenue: accessoriesRevenue,
+            Lines4G: lines4gCount,
+            Lines5G: lines5gCount,
+            TotalSalesRevenue: totalRevenue,
+          });
+        }
+      }
 
       // KPI data
       if (isManager) {
@@ -183,6 +244,34 @@ export default function AgentDashboard() {
             const empTargetMap = {};
             empTargets.forEach(t => {
               empTargetMap[t.target_type] = (empTargetMap[t.target_type] || 0) + t.target_value;
+            });
+
+            // Also check GoalDefinition for this employee
+            const empGoals = (allGoals || []).filter(g => {
+              const matchesPeriod = new Date(g.period_start) <= dateEnd && new Date(g.period_end) >= dateStart;
+              const matchesUser = g.scope_type === 'TEAM' || g.agent_name === emp.employee_name;
+              return matchesPeriod && matchesUser && g.is_active;
+            });
+
+            empGoals.forEach(g => {
+              let targetType = null;
+              if (g.commission_group_code === 'DEVICES' && g.metric_type === 'UNITS') {
+                targetType = 'Devices';
+              } else if (g.commission_group_code === 'ACCESSORIES_GROUP' && g.metric_type === 'NET_AMOUNT') {
+                targetType = 'AccessoriesRevenue';
+              } else if (g.commission_group_code === 'LINES' && g.metric_type === 'LINES_4G_UNITS') {
+                targetType = 'Lines4G';
+              } else if (g.commission_group_code === 'LINES' && g.metric_type === 'LINES_5G_UNITS') {
+                targetType = 'Lines5G';
+              } else if (g.commission_group_code === 'LINES' && g.metric_type === 'UNITS') {
+                targetType = 'Lines4G';
+              } else if (g.metric_type === 'NET_AMOUNT') {
+                targetType = 'TotalSalesRevenue';
+              }
+              
+              if (targetType && !empTargetMap[targetType]) {
+                empTargetMap[targetType] = g.target_value;
+              }
             });
 
             const empLeads = activeLeads.filter(l => l.assigned_to === emp.id);
