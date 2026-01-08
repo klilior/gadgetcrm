@@ -23,6 +23,25 @@ import PaymentModal from "./components/payments/PaymentModal"; // Added PaymentM
 function AppContent({ children, currentPageName }) {
   const { currentUser, activeUsers, logout, switchUser, removeUserFromShift, endShift, isLoading } = useUser();
   const location = useLocation();
+
+  // Redirect to correct home page based on role
+  useEffect(() => {
+    if (!currentUser || isLoading) return;
+    
+    const currentPath = location.pathname;
+    const isTechnicianRole = currentUser?.role === "טכנאי";
+    
+    // Only redirect if on root or Settings page (which might be default)
+    if (currentPath === '/' || currentPath === '/Settings' || currentPath === '/settings') {
+      if (isTechnicianRole) {
+        // Technicians go to Repair Dashboard
+        window.location.href = createPageUrl('RepairDashboard');
+      } else {
+        // All other users (נציג, מנהל, מנהל משמרת) go to Agent Dashboard
+        window.location.href = createPageUrl('AgentDashboard');
+      }
+    }
+  }, [currentUser, isLoading, location.pathname]);
   const [isScheduleMenuOpen, setIsScheduleMenuOpen] = useState(false);
   const [isAttendanceMenuOpen, setIsAttendanceMenuOpen] = useState(false);
   const [isSalesMenuOpen, setIsSalesMenuOpen] = useState(false);
