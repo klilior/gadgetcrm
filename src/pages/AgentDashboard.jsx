@@ -242,12 +242,16 @@ export default function AgentDashboard() {
       const lines5gCount = lineSales.filter(s => is5GLine(s)).reduce((sum, s) => sum + (s.quantity || 1), 0);
       const totalRevenue = mySales.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
 
+      // Calculate lines - use total if 4g/5g not specified
+      const finalLines4g = lines4gCount > 0 ? lines4gCount : (linesCount > 0 && lines5gCount === 0 ? linesCount : 0);
+      const finalLines5g = lines5gCount;
+      
       // Use SalesTransaction data primarily, fallback to SalesActivity
       const finalActuals = {
         Devices: devicesCount > 0 ? devicesCount : myActuals.Devices,
         AccessoriesRevenue: accessoriesRevenue > 0 ? accessoriesRevenue : myActuals.AccessoriesRevenue,
-        Lines4G: linesCount > 0 ? linesCount : (lines4gCount > 0 ? lines4gCount : myActuals.Lines4G),
-        Lines5G: lines5gCount > 0 ? lines5gCount : myActuals.Lines5G,
+        Lines4G: finalLines4g > 0 ? finalLines4g : myActuals.Lines4G,
+        Lines5G: finalLines5g > 0 ? finalLines5g : myActuals.Lines5G,
         TotalSalesRevenue: totalRevenue > 0 ? totalRevenue : myActuals.TotalSalesRevenue,
       };
       setActuals(finalActuals);
