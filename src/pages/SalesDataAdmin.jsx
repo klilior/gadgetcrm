@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Database, Tag, Users, Trash2, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
+import EmployeeSyncPanel from "@/components/admin/EmployeeSyncPanel";
 
 export default function SalesDataAdmin() {
     const { currentUser } = useUser();
@@ -385,8 +386,12 @@ export default function SalesDataAdmin() {
                         תרגום קטגוריות
                     </TabsTrigger>
                     <TabsTrigger value="debug" className="rounded-lg data-[state=active]:bg-red-100 data-[state=active]:text-red-800">
-                        <Database className="w-4 h-4 mr-2" />
-                        Debug API (RAW)
+                      <Database className="w-4 h-4 mr-2" />
+                      Debug API (RAW)
+                    </TabsTrigger>
+                    <TabsTrigger value="employeeSync" className="rounded-lg data-[state=active]:bg-amber-100 data-[state=active]:text-amber-800">
+                      <Users className="w-4 h-4 mr-2" />
+                      אחידות עובדים
                     </TabsTrigger>
                 </TabsList>
 
@@ -690,6 +695,9 @@ export default function SalesDataAdmin() {
                             )}
                         </CardContent>
                     </Card>
+                </TabsContent>
+                <TabsContent value="employeeSync" className="mt-6">
+                    <EmployeeSyncPanel />
                 </TabsContent>
             </Tabs>
         </div>
