@@ -28,6 +28,7 @@ import MobileInvoiceUpload from './pages/MobileInvoiceUpload';
 import Orders from './pages/Orders';
 import PaymentReturn from './pages/PaymentReturn';
 import PaymentSettings from './pages/PaymentSettings';
+import PriceAlerts from './pages/PriceAlerts';
 import Products from './pages/Products';
 import PurchasesDashboard from './pages/PurchasesDashboard';
 import RawLinesImport from './pages/RawLinesImport';
@@ -39,6 +40,8 @@ import ShiftBonusManagement from './pages/ShiftBonusManagement';
 import ShiftPreferences from './pages/ShiftPreferences';
 import Shifts from './pages/Shifts';
 import ShippingProviders from './pages/ShippingProviders';
+import SupplierProducts from './pages/SupplierProducts';
+import SuppliersManagement from './pages/SuppliersManagement';
 import SyncManagement from './pages/SyncManagement';
 import TargetBonusManagement from './pages/TargetBonusManagement';
 import TechnicianReport from './pages/TechnicianReport';
@@ -48,9 +51,6 @@ import VendorReport from './pages/VendorReport';
 import WeeklySchedule from './pages/WeeklySchedule';
 import WhatsAppDebug from './pages/WhatsAppDebug';
 import WhatsAppProviders from './pages/WhatsAppProviders';
-import PriceAlerts from './pages/PriceAlerts';
-import SuppliersManagement from './pages/SuppliersManagement';
-import SupplierProducts from './pages/SupplierProducts';
 import __Layout from './Layout.jsx';
 
 
@@ -85,6 +85,7 @@ export const PAGES = {
     "Orders": Orders,
     "PaymentReturn": PaymentReturn,
     "PaymentSettings": PaymentSettings,
+    "PriceAlerts": PriceAlerts,
     "Products": Products,
     "PurchasesDashboard": PurchasesDashboard,
     "RawLinesImport": RawLinesImport,
@@ -96,6 +97,8 @@ export const PAGES = {
     "ShiftPreferences": ShiftPreferences,
     "Shifts": Shifts,
     "ShippingProviders": ShippingProviders,
+    "SupplierProducts": SupplierProducts,
+    "SuppliersManagement": SuppliersManagement,
     "SyncManagement": SyncManagement,
     "TargetBonusManagement": TargetBonusManagement,
     "TechnicianReport": TechnicianReport,
@@ -105,9 +108,6 @@ export const PAGES = {
     "WeeklySchedule": WeeklySchedule,
     "WhatsAppDebug": WhatsAppDebug,
     "WhatsAppProviders": WhatsAppProviders,
-    "PriceAlerts": PriceAlerts,
-    "SuppliersManagement": SuppliersManagement,
-    "SupplierProducts": SupplierProducts,
 }
 
 export const pagesConfig = {

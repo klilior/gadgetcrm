@@ -99,47 +99,71 @@ export default function RepairDashboard() {
         console.log("🔵 RepairDashboard: Starting loadData...");
         setIsLoading(true);
         try {
-            // Fetch all clients, devices, vendors first, as they might be needed for mapping
-            // regardless of the technician filter on repairs.
+            // STEP 1: Load repairs FIRST and show them immediately (fastest path to content)
+            let repairsData;
+            if (isTechnicianRole) {
+                repairsData = await Repair.filter({
+                    repair_type: "מעבדת Gadget-Team"
+                }, "-updated_date", 200).catch(err => {
+                    console.error("❌ Error loading repairs for technician:", err);
+                    return [];
+                });
+            } else {
+                repairsData = await Repair.filter({}, "-updated_date", 200).catch(err => {
+                    console.error("❌ Error loading all repairs:", err);
+                    return [];
+                });
+            }
+
+            console.log(`✅ Loaded ${repairsData.length} repairs`);
+
+            // Show repairs immediately WITHOUT enrichment
+            setRepairs(repairsData.map(r => ({ ...r, customer: null, device: null, vendor: null })));
+            setSelectedRepairs([]);
+            setIsLoading(false); // Table is now visible!
+
+            // Calculate stats from raw data (no enrichment needed for stats)
+            const nonOpenStatuses = [
+                "תיקון נסגר", "לא ניתן לתיקון", "מכשיר סיים תיקון וממתין לאיסוף",
+                "Closed", "Return_Unrepaired", "Ready"
+            ];
+
+            if (isTechnicianRole) {
+                setStats({
+                    openLab: repairsData.filter(r => !nonOpenStatuses.includes(r.status) && r.status !== 'הוזמן חלק').length,
+                    orderedParts: repairsData.filter(r => r.status === 'הוזמן חלק').length,
+                    slaBreached: repairsData.filter(r => getSlaStatus(r).isBreached && !nonOpenStatuses.includes(r.status)).length,
+                    openImporter: 0,
+                    readyForPickup: 0
+                });
+            } else {
+                setStats({
+                    openLab: repairsData.filter(r => r.repair_type === 'מעבדת Gadget-Team' && !nonOpenStatuses.includes(r.status)).length,
+                    openImporter: repairsData.filter(r => ["To_Importer", "At_Importer", "Back_From_Importer"].includes(r.status)).length,
+                    readyForPickup: repairsData.filter(r => r.status === "מכשיר סיים תיקון וממתין לאיסוף" || r.status === "Ready").length,
+                    slaBreached: repairsData.filter(r => getSlaStatus(r).isBreached && !nonOpenStatuses.includes(r.status)).length,
+                    orderedParts: 0
+                });
+            }
+
+            // STEP 2: Load enrichment data in BACKGROUND (non-blocking)
+            // Extract unique IDs to minimize queries
+            const clientIds = [...new Set(repairsData.map(r => r.client_id).filter(Boolean))];
+            const deviceIds = [...new Set(repairsData.map(r => r.device_id).filter(Boolean))];
+            const vendorIds = [...new Set(repairsData.map(r => r.vendor_id).filter(Boolean))];
+
+            // Load only what we need in parallel
             const [clientsData, devicesData, vendorsData] = await Promise.all([
-                Client.list().catch(err => {
-                    console.error("❌ Error loading clients:", err);
-                    return []; // Return empty array on error
-                }),
-                RepairDevice.list().catch(err => {
-                    console.error("❌ Error loading devices:", err);
-                    return []; // Return empty array on error
-                }),
-                RepairVendor.list().catch(err => {
-                    console.error("❌ Error loading vendors:", err);
-                    return []; // Return empty array on error
-                })
+                clientIds.length > 0 ? Client.list().catch(() => []) : Promise.resolve([]),
+                deviceIds.length > 0 ? RepairDevice.list().catch(() => []) : Promise.resolve([]),
+                vendorIds.length > 0 ? RepairVendor.filter({ active: true }).catch(() => []) : Promise.resolve([])
             ]);
 
             const clientsMap = clientsData.reduce((acc, c) => ({ ...acc, [c.id]: c }), {});
             const devicesMap = devicesData.reduce((acc, d) => ({ ...acc, [d.id]: d }), {});
             const vendorsMap = vendorsData.reduce((acc, v) => ({ ...acc, [v.id]: v }), {});
 
-            let repairsData;
-
-            // Technicians only see "מעבדת Gadget-Team" repairs
-            if (isTechnicianRole) {
-                repairsData = await Repair.filter({
-                    repair_type: "מעבדת Gadget-Team"
-                }, "-updated_date", 500).catch(err => {
-                    console.error("❌ Error loading repairs for technician:", err);
-                    return []; // Return empty array on error
-                });
-            } else {
-                // Other users see all repairs
-                repairsData = await Repair.list("-updated_date").catch(err => {
-                    console.error("❌ Error loading all repairs:", err);
-                    return []; // Return empty array on error
-                });
-            }
-
-            console.log(`✅ Loaded ${repairsData.length} repairs`);
-
+            // STEP 3: Update with enriched data (seamless update)
             const enrichedRepairs = repairsData.map(repair => ({
                 ...repair,
                 customer: clientsMap[repair.client_id] || null,
@@ -148,69 +172,10 @@ export default function RepairDashboard() {
             }));
 
             setRepairs(enrichedRepairs);
-            setSelectedRepairs([]); // Clear selections on data reload
+            console.log("✅ RepairDashboard: loadData completed with enrichment");
 
-            const nonOpenStatuses = [
-                "תיקון נסגר",
-                "לא ניתן לתיקון",
-                "מכשיר סיים תיקון וממתין לאיסוף",
-                "Closed",
-                "Return_Unrepaired",
-                "Ready"
-            ];
-
-            if (isTechnicianRole) {
-                // Technician-specific stats (only "מעבדת Gadget-Team" repairs are in enrichedRepairs)
-                const openLab = enrichedRepairs.filter(r =>
-                    !nonOpenStatuses.includes(r.status) &&
-                    r.status !== 'הוזמן חלק' // Exclude 'הוזמן חלק' from openLab for technicians
-                ).length;
-
-                const orderedParts = enrichedRepairs.filter(r =>
-                    r.status === 'הוזמן חלק'
-                ).length;
-
-                const slaBreached = enrichedRepairs.filter(r =>
-                    getSlaStatus(r).isBreached &&
-                    !nonOpenStatuses.includes(r.status)
-                ).length;
-
-                setStats({
-                    openLab,
-                    orderedParts,
-                    slaBreached,
-                    openImporter: 0, // Not relevant for technician dashboard
-                    readyForPickup: 0 // Not relevant for technician dashboard
-                });
-            } else {
-                // Manager/Representative stats (all repairs are in enrichedRepairs)
-                const openLab = enrichedRepairs.filter(r =>
-                    r.repair_type === 'מעבדת Gadget-Team' &&
-                    !nonOpenStatuses.includes(r.status)
-                ).length;
-
-                const openImporter = enrichedRepairs.filter(r =>
-                    ["To_Importer", "At_Importer", "Back_From_Importer"].includes(r.status) &&
-                    !nonOpenStatuses.includes(r.status)
-                ).length;
-
-                const readyForPickup = enrichedRepairs.filter(r =>
-                    r.status === "מכשיר סיים תיקון וממתין לאיסוף" || r.status === "Ready"
-                ).length;
-
-                const slaBreached = enrichedRepairs.filter(r =>
-                    getSlaStatus(r).isBreached &&
-                    !nonOpenStatuses.includes(r.status)
-                ).length;
-
-                setStats({ openLab, openImporter, readyForPickup, slaBreached, orderedParts: 0 }); // orderedParts not a separate stat for managers
-            }
-
-            console.log("✅ RepairDashboard: loadData completed successfully");
         } catch (error) {
             console.error("❌ Error loading dashboard data:", error);
-            alert("שגיאה בטעינת נתונים. האם החיבור לאינטרנט תקין?");
-        } finally {
             setIsLoading(false);
         }
     }, [isTechnicianRole]);
