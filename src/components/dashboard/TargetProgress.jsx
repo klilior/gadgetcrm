@@ -48,6 +48,24 @@ export default function TargetProgress({ targets, actuals, period = 'היום' }
     { key: 'TotalSalesRevenue', label: 'סה״כ מכירות', unit: '₪' },
   ];
 
+  const hasAnyData = targetTypes.some(type => 
+    (targets?.[type.key] || 0) > 0 || (actuals?.[type.key] || 0) > 0
+  );
+
+  if (!hasAnyData) {
+    return (
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900">יעד מול ביצוע - {period}</h3>
+        </div>
+        <div className="text-center py-6 text-gray-500">
+          <p>לא הוגדרו יעדים לתקופה זו</p>
+          <p className="text-sm mt-1">הגדר יעדים במסך "יעדים וביצועים" או "קבוצות מכירה ועמלות"</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
       <div className="flex items-center justify-between mb-4">
