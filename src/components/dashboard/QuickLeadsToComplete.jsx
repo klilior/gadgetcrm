@@ -2,8 +2,8 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { StickyNote, Phone, Play, CheckCircle, Bell, Edit } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { StickyNote, Phone, Play, CheckCircle, Bell, Edit, Trash2, Clock } from 'lucide-react';
+import { formatDistanceToNow, format } from 'date-fns';
 import { he } from 'date-fns/locale';
 
 export default function QuickLeadsToComplete({ 
@@ -11,7 +11,8 @@ export default function QuickLeadsToComplete({
   onComplete, 
   onProcess, 
   onClose, 
-  onSetReminder 
+  onSetReminder,
+  onDelete
 }) {
   if (!leads || leads.length === 0) return null;
 
@@ -25,67 +26,93 @@ export default function QuickLeadsToComplete({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-2">
+        <div className="space-y-3">
           {leads.map(lead => (
             <div 
               key={lead.id} 
-              className="bg-white rounded-lg p-3 border border-purple-100 flex items-center justify-between"
+              className="bg-white rounded-lg p-4 border border-purple-100 shadow-sm"
             >
-              <div className="flex-1 min-w-0">
+              {/* Header row with badges */}
+              <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <Badge className="bg-purple-100 text-purple-800 text-xs">QUICK</Badge>
+                  <Badge className="bg-purple-100 text-purple-800 text-xs">פתק מהיר</Badge>
                   <Badge variant="outline" className="text-orange-600 border-orange-300 text-xs">חסר פרטים</Badge>
                 </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <a href={`tel:${lead.phone}`} className="font-mono text-blue-600 hover:underline">
-                    {lead.phone}
-                  </a>
-                  {lead.customer_name && (
-                    <span className="text-gray-700">• {lead.customer_name}</span>
+                <span className="text-xs text-gray-400">
+                  {formatDistanceToNow(new Date(lead.created_date), { addSuffix: true, locale: he })}
+                </span>
+              </div>
+
+              {/* Main content */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-1">
+                    <a href={`tel:${lead.phone}`} className="font-mono text-lg font-bold text-blue-600 hover:underline flex items-center gap-1">
+                      <Phone className="w-4 h-4" />
+                      {lead.phone}
+                    </a>
+                    {lead.customer_name && (
+                      <span className="text-gray-700 font-medium">{lead.customer_name}</span>
+                    )}
+                  </div>
+                  <p className="text-gray-600">{lead.topic}</p>
+                  {lead.notes && (
+                    <p className="text-sm text-gray-500 mt-1 truncate">{lead.notes}</p>
+                  )}
+                  {lead.sla_due_at && (
+                    <div className="flex items-center gap-1 mt-2 text-xs text-gray-500">
+                      <Clock className="w-3 h-3" />
+                      SLA: {format(new Date(lead.sla_due_at), 'HH:mm dd/MM', { locale: he })}
+                    </div>
                   )}
                 </div>
-                <p className="text-sm text-gray-600 truncate">{lead.topic}</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {formatDistanceToNow(new Date(lead.created_date), { addSuffix: true, locale: he })}
-                </p>
               </div>
-              
-              <div className="flex gap-1 mr-3">
+
+              {/* Action buttons row */}
+              <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="h-8 px-2 text-purple-600 hover:bg-purple-50"
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
                   onClick={() => onComplete?.(lead)}
-                  title="השלם עכשיו"
                 >
-                  <Edit className="w-4 h-4" />
+                  <Edit className="w-4 h-4 ml-1" />
+                  ערוך והשלם
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 px-2 text-blue-600 hover:bg-blue-50"
+                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
                   onClick={() => onProcess?.(lead.id)}
-                  title="טפל"
                 >
-                  <Play className="w-4 h-4" />
+                  <Play className="w-4 h-4 ml-1" />
+                  התחל טיפול
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 px-2 text-green-600 hover:bg-green-50"
+                  className="text-green-600 border-green-200 hover:bg-green-50"
                   onClick={() => onClose?.(lead.id)}
-                  title="סגור"
                 >
-                  <CheckCircle className="w-4 h-4" />
+                  <CheckCircle className="w-4 h-4 ml-1" />
+                  טופל
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 px-2 text-amber-600 hover:bg-amber-50"
+                  className="text-amber-600 border-amber-200 hover:bg-amber-50"
                   onClick={() => onSetReminder?.(lead)}
-                  title="עדכן תזכורת"
                 >
-                  <Bell className="w-4 h-4" />
+                  <Bell className="w-4 h-4 ml-1" />
+                  תזכורת
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  onClick={() => onDelete?.(lead.id)}
+                >
+                  <Trash2 className="w-4 h-4 ml-1" />
+                  מחק
                 </Button>
               </div>
             </div>

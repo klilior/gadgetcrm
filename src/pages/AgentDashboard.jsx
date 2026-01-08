@@ -181,32 +181,31 @@ export default function AgentDashboard() {
 
       setTargets(targetMap);
 
-      // Calculate actuals from SalesTransactions if SalesActivity is empty
-      if (periodActivities.length === 0 && allSalesTransactions && allSalesTransactions.length > 0) {
-        const periodSales = (allSalesTransactions || []).filter(s => {
-          const saleDate = new Date(s.sale_date || s.created_date);
-          return isWithinInterval(saleDate, { start: dateStart, end: dateEnd });
-        });
-        
-        const mySales = periodSales.filter(s => s.agent_name === currentUser?.employee_name);
-        
-        // Calculate from sales transactions
-        const devicesCount = mySales.filter(s => s.commission_group_code === 'DEVICES').reduce((sum, s) => sum + (s.quantity || 1), 0);
-        const accessoriesRevenue = mySales.filter(s => s.commission_group_code === 'ACCESSORIES_GROUP').reduce((sum, s) => sum + (s.net_amount || 0), 0);
-        const lines4gCount = mySales.filter(s => s.is_line_4g).reduce((sum, s) => sum + (s.quantity || 1), 0);
-        const lines5gCount = mySales.filter(s => s.is_line_5g).reduce((sum, s) => sum + (s.quantity || 1), 0);
-        const totalRevenue = mySales.reduce((sum, s) => sum + (s.net_amount || 0), 0);
+      // Calculate actuals from SalesTransactions - ALWAYS use them as primary source
+      const periodSales = (allSalesTransactions || []).filter(s => {
+        const saleDate = new Date(s.sale_date || s.created_date);
+        return isWithinInterval(saleDate, { start: dateStart, end: dateEnd });
+      });
+      
+      const mySales = periodSales.filter(s => s.agent_name === currentUser?.employee_name);
+      
+      // Calculate from sales transactions
+      const devicesCount = mySales.filter(s => s.commission_group_code === 'DEVICES').reduce((sum, s) => sum + (s.quantity || 1), 0);
+      const accessoriesRevenue = mySales.filter(s => s.commission_group_code === 'ACCESSORIES_GROUP').reduce((sum, s) => sum + (s.net_amount || 0), 0);
+      const linesCount = mySales.filter(s => s.commission_group_code === 'LINES').reduce((sum, s) => sum + (s.quantity || 1), 0);
+      const lines4gCount = mySales.filter(s => s.is_line_4g).reduce((sum, s) => sum + (s.quantity || 1), 0);
+      const lines5gCount = mySales.filter(s => s.is_line_5g).reduce((sum, s) => sum + (s.quantity || 1), 0);
+      const totalRevenue = mySales.reduce((sum, s) => sum + (s.net_amount || 0), 0);
 
-        if (devicesCount > 0 || accessoriesRevenue > 0 || lines4gCount > 0 || lines5gCount > 0 || totalRevenue > 0) {
-          setActuals({
-            Devices: devicesCount,
-            AccessoriesRevenue: accessoriesRevenue,
-            Lines4G: lines4gCount,
-            Lines5G: lines5gCount,
-            TotalSalesRevenue: totalRevenue,
-          });
-        }
-      }
+      // Use SalesTransaction data primarily, fallback to SalesActivity
+      const finalActuals = {
+        Devices: devicesCount > 0 ? devicesCount : myActuals.Devices,
+        AccessoriesRevenue: accessoriesRevenue > 0 ? accessoriesRevenue : myActuals.AccessoriesRevenue,
+        Lines4G: linesCount > 0 ? linesCount : (lines4gCount > 0 ? lines4gCount : myActuals.Lines4G),
+        Lines5G: lines5gCount > 0 ? lines5gCount : myActuals.Lines5G,
+        TotalSalesRevenue: totalRevenue > 0 ? totalRevenue : myActuals.TotalSalesRevenue,
+      };
+      setActuals(finalActuals);
 
       // KPI data
       if (isManager) {
@@ -226,6 +225,9 @@ export default function AgentDashboard() {
         const teamPerf = allEmployees
           .filter(e => e.role === 'נציג' || e.role === 'מנהל משמרת')
           .map(emp => {
+            // Get sales from SalesTransactions for this employee
+            const empSales = periodSales.filter(s => s.agent_name === emp.employee_name);
+            
             const empActivities = periodActivities.filter(a => a.user_id === emp.id);
             const empTargets = (allTargets || []).filter(t => 
               t.user_id === emp.id &&
@@ -233,12 +235,21 @@ export default function AgentDashboard() {
               new Date(t.period_end) >= dateStart
             );
             
+            // Calculate from SalesTransactions first
+            const empDevices = empSales.filter(s => s.commission_group_code === 'DEVICES').reduce((sum, s) => sum + (s.quantity || 1), 0);
+            const empAccessories = empSales.filter(s => s.commission_group_code === 'ACCESSORIES_GROUP').reduce((sum, s) => sum + (s.net_amount || 0), 0);
+            const empLines = empSales.filter(s => s.commission_group_code === 'LINES').reduce((sum, s) => sum + (s.quantity || 1), 0);
+            const empLines4g = empSales.filter(s => s.is_line_4g).reduce((sum, s) => sum + (s.quantity || 1), 0);
+            const empLines5g = empSales.filter(s => s.is_line_5g).reduce((sum, s) => sum + (s.quantity || 1), 0);
+            const empTotal = empSales.reduce((sum, s) => sum + (s.net_amount || 0), 0);
+            
+            // Fallback to SalesActivity if no SalesTransactions
             const empActuals = {
-              Devices: empActivities.filter(a => a.metric_type === 'Devices').reduce((s, a) => s + (a.metric_value || 0), 0),
-              AccessoriesRevenue: empActivities.filter(a => a.metric_type === 'AccessoriesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
-              Lines4G: empActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0),
-              Lines5G: empActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
-              TotalSalesRevenue: empActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+              Devices: empDevices > 0 ? empDevices : empActivities.filter(a => a.metric_type === 'Devices').reduce((s, a) => s + (a.metric_value || 0), 0),
+              AccessoriesRevenue: empAccessories > 0 ? empAccessories : empActivities.filter(a => a.metric_type === 'AccessoriesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+              Lines4G: empLines > 0 ? empLines : (empLines4g > 0 ? empLines4g : empActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0)),
+              Lines5G: empLines5g > 0 ? empLines5g : empActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
+              TotalSalesRevenue: empTotal > 0 ? empTotal : empActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
             };
 
             const empTargetMap = {};
@@ -475,6 +486,7 @@ export default function AgentDashboard() {
           onProcess={(id) => handleStatusChange(id, 'InProgress')}
           onClose={(id) => handleStatusChange(id, 'Closed')}
           onSetReminder={handleSetReminder}
+          onDelete={(id) => handleStatusChange(id, 'Deleted')}
         />
       )}
 
