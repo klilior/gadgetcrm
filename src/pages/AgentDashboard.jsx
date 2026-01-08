@@ -188,11 +188,16 @@ export default function AgentDashboard() {
       });
       
       // Helper to match sales rep names (handle Linet variations)
+      // Linet uses first name only (e.g., "דניאל", "גיא") while Employee has full name (e.g., "דניאל קריידן", "גיא פאר")
       const matchSalesRep = (txSalesRep, employeeName) => {
         if (!txSalesRep || !employeeName) return false;
-        const normalizedTx = txSalesRep.toLowerCase().trim();
-        const normalizedEmp = employeeName.toLowerCase().trim();
+        const normalizedTx = txSalesRep.trim();
+        const normalizedEmp = employeeName.trim();
+        const empFirstName = normalizedEmp.split(' ')[0];
+        // Check: exact match, first name match, or contains
         return normalizedTx === normalizedEmp || 
+               normalizedTx === empFirstName ||
+               normalizedEmp.startsWith(normalizedTx + ' ') ||
                normalizedTx.includes(normalizedEmp) || 
                normalizedEmp.includes(normalizedTx);
       };
