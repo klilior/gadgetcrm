@@ -8,12 +8,28 @@ const getPercentColor = (percent) => {
   return 'text-red-600 bg-red-100';
 };
 
-const PercentBadge = ({ percent }) => {
+const PercentBadge = ({ percent, actual, target }) => {
   const colorClass = getPercentColor(percent);
+  // Show actual/target if available
+  const hasData = actual !== undefined && target !== undefined;
+  
   return (
-    <Badge className={`${colorClass} font-bold`}>
-      {percent}%
-    </Badge>
+    <div className="flex flex-col items-center gap-0.5">
+      {hasData && target > 0 && (
+        <span className="text-xs text-gray-500">{actual}/{target}</span>
+      )}
+      {hasData && target === 0 && actual > 0 && (
+        <span className="text-xs text-blue-600 font-medium">{actual}</span>
+      )}
+      {target > 0 && (
+        <Badge className={`${colorClass} font-bold text-xs`}>
+          {percent}%
+        </Badge>
+      )}
+      {(!hasData || (target === 0 && actual === 0)) && (
+        <span className="text-gray-400 text-xs">-</span>
+      )}
+    </div>
   );
 };
 
@@ -75,19 +91,19 @@ export default function TeamPerformanceTable({ teamData }) {
               <TableRow key={member.userId} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                 <TableCell className="font-medium">{member.userName}</TableCell>
                 <TableCell className="text-center">
-                  <PercentBadge percent={calcPercent(member.actuals?.Devices, member.targets?.Devices)} />
+                  <PercentBadge percent={calcPercent(member.actuals?.Devices, member.targets?.Devices)} actual={member.actuals?.Devices || 0} target={member.targets?.Devices || 0} />
                 </TableCell>
                 <TableCell className="text-center">
-                  <PercentBadge percent={calcPercent(member.actuals?.AccessoriesRevenue, member.targets?.AccessoriesRevenue)} />
+                  <PercentBadge percent={calcPercent(member.actuals?.AccessoriesRevenue, member.targets?.AccessoriesRevenue)} actual={member.actuals?.AccessoriesRevenue || 0} target={member.targets?.AccessoriesRevenue || 0} />
                 </TableCell>
                 <TableCell className="text-center">
-                  <PercentBadge percent={calcPercent(member.actuals?.Lines4G, member.targets?.Lines4G)} />
+                  <PercentBadge percent={calcPercent(member.actuals?.Lines4G, member.targets?.Lines4G)} actual={member.actuals?.Lines4G || 0} target={member.targets?.Lines4G || 0} />
                 </TableCell>
                 <TableCell className="text-center">
-                  <PercentBadge percent={calcPercent(member.actuals?.Lines5G, member.targets?.Lines5G)} />
+                  <PercentBadge percent={calcPercent(member.actuals?.Lines5G, member.targets?.Lines5G)} actual={member.actuals?.Lines5G || 0} target={member.targets?.Lines5G || 0} />
                 </TableCell>
                 <TableCell className="text-center">
-                  <PercentBadge percent={calcPercent(member.actuals?.TotalSalesRevenue, member.targets?.TotalSalesRevenue)} />
+                  <PercentBadge percent={calcPercent(member.actuals?.TotalSalesRevenue, member.targets?.TotalSalesRevenue)} actual={member.actuals?.TotalSalesRevenue || 0} target={member.targets?.TotalSalesRevenue || 0} />
                 </TableCell>
                 <TableCell className="text-center">
                   <Badge variant="outline">{member.openLeads || 0}</Badge>
@@ -105,19 +121,19 @@ export default function TeamPerformanceTable({ teamData }) {
             <TableRow className="bg-purple-50 font-bold">
               <TableCell>סה״כ צוות</TableCell>
               <TableCell className="text-center">
-                <PercentBadge percent={calcPercent(totals.devices, totals.devicesTarget)} />
+                <PercentBadge percent={calcPercent(totals.devices, totals.devicesTarget)} actual={totals.devices} target={totals.devicesTarget} />
               </TableCell>
               <TableCell className="text-center">
-                <PercentBadge percent={calcPercent(totals.accessories, totals.accessoriesTarget)} />
+                <PercentBadge percent={calcPercent(totals.accessories, totals.accessoriesTarget)} actual={totals.accessories} target={totals.accessoriesTarget} />
               </TableCell>
               <TableCell className="text-center">
-                <PercentBadge percent={calcPercent(totals.lines4g, totals.lines4gTarget)} />
+                <PercentBadge percent={calcPercent(totals.lines4g, totals.lines4gTarget)} actual={totals.lines4g} target={totals.lines4gTarget} />
               </TableCell>
               <TableCell className="text-center">
-                <PercentBadge percent={calcPercent(totals.lines5g, totals.lines5gTarget)} />
+                <PercentBadge percent={calcPercent(totals.lines5g, totals.lines5gTarget)} actual={totals.lines5g} target={totals.lines5gTarget} />
               </TableCell>
               <TableCell className="text-center">
-                <PercentBadge percent={calcPercent(totals.total, totals.totalTarget)} />
+                <PercentBadge percent={calcPercent(totals.total, totals.totalTarget)} actual={totals.total} target={totals.totalTarget} />
               </TableCell>
               <TableCell className="text-center">
                 <Badge variant="outline">{totals.openLeads}</Badge>
