@@ -20,6 +20,7 @@ import LoginScreen from "./components/LoginScreen";
 import { UserProvider } from "./components/UserAuth";
 import AddUserModal from "./components/AddUserModal";
 import PaymentModal from "./components/payments/PaymentModal"; // Added PaymentModal import
+import QuickLeadButton from "./components/leads/QuickLeadButton";
 
 function AppContent({ children, currentPageName }) {
   const { currentUser, activeUsers, logout, switchUser, removeUserFromShift, endShift, isLoading } = useUser();
@@ -544,7 +545,10 @@ function AppContent({ children, currentPageName }) {
           onClose={() => setShowPaymentModal(false)}
         />
       )}
-    </div>
+
+      {/* Quick Lead FAB - visible for all non-technician users */}
+      {!isTechnicianRole && <QuickLeadButton />}
+      </div>
   );
 }
 
