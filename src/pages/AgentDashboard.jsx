@@ -183,19 +183,64 @@ export default function AgentDashboard() {
 
       // Calculate actuals from SalesTransactions - ALWAYS use them as primary source
       const periodSales = (allSalesTransactions || []).filter(s => {
-        const saleDate = new Date(s.sale_date || s.created_date);
+        const saleDate = new Date(s.issue_date || s.created_date);
         return isWithinInterval(saleDate, { start: dateStart, end: dateEnd });
       });
       
-      const mySales = periodSales.filter(s => s.agent_name === currentUser?.employee_name);
+      // Helper to match sales rep names (handle Linet variations)
+      const matchSalesRep = (txSalesRep, employeeName) => {
+        if (!txSalesRep || !employeeName) return false;
+        const normalizedTx = txSalesRep.toLowerCase().trim();
+        const normalizedEmp = employeeName.toLowerCase().trim();
+        return normalizedTx === normalizedEmp || 
+               normalizedTx.includes(normalizedEmp) || 
+               normalizedEmp.includes(normalizedTx);
+      };
+      
+      // Helper to identify category type from Linet category field
+      const isDeviceCategory = (cat) => {
+        if (!cat) return false;
+        const lower = cat.toLowerCase();
+        return lower.includes('מכשיר') || lower.includes('סמארטפון') || lower.includes('טלפון') || 
+               lower.includes('device') || lower.includes('phone') || lower.includes('סלולר');
+      };
+      
+      const isAccessoryCategory = (cat) => {
+        if (!cat) return false;
+        const lower = cat.toLowerCase();
+        return lower.includes('אביזר') || lower.includes('accessory') || lower.includes('כיסוי') || 
+               lower.includes('מגן') || lower.includes('מטען') || lower.includes('אוזני');
+      };
+      
+      const isLineCategory = (cat) => {
+        if (!cat) return false;
+        const lower = cat.toLowerCase();
+        return lower.includes('קו') || lower.includes('sim') || lower.includes('line') || 
+               lower.includes('חבילה') || lower.includes('מנוי');
+      };
+      
+      const is4GLine = (tx) => {
+        const cat = (tx.category || '').toLowerCase();
+        const prod = (tx.product_name || '').toLowerCase();
+        return (cat.includes('4g') || prod.includes('4g')) && !cat.includes('5g') && !prod.includes('5g');
+      };
+      
+      const is5GLine = (tx) => {
+        const cat = (tx.category || '').toLowerCase();
+        const prod = (tx.product_name || '').toLowerCase();
+        return cat.includes('5g') || prod.includes('5g');
+      };
+      
+      const mySales = periodSales.filter(s => matchSalesRep(s.sales_rep, currentUser?.employee_name));
       
       // Calculate from sales transactions
-      const devicesCount = mySales.filter(s => s.commission_group_code === 'DEVICES').reduce((sum, s) => sum + (s.quantity || 1), 0);
-      const accessoriesRevenue = mySales.filter(s => s.commission_group_code === 'ACCESSORIES_GROUP').reduce((sum, s) => sum + (s.net_amount || 0), 0);
-      const linesCount = mySales.filter(s => s.commission_group_code === 'LINES').reduce((sum, s) => sum + (s.quantity || 1), 0);
-      const lines4gCount = mySales.filter(s => s.is_line_4g).reduce((sum, s) => sum + (s.quantity || 1), 0);
-      const lines5gCount = mySales.filter(s => s.is_line_5g).reduce((sum, s) => sum + (s.quantity || 1), 0);
-      const totalRevenue = mySales.reduce((sum, s) => sum + (s.net_amount || 0), 0);
+      const devicesCount = mySales.filter(s => isDeviceCategory(s.category)).reduce((sum, s) => sum + (s.quantity || 1), 0);
+      const accessoriesRevenue = mySales.filter(s => isAccessoryCategory(s.category)).reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
+      const lineSales = mySales.filter(s => isLineCategory(s.category));
+      const linesCount = lineSales.reduce((sum, s) => sum + (s.quantity || 1), 0);
+      const lines4gCount = lineSales.filter(s => is4GLine(s)).reduce((sum, s) => sum + (s.quantity || 1), 0);
+      const lines5gCount = lineSales.filter(s => is5GLine(s)).reduce((sum, s) => sum + (s.quantity || 1), 0);
+      const totalRevenue = mySales.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
 
       // Use SalesTransaction data primarily, fallback to SalesActivity
       const finalActuals = {
