@@ -271,7 +271,7 @@ export default function AgentDashboard() {
           .filter(e => e.role === 'נציג' || e.role === 'מנהל משמרת')
           .map(emp => {
             // Get sales from SalesTransactions for this employee
-            const empSales = periodSales.filter(s => s.agent_name === emp.employee_name);
+            const empSales = periodSales.filter(s => matchSalesRep(s.sales_rep, emp.employee_name));
             
             const empActivities = periodActivities.filter(a => a.user_id === emp.id);
             const empTargets = (allTargets || []).filter(t => 
@@ -280,13 +280,14 @@ export default function AgentDashboard() {
               new Date(t.period_end) >= dateStart
             );
             
-            // Calculate from SalesTransactions first
-            const empDevices = empSales.filter(s => s.commission_group_code === 'DEVICES').reduce((sum, s) => sum + (s.quantity || 1), 0);
-            const empAccessories = empSales.filter(s => s.commission_group_code === 'ACCESSORIES_GROUP').reduce((sum, s) => sum + (s.net_amount || 0), 0);
-            const empLines = empSales.filter(s => s.commission_group_code === 'LINES').reduce((sum, s) => sum + (s.quantity || 1), 0);
-            const empLines4g = empSales.filter(s => s.is_line_4g).reduce((sum, s) => sum + (s.quantity || 1), 0);
-            const empLines5g = empSales.filter(s => s.is_line_5g).reduce((sum, s) => sum + (s.quantity || 1), 0);
-            const empTotal = empSales.reduce((sum, s) => sum + (s.net_amount || 0), 0);
+            // Calculate from SalesTransactions first - use category-based detection
+            const empDevices = empSales.filter(s => isDeviceCategory(s.category)).reduce((sum, s) => sum + (s.quantity || 1), 0);
+            const empAccessories = empSales.filter(s => isAccessoryCategory(s.category)).reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
+            const empLineSales = empSales.filter(s => isLineCategory(s.category));
+            const empLines = empLineSales.reduce((sum, s) => sum + (s.quantity || 1), 0);
+            const empLines4g = empLineSales.filter(s => is4GLine(s)).reduce((sum, s) => sum + (s.quantity || 1), 0);
+            const empLines5g = empLineSales.filter(s => is5GLine(s)).reduce((sum, s) => sum + (s.quantity || 1), 0);
+            const empTotal = empSales.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
             
             // Fallback to SalesActivity if no SalesTransactions
             const empActuals = {
