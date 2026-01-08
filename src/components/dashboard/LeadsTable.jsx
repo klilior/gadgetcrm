@@ -56,6 +56,16 @@ const StatusBadge = ({ status }) => {
   return <Badge className={config.className}>{config.label}</Badge>;
 };
 
+const QuickBadge = ({ lead }) => {
+  if (!lead.quick_incomplete) return null;
+  return (
+    <div className="flex gap-1 mb-1">
+      <Badge className="bg-purple-100 text-purple-800 text-xs">QUICK</Badge>
+      <Badge variant="outline" className="text-orange-600 border-orange-300 text-xs">חסר פרטים</Badge>
+    </div>
+  );
+};
+
 export default function LeadsTable({ 
   leads, 
   onStatusChange, 
@@ -133,6 +143,7 @@ export default function LeadsTable({
                   {formatDistanceToNow(new Date(lead.created_date), { addSuffix: true, locale: he })}
                 </TableCell>
                 <TableCell className="font-mono font-medium">
+                  <QuickBadge lead={lead} />
                   <a href={`tel:${lead.phone}`} className="text-blue-600 hover:underline">
                     {lead.phone}
                   </a>
