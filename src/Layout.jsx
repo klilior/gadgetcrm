@@ -205,6 +205,14 @@ function AppContent({ children, currentPageName }) {
           .glass-button { background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 16px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
           .glass-button:hover { background: rgba(255, 255, 255, 0.25); transform: translateY(-2px); box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15); }
 
+          /* Mobile scrolling fixes */
+          html, body, #root { height: 100%; }
+          .overflow-y-auto { -webkit-overflow-scrolling: touch; }
+          @supports not (height: 100dvh) {
+            .h-\\[100dvh\\] { height: 100vh; }
+            .min-h-\\[100dvh\\] { min-height: 100vh; }
+          }
+
           @media (max-width: 768px) {
             .mobile-padding { padding-left: 8px !important; padding-right: 8px !important; }
             .mobile-text { font-size: 14px !important; }
