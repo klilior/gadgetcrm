@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, Database, Tag, Users, Trash2, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import EmployeeSyncPanel from "@/components/admin/EmployeeSyncPanel";
+import EmployeeTargetsAudit from "@/components/admin/EmployeeTargetsAudit";
 
 export default function SalesDataAdmin() {
     const { currentUser } = useUser();
@@ -392,6 +393,10 @@ export default function SalesDataAdmin() {
                     <TabsTrigger value="employeeSync" className="rounded-lg data-[state=active]:bg-amber-100 data-[state=active]:text-amber-800">
                       <Users className="w-4 h-4 mr-2" />
                       אחידות עובדים
+                    </TabsTrigger>
+                    <TabsTrigger value="targetsAudit" className="rounded-lg data-[state=active]:bg-amber-50 data-[state=active]:text-amber-900">
+                      <Target className="w-4 h-4 mr-2" />
+                      בדיקת יעדים
                     </TabsTrigger>
                 </TabsList>
 
