@@ -481,7 +481,7 @@ function AppContent({ children, currentPageName }) {
             )}
           </Sidebar>
 
-          <main className="flex-1 flex flex-col min-w-0">
+          <main className="flex-1 flex flex-col min-w-0 min-h-0">
             <header className="glass-card m-2 md:m-4 p-3 md:p-4 flex justify-between items-center">
                <div className="flex items-center gap-2 md:gap-4 min-w-0">
                   <SidebarTrigger className="glass-button p-2 rounded-xl md:hidden flex-shrink-0" />
@@ -530,7 +530,7 @@ function AppContent({ children, currentPageName }) {
                   </Button>
                 </div>
             </header>
-            <div className="flex-1 overflow-auto p-2 md:p-4 pt-0">
+            <div className="flex-1 min-h-0 overflow-y-auto p-2 md:p-4 pt-0">
               {children}
             </div>
           </main>
