@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Lead, Target, SalesActivity, Employee, Repair, GoalDefinition, GoalProgress, SalesTransaction } from '@/entities/all';
+import { Lead, Target, SalesActivity, Employee, Repair, GoalDefinition, GoalProgress, SalesTransaction, LinetUsersMap } from '@/entities/all';
 import { useUser } from '../components/UserAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,15 @@ import TeamPerformanceTable from '../components/dashboard/TeamPerformanceTable';
 import QuickLeadButton from '../components/leads/QuickLeadButton';
 import QuickLeadsToComplete from '../components/dashboard/QuickLeadsToComplete';
 import EditLeadModal from '../components/leads/EditLeadModal';
+import { 
+  buildEmployeeMap, 
+  filterSalesByEmployee, 
+  filterGoalsByEmployee,
+  filterTargetsByEmployee,
+  calculateSalesSummary,
+  mapGoalsToTargets,
+  mapTargetsToMap
+} from '../components/utils/employeeMapping';
 
 // Helper to calculate SLA status
 const getSlaStatus = (lead) => {
