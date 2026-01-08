@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Lead, Employee } from '@/entities/all';
 import { useUser } from '../UserAuth';
 import { toast } from 'sonner';
-import { Phone, User, FileText, Bell, Clock, Loader2 } from 'lucide-react';
+import { Phone, User, FileText, Bell, Clock, Loader2, StickyNote } from 'lucide-react';
 
 export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
   const { currentUser } = useUser();
@@ -77,7 +77,9 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
         status: 'New',
         reminder_at: formData.reminder_at || null,
         reminder_done: false,
-        sla_due_at: slaDueAt
+        sla_due_at: slaDueAt,
+        capture_type: 'Quick',
+        quick_incomplete: true
       };
 
       await Lead.create(leadData);
@@ -120,8 +122,8 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
       <DialogContent className="max-w-md" dir="rtl">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
-            <Phone className="w-5 h-5 text-purple-600" />
-            ליד מהיר
+            <StickyNote className="w-5 h-5 text-purple-600" />
+            פתק מהיר
           </DialogTitle>
         </DialogHeader>
 
