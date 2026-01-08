@@ -12,6 +12,7 @@ import {
   CheckCircle, XCircle, Settings as SettingsIcon, Truck, X, Trash2, Loader2
 } from "lucide-react";
 import { format, isAfter, differenceInDays } from "date-fns";
+import { Repair as RepairEntity } from "@/entities/all";
 import RepairDetailsModal from "../components/repairs/RepairDetailsModal";
 import NewRepairModal from "../components/repairs/NewRepairModal";
 import { useUser } from "../components/UserAuth";
@@ -230,6 +231,33 @@ export default function RepairDashboard() {
             return format(new Date(dateString), "dd/MM/yyyy");
         } catch (error) {
             return "תאריך לא תקין";
+        }
+    };
+
+    // Extract short repair number (last 4 digits from REP-YYYYMMDD-XXXX format)
+    const getShortRepairId = (repairId) => {
+        if (!repairId) return '----';
+        // Extract last 4 digits after the last dash
+        const parts = repairId.split('-');
+        if (parts.length >= 3) {
+            return parts[parts.length - 1]; // Returns the last part (e.g., "4255")
+        }
+        // If format is different, try to extract last 4 digits
+        const match = repairId.match(/(\d{4})$/);
+        return match ? match[1] : repairId.slice(-4);
+    };
+
+    // Handle inline status change
+    const handleStatusChange = async (repair, newStatus) => {
+        try {
+            await Repair.update(repair.id, { status: newStatus });
+            // Update local state
+            setRepairs(prev => prev.map(r => 
+                r.id === repair.id ? { ...r, status: newStatus } : r
+            ));
+        } catch (error) {
+            console.error("Error updating status:", error);
+            alert("שגיאה בעדכון סטטוס");
         }
     };
 
@@ -466,12 +494,12 @@ export default function RepairDashboard() {
                                             />
                                         </TableHead>
                                     )}
-                                    <TableHead>מס׳ תיקון</TableHead>
+                                    <TableHead>מס׳</TableHead>
                                     <TableHead>לקוח</TableHead>
                                     <TableHead>מכשיר</TableHead>
                                     <TableHead>סוג תיקון</TableHead>
                                     <TableHead>סטטוס</TableHead>
-                                    <TableHead>תאריך</TableHead>
+                                    <TableHead>תאריך קבלה</TableHead>
                                     <TableHead>SLA</TableHead>
                                     <TableHead>פעולות</TableHead>
                                 </TableRow>
@@ -510,8 +538,8 @@ export default function RepairDashboard() {
                                                         />
                                                     </TableCell>
                                                 )}
-                                                <TableCell onClick={() => handleRepairSelect(repair)} className="font-mono text-sm font-semibold text-purple-700">
-                                                    {repair.repair_id}
+                                                <TableCell onClick={() => handleRepairSelect(repair)} className="font-mono text-sm font-bold text-purple-700">
+                                                    {getShortRepairId(repair.repair_id)}
                                                 </TableCell>
                                                 <TableCell onClick={() => handleRepairSelect(repair)}>
                                                     <div>
@@ -533,11 +561,28 @@ export default function RepairDashboard() {
                                                         )}
                                                     </div>
                                                 </TableCell>
-                                                <TableCell onClick={() => handleRepairSelect(repair)}>
-                                                    <Badge style={badgeStyle} className="text-xs flex items-center gap-1 w-fit">
-                                                        {statusIcon}
-                                                        {repair.status}
-                                                    </Badge>
+                                                <TableCell onClick={(e) => e.stopPropagation()}>
+                                                    <Select
+                                                        value={repair.status}
+                                                        onValueChange={(newStatus) => handleStatusChange(repair, newStatus)}
+                                                    >
+                                                        <SelectTrigger className="w-auto min-w-[140px] h-8 border-0 p-0">
+                                                            <Badge style={badgeStyle} className="text-xs flex items-center gap-1 w-fit cursor-pointer">
+                                                                {statusIcon}
+                                                                {repair.status}
+                                                            </Badge>
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="בטיפול/אבחון">בטיפול/אבחון</SelectItem>
+                                                            <SelectItem value="בטיפול החנות">בטיפול החנות</SelectItem>
+                                                            <SelectItem value="הוזמן חלק">הוזמן חלק</SelectItem>
+                                                            <SelectItem value="מכשיר סיים תיקון וממתין לאיסוף">מוכן לאיסוף</SelectItem>
+                                                            <SelectItem value="At_Importer">אצל היבואן</SelectItem>
+                                                            <SelectItem value="Back_From_Importer">חזר מהיבואן</SelectItem>
+                                                            <SelectItem value="לא ניתן לתיקון">לא ניתן לתיקון</SelectItem>
+                                                            <SelectItem value="תיקון נסגר">תיקון נסגר</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
                                                 </TableCell>
                                                 <TableCell onClick={() => handleRepairSelect(repair)} className="text-sm">
                                                     {formatDate(repair.created_date)}
@@ -595,7 +640,7 @@ export default function RepairDashboard() {
                                             )}
                                             <div className="flex justify-between items-start mb-3">
                                                 <div>
-                                                    <p className="font-mono text-sm font-semibold text-purple-700">{repair.repair_id}</p>
+                                                    <p className="font-mono text-sm font-bold text-purple-700">{getShortRepairId(repair.repair_id)}</p>
                                                     <h3 className="font-bold text-lg text-gray-900">{repair.customer?.full_name || 'לקוח לא ידוע'}</h3>
                                                 </div>
                                                 <Badge style={badgeStyle} className="text-xs flex items-center gap-1 w-fit">
