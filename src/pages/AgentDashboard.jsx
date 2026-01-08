@@ -20,6 +20,8 @@ import LeadsTable from '../components/dashboard/LeadsTable';
 import RemindersAlert from '../components/dashboard/RemindersAlert';
 import TeamPerformanceTable from '../components/dashboard/TeamPerformanceTable';
 import QuickLeadButton from '../components/leads/QuickLeadButton';
+import QuickLeadsToComplete from '../components/dashboard/QuickLeadsToComplete';
+import EditLeadModal from '../components/leads/EditLeadModal';
 
 // Helper to calculate SLA status
 const getSlaStatus = (lead) => {
@@ -48,6 +50,8 @@ export default function AgentDashboard() {
   const [teamData, setTeamData] = useState([]);
   const [repairs, setRepairs] = useState([]);
   const [reminders, setReminders] = useState([]);
+  const [quickLeads, setQuickLeads] = useState([]);
+  const [editingLead, setEditingLead] = useState(null);
 
   const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'מנהל משמרת';
   const userId = currentUser?.id;
@@ -104,6 +108,15 @@ export default function AgentDashboard() {
         new Date(l.reminder_at) <= oneHourFromNow
       );
       setReminders(activeReminders);
+
+      // Quick incomplete leads
+      const quickIncomplete = activeLeads.filter(l => 
+        l.quick_incomplete === true &&
+        l.status !== 'Closed' &&
+        l.status !== 'Deleted' &&
+        (isManager || l.assigned_to === userId)
+      ).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+      setQuickLeads(quickIncomplete);
 
       // Filter activities by period
       const periodActivities = (allActivities || []).filter(a => {
@@ -215,9 +228,15 @@ export default function AgentDashboard() {
 
   const handleStatusChange = async (leadId, newStatus) => {
     try {
+      const lead = leads.find(l => l.id === leadId);
       const updateData = { status: newStatus };
       if (newStatus === 'Deleted') {
         updateData.deleted_at = new Date().toISOString();
+      }
+      // Mark as complete if moving to InProgress
+      if (newStatus === 'InProgress' && lead?.quick_incomplete) {
+        updateData.quick_incomplete = false;
+        updateData.capture_type = 'Full';
       }
       await Lead.update(leadId, updateData);
       loadData();
@@ -228,11 +247,26 @@ export default function AgentDashboard() {
 
   const handleMarkReminderDone = async (leadId) => {
     try {
-      await Lead.update(leadId, { reminder_done: true });
+      const lead = leads.find(l => l.id === leadId);
+      const updateData = { reminder_done: true };
+      // Mark as complete if setting reminder done
+      if (lead?.quick_incomplete) {
+        updateData.quick_incomplete = false;
+        updateData.capture_type = 'Full';
+      }
+      await Lead.update(leadId, updateData);
       loadData();
     } catch (error) {
       console.error('Error marking reminder done:', error);
     }
+  };
+
+  const handleOpenEdit = (lead) => {
+    setEditingLead(lead);
+  };
+
+  const handleSetReminder = (lead) => {
+    setEditingLead(lead);
   };
 
   const handleAssignChange = async (leadId, newAssigneeId) => {
@@ -343,6 +377,17 @@ export default function AgentDashboard() {
 
       {/* KPI Strip */}
       <KPIStrip data={kpiData} showTeamStats={isManager} />
+
+      {/* Quick Leads to Complete */}
+      {quickLeads.length > 0 && (
+        <QuickLeadsToComplete
+          leads={quickLeads}
+          onComplete={handleOpenEdit}
+          onProcess={(id) => handleStatusChange(id, 'InProgress')}
+          onClose={(id) => handleStatusChange(id, 'Closed')}
+          onSetReminder={handleSetReminder}
+        />
+      )}
 
       {/* Reminders Alert */}
       {reminders.length > 0 && (
@@ -525,6 +570,16 @@ export default function AgentDashboard() {
 
       {/* Quick Lead FAB */}
       <QuickLeadButton />
+
+      {/* Edit Lead Modal */}
+      {editingLead && (
+        <EditLeadModal
+          isOpen={!!editingLead}
+          onClose={() => setEditingLead(null)}
+          lead={editingLead}
+          onLeadUpdated={loadData}
+        />
+      )}
     </div>
   );
 }
