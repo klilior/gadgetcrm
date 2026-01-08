@@ -140,58 +140,27 @@ export default function AgentDashboard() {
         return isWithinInterval(actDate, { start: dateStart, end: dateEnd });
       });
 
-      // Calculate actuals for current user
-      const myActivities = periodActivities.filter(a => a.user_id === userId);
-      const myActuals = {
-        Devices: myActivities.filter(a => a.metric_type === 'Devices').reduce((s, a) => s + (a.metric_value || 0), 0),
-        AccessoriesRevenue: myActivities.filter(a => a.metric_type === 'AccessoriesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
-        Lines4G: myActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0),
-        Lines5G: myActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
-        TotalSalesRevenue: myActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
-      };
-      setActuals(myActuals);
-
-      // Calculate targets for current user - check both Target and GoalDefinition
-      const myTargets = (allTargets || []).filter(t => 
-        t.user_id === userId &&
-        new Date(t.period_start) <= dateEnd &&
-        new Date(t.period_end) >= dateStart
-      );
-      const targetMap = {};
-      myTargets.forEach(t => {
-        targetMap[t.target_type] = (targetMap[t.target_type] || 0) + t.target_value;
-      });
-
-      // Also check GoalDefinition for targets
-      const myGoals = (allGoals || []).filter(g => {
+      // Filter period goals (within date range)
+      const periodGoals = (allGoals || []).filter(g => {
         const matchesPeriod = new Date(g.period_start) <= dateEnd && new Date(g.period_end) >= dateStart;
-        const matchesUser = g.scope_type === 'TEAM' || g.agent_name === currentUser?.employee_name;
-        return matchesPeriod && matchesUser && g.is_active;
+        return matchesPeriod && g.is_active;
       });
+      
+      // Filter period targets
+      const periodTargets = (allTargets || []).filter(t =>
+        new Date(t.period_start) <= dateEnd && new Date(t.period_end) >= dateStart
+      );
 
-      // Map GoalDefinition to Target format
-      myGoals.forEach(g => {
-        let targetType = null;
-        if (g.commission_group_code === 'DEVICES' && g.metric_type === 'UNITS') {
-          targetType = 'Devices';
-        } else if (g.commission_group_code === 'ACCESSORIES_GROUP' && g.metric_type === 'NET_AMOUNT') {
-          targetType = 'AccessoriesRevenue';
-        } else if (g.commission_group_code === 'LINES' && g.metric_type === 'LINES_4G_UNITS') {
-          targetType = 'Lines4G';
-        } else if (g.commission_group_code === 'LINES' && g.metric_type === 'LINES_5G_UNITS') {
-          targetType = 'Lines5G';
-        } else if (g.commission_group_code === 'LINES' && g.metric_type === 'UNITS') {
-          // Total lines - split to Lines4G if no specific type
-          targetType = 'Lines4G';
-        } else if (g.metric_type === 'NET_AMOUNT') {
-          targetType = 'TotalSalesRevenue';
-        }
-        
-        if (targetType && !targetMap[targetType]) {
-          targetMap[targetType] = g.target_value;
-        }
-      });
-
+      // ========== Current user's targets (from GoalDefinition + Target) ==========
+      const myGoals = filterGoalsByEmployee(periodGoals, employeeMap, userId);
+      const myTargetsRaw = filterTargetsByEmployee(periodTargets, userId);
+      
+      // Combine both sources into unified target map
+      const myGoalsMap = mapGoalsToTargets(myGoals);
+      const myTargetsMap = mapTargetsToMap(myTargetsRaw);
+      
+      // Merge: prefer GoalDefinition, fallback to Target
+      const targetMap = { ...myTargetsMap, ...myGoalsMap };
       setTargets(targetMap);
 
       // Calculate actuals from SalesTransactions - ALWAYS use them as primary source
