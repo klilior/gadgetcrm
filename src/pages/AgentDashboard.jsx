@@ -367,13 +367,13 @@ export default function AgentDashboard() {
         const repairsList = allRepairs || [];
         setRepairs(repairsList);
       } else {
-        // Rep KPIs
+        // Rep KPIs - use finalActuals (from SalesTransaction)
         setKpiData({
-          devices: myActuals.Devices,
-          accessories: myActuals.AccessoriesRevenue,
-          lines4g: myActuals.Lines4G,
-          lines5g: myActuals.Lines5G,
-          total: myActuals.TotalSalesRevenue,
+          devices: finalActuals.Devices,
+          accessories: finalActuals.AccessoriesRevenue,
+          lines4g: finalActuals.Lines4G,
+          lines5g: finalActuals.Lines5G,
+          total: finalActuals.TotalSalesRevenue,
         });
       }
 
