@@ -48,9 +48,7 @@ export default function SendMessageModal({ isOpen, onClose, customer, ticketId }
             // שמור את ההתכתבות ב-Activity
             try {
                 // מצא את ה-client מתוך customer
-                const clients = await base44.entities.Client.filter({ 
-                    phone: customer.phone 
-                });
+                const client = await customersService.findByPhone(customer.phone);
                 
                 await base44.entities.Activity.create({
                     summary: `הודעת וואטסאפ ללקוח ${customer.full_name}`,
@@ -58,7 +56,7 @@ export default function SendMessageModal({ isOpen, onClose, customer, ticketId }
                     content: message,
                     agent_id: currentUser?.id || null,
                     ticket_id: ticketId || null,
-                    order_id: clients.length > 0 ? clients[0].id : null
+                    order_id: client ? client.id : null
                 });
             } catch (activityError) {
                 console.error("Failed to save activity:", activityError);
