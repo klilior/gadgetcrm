@@ -23,6 +23,10 @@ export const suppliersService = {
   async remove(id) {
     return await base44.entities.Suppliers.delete(id);
   },
+  async get(id) {
+    const list = await base44.entities.Suppliers.filter({ id });
+    return (list || [])[0] || null;
+  },
   async search(query, limit = 50) {
     const q = (query || '').toLowerCase();
     if (!q) return [];

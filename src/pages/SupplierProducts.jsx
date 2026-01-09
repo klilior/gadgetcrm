@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { suppliersService } from "../components/utils/suppliersService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,8 +24,8 @@ export default function SupplierProducts() {
     setLoading(true);
     try {
       if (supplierId) {
-        const suppliers = await base44.entities.Suppliers.filter({ id: supplierId });
-        if (suppliers.length > 0) setSupplier(suppliers[0]);
+        const sup = await suppliersService.get(supplierId);
+        if (sup) setSupplier(sup);
         
         const prods = await base44.entities.SupplierProductPrice.filter({ supplier_id: supplierId }, '-last_invoice_date', 500);
         setProducts(prods || []);

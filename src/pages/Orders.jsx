@@ -33,6 +33,7 @@ const getStatusColor = (status) => {
 export default function OrdersPage() {
     const [orders, setOrders] = useState([]);
     const [clients, setClients] = useState({});
+  const [clientsList, setClientsList] = useState([]);
     const [orderProducts, setOrderProducts] = useState({});
     const [isLoading, setIsLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -49,18 +50,19 @@ export default function OrdersPage() {
         setLoadError(null);
         try {
             const Order = (await import("@/entities/all")).Order;
-            const Client = (await import("@/entities/all")).Client;
+
             const OrderProduct = (await import("@/entities/all")).OrderProduct;
             
             if (!Order) throw new Error("Order entity not found");
             if (!Client) throw new Error("Client entity not found");
 
             const [fetchedOrders, fetchedClients] = await Promise.all([
-                Order.list("-order_date", 10000),
-                Client.list()
+            Order.list("-order_date", 10000),
+            (await import('../components/utils/customersService')).customersService.list(2000)
             ]);
             
             setOrders(fetchedOrders || []);
+            setClientsList(fetchedClients || []);
             setClients((fetchedClients || []).reduce((acc, c) => ({ ...acc, [c.id]: c }), {}));
             
             if (OrderProduct) {

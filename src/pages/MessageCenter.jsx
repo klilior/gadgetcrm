@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
+import { customersService } from "../components/utils/customersService";
 import { useUser } from "../components/UserAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,10 +46,10 @@ export default function MessageCenter() {
             // We fetch customers by ID to avoid loading 1000+ irrelevant records
             // We chunk IDs to avoid query limits if needed, but for 200 it's usually fine
             const [customersData, activitiesData] = await Promise.all([
-                customerIds.length > 0 
-                    ? base44.entities.Client.filter({ id: { $in: customerIds } }) 
-                    : [],
-                base44.entities.Activity.list('-created_date', 1000)
+            customerIds.length > 0 
+                ? customersService.getByIds(customerIds)
+                : [],
+            base44.entities.Activity.list('-created_date', 1000)
             ]);
 
             console.log(`✅ Loaded ${customersData.length} customers, ${activitiesData.length} activities, ${conversationsData.length} conversations`);

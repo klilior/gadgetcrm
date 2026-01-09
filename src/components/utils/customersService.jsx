@@ -13,6 +13,10 @@ export const customersService = {
     const list = await this.list(limit);
     return this.toMap(list);
   },
+  async getByIds(ids = []) {
+    if (!ids || ids.length === 0) return [];
+    return await base44.entities.Client.filter({ id: { $in: ids } });
+  },
   async search({ query, phone, email }, limit = 50) {
     const list = await this.list(1000);
     const q = (query || '').toLowerCase();
