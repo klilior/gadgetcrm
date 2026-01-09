@@ -98,16 +98,25 @@ export default function LinesToWorkOn() {
 
     // Search filtering
     const filteredContracts = useMemo(() => {
-        if (!searchTerm) return contracts;
-        
-        const term = searchTerm.toLowerCase();
-        return contracts.filter(c => 
-            c.customer_name?.toLowerCase().includes(term) ||
-            c.customer_phone?.includes(term) ||
-            c.customer_id_number?.includes(term) ||
-            c.msisdn?.includes(term)
-        );
-    }, [contracts, searchTerm]);
+        let list = contracts;
+
+        // Filter orphaned contracts (no current agent) when selected
+        if (agentFilter === 'none') {
+            const knownIds = new Set(agents.map(a => a.user_id));
+            list = list.filter(c => !c.account_owner_id || !knownIds.has(c.account_owner_id));
+        }
+
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            list = list.filter(c => 
+                c.customer_name?.toLowerCase().includes(term) ||
+                c.customer_phone?.includes(term) ||
+                c.customer_id_number?.includes(term) ||
+                c.msisdn?.includes(term)
+            );
+        }
+        return list;
+    }, [contracts, searchTerm, agentFilter, agents]);
 
     const getStatusBadge = (status) => {
         const configs = {
@@ -214,6 +223,7 @@ export default function LinesToWorkOn() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">כל הנציגים</SelectItem>
+                                    <SelectItem value="none">ללא נציג</SelectItem>
                                     {agents.map(a => (
                                         <SelectItem key={a.user_id} value={a.user_id}>
                                             {a.user_name}
@@ -285,7 +295,11 @@ export default function LinesToWorkOn() {
                                             <TableCell className="text-sm">{formatDate(contract.safe_retarget_date)}</TableCell>
                                             <TableCell>{getStatusBadge(contract.status)}</TableCell>
                                             {viewMode === "all_agents" && (
-                                                <TableCell className="text-sm">{contract.account_owner_name}</TableCell>
+                                                <TableCell className="text-sm">
+                                                    {(!contract.account_owner_id || !agents.some(a => a.user_id === contract.account_owner_id)) 
+                                                        ? '-' 
+                                                        : (contract.account_owner_name || '-')}
+                                                </TableCell>
                                             )}
                                             <TableCell className="text-xs text-gray-500">
                                                 {contract.last_action_type || '-'}
