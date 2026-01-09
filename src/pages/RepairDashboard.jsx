@@ -16,6 +16,7 @@ import { Repair as RepairEntity } from "@/entities/all";
 import RepairDetailsModal from "../components/repairs/RepairDetailsModal";
 import NewRepairModal from "../components/repairs/NewRepairModal";
 import { useUser } from "../components/UserAuth";
+import { customersService } from "../components/utils/customersService";
 
 const StatCard = ({ title, value, icon: Icon, color, onClick }) => (
   <div
@@ -155,7 +156,7 @@ export default function RepairDashboard() {
 
             // Load only what we need in parallel
             const [clientsData, devicesData, vendorsData] = await Promise.all([
-                clientIds.length > 0 ? Client.list().catch(() => []) : Promise.resolve([]),
+                customersService.list().catch(() => []),
                 deviceIds.length > 0 ? RepairDevice.list().catch(() => []) : Promise.resolve([]),
                 vendorIds.length > 0 ? RepairVendor.filter({ active: true }).catch(() => []) : Promise.resolve([])
             ]);
