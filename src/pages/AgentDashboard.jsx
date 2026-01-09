@@ -24,10 +24,10 @@ import QuickLeadsToComplete from '../components/dashboard/QuickLeadsToComplete';
 import EditLeadModal from '../components/leads/EditLeadModal';
 import { 
   buildEmployeeMap, 
-  filterSalesByEmployee, 
+  groupSalesByEmployee,
+  calculateSalesSummarySigned,
   filterGoalsByEmployee,
   filterTargetsByEmployee,
-  calculateSalesSummary,
   mapGoalsToTargets,
   mapTargetsToMap
 } from '../components/utils/employeeMapping';
@@ -178,6 +178,8 @@ export default function AgentDashboard() {
         const saleDate = new Date(s.issue_date || s.created_date);
         return isWithinInterval(saleDate, { start: dateStart, end: dateEnd });
       });
+      // שיוך חד-חד ערכי של עסקאות לנציגים
+      const salesByEmployee = groupSalesByEmployee(periodSales, employeeMap);
       
       // Helper to match sales rep names (handle Linet variations)
       // Linet uses first name only (e.g., "דניאל", "גיא") while Employee has full name (e.g., "דניאל קריידן", "גיא פאר")
@@ -234,28 +236,19 @@ export default function AgentDashboard() {
         return cat.includes('5g') || prod.includes('5g');
       };
       
-      const mySales = filterSalesByEmployee(periodSales, employeeMap, userId);
+      const mySales = salesByEmployee[userId] || [];
       
-      // Calculate from sales transactions
-      const devicesCount = mySales.filter(s => isDeviceCategory(s.category, s.product_name)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
-      const accessoriesRevenue = mySales.filter(s => isAccessoryCategory(s.category)).reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
-      const lineSales = mySales.filter(s => isLineCategory(s.category, s.product_name));
-      const linesCount = lineSales.reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
-      const lines4gCount = lineSales.filter(s => is4GLine(s)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
-      const lines5gCount = lineSales.filter(s => is5GLine(s)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
-      const totalRevenue = mySales.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
-
-      // Calculate lines - use total if 4g/5g not specified
-      const finalLines4g = lines4gCount > 0 ? lines4gCount : (linesCount > 0 && lines5gCount === 0 ? linesCount : 0);
-      const finalLines5g = lines5gCount;
+      // חישוב מכירות חתומות (כולל זיכויים) אחרי שיוך ייחודי
+      const mySummary = calculateSalesSummarySigned(mySales);
       
-      // Use SalesTransaction data primarily, fallback to SalesActivity
+      // העדפה לעסקאות בפועל אם קיימות בכלל (גם אם התוצאה 0 נטו), אחרת מגיבוי SalesActivity
+      const hasMyTx = (mySales || []).length > 0;
       const finalActuals = {
-        Devices: devicesCount > 0 ? devicesCount : myActualsFromActivities.Devices,
-        AccessoriesRevenue: accessoriesRevenue > 0 ? accessoriesRevenue : myActualsFromActivities.AccessoriesRevenue,
-        Lines4G: finalLines4g > 0 ? finalLines4g : myActualsFromActivities.Lines4G,
-        Lines5G: finalLines5g > 0 ? finalLines5g : myActualsFromActivities.Lines5G,
-        TotalSalesRevenue: totalRevenue > 0 ? totalRevenue : myActualsFromActivities.TotalSalesRevenue,
+        Devices: hasMyTx ? mySummary.Devices : myActualsFromActivities.Devices,
+        AccessoriesRevenue: hasMyTx ? mySummary.AccessoriesRevenue : myActualsFromActivities.AccessoriesRevenue,
+        Lines4G: hasMyTx ? mySummary.Lines4G : myActualsFromActivities.Lines4G,
+        Lines5G: hasMyTx ? mySummary.Lines5G : myActualsFromActivities.Lines5G,
+        TotalSalesRevenue: hasMyTx ? mySummary.TotalSalesRevenue : myActualsFromActivities.TotalSalesRevenue,
       };
       setActuals(finalActuals);
 
@@ -278,7 +271,7 @@ export default function AgentDashboard() {
           .filter(e => e.role === 'נציג' || e.role === 'מנהל משמרת')
           .map(emp => {
             // Get sales from SalesTransactions for this employee
-            const empSales = filterSalesByEmployee(periodSales, employeeMap, emp.id);
+            const empSales = salesByEmployee[emp.id] || [];
             
             const empActivities = periodActivities.filter(a => a.user_id === emp.id);
             const empTargets = (allTargets || []).filter(t => 
@@ -287,26 +280,16 @@ export default function AgentDashboard() {
               new Date(t.period_end) >= dateStart
             );
             
-            // Calculate from SalesTransactions first - use category-based detection
-            const empDevices = empSales.filter(s => isDeviceCategory(s.category, s.product_name)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
-            const empAccessories = empSales.filter(s => isAccessoryCategory(s.category)).reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
-            const empLineSales = empSales.filter(s => isLineCategory(s.category, s.product_name));
-            const empLines = empLineSales.reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
-            const empLines4g = empLineSales.filter(s => is4GLine(s)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
-            const empLines5g = empLineSales.filter(s => is5GLine(s)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
-            const empTotal = empSales.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
-            
-            // Calculate lines - use total if 4g/5g not specified
-            const finalEmpLines4g = empLines4g > 0 ? empLines4g : (empLines > 0 && empLines5g === 0 ? empLines : 0);
-            const finalEmpLines5g = empLines5g;
-            
-            // Fallback to SalesActivity if no SalesTransactions
+            const hasEmpTx = (empSales || []).length > 0;
+            const empSummary = calculateSalesSummarySigned(empSales);
+
+            // Fallback ל‑SalesActivity רק אם אין בכלל עסקאות בחתך התקופה
             const empActuals = {
-              Devices: empDevices > 0 ? empDevices : empActivities.filter(a => a.metric_type === 'Devices').reduce((s, a) => s + (a.metric_value || 0), 0),
-              AccessoriesRevenue: empAccessories > 0 ? empAccessories : empActivities.filter(a => a.metric_type === 'AccessoriesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
-              Lines4G: finalEmpLines4g > 0 ? finalEmpLines4g : empActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0),
-              Lines5G: finalEmpLines5g > 0 ? finalEmpLines5g : empActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
-              TotalSalesRevenue: empTotal > 0 ? empTotal : empActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+              Devices: hasEmpTx ? empSummary.Devices : empActivities.filter(a => a.metric_type === 'Devices').reduce((s, a) => s + (a.metric_value || 0), 0),
+              AccessoriesRevenue: hasEmpTx ? empSummary.AccessoriesRevenue : empActivities.filter(a => a.metric_type === 'AccessoriesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+              Lines4G: hasEmpTx ? empSummary.Lines4G : empActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0),
+              Lines5G: hasEmpTx ? empSummary.Lines5G : empActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
+              TotalSalesRevenue: hasEmpTx ? empSummary.TotalSalesRevenue : empActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
             };
 
             const empTargetMap = {};
