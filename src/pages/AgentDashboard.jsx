@@ -234,7 +234,7 @@ export default function AgentDashboard() {
         return cat.includes('5g') || prod.includes('5g');
       };
       
-      const mySales = periodSales.filter(s => matchSalesRep(s.sales_rep, currentUser?.employee_name));
+      const mySales = filterSalesByEmployee(periodSales, employeeMap, userId);
       
       // Calculate from sales transactions
       const devicesCount = mySales.filter(s => isDeviceCategory(s.category, s.product_name)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
