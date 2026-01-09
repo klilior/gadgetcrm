@@ -278,7 +278,7 @@ export default function AgentDashboard() {
           .filter(e => e.role === 'נציג' || e.role === 'מנהל משמרת')
           .map(emp => {
             // Get sales from SalesTransactions for this employee
-            const empSales = periodSales.filter(s => matchSalesRep(s.sales_rep, emp.employee_name));
+            const empSales = filterSalesByEmployee(periodSales, employeeMap, emp.id);
             
             const empActivities = periodActivities.filter(a => a.user_id === emp.id);
             const empTargets = (allTargets || []).filter(t => 
