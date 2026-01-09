@@ -228,7 +228,7 @@ function AppContent({ children, currentPageName }) {
 
       <SidebarProvider>
         <div className="h-[100dvh] min-h-0 flex w-full">
-          <Sidebar side="right" collapsible="icon" className="glass-card border-0 m-2 md:m-4 mr-0 transition-all duration-300">
+          <Sidebar side="right" collapsible="icon" className="glass-card border-0 m-2 md:m-4 mr-0 transition-all duration-300 max-h-[100dvh] overflow-y-auto md:overflow-visible">
             <SidebarHeader className="p-3 md:p-6 border-b border-white/20 flex flex-col items-center gap-2 relative">
               <SidebarTrigger className="hidden md:flex absolute left-2 top-2 h-6 w-6 text-gray-400 hover:text-gray-600" />
               <div className="flex flex-col items-center group-data-[state=collapsed]:hidden transition-all duration-300">
