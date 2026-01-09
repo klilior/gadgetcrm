@@ -140,6 +140,16 @@ export default function AgentDashboard() {
         return isWithinInterval(actDate, { start: dateStart, end: dateEnd });
       });
 
+      // Fallback actuals from SalesActivity for the current user
+      const myActivities = (periodActivities || []).filter(a => a.user_id === userId);
+      const myActualsFromActivities = {
+        Devices: myActivities.filter(a => a.metric_type === 'Devices').reduce((s, a) => s + (a.metric_value || 0), 0),
+        AccessoriesRevenue: myActivities.filter(a => a.metric_type === 'AccessoriesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+        Lines4G: myActivities.filter(a => a.metric_type === 'Lines4G').reduce((s, a) => s + (a.metric_value || 0), 0),
+        Lines5G: myActivities.filter(a => a.metric_type === 'Lines5G').reduce((s, a) => s + (a.metric_value || 0), 0),
+        TotalSalesRevenue: myActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
+      };
+
       // Filter period goals (within date range)
       const periodGoals = (allGoals || []).filter(g => {
         const matchesPeriod = new Date(g.period_start) <= dateEnd && new Date(g.period_end) >= dateStart;
@@ -241,11 +251,11 @@ export default function AgentDashboard() {
       
       // Use SalesTransaction data primarily, fallback to SalesActivity
       const finalActuals = {
-        Devices: devicesCount > 0 ? devicesCount : myActuals.Devices,
-        AccessoriesRevenue: accessoriesRevenue > 0 ? accessoriesRevenue : myActuals.AccessoriesRevenue,
-        Lines4G: finalLines4g > 0 ? finalLines4g : myActuals.Lines4G,
-        Lines5G: finalLines5g > 0 ? finalLines5g : myActuals.Lines5G,
-        TotalSalesRevenue: totalRevenue > 0 ? totalRevenue : myActuals.TotalSalesRevenue,
+        Devices: devicesCount > 0 ? devicesCount : myActualsFromActivities.Devices,
+        AccessoriesRevenue: accessoriesRevenue > 0 ? accessoriesRevenue : myActualsFromActivities.AccessoriesRevenue,
+        Lines4G: finalLines4g > 0 ? finalLines4g : myActualsFromActivities.Lines4G,
+        Lines5G: finalLines5g > 0 ? finalLines5g : myActualsFromActivities.Lines5G,
+        TotalSalesRevenue: totalRevenue > 0 ? totalRevenue : myActualsFromActivities.TotalSalesRevenue,
       };
       setActuals(finalActuals);
 
