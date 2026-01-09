@@ -10,14 +10,14 @@ import { useUser } from "../components/UserAuth";
 import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, isBefore, startOfDay, endOfDay, subDays, startOfYear, endOfYear, subMonths, subYears, format } from "date-fns";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import useSuppliers from "../components/hooks/useSuppliers";
 
 export default function PurchasesDashboard() {
   const { currentUser } = useUser();
   const forbidden = currentUser?.role === 'נציג' || currentUser?.role === 'מנהל משמרת';
 
   const [rows, setRows] = useState([]);
-  const [suppliers, setSuppliers] = useState({});
-  const [suppliersList, setSuppliersList] = useState([]);
+  const { suppliersMap, suppliersList } = useSuppliers();
   const [loading, setLoading] = useState(true);
   const [filterSupplier, setFilterSupplier] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -31,10 +31,6 @@ export default function PurchasesDashboard() {
       // Load ALL invoices, not just approved
       const list = await base44.entities.Invoices.filter({}, '-doc_date', 1000);
       setRows(list || []);
-      const sups = await base44.entities.Suppliers.filter({}, undefined, 500);
-      const map = {}; (sups || []).forEach(s => { map[s.id] = s; });
-      setSuppliers(map);
-      setSuppliersList(sups || []);
     } finally { setLoading(false); }
   };
 
@@ -135,7 +131,7 @@ export default function PurchasesDashboard() {
       const key = r.supplier || 'unknown';
       agg[key] = (agg[key] || 0) + (Number(r.total_with_vat) || 0);
     }
-    const items = Object.entries(agg).map(([id, total]) => ({ id, name: suppliers[id]?.name || id, total }));
+    const items = Object.entries(agg).map(([id, total]) => ({ id, name: suppliersMap[id]?.name || id, total }));
     items.sort((a,b) => b.total - a.total);
     return items.slice(0, 10);
   }, [purchases, suppliers]);
@@ -351,7 +347,7 @@ export default function PurchasesDashboard() {
                   <tr><td colSpan={6} className="text-center py-4 text-gray-500">אין חשבוניות</td></tr>
                 ) : recentInvoices.map(inv => (
                   <tr key={inv.id} className="border-b hover:bg-gray-50">
-                    <td className="py-2 px-2">{suppliers[inv.supplier]?.name || inv.supplier || "-"}</td>
+                    <td className="py-2 px-2">{suppliersMap[inv.supplier]?.name || inv.supplier || "-"}</td>
                     <td className="py-2 px-2">{inv.doc_type || "-"}</td>
                     <td className="py-2 px-2 font-mono">{inv.doc_number || "-"}</td>
                     <td className="py-2 px-2">{inv.doc_date || "-"}</td>

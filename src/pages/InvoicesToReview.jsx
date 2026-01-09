@@ -10,11 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import useSuppliers from "../components/hooks/useSuppliers";
 import { RefreshCcw } from "lucide-react";
 
 export default function InvoicesToReview() {
   const [rows, setRows] = useState([]);
-  const [suppliers, setSuppliers] = useState({});
+  const { suppliersMap, suppliersList } = useSuppliers();
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -26,10 +27,6 @@ export default function InvoicesToReview() {
     try {
       const invoices = await base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200);
       setRows(invoices || []);
-      const sups = await base44.entities.Suppliers.list(200);
-      const map = {};
-      (sups || []).forEach((s) => { map[s.id] = s; });
-      setSuppliers(map);
     } finally {
       setLoading(false);
     }
@@ -113,7 +110,7 @@ export default function InvoicesToReview() {
                 ) : (
                   sorted.map((r) => (
                     <TableRow key={r.id} className="cursor-pointer" onClick={() => openRecord(r)}>
-                      <TableCell>{suppliers[r.supplier]?.name || r.supplier || "-"}</TableCell>
+                      <TableCell>{suppliersMap[r.supplier]?.name || r.supplier || "-"}</TableCell>
                       <TableCell>{r.doc_type || "-"}</TableCell>
                       <TableCell>{r.doc_number || "-"}</TableCell>
                       <TableCell>{r.doc_date || "-"}</TableCell>
@@ -143,7 +140,7 @@ export default function InvoicesToReview() {
                   <Select value={selected.supplier || ""} onValueChange={(v) => setSelected({ ...selected, supplier: v })}>
                     <SelectTrigger><SelectValue placeholder="בחר ספק" /></SelectTrigger>
                     <SelectContent>
-                      {Object.values(suppliers).map((s) => (
+                      {suppliersList.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>

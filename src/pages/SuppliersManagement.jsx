@@ -13,6 +13,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useUser } from "../components/UserAuth";
+import { suppliersService } from "../components/utils/suppliersService";
 
 export default function SuppliersManagement() {
   const [suppliers, setSuppliers] = useState([]);
@@ -27,7 +28,7 @@ export default function SuppliersManagement() {
   const load = async () => {
     setLoading(true);
     try {
-      const list = await base44.entities.Suppliers.filter({}, '-created_date', 500);
+      const list = await suppliersService.list(false, 500);
       setSuppliers(list || []);
     } finally {
       setLoading(false);
@@ -60,10 +61,10 @@ export default function SuppliersManagement() {
     setSaving(true);
     try {
       if (editModal.isNew) {
-        await base44.entities.Suppliers.create(form);
+        await suppliersService.create(form);
         toast.success("ספק נוצר בהצלחה");
       } else {
-        await base44.entities.Suppliers.update(editModal.id, form);
+        await suppliersService.update(editModal.id, form);
         toast.success("ספק עודכן בהצלחה");
       }
       setEditModal(null);
@@ -78,7 +79,7 @@ export default function SuppliersManagement() {
   const deleteSupplier = async (id) => {
     if (!confirm("האם למחוק ספק זה?")) return;
     try {
-      await base44.entities.Suppliers.delete(id);
+      await suppliersService.remove(id);
       toast.success("ספק נמחק");
       load();
     } catch (e) {
