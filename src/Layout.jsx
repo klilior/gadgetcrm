@@ -199,7 +199,7 @@ function AppContent({ children, currentPageName }) {
   }
 
   return (
-    <div dir="rtl" className="h-[100dvh] min-h-0 overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 font-sans">
+    <div dir="rtl" className="h-[100dvh] min-h-0 overflow-y-auto md:overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 font-sans">
       <style dangerouslySetInnerHTML={{ __html: `
           .glass-card { background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 24px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); }
           .glass-button { background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 16px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
