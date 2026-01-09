@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Client } from '@/entities/all'; // Using Client entity
+import { customersService } from '../utils/customersService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,8 +29,8 @@ export default function EditCustomerModal({ isOpen, onClose, customer, onSave })
     // Check if clientData exists and has an ID before attempting to save
     if (!clientData || !clientData.id) return;
     try {
-      // Use Client.update and pass clientData directly
-      await Client.update(clientData.id, clientData);
+      // Use customersService.update and pass clientData directly
+      await customersService.update(clientData.id, clientData);
       onSave(); // Call onSave after successful update
     } catch (error) {
       console.error("Failed to save client:", error);

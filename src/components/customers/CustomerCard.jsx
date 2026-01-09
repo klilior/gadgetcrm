@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Client, Ticket, Order, Repair, Activity } from '@/entities/all';
+import { Ticket, Order, Repair, Activity } from '@/entities/all';
+import { customersService } from '../utils/customersService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -102,7 +103,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
 
         setIsLoading(true);
         try {
-            const customerData = await Client.get(customerId);
+            const customerData = await customersService.get(customerId);
             setCustomer(customerData);
 
             const [ordersData, ticketsData, repairsData, activitiesData] = await Promise.all([

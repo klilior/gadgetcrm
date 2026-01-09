@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Client } from "@/entities/all";
+import { customersService } from "../components/utils/customersService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,7 @@ export default function CustomersPage() {
     const loadClients = async () => {
         setIsLoading(true);
         try {
-            const data = await Client.list("-created_date");
+            const data = await customersService.list();
             setClients(data);
             setFilteredClients(data);
         } catch (error) {

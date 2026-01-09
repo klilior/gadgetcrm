@@ -26,4 +26,6 @@ export const customersService = {
       })
       .slice(0, limit);
   },
+  async get(id) { return await base44.entities.Client.get(id); },
+  async update(id, data) { return await base44.entities.Client.update(id, data); },
 };
