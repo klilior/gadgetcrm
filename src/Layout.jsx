@@ -538,7 +538,7 @@ function AppContent({ children, currentPageName }) {
                   </Button>
                 </div>
             </header>
-            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 md:p-4 pt-0" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 md:p-4 pt-0" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y', position: 'relative' }}>
               {children}
             </div>
           </main>
