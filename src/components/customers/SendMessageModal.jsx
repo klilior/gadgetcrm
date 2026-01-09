@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { X, Send, Loader2, AlertTriangle } from 'lucide-react';
 import { useUser } from '../UserAuth';
 import { base44 } from '@/api/base44Client';
+import { customersService } from "../utils/customersService";
 
 export default function SendMessageModal({ isOpen, onClose, customer, ticketId }) {
     const [message, setMessage] = useState('');

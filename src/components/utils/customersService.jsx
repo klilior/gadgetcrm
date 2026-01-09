@@ -32,4 +32,10 @@ export const customersService = {
   },
   async get(id) { return await base44.entities.Client.get(id); },
   async update(id, data) { return await base44.entities.Client.update(id, data); },
+  async create(data) { return await base44.entities.Client.create(data); },
+  async findByPhone(phone) {
+    if (!phone) return null;
+    const list = await base44.entities.Client.filter({ phone });
+    return (list || [])[0] || null;
+  },
 };

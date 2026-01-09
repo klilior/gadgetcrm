@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X, Search, Phone, User, Plus } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { customersService } from "../utils/customersService";
 
 export default function NewConversationModal({ isOpen, onClose, onConversationCreated, customers }) {
     const [searchTerm, setSearchTerm] = useState("");
@@ -63,15 +64,13 @@ export default function NewConversationModal({ isOpen, onClose, onConversationCr
                 const normalizedPhone = normalizePhone(newPhone);
 
                 // Check if customer exists
-                const existing = customers.find(c => 
-                    normalizePhone(c.phone || '') === normalizedPhone
-                );
+                const existing = await customersService.findByPhone(normalizedPhone);
 
                 if (existing) {
                     customer = existing;
                 } else {
                     // Create new customer
-                    customer = await base44.entities.Client.create({
+                    customer = await customersService.create({
                         full_name: newName || normalizedPhone,
                         phone: normalizedPhone,
                         preferred_channel: 'whatsapp'
