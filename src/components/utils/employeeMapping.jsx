@@ -279,3 +279,71 @@ export function mapTargetsToMap(targets) {
   });
   return targetMap;
 }
+
+// ===== Added helpers: unique assignment and signed sales =====
+export function getTxSign(tx) {
+  const raw = String(tx?.doc_type ?? '').trim();
+  const num = parseInt(raw, 10);
+  const isCredit = num === 3 || /credit/i.test(raw);
+  const n = (v) => Number(v ?? 0);
+  const hasNegative = n(tx.total_row_amount) < 0 || n(tx.price_ex_vat) < 0 || n(tx.quantity) < 0;
+  return (isCredit || hasNegative) ? -1 : 1;
+}
+
+export function resolveEmployeeForTransaction(employeeMap, tx) {
+  if (!tx) return null;
+  const directId = tx.employee_id;
+  if (directId && employeeMap.has(directId)) return directId;
+  const name = (tx.sales_rep || '').toLowerCase().trim();
+  if (!name) return null;
+  let bestId = null, bestScore = -1;
+  for (const [id, emp] of employeeMap) {
+    const first = (emp.firstName || '').toLowerCase().trim();
+    for (const aliasRaw of (emp.aliases || [])) {
+      const a = (aliasRaw || '').toLowerCase().trim();
+      let score = 0;
+      if (a === name) score = 3; // התאמה מלאה
+      else if (first && first === name) score = 2; // שם פרטי מלא
+      else if (a.startsWith(name + ' ') || name.startsWith(a + ' ')) score = 1; // prefix
+      if (score > bestScore) { bestScore = score; bestId = id; }
+    }
+  }
+  return bestScore > 0 ? bestId : null;
+}
+
+export function groupSalesByEmployee(salesTransactions = [], employeeMap) {
+  const grouped = {};
+  (salesTransactions || []).forEach((tx) => {
+    const id = resolveEmployeeForTransaction(employeeMap, tx);
+    if (!id) return;
+    if (!grouped[id]) grouped[id] = [];
+    grouped[id].push(tx);
+  });
+  return grouped;
+}
+
+export function calculateSalesSummarySigned(salesTransactions = []) {
+  let devices = 0, accessoriesRevenue = 0, totalRevenue = 0, lines4g = 0, lines5g = 0;
+  (salesTransactions || []).forEach((s) => {
+    const sign = getTxSign(s);
+    const qty = Math.abs(Number(s.quantity ?? 1)) || 1;
+    const price = Math.abs(Number(s.price_ex_vat ?? s.total_row_amount ?? 0));
+
+    if (SalesCategories.isDevice(s.category, s.product_name)) devices += sign * qty;
+    if (SalesCategories.isAccessory(s.category)) accessoriesRevenue += sign * price;
+    if (SalesCategories.isLine(s.category, s.product_name)) {
+      if (SalesCategories.is5GLine(s)) lines5g += sign * qty;
+      else if (SalesCategories.is4GLine(s)) lines4g += sign * qty;
+      else lines4g += sign * qty; // ברירת מחדל
+    }
+
+    totalRevenue += sign * price;
+  });
+  return {
+    Devices: devices,
+    AccessoriesRevenue: Math.round(accessoriesRevenue),
+    Lines4G: lines4g,
+    Lines5G: lines5g,
+    TotalSalesRevenue: Math.round(totalRevenue),
+  };
+}
