@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect } from "react";
-import { Activity, Employee, Ticket, Customer } from "@/entities/all";
+import { Activity, Employee, Ticket } from "@/entities/all";
+import { customersService } from "../components/utils/customersService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,7 @@ export default function TodaysCalls() {
     if (ticketIds.length > 0) {
         const tickets = await Ticket.filter({ id: { $in: ticketIds } });
         const customerIds = [...new Set(tickets.map(t => t.customer_id).filter(Boolean))];
-        const customers = customerIds.length > 0 ? await Customer.filter({ id: { $in: customerIds } }) : [];
+        const customers = customerIds.length > 0 ? await customersService.getByIds(customerIds) : [];
 
         const ticketMap = tickets.reduce((acc, t) => ({...acc, [t.id]: t}), {});
         const customerMap = customers.reduce((acc, c) => ({...acc, [c.id]: c}), {});

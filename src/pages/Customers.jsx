@@ -295,7 +295,7 @@ export default function CustomersPage() {
                         setSelectedClient(null);
                     }}
                     customer={selectedClient}
-                    onUpdate={handleClientUpdate}
+                    onSave={handleClientUpdate}
                 />
             )}
 

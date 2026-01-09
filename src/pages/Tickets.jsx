@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Ticket, Employee, Client } from "@/entities/all";
+import { Ticket, Employee } from "@/entities/all";
+import { customersService } from "../components/utils/customersService";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, User, ChevronDown, PlusCircle, Inbox, Trash2, CheckSquare, Square } from "lucide-react";
@@ -137,7 +138,7 @@ export default function TicketsPage() {
         const [fetchedTickets, fetchedEmployees, fetchedClients] = await Promise.all([
           Ticket.list("-updated_date", 200),
           Employee.list(),
-          Client.list()
+          customersService.list()
         ]);
         
         const empMap = fetchedEmployees.reduce((acc, e) => {
