@@ -503,6 +503,7 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                     repair={repair}
                     client={client}
                     device={device}
+                    vendor={vendor}
                     agent={creatingAgent}
                     isOpen={showPrintLabel}
                     onClose={() => setShowPrintLabel(false)}

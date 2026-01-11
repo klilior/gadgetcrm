@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Printer, X, AlertTriangle } from 'lucide-react';
 
-export default function RepairLabel({ repair, client, device, agent, isOpen, onClose }) {
+export default function RepairLabel({ repair, client, device, vendor, agent, isOpen, onClose }) {
     const printRef = useRef();
 
     const handlePrint = () => {
