@@ -97,7 +97,17 @@ export default function RepairLabel({ repair, client, device, vendor, agent, isO
 
     if (!isOpen) return null;
 
-    const barcodeUrl = `https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(repair.repair_id)}&code=Code128&translate-esc=on`;
+    const getShortRepairId = (repairId) => {
+        if (!repairId) return '';
+        const idStr = String(repairId);
+        const parts = idStr.split('-');
+        if (parts.length >= 3) return parts[parts.length - 1];
+        const match = idStr.match(/(\d{4})$/);
+        return match ? match[1] : idStr.slice(-4);
+    };
+
+    const shortRepairId = getShortRepairId(repair.repair_id);
+    const barcodeUrl = `https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(shortRepairId)}&code=Code128&translate-esc=on`;
 
     const formatDateTime = (dateString) => {
         const date = new Date(dateString);
@@ -131,9 +141,6 @@ export default function RepairLabel({ repair, client, device, vendor, agent, isO
                             GADGET-TEAM
                         </div>
                         
-                        <div className="repair-number">
-                            {repair.repair_id}
-                        </div>
 
                         {repair.quote_required && (
                             <div className="quote-warning">
