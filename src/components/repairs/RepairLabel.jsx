@@ -163,6 +163,19 @@ export default function RepairLabel({ repair, client, device, vendor, agent, isO
                         </div>
                         
                         <div className="info-row">
+                            <span className="info-label">מס' סידורי:</span>
+                            <span>{device?.serial_imei || 'לא צוין'}</span>
+                        </div>
+
+                        <div className="info-row">
+                            <span className="info-label">סוג תיקון:</span>
+                            <span>
+                                {repair.repair_type}
+                                {repair.repair_type === 'מעבדת יבואן' && (vendor?.name ? ` - ${vendor.name}` : '')}
+                            </span>
+                        </div>
+                        
+                        <div className="info-row">
                             <span className="info-label">קוד נעילה:</span>
                             <span>{repair.lock_code || 'לא צוין'}</span>
                         </div>
