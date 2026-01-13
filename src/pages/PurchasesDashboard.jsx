@@ -37,6 +37,12 @@ export default function PurchasesDashboard() {
 
   useEffect(() => { load(); }, []);
 
+  if (loading) {
+    return (
+      <div className="p-6 text-center text-gray-600">טוען דשבורד רכישות...</div>
+    );
+  }
+
   if (forbidden) {
     return (
       <div className="p-6 text-center">
