@@ -11,7 +11,7 @@ import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, is
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import useSuppliers from "../components/hooks/useSuppliers";
-import { AlertCircle } from "lucide-react";
+
 
 export default function PurchasesDashboard() {
   const { currentUser } = useUser();
@@ -37,18 +37,18 @@ export default function PurchasesDashboard() {
 
   useEffect(() => { load(); }, []);
 
-  if (loading) {
-    return (
-      <div className="p-6 text-center text-gray-600">טוען דשבורד רכישות...</div>
-    );
-  }
-
   if (forbidden) {
     return (
       <div className="p-6 text-center">
         <h1 className="text-2xl font-bold text-red-600">אין הרשאה</h1>
         <p className="text-gray-600 mt-2">דף זה זמין למנהלים בלבד</p>
       </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6 text-center text-gray-600">טוען דשבורד רכישות...</div>
     );
   }
 
