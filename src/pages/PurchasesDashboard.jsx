@@ -37,20 +37,7 @@ export default function PurchasesDashboard() {
 
   useEffect(() => { load(); }, []);
 
-  if (forbidden) {
-    return (
-      <div className="p-6 text-center">
-        <h1 className="text-2xl font-bold text-red-600">אין הרשאה</h1>
-        <p className="text-gray-600 mt-2">דף זה זמין למנהלים בלבד</p>
-      </div>
-    );
-  }
 
-  if (loading) {
-    return (
-      <div className="p-6 text-center text-gray-600">טוען דשבורד רכישות...</div>
-    );
-  }
 
   // Calculate date range
   const getDateRangeBounds = () => {
@@ -161,6 +148,21 @@ export default function PurchasesDashboard() {
     const label = `${w.start.getDate()}/${w.start.getMonth()+1}`;
     return { name: label, total: sumW };
   });
+
+  if (forbidden) {
+    return (
+      <div className="p-6 text-center">
+        <h1 className="text-2xl font-bold text-red-600">אין הרשאה</h1>
+        <p className="text-gray-600 mt-2">דף זה זמין למנהלים בלבד</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6 text-center text-gray-600">טוען דשבורד רכישות...</div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-4" dir="rtl">
