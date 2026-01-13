@@ -11,6 +11,7 @@ import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, is
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import useSuppliers from "../components/hooks/useSuppliers";
+import { AlertCircle } from "lucide-react";
 
 export default function PurchasesDashboard() {
   const { currentUser } = useUser();
