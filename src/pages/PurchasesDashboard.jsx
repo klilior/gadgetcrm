@@ -134,7 +134,7 @@ export default function PurchasesDashboard() {
     const items = Object.entries(agg).map(([id, total]) => ({ id, name: suppliersMap[id]?.name || id, total }));
     items.sort((a,b) => b.total - a.total);
     return items.slice(0, 10);
-  }, [purchases, suppliers]);
+  }, [purchases, suppliersMap]);
 
   // Recent invoices table (filtered)
   const recentInvoices = useMemo(() => {
