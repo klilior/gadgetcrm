@@ -22,6 +22,7 @@ import LineProductMapping from './pages/LineProductMapping';
 import LinesToWorkOn from './pages/LinesToWorkOn';
 import ManageAttendance from './pages/ManageAttendance';
 import ManageEmployees from './pages/ManageEmployees';
+import ManagerControlCenter from './pages/ManagerControlCenter';
 import ManagerDashboard from './pages/ManagerDashboard';
 import MessageCenter from './pages/MessageCenter';
 import MobileInvoiceUpload from './pages/MobileInvoiceUpload';
@@ -51,7 +52,6 @@ import VendorReport from './pages/VendorReport';
 import WeeklySchedule from './pages/WeeklySchedule';
 import WhatsAppDebug from './pages/WhatsAppDebug';
 import WhatsAppProviders from './pages/WhatsAppProviders';
-import ManagerControlCenter from './pages/ManagerControlCenter';
 import __Layout from './Layout.jsx';
 
 
@@ -80,6 +80,7 @@ export const PAGES = {
     "LinesToWorkOn": LinesToWorkOn,
     "ManageAttendance": ManageAttendance,
     "ManageEmployees": ManageEmployees,
+    "ManagerControlCenter": ManagerControlCenter,
     "ManagerDashboard": ManagerDashboard,
     "MessageCenter": MessageCenter,
     "MobileInvoiceUpload": MobileInvoiceUpload,
@@ -109,7 +110,6 @@ export const PAGES = {
     "WeeklySchedule": WeeklySchedule,
     "WhatsAppDebug": WhatsAppDebug,
     "WhatsAppProviders": WhatsAppProviders,
-    "ManagerControlCenter": ManagerControlCenter,
 }
 
 export const pagesConfig = {

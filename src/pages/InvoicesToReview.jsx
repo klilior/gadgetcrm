@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import useSuppliers from "../components/hooks/useSuppliers";
-import { RefreshCcw } from "lucide-react";
+import { RefreshCcw, AlertTriangle, FileText, Eye } from "lucide-react";
 
 export default function InvoicesToReview() {
   const [rows, setRows] = useState([]);
@@ -25,8 +25,13 @@ export default function InvoicesToReview() {
   const load = async () => {
     setLoading(true);
     try {
+      // Only load invoices that have actual data (not empty placeholders)
       const invoices = await base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200);
-      setRows(invoices || []);
+      // Filter out completely empty records (no supplier, no doc_number, no total)
+      const filtered = (invoices || []).filter(inv => 
+        inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
+      );
+      setRows(filtered);
     } finally {
       setLoading(false);
     }
@@ -66,6 +71,33 @@ export default function InvoicesToReview() {
         source_intake: selected.source_intake || undefined,
       };
       await base44.entities.Invoices.update(selected.id, updatePayload);
+      
+      // Learn supplier pattern if supplier was manually set
+      if (selected.supplier && selected.ai_debug_last_extraction_json) {
+        try {
+          const extraction = JSON.parse(selected.ai_debug_last_extraction_json);
+          const normalizedName = extraction.supplier_name_normalized?.trim();
+          if (normalizedName) {
+            // Check if pattern exists
+            const existingPatterns = await base44.entities.SupplierPattern.filter({
+              pattern_type: 'name_pattern',
+              pattern_value: normalizedName
+            });
+            if (!existingPatterns || existingPatterns.length === 0) {
+              await base44.entities.SupplierPattern.create({
+                supplier_id: selected.supplier,
+                pattern_type: 'name_pattern',
+                pattern_value: normalizedName,
+                confidence: 100,
+                learned_from_invoice: selected.id,
+                is_active: true
+              });
+              toast.info("המערכת למדה את הספק לזיהוי עתידי");
+            }
+          }
+        } catch (_) {}
+      }
+      
       toast.success("נשמר בהצלחה");
       setSelected(null);
       load();
