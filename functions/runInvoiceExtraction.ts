@@ -222,9 +222,16 @@ Deno.serve(async (req) => {
     if (!extraction || typeof extraction !== 'object') throw new Error('Invalid extraction response');
 
     if (extraction.classification === 'OTHER' || extraction.should_skip === true) {
+      // Update intake as skipped
       await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
         status: 'דולג',
         status_reason: extraction.skip_reason_he || 'המסמך אינו חשבונית/זיכוי ולכן דולג.'
+      });
+      // Mark the invoice as rejected so it won't appear in review list
+      await base44.asServiceRole.entities.Invoices.update(invoice.id, {
+        extraction_status: 'נדחה',
+        notes: `מסמך דולג: ${extraction.skip_reason_he || 'המסמך אינו חשבונית/זיכוי'}`,
+        ai_debug_last_extraction_json: JSON.stringify(extraction)
       });
       return Response.json({ success: true, skipped: true, reason: 'OTHER', extraction });
     }
@@ -239,29 +246,65 @@ Deno.serve(async (req) => {
 
     if (!validation || typeof validation !== 'object') throw new Error('Invalid validation response');
 
-    // Step 4: Supplier linking
+    // Step 4: Supplier linking with pattern learning
     let supplierId = null;
     const vatId = extraction.supplier_vat_id && String(extraction.supplier_vat_id).trim();
+    const supplierName = extraction.supplier_name?.trim();
+    const normalizedName = extraction.supplier_name_normalized?.trim();
+    
+    // First try to find by VAT ID
     if (vatId) {
       const found = await base44.asServiceRole.entities.Suppliers.filter({ vat_id: vatId }, undefined, 1);
       if (found && found.length > 0) {
         supplierId = found[0].id;
-      } else {
-        const created = await base44.asServiceRole.entities.Suppliers.create({
-          name: extraction.supplier_name || 'לא ידוע',
-          vat_id: vatId,
-          created_from_invoice: true,
-          is_active: true
-        });
-        supplierId = created.id;
       }
-    } else {
+    }
+    
+    // If not found by VAT, try by learned pattern (name pattern)
+    if (!supplierId && normalizedName) {
+      const patterns = await base44.asServiceRole.entities.SupplierPattern.filter({ 
+        pattern_type: 'name_pattern', 
+        pattern_value: normalizedName,
+        is_active: true 
+      }, undefined, 1);
+      if (patterns && patterns.length > 0) {
+        supplierId = patterns[0].supplier_id;
+      }
+    }
+    
+    // Create new supplier if not found
+    if (!supplierId) {
       const created = await base44.asServiceRole.entities.Suppliers.create({
-        name: extraction.supplier_name || 'לא ידוע',
+        name: supplierName || 'לא ידוע',
+        vat_id: vatId || undefined,
         created_from_invoice: true,
         is_active: true
       });
       supplierId = created.id;
+      
+      // Save patterns for future matching
+      if (vatId) {
+        try {
+          await base44.asServiceRole.entities.SupplierPattern.create({
+            supplier_id: supplierId,
+            pattern_type: 'vat_id',
+            pattern_value: vatId,
+            confidence: 100,
+            learned_from_invoice: invoice.id
+          });
+        } catch (_) {} // Ignore if pattern already exists
+      }
+      if (normalizedName) {
+        try {
+          await base44.asServiceRole.entities.SupplierPattern.create({
+            supplier_id: supplierId,
+            pattern_type: 'name_pattern',
+            pattern_value: normalizedName,
+            confidence: 80,
+            learned_from_invoice: invoice.id
+          });
+        } catch (_) {}
+      }
     }
 
     // Step 5: Update invoice
