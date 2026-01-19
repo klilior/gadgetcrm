@@ -91,18 +91,20 @@ function AppContent({ children, currentPageName }) {
       { title: "דוח התחשבנות מעבדה", url: createPageUrl("VendorReport"), icon: BarChart3 }
       ];
       } else if (currentUser) {
+      // For managers - show ManagerControlCenter as "הדשבורד שלי"
+      const dashboardUrl = isManager ? createPageUrl("ManagerControlCenter") : createPageUrl("AgentDashboard");
+
       navigationItems = [
-        { title: "הדשבורד שלי", url: createPageUrl("AgentDashboard"), icon: Trophy },
+        { title: "הדשבורד שלי", url: dashboardUrl, icon: Trophy },
         { title: "קווים לטיפול", url: createPageUrl("LinesToWorkOn"), icon: Phone },
         { title: "דוח מכירות (Linet)", url: createPageUrl("SalesDashboard"), icon: BarChart3 },
         { title: "ביצועי נציגים", url: createPageUrl("AgentPerformanceDashboard"), icon: Users },
-        { title: "מרכז בקרה למנהל", url: createPageUrl("ManagerControlCenter"), icon: BarChart3 },
-      { title: "מרכז הודעות", url: createPageUrl("MessageCenter"), icon: MessageCircle },
-      { title: "הטיקטים שלי", url: createPageUrl("Tickets"), icon: Ticket },
-      { title: "לקוחות", url: createPageUrl("Customers"), icon: Users },
-      { title: "הזמנות", url: createPageUrl("Orders"), icon: Package },
-      { title: "דשבורד תיקונים", url: createPageUrl("RepairDashboard"), icon: Wrench },
-    ];
+        { title: "מרכז הודעות", url: createPageUrl("MessageCenter"), icon: MessageCircle },
+        { title: "הטיקטים שלי", url: createPageUrl("Tickets"), icon: Ticket },
+        { title: "לקוחות", url: createPageUrl("Customers"), icon: Users },
+        { title: "הזמנות", url: createPageUrl("Orders"), icon: Package },
+        { title: "דשבורד תיקונים", url: createPageUrl("RepairDashboard"), icon: Wrench },
+      ];
 
     scheduleMenuItems = [
       { title: "העדפות שלי", url: createPageUrl("ShiftPreferences") },
