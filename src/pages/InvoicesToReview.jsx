@@ -112,7 +112,27 @@ export default function InvoicesToReview() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">חשבוניות לאימות</h1>
-        <Button variant="outline" onClick={load} className="gap-2"><RefreshCcw className="w-4 h-4"/>רענן</Button>
+        <div className="flex gap-2">
+          {canApprove && (
+            <Button 
+              variant="outline" 
+              onClick={async () => {
+                try {
+                  toast.info("מנקה מסמכים שאינם חשבוניות...");
+                  await base44.functions.invoke('cleanupSkippedInvoices');
+                  toast.success("הניקוי הושלם");
+                  load();
+                } catch (e) {
+                  toast.error("שגיאה בניקוי: " + (e?.message || "שגיאה"));
+                }
+              }}
+              className="gap-2"
+            >
+              🧹 נקה מסמכים שאינם חשבוניות
+            </Button>
+          )}
+          <Button variant="outline" onClick={load} className="gap-2"><RefreshCcw className="w-4 h-4"/>רענן</Button>
+        </div>
       </div>
 
       <Card className="glass-card border-0">
