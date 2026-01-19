@@ -140,18 +140,47 @@ export default function InvoicesToReview() {
                 ) : sorted.length === 0 ? (
                   <TableRow><TableCell colSpan={7}>אין תוצאות</TableCell></TableRow>
                 ) : (
-                  sorted.map((r) => (
-                    <TableRow key={r.id} className="cursor-pointer" onClick={() => openRecord(r)}>
-                      <TableCell>{suppliersMap[r.supplier]?.name || r.supplier || "-"}</TableCell>
-                      <TableCell>{r.doc_type || "-"}</TableCell>
-                      <TableCell>{r.doc_number || "-"}</TableCell>
-                      <TableCell>{r.doc_date || "-"}</TableCell>
-                      <TableCell>{r.total_with_vat != null ? r.total_with_vat : "-"}</TableCell>
-                      <TableCell><Badge variant="outline">{r.currency || "-"}</Badge></TableCell>
-                      <TableCell>{r.confidence_score != null ? r.confidence_score : "-"}</TableCell>
-                      <TableCell><Badge variant="outline">{r.extraction_status || "-"}</Badge></TableCell>
-                    </TableRow>
-                  ))
+                  sorted.map((r) => {
+                    const hasData = r.supplier || r.doc_number || r.total_with_vat;
+                    const confidence = r.confidence_score;
+                    const needsReview = !hasData || confidence < 70;
+                    
+                    return (
+                      <TableRow 
+                        key={r.id} 
+                        className={`cursor-pointer hover:bg-purple-50/50 ${needsReview ? 'bg-amber-50/50' : ''}`} 
+                        onClick={() => openRecord(r)}
+                      >
+                        <TableCell className="font-medium">
+                          {suppliersMap[r.supplier]?.name || r.supplier || 
+                            <span className="text-gray-400 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 text-amber-500" />
+                              חסר
+                            </span>
+                          }
+                        </TableCell>
+                        <TableCell>{r.doc_type || <span className="text-gray-400">-</span>}</TableCell>
+                        <TableCell>{r.doc_number || <span className="text-gray-400">-</span>}</TableCell>
+                        <TableCell>{r.doc_date || <span className="text-gray-400">-</span>}</TableCell>
+                        <TableCell className="font-medium">
+                          {r.total_with_vat != null ? `₪${r.total_with_vat.toLocaleString()}` : <span className="text-gray-400">-</span>}
+                        </TableCell>
+                        <TableCell><Badge variant="outline">{r.currency || "ILS"}</Badge></TableCell>
+                        <TableCell>
+                          {confidence != null ? (
+                            <Badge variant={confidence >= 80 ? "default" : confidence >= 50 ? "secondary" : "destructive"}>
+                              {confidence}%
+                            </Badge>
+                          ) : <span className="text-gray-400">-</span>}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={r.extraction_status === 'נקרא בהצלחה' ? 'default' : 'outline'}>
+                            {r.extraction_status || "-"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
