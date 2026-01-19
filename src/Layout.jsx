@@ -32,13 +32,14 @@ function AppContent({ children, currentPageName }) {
     
     const currentPath = location.pathname;
     const isTechnicianRole = currentUser?.role === "טכנאי";
-    
+    const isManagerRole = currentUser?.role === "מנהל" || currentUser?.role === "admin";
+
     // Only redirect if on root or Settings page (which might be default)
     const isRootOrSettings = currentPath === '/' || currentPath === '' || 
                              currentPath.toLowerCase() === '/settings';
-    
+
     if (isRootOrSettings) {
-      const targetPage = isTechnicianRole ? 'RepairDashboard' : 'AgentDashboard';
+      const targetPage = isTechnicianRole ? 'RepairDashboard' : (isManagerRole ? 'ManagerControlCenter' : 'AgentDashboard');
       const targetUrl = createPageUrl(targetPage);
       
       // Use replace to avoid back button issues
