@@ -258,6 +258,14 @@ export default function InvoicesToReview() {
                 </div>
               </div>
 
+              {/* Show source file link if available */}
+              {selected.source_intake && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  <span>מסמך מקור: {selected.source_intake}</span>
+                </div>
+              )}
+
               {!canApprove && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm">
                   פעולה של "אשר חשבונית"/"דחה" זמינה רק למנהלים, ותיושם אוטומטית בכפתורים אלו.
