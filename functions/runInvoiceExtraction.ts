@@ -238,6 +238,118 @@ const VALIDATE_SCHEMA = {
   additionalProperties: true,
 };
 
+// Helper function to process a single invoice extraction
+async function processSingleInvoice(base44, intake, invoice, extraction, invoiceIndex = null) {
+  if (extraction.classification === 'OTHER' || extraction.should_skip === true) {
+    // Update intake as skipped
+    await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
+      status: 'דולג',
+      status_reason: extraction.skip_reason_he || 'המסמך אינו חשבונית/זיכוי ולכן דולג.'
+    });
+    // Mark the invoice as rejected
+    await base44.asServiceRole.entities.Invoices.update(invoice.id, {
+      extraction_status: 'נדחה',
+      notes: `מסמך דולג: ${extraction.skip_reason_he || 'המסמך אינו חשבונית/זיכוי'}`,
+      ai_debug_last_extraction_json: JSON.stringify(extraction)
+    });
+    return { success: true, skipped: true, reason: 'OTHER', extraction };
+  }
+
+  // Validation
+  const validationPrompt = `${VALIDATE_PROMPT}\n\nHere is the extracted JSON (use as input):\n\n${JSON.stringify(extraction)}`;
+  const validation = await base44.integrations.Core.InvokeLLM({
+    prompt: validationPrompt,
+    add_context_from_internet: false,
+    response_json_schema: VALIDATE_SCHEMA,
+  });
+
+  if (!validation || typeof validation !== 'object') throw new Error('Invalid validation response');
+
+  // Supplier linking with pattern learning
+  let supplierId = null;
+  const vatId = extraction.supplier_vat_id && String(extraction.supplier_vat_id).trim();
+  const supplierName = extraction.supplier_name?.trim();
+  const normalizedName = extraction.supplier_name_normalized?.trim();
+  
+  // First try to find by VAT ID
+  if (vatId) {
+    const found = await base44.asServiceRole.entities.Suppliers.filter({ vat_id: vatId }, undefined, 1);
+    if (found && found.length > 0) {
+      supplierId = found[0].id;
+    }
+  }
+  
+  // If not found by VAT, try by learned pattern
+  if (!supplierId && normalizedName) {
+    const patterns = await base44.asServiceRole.entities.SupplierPattern.filter({ 
+      pattern_type: 'name_pattern', 
+      pattern_value: normalizedName,
+      is_active: true 
+    }, undefined, 1);
+    if (patterns && patterns.length > 0) {
+      supplierId = patterns[0].supplier_id;
+    }
+  }
+  
+  // Create new supplier if not found
+  if (!supplierId) {
+    const created = await base44.asServiceRole.entities.Suppliers.create({
+      name: supplierName || 'לא ידוע',
+      vat_id: vatId || undefined,
+      created_from_invoice: true,
+      is_active: true
+    });
+    supplierId = created.id;
+    
+    // Save patterns for future matching
+    if (vatId) {
+      try {
+        await base44.asServiceRole.entities.SupplierPattern.create({
+          supplier_id: supplierId,
+          pattern_type: 'vat_id',
+          pattern_value: vatId,
+          confidence: 100,
+          learned_from_invoice: invoice.id
+        });
+      } catch (_) {}
+    }
+    if (normalizedName) {
+      try {
+        await base44.asServiceRole.entities.SupplierPattern.create({
+          supplier_id: supplierId,
+          pattern_type: 'name_pattern',
+          pattern_value: normalizedName,
+          confidence: 80,
+          learned_from_invoice: invoice.id
+        });
+      } catch (_) {}
+    }
+  }
+
+  // Update invoice
+  const indexNote = invoiceIndex !== null ? `[חשבונית ${invoiceIndex + 1} מתוך קובץ מרובה]\n` : '';
+  const notes = `${indexNote}${extraction.display_summary_he || ''}\n${validation.display_validation_he || ''}`.trim();
+  const updatePayload = {
+    supplier: supplierId,
+    doc_type: extraction.doc_type_he || undefined,
+    doc_number: extraction.doc_number || undefined,
+    doc_date: extraction.doc_date || undefined,
+    currency: extraction.currency || undefined,
+    subtotal_before_vat: extraction.subtotal_before_vat ?? undefined,
+    vat_amount: extraction.vat_amount ?? undefined,
+    total_with_vat: extraction.total_with_vat ?? undefined,
+    confidence_score: extraction.overall_confidence ?? undefined,
+    extraction_status: validation.recommended_extraction_status_he,
+    notes: notes,
+    ai_debug_last_extraction_json: JSON.stringify(extraction),
+    ai_debug_last_validation_json: JSON.stringify(validation)
+  };
+
+  await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
+
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction, validation };
+}
+
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   try {
@@ -265,7 +377,74 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, skipped: true, reason: 'Invoice already finalized' });
     }
 
-    // Step 1: Extraction
+    // Step 0: Detect if multiple invoices in file
+    const multiDetect = await base44.integrations.Core.InvokeLLM({
+      prompt: MULTI_INVOICE_DETECT_PROMPT,
+      add_context_from_internet: false,
+      response_json_schema: MULTI_INVOICE_DETECT_SCHEMA,
+      file_urls: [intake.file]
+    });
+
+    const invoiceCount = multiDetect?.invoice_count || 1;
+    const results = [];
+
+    if (invoiceCount > 1 && multiDetect.invoices_detected?.length > 0) {
+      // Multiple invoices detected - process each one
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
+        status_reason: `זוהו ${invoiceCount} חשבוניות בקובץ. מעבד...`
+      });
+
+      for (let i = 0; i < invoiceCount; i++) {
+        const hint = multiDetect.invoices_detected[i];
+        
+        // Create extraction prompt with specific invoice hint
+        const specificPrompt = `${EXTRACT_PROMPT}
+
+IMPORTANT: This document contains MULTIPLE invoices. 
+Extract ONLY invoice #${i + 1} which is: ${hint?.supplier_hint || ''} ${hint?.doc_number_hint || ''} ${hint?.page_hint || ''}
+Ignore all other invoices in the document.`;
+
+        const extraction = await base44.integrations.Core.InvokeLLM({
+          prompt: specificPrompt,
+          add_context_from_internet: false,
+          response_json_schema: EXTRACT_SCHEMA,
+          file_urls: [intake.file]
+        });
+
+        if (!extraction || typeof extraction !== 'object') continue;
+
+        // For first invoice, use the existing linked invoice
+        // For additional invoices, create new invoice records
+        let targetInvoice = invoice;
+        if (i > 0) {
+          const newInvoice = await base44.asServiceRole.entities.Invoices.create({
+            source_intake: intake.id,
+            extraction_status: 'ממתין לאימות',
+            notes: `נוצר אוטומטית - חשבונית ${i + 1} מתוך ${invoiceCount} בקובץ מרובה`
+          });
+          targetInvoice = newInvoice;
+        }
+
+        const result = await processSingleInvoice(base44, intake, targetInvoice, extraction, i);
+        results.push(result);
+      }
+
+      // Update intake status
+      const successCount = results.filter(r => r.success && !r.skipped).length;
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
+        status: 'עובד',
+        status_reason: `עובדו ${successCount} חשבוניות מתוך ${invoiceCount} שזוהו בקובץ`
+      });
+
+      return Response.json({ 
+        success: true, 
+        multiple_invoices: true, 
+        invoice_count: invoiceCount,
+        results 
+      });
+    }
+
+    // Single invoice - normal flow
     const extraction = await base44.integrations.Core.InvokeLLM({
       prompt: EXTRACT_PROMPT,
       add_context_from_internet: false,
