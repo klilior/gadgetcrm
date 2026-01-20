@@ -118,8 +118,8 @@ export default function PurchasesDashboard() {
     custom: "טווח מותאם"
   }[dateRange];
 
-  // Top 10 suppliers (from approved invoices)
-  const topSuppliers = useMemo(() => {
+  // All suppliers sorted by total (from approved invoices)
+  const allSuppliersSorted = useMemo(() => {
     const agg = {};
     for (const r of purchases) {
       const key = r.supplier || 'unknown';
@@ -127,7 +127,7 @@ export default function PurchasesDashboard() {
     }
     const items = Object.entries(agg).map(([id, total]) => ({ id, name: suppliersMap[id]?.name || id, total }));
     items.sort((a,b) => b.total - a.total);
-    return items.slice(0, 10);
+    return items;
   }, [purchases, suppliersMap]);
 
   // Recent invoices table (filtered)
