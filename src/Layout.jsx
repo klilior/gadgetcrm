@@ -100,21 +100,25 @@ function AppContent({ children, currentPageName }) {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
-  // Redirect logic
+  // Redirect logic - check immediately if we need to redirect
+  const currentPath = location.pathname;
+  const isRootOrSettings = currentPath === '/' || currentPath === '' || currentPath.toLowerCase() === '/settings';
+  const needsRedirect = !isLoading && currentUser && isRootOrSettings;
+
   useEffect(() => {
     if (!currentUser || isLoading) return;
-    const currentPath = location.pathname;
-    const isTechnicianRole = currentUser?.role === "טכנאי";
-    const isManagerRole = currentUser?.role === "מנהל" || currentUser?.role === "admin";
-    const isRootOrSettings = currentPath === '/' || currentPath === '' || currentPath.toLowerCase() === '/settings';
-
+    
     if (isRootOrSettings) {
+      setIsRedirecting(true);
+      const isTechnicianRole = currentUser?.role === "טכנאי";
+      const isManagerRole = currentUser?.role === "מנהל" || currentUser?.role === "admin";
       const targetPage = isTechnicianRole ? 'RepairDashboard' : (isManagerRole ? 'ManagerControlCenter' : 'AgentDashboard');
       const targetUrl = createPageUrl(targetPage);
       if (currentPath !== targetUrl) window.location.replace(targetUrl);
     }
-  }, [currentUser, isLoading, location.pathname]);
+  }, [currentUser, isLoading, currentPath, isRootOrSettings]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
