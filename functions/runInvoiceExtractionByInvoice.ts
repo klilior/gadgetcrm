@@ -328,29 +328,75 @@ Deno.serve(async (req) => {
     const validationJson = JSON.stringify(validation);
     await base44.asServiceRole.entities.Invoices.update(invoice.id, { ai_debug_last_validation_json: validationJson });
 
-    // Step 4: Supplier linking
+    // Step 4: Supplier linking - improved with normalized VAT ID matching
     let supplierId = null;
-    const vatId = extraction.supplier_vat_id && String(extraction.supplier_vat_id).trim();
-    if (vatId) {
-      const found = await base44.asServiceRole.entities.Suppliers.filter({ vat_id: vatId }, undefined, 1);
+    const rawVatId = extraction.supplier_vat_id && String(extraction.supplier_vat_id).trim();
+    // Normalize VAT ID: remove non-alphanumeric, uppercase
+    const normalizedVatId = rawVatId ? rawVatId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : null;
+    
+    if (normalizedVatId) {
+      // Try to find by exact vat_id first
+      let found = await base44.asServiceRole.entities.Suppliers.filter({ vat_id: rawVatId }, undefined, 1);
+      
+      // If not found, search all suppliers and compare normalized
+      if (!found || found.length === 0) {
+        const allSuppliers = await base44.asServiceRole.entities.Suppliers.filter({}, undefined, 500);
+        found = allSuppliers.filter(s => {
+          if (!s.vat_id) return false;
+          const normalized = s.vat_id.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+          return normalized === normalizedVatId;
+        });
+      }
+      
       if (found && found.length > 0) {
         supplierId = found[0].id;
+        // Update supplier name if current is generic and we have a better one
+        const currentName = found[0].name || '';
+        const newName = extraction.supplier_name || '';
+        const hasHebrew = /[\u0590-\u05FF]/.test(newName);
+        const currentHasHebrew = /[\u0590-\u05FF]/.test(currentName);
+        if (hasHebrew && !currentHasHebrew && newName.length > currentName.length) {
+          await base44.asServiceRole.entities.Suppliers.update(supplierId, { name: newName });
+        }
       } else {
         const created = await base44.asServiceRole.entities.Suppliers.create({
           name: extraction.supplier_name || 'לא ידוע',
-          vat_id: vatId,
+          vat_id: rawVatId,
           created_from_invoice: true,
           is_active: true
         });
         supplierId = created.id;
       }
     } else {
-      const created = await base44.asServiceRole.entities.Suppliers.create({
-        name: extraction.supplier_name || 'לא ידוע',
-        created_from_invoice: true,
-        is_active: true
-      });
-      supplierId = created.id;
+      // No VAT ID - try to match by normalized name
+      const supplierName = extraction.supplier_name || '';
+      const normalizedName = supplierName.replace(/['"״׳\-]/g, '').replace(/בע"?מ|בעמ|ltd|llc|inc/gi, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      
+      if (normalizedName) {
+        const allSuppliers = await base44.asServiceRole.entities.Suppliers.filter({}, undefined, 500);
+        const found = allSuppliers.find(s => {
+          const sName = (s.name || '').replace(/['"״׳\-]/g, '').replace(/בע"?מ|בעמ|ltd|llc|inc/gi, '').replace(/\s+/g, ' ').trim().toLowerCase();
+          return sName === normalizedName;
+        });
+        
+        if (found) {
+          supplierId = found.id;
+        } else {
+          const created = await base44.asServiceRole.entities.Suppliers.create({
+            name: extraction.supplier_name || 'לא ידוע',
+            created_from_invoice: true,
+            is_active: true
+          });
+          supplierId = created.id;
+        }
+      } else {
+        const created = await base44.asServiceRole.entities.Suppliers.create({
+          name: extraction.supplier_name || 'לא ידוע',
+          created_from_invoice: true,
+          is_active: true
+        });
+        supplierId = created.id;
+      }
     }
 
     // Step 5: Update invoice (mapping + safe auto-approval)
