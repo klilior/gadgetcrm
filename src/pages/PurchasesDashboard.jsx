@@ -318,7 +318,7 @@ export default function PurchasesDashboard() {
       </Card>
 
       {/* Recent invoices table with filters */}
-      <Card className="glass-card border-0">
+      <Card id="invoices-table" className="glass-card border-0">
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <CardTitle>חשבוניות אחרונות ({filteredRows.length})</CardTitle>
