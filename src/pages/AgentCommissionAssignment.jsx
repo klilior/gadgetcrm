@@ -13,11 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Edit, Trash2, Users, Link2 } from "lucide-react";
 
 export default function AgentCommissionAssignment() {
-    const { currentUser } = useUser();
+    const { currentUser, isLoading: userLoading } = useUser();
     const [assignments, setAssignments] = useState([]);
     const [models, setModels] = useState([]);
     const [agents, setAgents] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     
     const [showModal, setShowModal] = useState(false);
     const [editingAssignment, setEditingAssignment] = useState(null);
@@ -33,8 +33,10 @@ export default function AgentCommissionAssignment() {
     const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (!userLoading && currentUser) {
+            loadData();
+        }
+    }, [userLoading, currentUser]);
 
     const loadData = async () => {
         setIsLoading(true);
