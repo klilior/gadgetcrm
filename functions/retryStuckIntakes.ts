@@ -59,8 +59,8 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Call the extraction function
-        const extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', {
+        // Call the extraction function using direct HTTP call (service role doesn't pass user context)
+        const extractionResult = await base44.functions.invoke('runInvoiceExtractionByInvoice', {
           invoice_id: intake.linked_invoice
         });
 
