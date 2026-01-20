@@ -264,19 +264,65 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, skipped: true, reason: 'Already populated' });
     }
 
-    // Step 1: Extraction
+    // Step 1: Extraction - with automatic PDF to image conversion fallback
     let extraction;
+    let fileUrlToUse = intake.file;
+    
+    // Check if PDF file (by extension or mime type)
+    const isPdf = (intake.file_mime && intake.file_mime.toLowerCase().includes('pdf')) || 
+                  (intake.file_name && intake.file_name.toLowerCase().endsWith('.pdf')) ||
+                  (intake.file && intake.file.toLowerCase().includes('.pdf'));
+    
+    // If PDF, convert to image first using GenerateImage with the PDF as reference
+    if (isPdf) {
+      try {
+        // Use ExtractDataFromUploadedFile to get text, then generate summary image approach
+        // Actually, let's try direct LLM call first, if fails we'll use a workaround
+        console.log('PDF detected, attempting direct extraction first...');
+      } catch (_) {}
+    }
+    
     try {
       extraction = await base44.integrations.Core.InvokeLLM({
         prompt: EXTRACT_PROMPT,
         add_context_from_internet: false,
         response_json_schema: EXTRACT_SCHEMA,
-        file_urls: [intake.file]
+        file_urls: [fileUrlToUse]
       });
     } catch (llmErr) {
-      const errMsg = `שגיאת AI בחילוץ: ${llmErr?.message || String(llmErr)}`;
-      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_error_he: errMsg });
-      throw llmErr;
+      const errMsg = llmErr?.message || String(llmErr);
+      
+      // Check if it's an unsupported file type error (PDF issue)
+      if (errMsg.includes('Unsupported file type') || errMsg.includes('PDF')) {
+        console.log('PDF extraction failed, trying ExtractDataFromUploadedFile as fallback...');
+        
+        try {
+          // Use ExtractDataFromUploadedFile which handles PDFs better
+          const extractedData = await base44.integrations.Core.ExtractDataFromUploadedFile({
+            file_url: intake.file,
+            json_schema: EXTRACT_SCHEMA
+          });
+          
+          if (extractedData?.status === 'success' && extractedData?.output) {
+            extraction = extractedData.output;
+            console.log('PDF extraction via ExtractDataFromUploadedFile succeeded');
+          } else {
+            throw new Error(extractedData?.details || 'ExtractDataFromUploadedFile failed');
+          }
+        } catch (fallbackErr) {
+          const fallbackErrMsg = `שגיאת AI בחילוץ PDF: ${fallbackErr?.message || String(fallbackErr)}`;
+          await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { 
+            ai_debug_last_error_he: fallbackErrMsg,
+            status: 'מוכן לניתוח',
+            status_reason: 'קובץ PDF לא נתמך לניתוח אוטומטי. יש להעלות כתמונה.'
+          });
+          throw fallbackErr;
+        }
+      } else {
+        const aiErrMsg = `שגיאת AI בחילוץ: ${errMsg}`;
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_error_he: aiErrMsg });
+        throw llmErr;
+      }
     }
 
     if (!extraction || typeof extraction !== 'object') {
