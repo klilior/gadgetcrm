@@ -5,13 +5,61 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BarChart3, RefreshCcw, FileText, CheckCircle, Clock, AlertTriangle, Calendar } from "lucide-react";
+import { BarChart3, RefreshCcw, FileText, CheckCircle, Clock, AlertTriangle, Calendar, Search, Eye, Download, X } from "lucide-react";
 import { useUser } from "../components/UserAuth";
 import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, isBefore, startOfDay, endOfDay, subDays, startOfYear, endOfYear, subMonths, subYears, format } from "date-fns";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import useSuppliers from "../components/hooks/useSuppliers";
 
+
+function FileActions({ invoiceId, sourceIntake }) {
+  const [fileUrl, setFileUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const loadFile = async () => {
+    if (fileUrl || !sourceIntake) return;
+    setLoading(true);
+    try {
+      const intakes = await base44.entities.InvoiceIntakeRaw.filter({ id: sourceIntake });
+      if (intakes?.[0]?.file) {
+        setFileUrl(intakes[0].file);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (sourceIntake) loadFile();
+  }, [sourceIntake]);
+
+  if (!sourceIntake) return <span className="text-gray-400 text-xs">-</span>;
+  if (loading) return <span className="text-gray-400 text-xs">טוען...</span>;
+  if (!fileUrl) return <span className="text-gray-400 text-xs">אין קובץ</span>;
+
+  return (
+    <div className="flex items-center gap-1">
+      <a
+        href={fileUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="p-1 hover:bg-blue-100 rounded text-blue-600"
+        title="צפייה"
+      >
+        <Eye className="w-4 h-4" />
+      </a>
+      <a
+        href={fileUrl}
+        download
+        className="p-1 hover:bg-green-100 rounded text-green-600"
+        title="הורדה"
+      >
+        <Download className="w-4 h-4" />
+      </a>
+    </div>
+  );
+}
 
 export default function PurchasesDashboard() {
   const { currentUser } = useUser();
@@ -25,6 +73,8 @@ export default function PurchasesDashboard() {
   const [dateRange, setDateRange] = useState("month"); // today, yesterday, week, month, lastMonth, year, lastYear, custom
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [searchText, setSearchText] = useState("");
+  const [sortOrder, setSortOrder] = useState("desc"); // desc = newest first, asc = oldest first
 
   const load = async () => {
     setLoading(true);
@@ -77,13 +127,27 @@ export default function PurchasesDashboard() {
 
   // Filter rows
   const filteredRows = useMemo(() => {
-    return rows.filter(r => {
+    let result = rows.filter(r => {
       if (filterSupplier !== "all" && r.supplier !== filterSupplier) return false;
       if (filterStatus !== "all" && r.extraction_status !== filterStatus) return false;
       if (!inDateRange(r)) return false;
+      // Search by doc_number
+      if (searchText.trim()) {
+        const search = searchText.trim().toLowerCase();
+        const docNum = (r.doc_number || '').toLowerCase();
+        const supplierName = (suppliersMap[r.supplier]?.name || '').toLowerCase();
+        if (!docNum.includes(search) && !supplierName.includes(search)) return false;
+      }
       return true;
     });
-  }, [rows, filterSupplier, filterStatus, dateRange, customFrom, customTo]);
+    // Sort by date
+    result.sort((a, b) => {
+      const dateA = a.doc_date ? new Date(a.doc_date).getTime() : 0;
+      const dateB = b.doc_date ? new Date(b.doc_date).getTime() : 0;
+      return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+    });
+    return result;
+  }, [rows, filterSupplier, filterStatus, dateRange, customFrom, customTo, searchText, sortOrder, suppliersMap]);
 
   const now = new Date();
 
@@ -320,32 +384,62 @@ export default function PurchasesDashboard() {
       {/* Recent invoices table with filters */}
       <Card id="invoices-table" className="glass-card border-0">
         <CardHeader>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <CardTitle>חשבוניות אחרונות ({filteredRows.length})</CardTitle>
-            <div className="flex gap-2">
-              <Select value={filterSupplier} onValueChange={setFilterSupplier}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="כל הספקים" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">כל הספקים</SelectItem>
-                  {suppliersList.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="כל הסטטוסים" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">כל הסטטוסים</SelectItem>
-                  <SelectItem value="ממתין לאימות">ממתין לאימות</SelectItem>
-                  <SelectItem value="נקרא בהצלחה">נקרא בהצלחה</SelectItem>
-                  <SelectItem value="אושר">אושר</SelectItem>
-                  <SelectItem value="נדחה">נדחה</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <CardTitle>חשבוניות ({filteredRows.length})</CardTitle>
+                {filterSupplier !== "all" && (
+                  <Badge className="bg-indigo-100 text-indigo-800 flex items-center gap-1">
+                    {suppliersMap[filterSupplier]?.name}
+                    <button onClick={() => setFilterSupplier("all")} className="hover:text-indigo-600">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    placeholder="חיפוש מספר חשבונית..."
+                    value={searchText}
+                    onChange={e => setSearchText(e.target.value)}
+                    className="pr-8 w-[180px]"
+                  />
+                </div>
+                <Select value={sortOrder} onValueChange={setSortOrder}>
+                  <SelectTrigger className="w-[130px]">
+                    <SelectValue placeholder="מיון" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="desc">חדש לישן</SelectItem>
+                    <SelectItem value="asc">ישן לחדש</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterSupplier} onValueChange={setFilterSupplier}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="כל הספקים" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">כל הספקים</SelectItem>
+                    {suppliersList.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="כל הסטטוסים" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">כל הסטטוסים</SelectItem>
+                    <SelectItem value="ממתין לאימות">ממתין לאימות</SelectItem>
+                    <SelectItem value="נקרא בהצלחה">נקרא בהצלחה</SelectItem>
+                    <SelectItem value="אושר">אושר</SelectItem>
+                    <SelectItem value="נדחה">נדחה</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -360,11 +454,12 @@ export default function PurchasesDashboard() {
                   <th className="text-right py-2 px-2">תאריך</th>
                   <th className="text-right py-2 px-2">סכום</th>
                   <th className="text-right py-2 px-2">סטטוס</th>
+                  <th className="text-right py-2 px-2">קובץ</th>
                 </tr>
               </thead>
               <tbody>
                 {recentInvoices.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-4 text-gray-500">אין חשבוניות</td></tr>
+                  <tr><td colSpan={7} className="text-center py-4 text-gray-500">אין חשבוניות</td></tr>
                 ) : recentInvoices.map(inv => (
                   <tr key={inv.id} className="border-b hover:bg-gray-50">
                     <td className="py-2 px-2">{suppliersMap[inv.supplier]?.name || inv.supplier || "-"}</td>
@@ -381,6 +476,9 @@ export default function PurchasesDashboard() {
                       }>
                         {inv.extraction_status || "לא ידוע"}
                       </Badge>
+                    </td>
+                    <td className="py-2 px-2">
+                      <FileActions invoiceId={inv.id} sourceIntake={inv.source_intake} />
                     </td>
                   </tr>
                 ))}
