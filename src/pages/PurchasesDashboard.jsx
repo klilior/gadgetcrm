@@ -276,14 +276,25 @@ export default function PurchasesDashboard() {
       </div>
 
       <Card className="glass-card border-0">
-        <CardHeader><CardTitle>Top 10 ספקים החודש</CardTitle></CardHeader>
+        <CardHeader><CardTitle>כל הספקים - {dateRangeLabel} (לפי סכום יורד)</CardTitle></CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            {topSuppliers.length === 0 ? (
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {allSuppliersSorted.length === 0 ? (
               <div className="text-gray-500">אין נתונים</div>
-            ) : topSuppliers.map((s, i) => (
-              <div key={s.id} className="flex items-center justify-between border-b py-1">
-                <div className="text-sm">{i+1}. {s.name}</div>
+            ) : allSuppliersSorted.map((s, i) => (
+              <div key={s.id} className="flex items-center justify-between border-b py-2 hover:bg-gray-50 rounded px-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 text-xs w-6">{i+1}.</span>
+                  <button
+                    onClick={() => {
+                      setFilterSupplier(s.id);
+                      document.getElementById('invoices-table')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline text-right"
+                  >
+                    {s.name}
+                  </button>
+                </div>
                 <div className="font-semibold">₪ {s.total.toLocaleString()}</div>
               </div>
             ))}
