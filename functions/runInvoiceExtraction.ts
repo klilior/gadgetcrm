@@ -1,5 +1,59 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
+
+You are a document analysis engine that detects how many separate invoices/credit notes exist in a scanned document.
+
+INPUT
+You will receive ONE document file (PDF/JPG/PNG) that may contain MULTIPLE invoices or credit notes scanned together.
+
+GOAL
+Count how many SEPARATE invoices or credit notes appear in this document.
+Look for visual separations, different invoice numbers, different dates, different suppliers, page breaks between invoices.
+
+OUTPUT SCHEMA (EXACT)
+{
+  "invoice_count": number,
+  "invoices_detected": [
+    {
+      "index": number,
+      "page_hint": string | null,
+      "supplier_hint": string | null,
+      "doc_number_hint": string | null
+    }
+  ],
+  "is_single_invoice": boolean,
+  "detection_confidence": number
+}
+
+RULES
+- invoice_count: total number of separate invoices/credit notes detected
+- If only 1 invoice found, is_single_invoice = true
+- detection_confidence: 0-100
+- For each invoice detected, provide hints about where it is and key identifiers`;
+
+const MULTI_INVOICE_DETECT_SCHEMA = {
+  type: 'object',
+  properties: {
+    invoice_count: { type: 'number' },
+    invoices_detected: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          index: { type: 'number' },
+          page_hint: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          supplier_hint: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          doc_number_hint: { anyOf: [{ type: 'string' }, { type: 'null' }] }
+        }
+      }
+    },
+    is_single_invoice: { type: 'boolean' },
+    detection_confidence: { type: 'number' }
+  },
+  required: ['invoice_count', 'is_single_invoice', 'detection_confidence']
+};
+
 const EXTRACT_PROMPT = `SYSTEM / INSTRUCTION
 
 You are an invoice header extraction engine.
