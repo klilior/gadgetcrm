@@ -52,8 +52,20 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Skip if already processed successfully (has data)
+        const hasData = invoice.doc_number && invoice.total_with_vat;
+        if (hasData && (invoice.extraction_status === 'ממתין לאימות' || invoice.extraction_status === 'נקרא בהצלחה')) {
+          // Update intake status to match
+          await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
+            status: 'עובד',
+            status_reason: 'החשבונית נותחה בהצלחה וממתינה לאימות.'
+          });
+          results.push({ intake_id: intake.id, status: 'synced', reason: 'Invoice already has data, waiting for review' });
+          continue;
+        }
+
         // Reset invoice for re-extraction if needed
-        if (invoice.extraction_status !== 'ממתין לאימות' && invoice.extraction_status !== 'נקרא בהצלחה') {
+        if (!hasData && invoice.extraction_status !== 'ממתין לאימות' && invoice.extraction_status !== 'נקרא בהצלחה') {
           await base44.asServiceRole.entities.Invoices.update(invoice.id, {
             extraction_status: 'ממתין לאימות'
           });
