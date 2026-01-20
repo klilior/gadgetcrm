@@ -227,7 +227,8 @@ function AppContent({ children, currentPageName }) {
     setOpenSection(openSection === section ? null : section);
   };
 
-  if (isLoading) {
+  // Show loading screen while loading OR while redirecting from root/settings
+  if (isLoading || needsRedirect || isRedirecting) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-lg text-gray-600">טוען...</div>
