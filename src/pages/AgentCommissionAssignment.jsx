@@ -126,6 +126,14 @@ export default function AgentCommissionAssignment() {
         return model?.name || modelId;
     };
 
+    if (userLoading || isLoading) {
+        return (
+            <div className="p-6 text-center">
+                <p className="text-gray-600">טוען...</p>
+            </div>
+        );
+    }
+
     if (!isManager) {
         return (
             <div className="p-6 text-center">
