@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowRight, TrendingUp, TrendingDown, Minus, Package, RefreshCcw, FileText } from "lucide-react";
+import { ArrowRight, TrendingUp, TrendingDown, Minus, Package, RefreshCcw, FileText, Receipt } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createPageUrl } from "@/utils";
 
 export default function SupplierProducts() {
@@ -16,6 +17,7 @@ export default function SupplierProducts() {
   
   const [supplier, setSupplier] = useState(null);
   const [products, setProducts] = useState([]);
+  const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [invoiceDetails, setInvoiceDetails] = useState(null);
@@ -29,6 +31,10 @@ export default function SupplierProducts() {
         
         const prods = await base44.entities.SupplierProductPrice.filter({ supplier_id: supplierId }, '-last_invoice_date', 500);
         setProducts(prods || []);
+        
+        // Load invoices for this supplier
+        const invs = await base44.entities.Invoices.filter({ supplier: supplierId }, '-doc_date', 500);
+        setInvoices(invs || []);
       }
     } finally {
       setLoading(false);
@@ -105,66 +111,138 @@ export default function SupplierProducts() {
               <div><span className="text-gray-500">שם:</span> <strong>{supplier.name}</strong></div>
               <div><span className="text-gray-500">ח.פ/עוסק:</span> <strong>{supplier.vat_id || '-'}</strong></div>
               <div><span className="text-gray-500">סה"כ מוצרים:</span> <strong>{products.length}</strong></div>
+              <div><span className="text-gray-500">סה"כ חשבוניות:</span> <strong>{invoices.length}</strong></div>
               <div><span className="text-gray-500">סטטוס:</span> {supplier.is_active ? <Badge className="bg-green-100 text-green-800">פעיל</Badge> : <Badge variant="outline">לא פעיל</Badge>}</div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      <Card className="glass-card border-0">
-        <CardHeader>
-          <CardTitle>רשימת מוצרים ({products.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center py-8">טוען...</div>
-          ) : products.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">אין מוצרים עדיין</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>מק"ט</TableHead>
-                    <TableHead>שם מוצר</TableHead>
-                    <TableHead>מחיר אחרון</TableHead>
-                    <TableHead>מחיר מינימום</TableHead>
-                    <TableHead>מחיר מקסימום</TableHead>
-                    <TableHead>שינוי</TableHead>
-                    <TableHead>רכישות</TableHead>
-                    <TableHead>תאריך אחרון</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.map((p) => (
-                    <TableRow key={p.id} className="cursor-pointer hover:bg-gray-50" onClick={() => openProductDetails(p)}>
-                      <TableCell className="font-mono font-semibold">{p.sku}</TableCell>
-                      <TableCell>{p.product_name}</TableCell>
-                      <TableCell className="font-semibold">₪{p.last_price_before_vat?.toFixed(2) || '-'}</TableCell>
-                      <TableCell className="text-green-600">₪{p.min_price_before_vat?.toFixed(2) || p.last_price_before_vat?.toFixed(2) || '-'}</TableCell>
-                      <TableCell className="text-red-600">₪{p.max_price_before_vat?.toFixed(2) || p.last_price_before_vat?.toFixed(2) || '-'}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          {getPriceChangeIcon(p.price_change_direction)}
-                          {getPriceChangeBadge(p.price_change_direction, p.price_change_percent)}
-                        </div>
-                      </TableCell>
-                      <TableCell>{p.purchase_count || 1}</TableCell>
-                      <TableCell>{p.last_invoice_date || '-'}</TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="sm">
-                          <FileText className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="invoices" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="invoices" className="gap-2">
+            <Receipt className="w-4 h-4" />
+            חשבוניות ({invoices.length})
+          </TabsTrigger>
+          <TabsTrigger value="products" className="gap-2">
+            <Package className="w-4 h-4" />
+            מוצרים ({products.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="invoices">
+          <Card className="glass-card border-0">
+            <CardHeader>
+              <CardTitle>חשבוניות ספק ({invoices.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8">טוען...</div>
+              ) : invoices.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">אין חשבוניות</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>מספר חשבונית</TableHead>
+                        <TableHead>סוג</TableHead>
+                        <TableHead>תאריך</TableHead>
+                        <TableHead>סכום לפני מע"מ</TableHead>
+                        <TableHead>מע"מ</TableHead>
+                        <TableHead>סה"כ</TableHead>
+                        <TableHead>סטטוס</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {invoices.map((inv) => (
+                        <TableRow key={inv.id}>
+                          <TableCell className="font-mono font-semibold">{inv.doc_number || '-'}</TableCell>
+                          <TableCell>{inv.doc_type || '-'}</TableCell>
+                          <TableCell>{inv.doc_date || '-'}</TableCell>
+                          <TableCell>₪{inv.subtotal_before_vat?.toLocaleString() || '-'}</TableCell>
+                          <TableCell>₪{inv.vat_amount?.toLocaleString() || '-'}</TableCell>
+                          <TableCell className="font-semibold">₪{inv.total_with_vat?.toLocaleString() || '-'}</TableCell>
+                          <TableCell>
+                            <Badge variant={inv.extraction_status === 'אושר' ? 'default' : 'outline'}>
+                              {inv.extraction_status || 'לא ידוע'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Link to={`${createPageUrl("InvoicesToReview")}?invoice_id=${inv.id}`}>
+                              <Button variant="ghost" size="sm">
+                                <FileText className="w-4 h-4" />
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="products">
+          <Card className="glass-card border-0">
+            <CardHeader>
+              <CardTitle>רשימת מוצרים ({products.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8">טוען...</div>
+              ) : products.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">אין מוצרים עדיין</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>מק"ט</TableHead>
+                        <TableHead>שם מוצר</TableHead>
+                        <TableHead>מחיר אחרון</TableHead>
+                        <TableHead>מחיר מינימום</TableHead>
+                        <TableHead>מחיר מקסימום</TableHead>
+                        <TableHead>שינוי</TableHead>
+                        <TableHead>רכישות</TableHead>
+                        <TableHead>תאריך אחרון</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {products.map((p) => (
+                        <TableRow key={p.id} className="cursor-pointer hover:bg-gray-50" onClick={() => openProductDetails(p)}>
+                          <TableCell className="font-mono font-semibold">{p.sku}</TableCell>
+                          <TableCell>{p.product_name}</TableCell>
+                          <TableCell className="font-semibold">₪{p.last_price_before_vat?.toFixed(2) || '-'}</TableCell>
+                          <TableCell className="text-green-600">₪{p.min_price_before_vat?.toFixed(2) || p.last_price_before_vat?.toFixed(2) || '-'}</TableCell>
+                          <TableCell className="text-red-600">₪{p.max_price_before_vat?.toFixed(2) || p.last_price_before_vat?.toFixed(2) || '-'}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              {getPriceChangeIcon(p.price_change_direction)}
+                              {getPriceChangeBadge(p.price_change_direction, p.price_change_percent)}
+                            </div>
+                          </TableCell>
+                          <TableCell>{p.purchase_count || 1}</TableCell>
+                          <TableCell>{p.last_invoice_date || '-'}</TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="sm">
+                              <FileText className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={!!selectedProduct} onOpenChange={(open) => !open && closeModal()}>
         <DialogContent className="max-w-lg" dir="rtl">
