@@ -18,6 +18,18 @@ Only two document types are relevant:
 - Credit Note (חשבונית זיכוי)
 Anything else must be classified as OTHER and skipped.
 
+CRITICAL SUPPLIER IDENTIFICATION RULES:
+1. The supplier name is the COMPANY that ISSUED the invoice (the seller), NOT the customer/buyer.
+2. Look for the supplier name at the TOP of the invoice, usually with their logo.
+3. The supplier VAT ID (עוסק מורשה / ח.פ.) is a 9-digit Israeli number - extract ONLY the digits.
+4. Common patterns to identify the supplier section:
+   - Logo area (top left or top right)
+   - "עוסק מורשה:" followed by a 9-digit number
+   - "ח.פ.:" or "מספר חברה:" followed by a number
+5. IGNORE numbers that start with "IL", "IN", or contain letters - these are usually document/account numbers, NOT VAT IDs.
+6. The correct VAT ID format is exactly 9 digits (e.g., "516542024"), no letters, no prefixes.
+7. If you see multiple numbers, prefer the one labeled "עוסק מורשה" over others.
+
 STRICT OUTPUT RULES
 1) Output ONLY a single valid JSON object. No markdown, no code fences, no commentary.
 2) Never guess. If not confidently found, use null.
