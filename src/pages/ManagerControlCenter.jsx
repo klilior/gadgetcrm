@@ -17,6 +17,7 @@ import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tool
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import useSuppliers from "../components/hooks/useSuppliers";
+import UndeliveredOrdersWidget from "../components/dashboard/UndeliveredOrdersWidget";
 
 // Ratio thresholds for color coding
 const RATIO_THRESHOLDS = { good: 40, warning: 60 }; // green < 40%, orange 40-60%, red > 60%
