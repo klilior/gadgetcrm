@@ -318,10 +318,11 @@ Deno.serve(async (req) => {
         const dateTo = format(parseISO(toDatetime), 'yyyy-MM-dd');
 
         let offset = 0;
-        let moreData = true;
-        let stats = { fetched: 0, created: 0, updated: 0, skipped: 0, line_contracts_created: 0 };
-        const startTime = Date.now();
-        const allDocuments = []; // Collect all documents for customer sync
+            let moreData = true;
+            let stats = { fetched: 0, created: 0, updated: 0, skipped: 0, line_contracts_created: 0, undelivered_tasks_created: 0, undelivered_tasks_updated: 0 };
+            const startTime = Date.now();
+            const allDocuments = []; // Collect all documents for customer sync
+            const UNDELIVERED_TRIGGER_SKU = "963258741"; // SKU that triggers undelivered order task
 
         console.log(`📅 Fetching documents from ${dateFrom} to ${dateTo}`);
 
