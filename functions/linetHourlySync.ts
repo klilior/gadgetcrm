@@ -37,14 +37,29 @@ Deno.serve(async (req) => {
 
         console.log(`📅 Hourly Sync: ${fromDatetime} → ${toDatetime}`);
 
-        // Call the main sync function using SDK invoke
-        const syncResult = await base44.asServiceRole.functions.invoke('runLinetSync', {
-            from_datetime: fromDatetime,
-            to_datetime: toDatetime,
-            trigger_type: "HOURLY",
-            update_last_successful: true
+        // Call the main sync function using internal fetch (same auth context)
+        const baseUrl = req.url.replace(/\/[^\/]*$/, '');
+        const syncResponse = await fetch(`${baseUrl}/runLinetSync`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': req.headers.get('Authorization') || '',
+                'X-Base44-App-Id': req.headers.get('X-Base44-App-Id') || ''
+            },
+            body: JSON.stringify({
+                from_datetime: fromDatetime,
+                to_datetime: toDatetime,
+                trigger_type: "HOURLY",
+                update_last_successful: true
+            })
         });
 
+        if (!syncResponse.ok) {
+            const errorText = await syncResponse.text();
+            throw new Error(`Sync function failed: ${syncResponse.status} - ${errorText}`);
+        }
+
+        const syncResult = await syncResponse.json();
         console.log("✅ Hourly sync completed:", syncResult);
 
         return Response.json({
