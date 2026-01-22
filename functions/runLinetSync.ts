@@ -586,6 +586,85 @@ Deno.serve(async (req) => {
     }
 });
 
+// Helper to handle UndeliveredOrderTask creation/update
+async function handleUndeliveredOrderTask(base44, doc, usersMap, triggerSku) {
+    const linet_doc_id = String(doc.id);
+    const doc_number = String(doc.docnum);
+    const issue_date = doc.issue_date ? doc.issue_date.split(' ')[0] : null;
+    const sales_rep_name = usersMap[String(doc.owner)] || String(doc.owner);
+    const customer_name = doc.company_name || doc.account_name || doc.company || "General Customer";
+    
+    // Extract customer phone from account data if available
+    let customer_phone = doc.phone || doc.mobile || doc.account_phone || null;
+    
+    // Build products list (excluding trigger SKU)
+    const products = [];
+    if (Array.isArray(doc.docDetailes)) {
+        for (const line of doc.docDetailes) {
+            if (line.sku === triggerSku) continue; // Skip trigger item
+            if (!line.sku && !line.name) continue;
+            products.push({
+                sku: line.sku || "",
+                product_name: line.name || "",
+                qty: Math.abs(parseFloat(line.qty) || 0)
+            });
+        }
+    }
+    
+    // Get owner user ID from LinetUsersMap
+    const userMaps = await base44.asServiceRole.entities.LinetUsersMap.filter({ user_name: sales_rep_name }, null, 1);
+    const owner_user_id = userMaps.length > 0 ? userMaps[0].base44_user_id || String(doc.owner) : String(doc.owner);
+    
+    // Check if task already exists by source_doc_id
+    let existing = await base44.asServiceRole.entities.UndeliveredOrderTask.filter({ source_doc_id: linet_doc_id }, null, 1);
+    
+    // Fallback: check by doc_number + date if source_doc_id not found
+    if (existing.length === 0) {
+        existing = await base44.asServiceRole.entities.UndeliveredOrderTask.filter({
+            source_doc_number: doc_number,
+            source_doc_date: issue_date
+        }, null, 1);
+    }
+    
+    const taskData = {
+        source_system: "Linet",
+        source_doc_id: linet_doc_id,
+        source_doc_number: doc_number,
+        source_doc_date: issue_date,
+        owner_user_id,
+        owner_name: sales_rep_name,
+        customer_name,
+        customer_phone,
+        products_list: JSON.stringify(products)
+    };
+    
+    if (existing.length > 0) {
+        // Update existing task (only if Open)
+        const existingTask = existing[0];
+        if (existingTask.status === 'Open') {
+            await base44.asServiceRole.entities.UndeliveredOrderTask.update(existingTask.id, {
+                customer_name: taskData.customer_name,
+                customer_phone: taskData.customer_phone,
+                products_list: taskData.products_list
+            });
+            return 'updated';
+        }
+        return 'skipped';
+    } else {
+        // Create new task
+        await base44.asServiceRole.entities.UndeliveredOrderTask.create({
+            ...taskData,
+            status: 'Open',
+            activity_log: JSON.stringify([{
+                action: 'נוצר אוטומטית מסנכרון לינט',
+                user: 'system',
+                timestamp: new Date().toISOString()
+            }])
+        });
+        return 'created';
+    }
+}
+
 // Helper to detect carrier from product
 function detectCarrier(sku, productName, mappings) {
     if (!mappings || mappings.length === 0) return null;
