@@ -232,6 +232,9 @@ Deno.serve(async (req) => {
         base44 = createClientFromRequest(req);
         console.log("✅ Base44 client created");
 
+        // Note: This function can be called from automations/other functions without user auth
+        // It uses asServiceRole for all operations, so no user auth check needed
+
         // Parse request
         let body = {};
         try {
