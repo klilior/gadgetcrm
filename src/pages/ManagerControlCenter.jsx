@@ -487,6 +487,14 @@ export default function ManagerControlCenter() {
         </CardContent>
       </Card>
 
+      {/* Undelivered Orders Widget */}
+      <UndeliveredOrdersWidget 
+        currentUser={currentUser}
+        isManager={true}
+        employees={[]}
+        compact={false}
+      />
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-600 to-emerald-500 text-white">
