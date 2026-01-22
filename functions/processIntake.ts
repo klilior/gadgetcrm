@@ -13,13 +13,38 @@ function isValidFile(intake) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    
+    // Support both user-triggered and automation-triggered calls
+    let user = null;
+    try {
+      user = await base44.auth.me();
+    } catch (_) {
+      // May be called by automation without user context
+    }
 
     const bodyText = await req.text();
     const body = bodyText ? JSON.parse(bodyText) : {};
-    const intakeId = body.intake_id;
-    if (!intakeId) return Response.json({ error: 'Missing intake_id' }, { status: 400 });
+    
+    // Handle both direct intake_id and entity automation payload format
+    // Entity automations send: { event: { type, entity_name, entity_id }, data: {...} }
+    let intakeId = body.intake_id;
+    
+    if (!intakeId && body.event?.entity_id) {
+      // This is from an entity automation
+      intakeId = body.event.entity_id;
+      console.log(`Processing intake from entity automation: ${intakeId}`);
+    }
+    
+    if (!intakeId && body.data?.id) {
+      // Fallback: automation might send data directly
+      intakeId = body.data.id;
+      console.log(`Processing intake from automation data: ${intakeId}`);
+    }
+    
+    if (!intakeId) {
+      console.error('Missing intake_id. Received body:', JSON.stringify(body));
+      return Response.json({ error: 'Missing intake_id', received: body }, { status: 400 });
+    }
 
     const list = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ id: intakeId });
     const intake = list?.[0];
