@@ -26,9 +26,14 @@ CRITICAL SUPPLIER IDENTIFICATION RULES:
    - Logo area (top left or top right)
    - "עוסק מורשה:" followed by a 9-digit number
    - "ח.פ.:" or "מספר חברה:" followed by a number
-5. IGNORE numbers that start with "IL", "IN", or contain letters - these are usually document/account numbers, NOT VAT IDs.
-6. The correct VAT ID format is exactly 9 digits (e.g., "516542024"), no letters, no prefixes.
-7. If you see multiple numbers, prefer the one labeled "עוסק מורשה" over others.
+5. CRITICAL: NEVER use document numbers as VAT ID! These are NOT VAT IDs:
+   - Numbers starting with "IL" or "IN" (e.g., "IN264000429" is a document number, NOT a VAT ID)
+   - Invoice numbers, order numbers, account numbers
+   - Any number that appears next to "מספר חשבונית", "Invoice No", "Document No", etc.
+6. The correct VAT ID format is EXACTLY 9 digits (e.g., "516542024"), no letters, no prefixes.
+7. VAT ID is ALWAYS labeled as one of: "עוסק מורשה", "ח.פ.", "מספר חברה", "VAT ID", "Tax ID"
+8. If you cannot find a clearly labeled 9-digit VAT ID, set supplier_vat_id to null - do NOT guess!
+9. If you see multiple numbers, ONLY use the one explicitly labeled as VAT/Tax ID.
 
 STRICT OUTPUT RULES
 1) Output ONLY a single valid JSON object. No markdown, no code fences, no commentary.
