@@ -230,15 +230,21 @@ const VALIDATE_SCHEMA = {
 };
 
 Deno.serve(async (req) => {
-  const base44 = createClientFromRequest(req);
-  try {
-    // Support both user-triggered and automation-triggered calls
-    // No auth required since this is called by automations and other backend functions
-    
-    const text = await req.text();
-    const body = text ? JSON.parse(text) : {};
-    const invoiceId = body.invoice_id;
-    if (!invoiceId) return Response.json({ error: 'Missing invoice_id' }, { status: 400 });
+    const base44 = createClientFromRequest(req);
+    try {
+      // Support both user-triggered and automation-triggered calls
+      // Check if user is authenticated (for frontend calls)
+      let user = null;
+      try {
+        user = await base44.auth.me();
+      } catch (_) {
+        // May be called by automation/other functions without user context - that's OK
+      }
+
+      const text = await req.text();
+      const body = text ? JSON.parse(text) : {};
+      const invoiceId = body.invoice_id;
+      if (!invoiceId) return Response.json({ error: 'Missing invoice_id' }, { status: 400 });
     
     console.log(`Starting extraction for invoice: ${invoiceId}`);
 
