@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 import { subDays } from 'npm:date-fns@2.30.0';
 
 Deno.serve(async (req) => {
@@ -14,13 +14,14 @@ Deno.serve(async (req) => {
 
         console.log(`📅 Nightly Sync: ${fromDatetime} → ${toDatetime}`);
 
-        // Call the main sync function directly with fetch
-        const functionUrl = `${req.url.split('/functions/')[0]}/functions/runLinetSync`;
-        const syncResponse = await fetch(functionUrl, {
+        // Call the main sync function using internal fetch (same auth context)
+        const baseUrl = req.url.replace(/\/[^\/]*$/, '');
+        const syncResponse = await fetch(`${baseUrl}/runLinetSync`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': req.headers.get('Authorization') || ''
+                'Authorization': req.headers.get('Authorization') || '',
+                'X-Base44-App-Id': req.headers.get('X-Base44-App-Id') || ''
             },
             body: JSON.stringify({
                 from_datetime: fromDatetime,
@@ -31,7 +32,8 @@ Deno.serve(async (req) => {
         });
 
         if (!syncResponse.ok) {
-            throw new Error(`Sync function failed: ${syncResponse.status}`);
+            const errorText = await syncResponse.text();
+            throw new Error(`Sync function failed: ${syncResponse.status} - ${errorText}`);
         }
 
         const syncResult = await syncResponse.json();
