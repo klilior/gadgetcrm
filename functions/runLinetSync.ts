@@ -513,7 +513,7 @@ Deno.serve(async (req) => {
         }
         await base44.asServiceRole.entities.SyncMetadata.update(metadata.id, metadataUpdate);
 
-        console.log(`✅ Sync completed: ${stats.created} created, ${stats.updated} updated, ${stats.skipped} skipped, ${stats.line_contracts_created} line contracts`);
+        console.log(`✅ Sync completed: ${stats.created} created, ${stats.updated} updated, ${stats.skipped} skipped, ${stats.line_contracts_created} line contracts, ${stats.undelivered_tasks_created} undelivered tasks created, ${stats.undelivered_tasks_updated} updated`);
 
         // Sync customers for all account_ids seen in this sync
         let customerSyncStats = null;
