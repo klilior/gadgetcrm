@@ -157,9 +157,23 @@ Deno.serve(async (req) => {
         let extractionResult = null;
         let extractionError = null;
         try { 
-          extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: invoiceId }); 
+          // Use internal fetch to call extraction function (avoids auth issues)
+          const baseUrl = req.url.replace(/\/[^\/]*$/, '');
+          const extractResponse = await fetch(`${baseUrl}/runInvoiceExtractionByInvoice`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': req.headers.get('Authorization') || '',
+              'X-Base44-App-Id': req.headers.get('X-Base44-App-Id') || ''
+            },
+            body: JSON.stringify({ invoice_id: invoiceId })
+          });
+          extractionResult = await extractResponse.json();
+          if (!extractResponse.ok) {
+            extractionError = extractionResult?.error || `Status ${extractResponse.status}`;
+          }
           // Update intake status based on result
-          if (extractionResult?.data?.success) {
+          if (extractionResult?.success) {
             await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'עובד', status_reason: 'ניתוח AI הושלם בהצלחה' });
           }
         } catch (extractErr) {
