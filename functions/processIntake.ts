@@ -22,29 +22,39 @@ Deno.serve(async (req) => {
       // May be called by automation without user context
     }
 
-    const bodyText = await req.text();
-    const body = bodyText ? JSON.parse(bodyText) : {};
-    
-    // Handle both direct intake_id and entity automation payload format
-    // Entity automations send: { event: { type, entity_name, entity_id }, data: {...} }
-    let intakeId = body.intake_id;
-    
-    if (!intakeId && body.event?.entity_id) {
-      // This is from an entity automation
-      intakeId = body.event.entity_id;
-      console.log(`Processing intake from entity automation: ${intakeId}`);
+    let body = {};
+    try {
+      const bodyText = await req.text();
+      body = bodyText ? JSON.parse(bodyText) : {};
+    } catch (parseErr) {
+      console.error('Body parse error:', parseErr.message);
     }
     
-    if (!intakeId && body.data?.id) {
-      // Fallback: automation might send data directly
+    console.log('Received payload:', JSON.stringify(body));
+    
+    // Handle multiple payload formats:
+    // 1. Direct: { intake_id: "..." }
+    // 2. Entity automation: { event: { type, entity_name, entity_id }, data: {...}, old_data: {...} }
+    let intakeId = body.intake_id;
+    
+    // Entity automation format - entity_id is in event object
+    if (!intakeId && body.event && body.event.entity_id) {
+      intakeId = body.event.entity_id;
+      console.log(`Processing intake from entity automation event: ${intakeId}`);
+    }
+    
+    // Fallback: data.id from automation
+    if (!intakeId && body.data && body.data.id) {
       intakeId = body.data.id;
-      console.log(`Processing intake from automation data: ${intakeId}`);
+      console.log(`Processing intake from automation data.id: ${intakeId}`);
     }
     
     if (!intakeId) {
-      console.error('Missing intake_id. Received body:', JSON.stringify(body));
-      return Response.json({ error: 'Missing intake_id', received: body }, { status: 400 });
+      console.error('Missing intake_id. Body keys:', Object.keys(body), 'Full body:', JSON.stringify(body).substring(0, 500));
+      return Response.json({ error: 'Missing intake_id', body_keys: Object.keys(body) }, { status: 400 });
     }
+    
+    console.log(`Processing intake_id: ${intakeId}`);
 
     const list = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ id: intakeId });
     const intake = list?.[0];
