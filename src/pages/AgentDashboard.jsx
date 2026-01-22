@@ -540,6 +540,15 @@ export default function AgentDashboard() {
         />
       )}
 
+      {/* Undelivered Orders Widget */}
+      <UndeliveredOrdersWidget 
+        currentUser={currentUser}
+        isManager={isManager}
+        employees={employees}
+        compact={false}
+        onRefresh={loadData}
+      />
+
       {/* Main Content */}
       {isManager ? (
         // Manager View
