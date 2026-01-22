@@ -382,7 +382,21 @@ Deno.serve(async (req) => {
                 const doc_type_name = is_credit ? "חשבונית זיכוי" : "חשבונית מס קבלה";
 
                 if (Array.isArray(doc.docDetailes)) {
-                    for (const line of doc.docDetailes) {
+                    // Check for undelivered order trigger (SKU 963258741)
+            const hasUndeliveredTrigger = doc.docDetailes?.some(line => line.sku === UNDELIVERED_TRIGGER_SKU);
+            
+            if (hasUndeliveredTrigger && !is_credit) {
+                // Create or update UndeliveredOrderTask
+                try {
+                    const taskResult = await handleUndeliveredOrderTask(base44, doc, usersMap, UNDELIVERED_TRIGGER_SKU);
+                    if (taskResult === 'created') stats.undelivered_tasks_created++;
+                    else if (taskResult === 'updated') stats.undelivered_tasks_updated++;
+                } catch (taskErr) {
+                    console.error(`Failed to handle undelivered task for doc ${linet_doc_id}:`, taskErr.message);
+                }
+            }
+            
+            for (const line of doc.docDetailes) {
                         const sku = line.sku || "";
                         const product_name = line.name || "";
                         let quantity = parseNum(line.qty);
