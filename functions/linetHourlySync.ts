@@ -1,5 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
-import { subHours, format } from 'npm:date-fns@2.30.0';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { subHours } from 'npm:date-fns@2.30.0';
 
 const SYNC_KEY = "linet_main_sync";
 
@@ -37,27 +37,14 @@ Deno.serve(async (req) => {
 
         console.log(`📅 Hourly Sync: ${fromDatetime} → ${toDatetime}`);
 
-        // Call the main sync function directly with fetch
-        const functionUrl = `${req.url.split('/functions/')[0]}/functions/runLinetSync`;
-        const syncResponse = await fetch(functionUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': req.headers.get('Authorization') || ''
-            },
-            body: JSON.stringify({
-                from_datetime: fromDatetime,
-                to_datetime: toDatetime,
-                trigger_type: "HOURLY",
-                update_last_successful: true
-            })
+        // Call the main sync function using SDK invoke
+        const syncResult = await base44.asServiceRole.functions.invoke('runLinetSync', {
+            from_datetime: fromDatetime,
+            to_datetime: toDatetime,
+            trigger_type: "HOURLY",
+            update_last_successful: true
         });
 
-        if (!syncResponse.ok) {
-            throw new Error(`Sync function failed: ${syncResponse.status}`);
-        }
-
-        const syncResult = await syncResponse.json();
         console.log("✅ Hourly sync completed:", syncResult);
 
         return Response.json({
