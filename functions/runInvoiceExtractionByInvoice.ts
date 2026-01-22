@@ -194,7 +194,7 @@ Output JSON keys must be English.
 TASKS
 1) Validate math consistency:
    subtotal_before_vat + vat_amount ≈ total_with_vat
-   tolerance: 1.0
+   tolerance: 5.0 (up to 5 NIS difference is acceptable due to rounding)
 2) Validate critical fields presence:
    supplier_name, doc_type_he, doc_number, doc_date, total_with_vat
 3) Recommend invoice extraction status in Hebrew.
