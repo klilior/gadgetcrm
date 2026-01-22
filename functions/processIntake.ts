@@ -101,7 +101,21 @@ Deno.serve(async (req) => {
       let extractionResult = null;
       let extractionError = null;
       try { 
-        extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: intake.linked_invoice }); 
+        // Use internal fetch to call extraction function (avoids auth issues)
+        const baseUrl = req.url.replace(/\/[^\/]*$/, '');
+        const extractResponse = await fetch(`${baseUrl}/runInvoiceExtractionByInvoice`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': req.headers.get('Authorization') || '',
+            'X-Base44-App-Id': req.headers.get('X-Base44-App-Id') || ''
+          },
+          body: JSON.stringify({ invoice_id: intake.linked_invoice })
+        });
+        extractionResult = await extractResponse.json();
+        if (!extractResponse.ok) {
+          extractionError = extractionResult?.error || `Status ${extractResponse.status}`;
+        }
       } catch (err) {
         extractionError = err?.message || String(err);
         console.error('Extraction error (existing link):', extractionError);
