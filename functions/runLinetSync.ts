@@ -546,7 +546,7 @@ Deno.serve(async (req) => {
             success: true,
             stats,
             customer_sync: customerSyncStats,
-            message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים${customerSyncStats ? `, ${customerSyncStats.created + customerSyncStats.updated} לקוחות` : ''}`
+            message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים, ${stats.undelivered_tasks_created} משימות הזמנות${customerSyncStats ? `, ${customerSyncStats.created + customerSyncStats.updated} לקוחות` : ''}`
         });
 
     } catch (error) {
