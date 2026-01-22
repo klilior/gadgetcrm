@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 import { format, subDays, parseISO, addMonths, addDays } from 'npm:date-fns@2.30.0';
 
 const BASE_URL = "https://app.linet.org.il/api";
