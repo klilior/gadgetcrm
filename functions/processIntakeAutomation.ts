@@ -41,12 +41,9 @@ Deno.serve(async (req) => {
     const intakeId = event.entity_id;
     console.log(`Processing intake from automation: ${intakeId}, event type: ${event.type}`);
     
-    // Get full intake data (use data from payload if available, otherwise fetch)
-    let intake = data;
-    if (!intake || !intake.file) {
-      const list = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ id: intakeId });
-      intake = list?.[0];
-    }
+    // Always fetch full intake data to ensure we have current state
+    const list = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ id: intakeId });
+    const intake = list?.[0];
     
     if (!intake) {
       console.error(`Intake not found: ${intakeId}`);
