@@ -232,13 +232,15 @@ const VALIDATE_SCHEMA = {
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   try {
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-
+    // Support both user-triggered and automation-triggered calls
+    // No auth required since this is called by automations and other backend functions
+    
     const text = await req.text();
     const body = text ? JSON.parse(text) : {};
     const invoiceId = body.invoice_id;
     if (!invoiceId) return Response.json({ error: 'Missing invoice_id' }, { status: 400 });
+    
+    console.log(`Starting extraction for invoice: ${invoiceId}`);
 
     const invList = await base44.asServiceRole.entities.Invoices.filter({ id: invoiceId });
     const invoice = invList?.[0];
