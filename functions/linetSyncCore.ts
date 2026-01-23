@@ -267,6 +267,7 @@ export async function executeLinetSync(base44, body = {}) {
     const triggerType = body.trigger_type || 'MANUAL';
     const updateLastSuccessful = body.update_last_successful !== false;
     const createLineContracts = body.create_line_contracts !== false;
+    const disableCustomerSync = body.disable_customer_sync === true;
 
     if (!fromDatetime) {
       fromDatetime = subDays(new Date(), 1).toISOString();
@@ -429,14 +430,18 @@ export async function executeLinetSync(base44, body = {}) {
 
     let customerSyncStats = null;
     try {
-      const uniqueAccountIds = [...new Set(allDocuments.map((doc) => doc.account_id).filter((id) => id && !isNaN(Number(id))).map((id) => Number(id)))];
-      if (uniqueAccountIds.length > 0) {
-        try {
-          const customerSync = await base44.asServiceRole.functions.invoke('syncLinetCustomers', { account_ids: uniqueAccountIds, force_refresh: false });
-          customerSyncStats = customerSync.stats;
-        } catch (invokeErr) {
-          console.log('⚠️ syncLinetCustomers not available or failed:', invokeErr.message);
+      if (!disableCustomerSync) {
+        const uniqueAccountIds = [...new Set(allDocuments.map((doc) => doc.account_id).filter((id) => id && !isNaN(Number(id))).map((id) => Number(id)))] ;
+        if (uniqueAccountIds.length > 0) {
+          try {
+            const customerSync = await base44.asServiceRole.functions.invoke('syncLinetCustomers', { account_ids: uniqueAccountIds, force_refresh: false });
+            customerSyncStats = customerSync.stats;
+          } catch (invokeErr) {
+            console.log('⚠️ syncLinetCustomers not available or failed:', invokeErr.message);
+          }
         }
+      } else {
+        console.log('ℹ️ Customer sync disabled for this run');
       }
     } catch (customerErr) {
       console.log('⚠️ Customer sync skipped:', customerErr.message);

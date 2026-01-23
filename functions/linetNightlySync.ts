@@ -20,7 +20,8 @@ Deno.serve(async (req) => {
             from_datetime: fromDatetime,
             to_datetime: toDatetime,
             trigger_type: "NIGHTLY",
-            update_last_successful: true
+            update_last_successful: true,
+            disable_customer_sync: true
         });
 
         console.log("✅ Nightly sync completed:", syncResult);
