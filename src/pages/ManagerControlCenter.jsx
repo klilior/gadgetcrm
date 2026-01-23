@@ -496,6 +496,28 @@ export default function ManagerControlCenter() {
         </CardContent>
       </Card>
 
+      {/* Pending Invoices Alert */}
+      {pendingInvoicesCount > 0 && (
+        <Link to={createPageUrl("InvoicesToReview")}>
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 transition-all cursor-pointer">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 rounded-full p-2">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="font-bold text-lg">{pendingInvoicesCount} חשבוניות ממתינות לאימות</p>
+                  <p className="text-white/80 text-sm">לחץ כאן לעבור לרשימת החשבוניות</p>
+                </div>
+              </div>
+              <Button variant="secondary" size="sm" className="bg-white text-orange-600 hover:bg-white/90">
+                עבור לאימות →
+              </Button>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
+
       {/* Undelivered Orders Widget */}
       <UndeliveredOrdersWidget 
         currentUser={currentUser}
