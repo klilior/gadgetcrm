@@ -226,14 +226,63 @@ export default function InvoicesToReview() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-w-2xl" dir="rtl">
+      <Dialog open={!!selected} onOpenChange={(open) => { if (!open) { setSelected(null); setIntakeFile(null); } }}>
+        <DialogContent className="max-w-[95vw] w-[1400px] max-h-[90vh] overflow-hidden" dir="rtl">
           <DialogHeader>
             <DialogTitle>פרטי חשבונית</DialogTitle>
           </DialogHeader>
           {selected && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex gap-4 h-[75vh]">
+              {/* Left side - Document viewer */}
+              <div className="flex-1 border rounded-lg bg-gray-50 flex flex-col overflow-hidden">
+                <div className="p-2 border-b bg-white flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-600">תצוגת מסמך</span>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setImageZoom(Math.max(50, imageZoom - 25))}>
+                      <ZoomOut className="w-4 h-4" />
+                    </Button>
+                    <span className="text-xs text-gray-500">{imageZoom}%</span>
+                    <Button variant="ghost" size="sm" onClick={() => setImageZoom(Math.min(200, imageZoom + 25))}>
+                      <ZoomIn className="w-4 h-4" />
+                    </Button>
+                    {intakeFile && (
+                      <a href={intakeFile} target="_blank" rel="noopener noreferrer">
+                        <Button variant="ghost" size="sm">
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <div className="flex-1 overflow-auto p-2 flex items-start justify-center">
+                  {intakeFile ? (
+                    intakeFile.toLowerCase().includes('.pdf') ? (
+                      <iframe 
+                        src={intakeFile} 
+                        className="w-full h-full border-0"
+                        title="Document preview"
+                      />
+                    ) : (
+                      <img 
+                        src={intakeFile} 
+                        alt="Invoice document" 
+                        style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
+                        className="object-contain"
+                      />
+                    )
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                      <FileText className="w-16 h-16 mb-2" />
+                      <span>אין מסמך מקור זמין</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right side - Form */}
+              <div className="w-[400px] flex flex-col overflow-y-auto">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1">
                   <Label>ספק</Label>
                   <Select value={selected.supplier || ""} onValueChange={(v) => setSelected({ ...selected, supplier: v })}>
