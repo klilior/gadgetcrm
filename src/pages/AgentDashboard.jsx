@@ -87,6 +87,9 @@ export default function AgentDashboard() {
       }
 
       // Load all data in parallel
+      // Calculate latest goals progress from sales before loading dashboard targets
+      await base44.functions.invoke('calculateGoalProgress', { calculate_all: true });
+
       const [allLeads, allTargets, allActivities, allEmployees, allRepairs, allGoals, allGoalProgress, allSalesTransactions, allLinetUsersMap] = await Promise.all([
         Lead.filter({ status: { $ne: 'Deleted' } }),
         Target.list(),
