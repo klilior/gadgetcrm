@@ -303,25 +303,36 @@ export default function InvoicesToReview() {
                 </div>
                 <div className="flex-1 overflow-auto p-4 flex items-start justify-center">
                   {intakeFile ? (
-                    intakeFile.toLowerCase().includes('.pdf') ? (
-                      <iframe 
-                        src={intakeFile} 
-                        className="w-full h-full border-0 bg-white"
-                        title="Document preview"
-                      />
-                    ) : (
-                      <img 
-                        src={intakeFile} 
-                        alt="Invoice document" 
-                        style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
-                        className="object-contain shadow-lg bg-white"
-                        onError={(e) => {
-                          // If image fails to load inline, show download link
-                          e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'flex';
-                        }}
-                      />
-                    )
+                    (() => {
+                      const lowerFile = intakeFile.toLowerCase();
+                      const isPdf = lowerFile.includes('.pdf') || lowerFile.includes('pdf') || lowerFile.includes('application/pdf');
+                      
+                      if (isPdf) {
+                        return (
+                          <iframe 
+                            src={intakeFile + '#toolbar=1&navpanes=0'}
+                            className="w-full h-full border-0 bg-white rounded shadow-lg"
+                            title="Document preview"
+                            style={{ minHeight: '600px' }}
+                          />
+                        );
+                      }
+                      
+                      return (
+                        <img 
+                          src={intakeFile} 
+                          alt="Invoice document" 
+                          style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
+                          className="object-contain shadow-lg bg-white"
+                          onError={(e) => {
+                            // If image fails to load, try showing as PDF iframe
+                            e.target.style.display = 'none';
+                            const fallback = e.target.nextSibling;
+                            if (fallback) fallback.style.display = 'flex';
+                          }}
+                        />
+                      );
+                    })()
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full text-gray-400">
                       <FileText className="w-20 h-20 mb-4" />
@@ -329,13 +340,17 @@ export default function InvoicesToReview() {
                       <span className="text-sm mt-1">ייתכן שהמסמך לא הועלה או נמחק</span>
                     </div>
                   )}
-                  {/* Fallback for images that can't be displayed inline */}
-                  {intakeFile && !intakeFile.toLowerCase().includes('.pdf') && (
-                    <div className="hidden flex-col items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
-                      <FileText className="w-16 h-16 mb-4" />
-                      <span className="text-lg mb-2">לא ניתן להציג את המסמך</span>
-                      <a href={intakeFile} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
-                        לחץ כאן לפתיחה/הורדה
+                  {/* Fallback - show as iframe or download link */}
+                  {intakeFile && (
+                    <div className="hidden flex-col items-center justify-center w-full h-full" style={{display: 'none'}}>
+                      <iframe 
+                        src={intakeFile}
+                        className="w-full h-full border-0 bg-white rounded shadow-lg"
+                        title="Document preview fallback"
+                        style={{ minHeight: '500px' }}
+                      />
+                      <a href={intakeFile} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline mt-2 text-sm">
+                        פתח בחלון חדש
                       </a>
                     </div>
                   )}
