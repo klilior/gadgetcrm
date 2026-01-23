@@ -229,12 +229,12 @@ export function calculateSalesSummary(salesTransactions) {
     .reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
     
   const lineSales = salesTransactions.filter(s => SalesCategories.isLine(s.category, s.product_name));
-  const totalLines = lineSales.reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
-  const lines4g = lineSales.filter(s => SalesCategories.is4GLine(s)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
-  const lines5g = lineSales.filter(s => SalesCategories.is5GLine(s)).reduce((sum, s) => sum + Math.abs(s.quantity || 1), 0);
+  const totalLines = lineSales.reduce((sum, s) => sum + Math.abs(Number(s.quantity ?? 1)), 0);
+  const lines4g = lineSales.filter(s => SalesCategories.is4GLine(s)).reduce((sum, s) => sum + Math.abs(Number(s.quantity ?? 1)), 0);
+  const lines5g = lineSales.filter(s => SalesCategories.is5GLine(s)).reduce((sum, s) => sum + Math.abs(Number(s.quantity ?? 1)), 0);
   
-  // אם אין הבחנה 4G/5G, שים הכל ב-4G
-  const finalLines4g = lines4g > 0 ? lines4g : (totalLines > 0 && lines5g === 0 ? totalLines : 0);
+  // אם אין הבחנה 4G/5G, אל תנפח אוטומטית ל-4G; השאר 0 כדי לא להציג מתי שלא ברור
+  const finalLines4g = lines4g;
   
   const totalRevenue = salesTransactions.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
   
