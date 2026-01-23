@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import useSuppliers from "../components/hooks/useSuppliers";
-import { RefreshCcw, AlertTriangle, FileText, Eye, ExternalLink, ZoomIn, ZoomOut } from "lucide-react";
+import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut } from "lucide-react";
 
 export default function InvoicesToReview() {
   const [rows, setRows] = useState([]);
@@ -27,9 +27,7 @@ export default function InvoicesToReview() {
   const load = async () => {
     setLoading(true);
     try {
-      // Only load invoices that have actual data (not empty placeholders)
       const invoices = await base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200);
-      // Filter out completely empty records (no supplier, no doc_number, no total)
       const filtered = (invoices || []).filter(inv => 
         inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
       );
@@ -59,7 +57,6 @@ export default function InvoicesToReview() {
     setIntakeFile(null);
     setImageZoom(100);
     
-    // Load the source file from intake
     if (row.source_intake) {
       try {
         const intakeList = await base44.entities.InvoiceIntakeRaw.filter({ id: row.source_intake });
@@ -70,6 +67,11 @@ export default function InvoicesToReview() {
         console.error("Failed to load intake file:", e);
       }
     }
+  };
+
+  const closeDialog = () => {
+    setSelected(null);
+    setIntakeFile(null);
   };
 
   const saveRecord = async () => {
@@ -96,7 +98,6 @@ export default function InvoicesToReview() {
           const extraction = JSON.parse(selected.ai_debug_last_extraction_json);
           const normalizedName = extraction.supplier_name_normalized?.trim();
           if (normalizedName) {
-            // Check if pattern exists
             const existingPatterns = await base44.entities.SupplierPattern.filter({
               pattern_type: 'name_pattern',
               pattern_value: normalizedName
@@ -117,12 +118,49 @@ export default function InvoicesToReview() {
       }
       
       toast.success("נשמר בהצלחה");
-      setSelected(null);
+      closeDialog();
       load();
     } catch (e) {
       toast.error("שגיאה בשמירה: " + (e?.message || "שגיאה"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    try {
+      await base44.functions.invoke('updateInvoiceStatus', { invoice_id: selected.id, action: 'approve' });
+      toast.success("החשבונית אושרה");
+      closeDialog();
+      load();
+    } catch (e) {
+      toast.error("שגיאה באישור: " + (e?.message || "שגיאה"));
+    }
+  };
+
+  const handleReject = async () => {
+    try {
+      await base44.functions.invoke('updateInvoiceStatus', { invoice_id: selected.id, action: 'reject' });
+      toast.info("החשבונית נדחתה");
+      closeDialog();
+      load();
+    } catch (e) {
+      toast.error("שגיאה בדחייה: " + (e?.message || "שגיאה"));
+    }
+  };
+
+  const handleRunAI = async () => {
+    try {
+      toast.info("מריץ חילוץ AI...");
+      await base44.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: selected.id });
+      toast.success("חילוץ הושלם");
+      // Reload the record to show updated data
+      const updated = await base44.entities.Invoices.filter({ id: selected.id });
+      if (updated && updated.length > 0) {
+        setSelected(updated[0]);
+      }
+    } catch (e) {
+      toast.error("שגיאה בחילוץ: " + (e?.message || "שגיאה"));
     }
   };
 
@@ -155,7 +193,7 @@ export default function InvoicesToReview() {
 
       <Card className="glass-card border-0">
         <CardHeader>
-          <CardTitle>רשימת חשבוניות ממתינות</CardTitle>
+          <CardTitle>רשימת חשבוניות ממתינות ({sorted.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -174,9 +212,9 @@ export default function InvoicesToReview() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={7}>טוען...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8}>טוען...</TableCell></TableRow>
                 ) : sorted.length === 0 ? (
-                  <TableRow><TableCell colSpan={7}>אין תוצאות</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center text-green-600 py-8">🎉 אין חשבוניות ממתינות לאימות</TableCell></TableRow>
                 ) : (
                   sorted.map((r) => {
                     const hasData = r.supplier || r.doc_number || r.total_with_vat;
@@ -226,40 +264,49 @@ export default function InvoicesToReview() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selected} onOpenChange={(open) => { if (!open) { setSelected(null); setIntakeFile(null); } }}>
-        <DialogContent className="max-w-[95vw] w-[1400px] max-h-[90vh] overflow-hidden" dir="rtl">
-          <DialogHeader>
-            <DialogTitle>פרטי חשבונית</DialogTitle>
+      {/* Invoice Detail Dialog with Document Viewer */}
+      <Dialog open={!!selected} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+        <DialogContent className="max-w-[95vw] w-[1400px] max-h-[90vh] overflow-hidden p-0" dir="rtl">
+          <DialogHeader className="p-4 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              פרטי חשבונית
+              {selected?.confidence_score != null && (
+                <Badge variant={selected.confidence_score >= 80 ? "default" : selected.confidence_score >= 50 ? "secondary" : "destructive"}>
+                  ודאות: {selected.confidence_score}%
+                </Badge>
+              )}
+            </DialogTitle>
           </DialogHeader>
+          
           {selected && (
-            <div className="flex gap-4 h-[75vh]">
+            <div className="flex h-[calc(90vh-80px)]">
               {/* Left side - Document viewer */}
-              <div className="flex-1 border rounded-lg bg-gray-50 flex flex-col overflow-hidden">
+              <div className="flex-1 border-l flex flex-col bg-gray-100">
                 <div className="p-2 border-b bg-white flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-600">תצוגת מסמך</span>
+                  <span className="text-sm font-medium text-gray-600">תצוגת מסמך מקור</span>
                   <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setImageZoom(Math.max(50, imageZoom - 25))}>
+                    <Button variant="ghost" size="sm" onClick={() => setImageZoom(Math.max(25, imageZoom - 25))}>
                       <ZoomOut className="w-4 h-4" />
                     </Button>
-                    <span className="text-xs text-gray-500">{imageZoom}%</span>
-                    <Button variant="ghost" size="sm" onClick={() => setImageZoom(Math.min(200, imageZoom + 25))}>
+                    <span className="text-xs text-gray-500 w-12 text-center">{imageZoom}%</span>
+                    <Button variant="ghost" size="sm" onClick={() => setImageZoom(Math.min(300, imageZoom + 25))}>
                       <ZoomIn className="w-4 h-4" />
                     </Button>
                     {intakeFile && (
                       <a href={intakeFile} target="_blank" rel="noopener noreferrer">
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" title="פתח בחלון חדש">
                           <ExternalLink className="w-4 h-4" />
                         </Button>
                       </a>
                     )}
                   </div>
                 </div>
-                <div className="flex-1 overflow-auto p-2 flex items-start justify-center">
+                <div className="flex-1 overflow-auto p-4 flex items-start justify-center">
                   {intakeFile ? (
                     intakeFile.toLowerCase().includes('.pdf') ? (
                       <iframe 
                         src={intakeFile} 
-                        className="w-full h-full border-0"
+                        className="w-full h-full border-0 bg-white"
                         title="Document preview"
                       />
                     ) : (
@@ -267,129 +314,122 @@ export default function InvoicesToReview() {
                         src={intakeFile} 
                         alt="Invoice document" 
                         style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
-                        className="object-contain"
+                        className="object-contain shadow-lg bg-white"
                       />
                     )
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                      <FileText className="w-16 h-16 mb-2" />
-                      <span>אין מסמך מקור זמין</span>
+                      <FileText className="w-20 h-20 mb-4" />
+                      <span className="text-lg">אין מסמך מקור זמין</span>
+                      <span className="text-sm mt-1">ייתכן שהמסמך לא הועלה או נמחק</span>
                     </div>
                   )}
                 </div>
               </div>
 
               {/* Right side - Form */}
-              <div className="w-[400px] flex flex-col overflow-y-auto">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-3">
-                <div className="space-y-1">
-                  <Label>ספק</Label>
-                  <Select value={selected.supplier || ""} onValueChange={(v) => setSelected({ ...selected, supplier: v })}>
-                    <SelectTrigger><SelectValue placeholder="בחר ספק" /></SelectTrigger>
-                    <SelectContent>
-                      {suppliersList.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>סוג מסמך</Label>
-                  <Select value={selected.doc_type || ""} onValueChange={(v) => setSelected({ ...selected, doc_type: v })}>
-                    <SelectTrigger><SelectValue placeholder="בחר סוג" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="חשבונית מס">חשבונית מס</SelectItem>
-                      <SelectItem value="חשבונית זיכוי">חשבונית זיכוי</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>מספר מסמך</Label>
-                  <Input value={selected.doc_number || ""} onChange={(e) => setSelected({ ...selected, doc_number: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label>תאריך מסמך</Label>
-                  <Input type="date" value={selected.doc_date || ""} onChange={(e) => setSelected({ ...selected, doc_date: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label>מטבע</Label>
-                  <Select value={selected.currency || "ILS"} onValueChange={(v) => setSelected({ ...selected, currency: v })}>
-                    <SelectTrigger><SelectValue placeholder="בחר מטבע" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ILS">ILS</SelectItem>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>סה״כ לפני מע"מ</Label>
-                  <Input type="number" value={selected.subtotal_before_vat ?? ""} onChange={(e) => setSelected({ ...selected, subtotal_before_vat: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label>מע"מ</Label>
-                  <Input type="number" value={selected.vat_amount ?? ""} onChange={(e) => setSelected({ ...selected, vat_amount: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label>סה״כ כולל מע"מ</Label>
-                  <Input type="number" value={selected.total_with_vat ?? ""} onChange={(e) => setSelected({ ...selected, total_with_vat: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label>מסמך מקור (ID)</Label>
-                  <Input value={selected.source_intake || ""} onChange={(e) => setSelected({ ...selected, source_intake: e.target.value })} />
-                </div>
-                <div className="md:col-span-2 space-y-1">
-                  <Label>הערות</Label>
-                  <Input value={selected.notes || ""} onChange={(e) => setSelected({ ...selected, notes: e.target.value })} />
-                </div>
-              </div>
+              <div className="w-[380px] flex flex-col bg-white">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-gray-500">ספק</Label>
+                    <Select value={selected.supplier || ""} onValueChange={(v) => setSelected({ ...selected, supplier: v })}>
+                      <SelectTrigger className="h-9"><SelectValue placeholder="בחר ספק" /></SelectTrigger>
+                      <SelectContent>
+                        {suppliersList.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              {/* Show source file link if available */}
-              {selected.source_intake && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-blue-600" />
-                  <span>מסמך מקור: {selected.source_intake}</span>
-                </div>
-              )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">סוג מסמך</Label>
+                      <Select value={selected.doc_type || ""} onValueChange={(v) => setSelected({ ...selected, doc_type: v })}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="בחר" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="חשבונית מס">חשבונית מס</SelectItem>
+                          <SelectItem value="חשבונית זיכוי">חשבונית זיכוי</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">מספר מסמך</Label>
+                      <Input className="h-9" value={selected.doc_number || ""} onChange={(e) => setSelected({ ...selected, doc_number: e.target.value })} />
+                    </div>
+                  </div>
 
-              {!canApprove && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm">
-                  פעולה של "אשר חשבונית"/"דחה" זמינה רק למנהלים, ותיושם אוטומטית בכפתורים אלו.
-                </div>
-              )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">תאריך מסמך</Label>
+                      <Input className="h-9" type="date" value={selected.doc_date || ""} onChange={(e) => setSelected({ ...selected, doc_date: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">מטבע</Label>
+                      <Select value={selected.currency || "ILS"} onValueChange={(v) => setSelected({ ...selected, currency: v })}>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ILS">₪ ILS</SelectItem>
+                          <SelectItem value="USD">$ USD</SelectItem>
+                          <SelectItem value="EUR">€ EUR</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-              <div className="flex items-center gap-2 justify-between">
-                <div className="flex gap-2">
-                  {canApprove && (
-                    <>
-                      <Button onClick={async () => {
-                        await base44.functions.invoke('updateInvoiceStatus', { invoice_id: selected.id, action: 'approve' });
-                        setSelected(null);
-                        load();
-                      }} variant="secondary">אשר חשבונית</Button>
-                      <Button onClick={async () => {
-                        await base44.functions.invoke('updateInvoiceStatus', { invoice_id: selected.id, action: 'reject' });
-                        setSelected(null);
-                        load();
-                      }} variant="destructive">דחה</Button>
-                    </>
+                  <div className="border-t pt-3 mt-3">
+                    <Label className="text-xs text-gray-500 mb-2 block">סכומים</Label>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 w-24">לפני מע"מ:</span>
+                        <Input className="h-8 flex-1" type="number" value={selected.subtotal_before_vat ?? ""} onChange={(e) => setSelected({ ...selected, subtotal_before_vat: e.target.value })} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 w-24">מע"מ:</span>
+                        <Input className="h-8 flex-1" type="number" value={selected.vat_amount ?? ""} onChange={(e) => setSelected({ ...selected, vat_amount: e.target.value })} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium w-24">סה"כ:</span>
+                        <Input className="h-9 flex-1 font-bold text-lg" type="number" value={selected.total_with_vat ?? ""} onChange={(e) => setSelected({ ...selected, total_with_vat: e.target.value })} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs text-gray-500">הערות</Label>
+                    <Input className="h-9" value={selected.notes || ""} onChange={(e) => setSelected({ ...selected, notes: e.target.value })} placeholder="הערות נוספות..." />
+                  </div>
+
+                  {!canApprove && (
+                    <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                      ⚠️ אישור/דחייה זמינים רק למנהלים
+                    </div>
                   )}
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setSelected(null)}>סגור</Button>
-                  <Button variant="secondary" onClick={async () => {
-                    try {
-                      toast.info("מריץ חילוץ AI...");
-                      await base44.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: selected.id });
-                      toast.success("חילוץ הושלם");
-                    } catch (e) {
-                      toast.error("שגיאה בחילוץ: " + (e?.message || "שגיאה"));
-                    }
-                    setSelected(null);
-                    load();
-                  }}>🤖 הרץ AI</Button>
-                  <Button onClick={saveRecord} disabled={saving}>{saving ? "שומר..." : "שמור"}</Button>
+
+                {/* Action buttons - fixed at bottom */}
+                <div className="p-4 border-t bg-gray-50 space-y-2">
+                  {canApprove && (
+                    <div className="flex gap-2">
+                      <Button className="flex-1 h-10" onClick={handleApprove} variant="default">
+                        ✓ אשר חשבונית
+                      </Button>
+                      <Button className="flex-1 h-10" onClick={handleReject} variant="destructive">
+                        ✗ דחה
+                      </Button>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button className="flex-1 h-9" variant="secondary" onClick={handleRunAI}>
+                      🤖 הרץ AI שוב
+                    </Button>
+                    <Button className="flex-1 h-9" onClick={saveRecord} disabled={saving}>
+                      {saving ? "שומר..." : "💾 שמור"}
+                    </Button>
+                  </div>
+                  <Button className="w-full h-9" variant="outline" onClick={closeDialog}>
+                    סגור
+                  </Button>
                 </div>
               </div>
             </div>
