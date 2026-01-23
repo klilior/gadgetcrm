@@ -19,6 +19,8 @@ export default function InvoicesToReview() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [intakeFile, setIntakeFile] = useState(null);
+  const [imageZoom, setImageZoom] = useState(100);
   const { currentUser } = useUser();
   const canApprove = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
