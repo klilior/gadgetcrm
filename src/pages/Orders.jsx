@@ -172,7 +172,6 @@ export default function OrdersPage() {
 
         setSelectedOrder({
             ...order,
-            id: order.external_order_number,
             billing,
             shipping_lines: [{ method_title: order.shipping_method }],
             line_items: products,
