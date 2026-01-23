@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 import { subHours } from 'npm:date-fns@2.30.0';
+import { executeLinetSync } from "./linetSyncCore.js";
 
 const SYNC_KEY = "linet_main_sync";
 
@@ -37,8 +38,8 @@ Deno.serve(async (req) => {
 
         console.log(`📅 Hourly Sync: ${fromDatetime} → ${toDatetime}`);
 
-        // Call the main sync function using SDK (works with service role context)
-        const syncResult = await base44.asServiceRole.functions.invoke('runLinetSync', {
+        // Call the core sync directly to avoid self-invocation loop
+        const syncResult = await executeLinetSync(base44, {
             from_datetime: fromDatetime,
             to_datetime: toDatetime,
             trigger_type: "HOURLY",
