@@ -104,13 +104,13 @@ function AppContent({ children, currentPageName }) {
 
   // Redirect logic - check immediately if we need to redirect
   const currentPath = location.pathname;
-  const isRootOrSettings = currentPath === '/' || currentPath === '' || currentPath.toLowerCase() === '/settings';
-  const needsRedirect = !isLoading && currentUser && isRootOrSettings;
+  const isRoot = currentPath === '/' || currentPath === '';
+  const needsRedirect = !isLoading && currentUser && isRoot;
 
   useEffect(() => {
     if (!currentUser || isLoading) return;
     
-    if (isRootOrSettings) {
+    if (isRoot) {
       setIsRedirecting(true);
       const isTechnicianRole = currentUser?.role === "טכנאי";
       const isManagerRole = currentUser?.role === "מנהל" || currentUser?.role === "admin";
@@ -118,7 +118,7 @@ function AppContent({ children, currentPageName }) {
       const targetUrl = createPageUrl(targetPage);
       if (currentPath !== targetUrl) window.location.replace(targetUrl);
     }
-  }, [currentUser, isLoading, currentPath, isRootOrSettings]);
+  }, [currentUser, isLoading, currentPath, isRoot]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
