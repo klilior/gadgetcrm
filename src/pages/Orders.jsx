@@ -54,7 +54,7 @@ export default function OrdersPage() {
             const OrderProduct = (await import("@/entities/all")).OrderProduct;
             
             if (!Order) throw new Error("Order entity not found");
-            if (!Client) throw new Error("Client entity not found");
+
 
             const [fetchedOrders, fetchedClients] = await Promise.all([
             Order.list("-order_date", 10000),
