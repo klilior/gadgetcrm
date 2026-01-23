@@ -15,7 +15,7 @@ import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, isWithinInterva
 import { he } from 'date-fns/locale';
 
 import KPIStrip from '../components/dashboard/KPIStrip';
-import TargetProgress from '../components/dashboard/TargetProgress';
+import SalesVsTarget from '../components/dashboard/SalesVsTarget';
 import LeadsTable from '../components/dashboard/LeadsTable';
 import RemindersAlert from '../components/dashboard/RemindersAlert';
 import TeamPerformanceTable from '../components/dashboard/TeamPerformanceTable';
@@ -47,7 +47,7 @@ const getSlaStatus = (lead) => {
 export default function AgentDashboard() {
   const { currentUser } = useUser();
   const [isLoading, setIsLoading] = useState(true);
-  const [period, setPeriod] = useState('today'); // today, week, month
+  const [period, setPeriod] = useState('month'); // today, week, month (ברירת מחדל לנציג: החודש)
   const [focusMode, setFocusMode] = useState(false);
   
   // Data states
@@ -168,14 +168,26 @@ export default function AgentDashboard() {
       // ========== Current user's targets (from GoalDefinition + Target) ==========
       const myGoals = filterGoalsByEmployee(periodGoals, employeeMap, userId);
       const myTargetsRaw = filterTargetsByEmployee(periodTargets, userId);
-      
-      // Combine both sources into unified target map
-      const myGoalsMap = mapGoalsToTargets(myGoals);
-      const myTargetsMap = mapTargetsToMap(myTargetsRaw);
-      
-      // Merge: prefer GoalDefinition, fallback to Target
-      const targetMap = { ...myTargetsMap, ...myGoalsMap };
-      setTargets(targetMap);
+
+      // יעד לנציג לפי GoalDefinition (מועדף), עם נפילה אחורה ל-Target entity
+      const computedTargets = { Devices: 0, AccessoriesRevenue: 0, Lines: 0 };
+      (myGoals || []).forEach(g => {
+        const code = g.commission_group_code;
+        const metric = g.metric_type;
+        const val = g.target_value || 0;
+        if (code === 'DEVICES' && metric === 'UNITS') computedTargets.Devices += val;
+        if (code === 'ACCESSORIES_GROUP' && metric === 'NET_AMOUNT') computedTargets.AccessoriesRevenue += val;
+        if (code === 'LINES' && (metric === 'UNITS' || metric === 'LINES_4G_UNITS' || metric === 'LINES_5G_UNITS')) computedTargets.Lines += val;
+      });
+
+      if (computedTargets.Devices === 0 && computedTargets.AccessoriesRevenue === 0 && computedTargets.Lines === 0) {
+        const myTargetsMap = mapTargetsToMap(myTargetsRaw);
+        computedTargets.Devices = myTargetsMap.Devices || 0;
+        computedTargets.AccessoriesRevenue = myTargetsMap.AccessoriesRevenue || 0;
+        computedTargets.Lines = myTargetsMap.Lines || 0;
+      }
+
+      setTargets(computedTargets);
 
       // Calculate actuals from SalesTransactions - ALWAYS use them as primary source
       const periodSales = (allSalesTransactions || []).filter(s => {
@@ -694,11 +706,15 @@ export default function AgentDashboard() {
       ) : (
         // Rep View
         <div className="space-y-6">
-          {/* Target Progress */}
-          <TargetProgress 
-            targets={targets} 
-            actuals={actuals} 
-            period={periodLabels[period]}
+          {/* Sales vs Target - Rep Widget */}
+          <SalesVsTarget
+            targets={targets}
+            actuals={{
+              Devices: actuals?.Devices || 0,
+              AccessoriesRevenue: actuals?.AccessoriesRevenue || 0,
+              Lines: (actuals?.Lines4G || 0) + (actuals?.Lines5G || 0),
+            }}
+            periodLabel={periodLabels[period]}
           />
 
           {/* My Leads */}
