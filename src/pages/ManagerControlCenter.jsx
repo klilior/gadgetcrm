@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   BarChart3, RefreshCw, Users, Filter, Smartphone, Radio, 
   ShoppingBag, TrendingUp, Download, Search, RotateCcw,
-  DollarSign, CreditCard, Package, Percent, FileText, Building2
+  DollarSign, CreditCard, Package, Percent, FileText, Building2, AlertCircle
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths, subDays, startOfWeek, endOfWeek, startOfYear } from "date-fns";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Legend } from 'recharts';
