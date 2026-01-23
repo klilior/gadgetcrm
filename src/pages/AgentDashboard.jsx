@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { base44 } from "@/api/base44Client";
 import { Lead, Target, SalesActivity, Employee, Repair, GoalDefinition, GoalProgress, SalesTransaction, LinetUsersMap } from '@/entities/all';
 import { useUser } from '../components/UserAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
