@@ -57,8 +57,8 @@ export default function OrdersPage() {
 
 
             const [fetchedOrders, fetchedClients] = await Promise.all([
-            Order.list("-order_date", 10000),
-            (await import('../components/utils/customersService')).customersService.list(2000)
+              Order.list("-order_date", 10000),
+              (await import('../components/utils/customersService')).customersService.list(2000)
             ]);
             
             setOrders(fetchedOrders || []);
