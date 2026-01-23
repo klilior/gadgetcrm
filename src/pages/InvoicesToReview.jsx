@@ -54,7 +54,23 @@ export default function InvoicesToReview() {
     return arr;
   }, [rows]);
 
-  const openRecord = (row) => setSelected({ ...row });
+  const openRecord = async (row) => {
+    setSelected({ ...row });
+    setIntakeFile(null);
+    setImageZoom(100);
+    
+    // Load the source file from intake
+    if (row.source_intake) {
+      try {
+        const intakeList = await base44.entities.InvoiceIntakeRaw.filter({ id: row.source_intake });
+        if (intakeList && intakeList.length > 0 && intakeList[0].file) {
+          setIntakeFile(intakeList[0].file);
+        }
+      } catch (e) {
+        console.error("Failed to load intake file:", e);
+      }
+    }
+  };
 
   const saveRecord = async () => {
     if (!selected) return;
