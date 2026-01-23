@@ -70,8 +70,16 @@ export default function ManagerControlCenter() {
 
   const loadInitialData = async () => {
     try {
-      const mappingsData = await base44.entities.CommissionGroupMapping.filter({ is_active: true });
+      const [mappingsData, pendingInvoices] = await Promise.all([
+        base44.entities.CommissionGroupMapping.filter({ is_active: true }),
+        base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200)
+      ]);
       setMappings(mappingsData);
+      // Count only invoices with actual data
+      const filtered = (pendingInvoices || []).filter(inv => 
+        inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
+      );
+      setPendingInvoicesCount(filtered.length);
     } catch (e) {
       console.error("Error loading mappings:", e);
     }
