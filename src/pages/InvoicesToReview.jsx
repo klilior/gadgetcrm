@@ -420,6 +420,42 @@ export default function InvoicesToReview() {
                       ⚠️ אישור/דחייה זמינים רק למנהלים
                     </div>
                   )}
+
+                  {/* AI Debug Info - Why not auto-approved */}
+                  {(selected.ai_debug_last_validation_json || selected.ai_debug_last_extraction_json) && (
+                    <div className="border-t pt-3 mt-3">
+                      <details className="text-xs">
+                        <summary className="cursor-pointer font-medium text-gray-600 mb-2">🔍 למה לא אושר אוטומטית?</summary>
+                        <div className="space-y-2 bg-gray-50 p-2 rounded text-gray-600">
+                          {selected.ai_debug_last_validation_json && (() => {
+                            try {
+                              const validation = JSON.parse(selected.ai_debug_last_validation_json);
+                              return (
+                                <div>
+                                  <div className="font-medium text-gray-700">בדיקת תקינות:</div>
+                                  {validation.math_consistent === false && <div className="text-red-600">❌ חישוב מתמטי לא תקין</div>}
+                                  {validation.math_consistent === true && <div className="text-green-600">✓ חישוב מתמטי תקין</div>}
+                                  {validation.missing_critical_fields?.length > 0 && (
+                                    <div className="text-amber-600">⚠️ שדות חסרים: {validation.missing_critical_fields.join(', ')}</div>
+                                  )}
+                                  {validation.recommended_status && (
+                                    <div>סטטוס מומלץ: <Badge variant="outline">{validation.recommended_status}</Badge></div>
+                                  )}
+                                  {validation.reason_for_review && (
+                                    <div className="text-amber-700 mt-1">📝 {validation.reason_for_review}</div>
+                                  )}
+                                </div>
+                              );
+                            } catch { return <div className="text-gray-400">לא ניתן לפרסר</div>; }
+                          })()}
+                          {selected.confidence_score != null && selected.confidence_score < 85 && (
+                            <div className="text-amber-600">⚠️ ציון ודאות נמוך ({selected.confidence_score}% - נדרש 85%+)</div>
+                          )}
+                          {!selected.supplier && <div className="text-red-600">❌ ספק לא זוהה</div>}
+                        </div>
+                      </details>
+                    </div>
+                  )}
                 </div>
 
                 {/* Action buttons - fixed at bottom */}
