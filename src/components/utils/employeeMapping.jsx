@@ -180,9 +180,25 @@ export const SalesCategories = {
     if (!category && !productName) return false;
     const catLower = (category || '').toLowerCase();
     const prodLower = (productName || '').toLowerCase();
-    return catLower.includes('קו') || catLower.includes('sim') || catLower.includes('line') || 
-           catLower.includes('חבילה') || catLower.includes('מנוי') ||
-           prodLower.includes('sim') || prodLower.includes('קו') || prodLower.includes('חבילה');
+
+    // אל תסווג כ"קו" אם זה אביזר/חבילה של אביזרים
+    if (SalesCategories.isAccessory(category)) return false;
+
+    // זיהוי קווים אמיתי: קו/סים/eSIM/line/SIM (כולל עברית "סים")
+    const isLineKeyword = (
+      catLower.includes('קו') ||
+      catLower.includes('sim') ||
+      catLower.includes('סים') ||
+      catLower.includes('line') ||
+      prodLower.includes('sim') ||
+      prodLower.includes('סים') ||
+      prodLower.includes('esim') ||
+      prodLower.includes('קו') ||
+      prodLower.includes('line')
+    );
+
+    // הוסר: 'חבילה' ו-'מנוי' כדי לא לתפוס באנדלים של אביזרים
+    return isLineKeyword;
   },
   
   is4GLine: (tx) => {
