@@ -43,10 +43,13 @@ export default function GoalsDashboard() {
     const loadData = async () => {
         setIsLoading(true);
         try {
+            // Ensure progress is up-to-date with latest sales before loading
+            await base44.functions.invoke('calculateGoalProgress', { calculate_all: true });
+
             const [goalsData, progressData, agentsData] = await Promise.all([
                 base44.entities.GoalDefinition.filter({ is_active: true }),
-                base44.entities.GoalProgress.list(null, 500),
-                base44.entities.LinetUsersMap.list(null, 100)
+                base44.entities.GoalProgress.list(null, 1000),
+                base44.entities.LinetUsersMap.list(null, 200)
             ]);
             
             setGoals(goalsData || []);
