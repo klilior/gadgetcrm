@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import useSuppliers from "../components/hooks/useSuppliers";
-import { RefreshCcw, AlertTriangle, FileText, Eye } from "lucide-react";
+import { RefreshCcw, AlertTriangle, FileText, Eye, ExternalLink, ZoomIn, ZoomOut } from "lucide-react";
 
 export default function InvoicesToReview() {
   const [rows, setRows] = useState([]);
