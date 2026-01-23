@@ -30,6 +30,7 @@ export default function ManagerControlCenter() {
   const [sales, setSales] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [mappings, setMappings] = useState([]);
+  const [pendingInvoicesCount, setPendingInvoicesCount] = useState(0);
   const { suppliersMap, suppliersList } = useSuppliers();
   const [isLoading, setIsLoading] = useState(false);
 
