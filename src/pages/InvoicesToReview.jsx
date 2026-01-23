@@ -460,6 +460,10 @@ export default function InvoicesToReview() {
 
                 {/* Action buttons - fixed at bottom */}
                 <div className="p-4 border-t bg-gray-50 space-y-2">
+                  {/* Explanation of buttons */}
+                  <div className="text-[10px] text-gray-500 mb-1">
+                    💾 <b>שמור</b> = שמור שינויים ללא אישור סופי | ✓ <b>אשר</b> = שמור + סמן כ"אושר" + למד את הספק
+                  </div>
                   {canApprove && (
                     <div className="flex gap-2">
                       <Button className="flex-1 h-10" onClick={handleApprove} variant="default">
@@ -474,11 +478,11 @@ export default function InvoicesToReview() {
                     <Button className="flex-1 h-9" variant="secondary" onClick={handleRunAI}>
                       🤖 הרץ AI שוב
                     </Button>
-                    <Button className="flex-1 h-9" onClick={saveRecord} disabled={saving}>
+                    <Button className="flex-1 h-9" variant="outline" onClick={saveRecord} disabled={saving}>
                       {saving ? "שומר..." : "💾 שמור"}
                     </Button>
                   </div>
-                  <Button className="w-full h-9" variant="outline" onClick={closeDialog}>
+                  <Button className="w-full h-9" variant="ghost" onClick={closeDialog}>
                     סגור
                   </Button>
                 </div>
