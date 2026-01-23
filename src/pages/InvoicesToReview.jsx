@@ -315,6 +315,11 @@ export default function InvoicesToReview() {
                         alt="Invoice document" 
                         style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
                         className="object-contain shadow-lg bg-white"
+                        onError={(e) => {
+                          // If image fails to load inline, show download link
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
                       />
                     )
                   ) : (
@@ -322,6 +327,16 @@ export default function InvoicesToReview() {
                       <FileText className="w-20 h-20 mb-4" />
                       <span className="text-lg">אין מסמך מקור זמין</span>
                       <span className="text-sm mt-1">ייתכן שהמסמך לא הועלה או נמחק</span>
+                    </div>
+                  )}
+                  {/* Fallback for images that can't be displayed inline */}
+                  {intakeFile && !intakeFile.toLowerCase().includes('.pdf') && (
+                    <div className="hidden flex-col items-center justify-center h-full text-gray-500" style={{display: 'none'}}>
+                      <FileText className="w-16 h-16 mb-4" />
+                      <span className="text-lg mb-2">לא ניתן להציג את המסמך</span>
+                      <a href={intakeFile} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                        לחץ כאן לפתיחה/הורדה
+                      </a>
                     </div>
                   )}
                 </div>
