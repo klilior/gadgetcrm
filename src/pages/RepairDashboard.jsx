@@ -186,6 +186,17 @@ export default function RepairDashboard() {
         loadData();
     }, [loadData]);
 
+    // Open repair details directly when coming with ?repairId=...
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const rid = params.get('repairId');
+        if (!rid || selectedRepair) return;
+        if (repairs && repairs.length > 0) {
+            const match = repairs.find(r => r.id === rid || r.repair_id === rid);
+            if (match) setSelectedRepair(match);
+        }
+    }, [repairs, selectedRepair]);
+
     const filteredRepairs = repairs.filter(repair => {
         const matchesSearch = searchTerm === "" ||
             repair.repair_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||

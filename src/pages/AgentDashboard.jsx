@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, isWithinInterval, differenceInDays } from 'date-fns';
 import { he } from 'date-fns/locale';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
 
 import KPIStrip from '../components/dashboard/KPIStrip';
 import SalesVsTarget from '../components/dashboard/SalesVsTarget';
@@ -629,7 +631,7 @@ export default function AgentDashboard() {
                           <div className="space-y-0.5">
                             <div className="font-medium">{r.customer?.full_name || 'לקוח לא ידוע'}</div>
                             <div className="text-xs text-gray-500">כניסה: {format(new Date(r.created_date), 'dd/MM/yyyy')} · עדכון: {format(new Date(r.updated_date), 'dd/MM/yyyy')}</div>
-                            <div className="text-xs">סוג: <button className="text-purple-600 hover:text-purple-700 underline" onClick={() => setSelectedRepair(r)}>{r.repair_type || 'לא צוין'}</button></div>
+                            <div className="text-xs">סוג: <Link className="text-purple-600 hover:text-purple-700 underline" to={createPageUrl(`RepairDashboard?repairId=${r.id}`)}>{r.repair_type || 'לא צוין'}</Link></div>
                           </div>
                           <Badge className="bg-red-500 text-white">
                             {differenceInDays(new Date(), new Date(r.created_date))} ימים
@@ -690,7 +692,7 @@ export default function AgentDashboard() {
                               <div className="space-y-0.5">
                                 <div className="font-medium">{r.customer?.full_name || 'לקוח לא ידוע'}</div>
                                 <div className="text-xs text-gray-600">כניסה: {format(new Date(r.created_date), 'dd/MM/yyyy')} · עדכון: {format(new Date(r.updated_date), 'dd/MM/yyyy')}</div>
-                                <div className="text-xs">סוג: <button className="text-purple-600 hover:text-purple-700 underline" onClick={() => setSelectedRepair(r)}>{r.repair_type || 'לא צוין'}</button></div>
+                                <div className="text-xs">סוג: <Link className="text-purple-600 hover:text-purple-700 underline" to={createPageUrl(`RepairDashboard?repairId=${r.id}`)}>{r.repair_type || 'לא צוין'}</Link></div>
                               </div>
                               <span className="text-red-600 font-medium">
                                 {differenceInDays(new Date(), new Date(r.created_date))} ימים
@@ -717,7 +719,7 @@ export default function AgentDashboard() {
                               <div className="space-y-0.5">
                                 <div className="font-medium">{r.customer?.full_name || 'לקוח לא ידוע'}</div>
                                 <div className="text-xs text-gray-600">כניסה: {format(new Date(r.created_date), 'dd/MM/yyyy')} · עדכון: {format(new Date(r.updated_date), 'dd/MM/yyyy')}</div>
-                                <div className="text-xs">סוג: <button className="text-purple-600 hover:text-purple-700 underline" onClick={() => setSelectedRepair(r)}>{r.repair_type || 'לא צוין'}</button></div>
+                                <div className="text-xs">סוג: <Link className="text-purple-600 hover:text-purple-700 underline" to={createPageUrl(`RepairDashboard?repairId=${r.id}`)}>{r.repair_type || 'לא צוין'}</Link></div>
                               </div>
                               <span className="text-orange-600 font-medium">
                                 {differenceInDays(new Date(), new Date(r.created_date))} ימים
