@@ -687,7 +687,11 @@ export default function AgentDashboard() {
                         <div className="space-y-2 max-h-48 overflow-y-auto">
                           {overdueRepairs.map(r => (
                             <div key={r.id} className="bg-red-50 rounded p-2 text-sm flex justify-between">
-                              <span>{r.repair_id}</span>
+                              <div className="space-y-0.5">
+                                <div className="font-medium">{r.customer?.full_name || 'לקוח לא ידוע'}</div>
+                                <div className="text-xs text-gray-600">כניסה: {format(new Date(r.created_date), 'dd/MM/yyyy')} · עדכון: {format(new Date(r.updated_date), 'dd/MM/yyyy')}</div>
+                                <div className="text-xs">סוג: <button className="text-purple-600 hover:text-purple-700 underline" onClick={() => setSelectedRepair(r)}>{r.repair_type || 'לא צוין'}</button></div>
+                              </div>
                               <span className="text-red-600 font-medium">
                                 {differenceInDays(new Date(), new Date(r.created_date))} ימים
                               </span>
@@ -710,7 +714,11 @@ export default function AgentDashboard() {
                         <div className="space-y-2 max-h-48 overflow-y-auto">
                           {dueSoonRepairs.map(r => (
                             <div key={r.id} className="bg-orange-50 rounded p-2 text-sm flex justify-between">
-                              <span>{r.repair_id}</span>
+                              <div className="space-y-0.5">
+                                <div className="font-medium">{r.customer?.full_name || 'לקוח לא ידוע'}</div>
+                                <div className="text-xs text-gray-600">כניסה: {format(new Date(r.created_date), 'dd/MM/yyyy')} · עדכון: {format(new Date(r.updated_date), 'dd/MM/yyyy')}</div>
+                                <div className="text-xs">סוג: <button className="text-purple-600 hover:text-purple-700 underline" onClick={() => setSelectedRepair(r)}>{r.repair_type || 'לא צוין'}</button></div>
+                              </div>
                               <span className="text-orange-600 font-medium">
                                 {differenceInDays(new Date(), new Date(r.created_date))} ימים
                               </span>
