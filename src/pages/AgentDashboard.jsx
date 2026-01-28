@@ -744,7 +744,11 @@ export default function AgentDashboard() {
               <CardTitle className="flex items-center gap-2">
                 <Phone className="w-5 h-5 text-purple-600" />
                 הלידים שלי
-                <Badge variant="outline" className="mr-2">{myLeads.length}</Badge>
+                <Badge variant="outline" className="mr-2">
+                  {leadFilter === 'all' 
+                    ? leads.filter(l => l.assigned_to === userId && l.status !== 'Deleted').length 
+                    : myLeads.length}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
