@@ -478,12 +478,16 @@ export default function AgentDashboard() {
 
   // Filtered leads for focus mode
   const overdueLeads = leads.filter(l => getSlaStatus(l) === 'Overdue');
-  const showClosedLeads = leadFilter === 'all';
-  const baseLeads = isManager 
-    ? (showClosedLeads ? leads : leads.filter(l => l.status !== 'Closed'))
-    : (showClosedLeads 
-        ? leads.filter(l => l.assigned_to === userId && l.status !== 'Deleted')
-        : myLeads);
+  let baseLeads;
+  if (isManager) {
+    if (leadFilter === 'closed') baseLeads = leads.filter(l => l.status === 'Closed');
+    else if (leadFilter === 'all') baseLeads = leads;
+    else baseLeads = leads.filter(l => l.status !== 'Closed');
+  } else {
+    if (leadFilter === 'closed') baseLeads = leads.filter(l => l.assigned_to === userId && l.status === 'Closed');
+    else if (leadFilter === 'all') baseLeads = leads.filter(l => l.assigned_to === userId && l.status !== 'Deleted');
+    else baseLeads = myLeads;
+  }
   const displayLeads = focusMode ? overdueLeads : baseLeads;
 
   const periodLabels = {
@@ -545,6 +549,7 @@ export default function AgentDashboard() {
             <SelectContent>
               <SelectItem value="open">פתוחים בלבד</SelectItem>
               <SelectItem value="all">כולל סגורים</SelectItem>
+              <SelectItem value="closed">סגורים</SelectItem>
             </SelectContent>
           </Select>
 
@@ -569,16 +574,14 @@ export default function AgentDashboard() {
       <KPIStrip data={kpiData} showTeamStats={isManager} />
 
       {/* Quick Leads to Complete */}
-      {quickLeads.length > 0 && (
-        <QuickLeadsToComplete
-          leads={quickLeads}
-          onComplete={handleOpenEdit}
-          onProcess={(id) => handleStatusChange(id, 'InProgress')}
-          onClose={(id) => handleStatusChange(id, 'Closed')}
-          onSetReminder={handleSetReminder}
-          onDelete={(id) => handleStatusChange(id, 'Deleted')}
-        />
-      )}
+      <QuickLeadsToComplete
+        leads={quickLeads}
+        onComplete={handleOpenEdit}
+        onProcess={(id) => handleStatusChange(id, 'InProgress')}
+        onClose={(id) => handleStatusChange(id, 'Closed')}
+        onSetReminder={handleSetReminder}
+        onDelete={(id) => handleStatusChange(id, 'Deleted')}
+      />
 
       {/* Reminders Alert */}
       {reminders.length > 0 && (
@@ -775,7 +778,12 @@ export default function AgentDashboard() {
             </CardHeader>
             <CardContent>
               <LeadsTable
-                leads={leadFilter === 'all' ? leads.filter(l => l.assigned_to === userId && l.status !== 'Deleted') : myLeads}
+                leads={leadFilter === 'all'
+                  ? leads.filter(l => l.assigned_to === userId && l.status !== 'Deleted')
+                  : (leadFilter === 'closed'
+                      ? leads.filter(l => l.assigned_to === userId && l.status === 'Closed')
+                      : myLeads)
+                }
                 onStatusChange={handleStatusChange}
                 onMarkReminderDone={handleMarkReminderDone}
                 onEdit={handleOpenEdit}
