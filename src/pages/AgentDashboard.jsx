@@ -520,6 +520,17 @@ export default function AgentDashboard() {
             </SelectContent>
           </Select>
 
+          <Select value={leadFilter} onValueChange={setLeadFilter}>
+            <SelectTrigger className="w-36">
+              <Filter className="w-4 h-4 ml-2" />
+              <SelectValue placeholder="סינון לידים" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="open">פתוחים בלבד</SelectItem>
+              <SelectItem value="all">כולל סגורים</SelectItem>
+            </SelectContent>
+          </Select>
+
           {isManager && (
             <Button
               variant={focusMode ? 'default' : 'outline'}
