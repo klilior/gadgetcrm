@@ -141,7 +141,7 @@ export default function RepairDashboard() {
             } else {
                 setStats({
                     openLab: repairsData.filter(r => r.repair_type === 'מעבדת Gadget-Team' && !nonOpenStatuses.includes(r.status)).length,
-                    openImporter: repairsData.filter(r => ["To_Importer", "At_Importer", "Back_From_Importer"].includes(r.status)).length,
+                    openImporter: repairsData.filter(r => r.status === 'At_Importer').length,
                     readyForPickup: repairsData.filter(r => r.status === "מכשיר סיים תיקון וממתין לאיסוף" || r.status === "Ready").length,
                     slaBreached: repairsData.filter(r => getSlaStatus(r).isBreached && !nonOpenStatuses.includes(r.status)).length,
                     orderedParts: 0
@@ -234,7 +234,7 @@ export default function RepairDashboard() {
                     matchesQuickFilter = repair.status === 'הוזמן חלק';
                     break;
                 case 'openImporter':
-                    matchesQuickFilter = ["To_Importer", "At_Importer", "Back_From_Importer"].includes(repair.status);
+                    matchesQuickFilter = repair.status === 'At_Importer';
                     break;
                 case 'readyForPickup':
                     matchesQuickFilter = repair.status === "מכשיר סיים תיקון וממתין לאיסוף" || repair.status === "Ready";
