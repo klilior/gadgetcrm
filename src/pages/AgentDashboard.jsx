@@ -626,9 +626,10 @@ export default function AgentDashboard() {
                     <div className="space-y-2">
                       {overdueRepairs.slice(0, 5).map(r => (
                         <div key={r.id} className="bg-white rounded-lg p-3 flex justify-between items-center">
-                          <div>
-                            <p className="font-medium">{r.repair_id}</p>
-                            <p className="text-sm text-gray-600">{r.customer?.full_name || 'לקוח'} - {r.device?.model || 'מכשיר'}</p>
+                          <div className="space-y-0.5">
+                            <div className="font-medium">{r.customer?.full_name || 'לקוח לא ידוע'}</div>
+                            <div className="text-xs text-gray-500">כניסה: {format(new Date(r.created_date), 'dd/MM/yyyy')} · עדכון: {format(new Date(r.updated_date), 'dd/MM/yyyy')}</div>
+                            <div className="text-xs">סוג: <button className="text-purple-600 hover:text-purple-700 underline" onClick={() => setSelectedRepair(r)}>{r.repair_type || 'לא צוין'}</button></div>
                           </div>
                           <Badge className="bg-red-500 text-white">
                             {differenceInDays(new Date(), new Date(r.created_date))} ימים
