@@ -50,6 +50,7 @@ export default function AgentDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [period, setPeriod] = useState('month'); // today, week, month (ברירת מחדל לנציג: החודש)
   const [focusMode, setFocusMode] = useState(false);
+  const [leadFilter, setLeadFilter] = useState('open');
   
   // Data states
   const [leads, setLeads] = useState([]);
@@ -460,9 +461,13 @@ export default function AgentDashboard() {
 
   // Filtered leads for focus mode
   const overdueLeads = leads.filter(l => getSlaStatus(l) === 'Overdue');
-  const displayLeads = focusMode 
-    ? overdueLeads 
-    : (isManager ? leads.filter(l => l.status !== 'Closed') : myLeads);
+  const showClosedLeads = leadFilter === 'all';
+  const baseLeads = isManager 
+    ? (showClosedLeads ? leads : leads.filter(l => l.status !== 'Closed'))
+    : (showClosedLeads 
+        ? leads.filter(l => l.assigned_to === userId && l.status !== 'Deleted')
+        : myLeads);
+  const displayLeads = focusMode ? overdueLeads : baseLeads;
 
   const periodLabels = {
     today: 'היום',

@@ -281,17 +281,13 @@ export default function UndeliveredOrdersWidget({
                       </div>
                       
                       {/* Products Summary */}
-                      <button
-                        onClick={() => setExpandedTask(isExpanded ? null : task.id)}
-                        className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
-                      >
-                        <span>{products.length} מוצרים</span>
-                        {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                      </button>
+                      <div className="text-xs text-gray-500">
+                        {products.length} מוצרים
+                      </div>
                     </div>
                     
                     {/* Expanded Products */}
-                    {isExpanded && products.length > 0 && (
+                    {products.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-gray-100">
                         <div className="space-y-1 text-xs">
                           {products.map((p, idx) => (
