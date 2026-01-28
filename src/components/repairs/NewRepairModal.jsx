@@ -244,8 +244,10 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
 
             let defaultStatus = 'בטיפול/אבחון';
             // If it's an in-store repair, status is 'בטיפול החנות'
-            if (repairData.repair_type === 'בטיפול החנות') { // Updated state name
+            if (repairData.repair_type === 'בטיפול החנות') {
                 defaultStatus = 'בטיפול החנות';
+            } else if (repairData.repair_type === 'מעבדת יבואן') {
+                defaultStatus = 'At_Importer';
             }
             // For 'מעבדת Gadget-Team' it's already assigned to currentUser.id
 

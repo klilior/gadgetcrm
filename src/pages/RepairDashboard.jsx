@@ -494,7 +494,7 @@ export default function RepairDashboard() {
                         <SelectItem value="הוזמן חלק">הוזמן חלק</SelectItem>
                         <SelectItem value="מכשיר סיים תיקון וממתין לאיסוף">מוכן לאיסוף</SelectItem>
                         <SelectItem value="At_Importer">אצל היבואן</SelectItem>
-                        <SelectItem value="Back_From_Importer">חזר מהיבואן</SelectItem>
+                        
                         <SelectItem value="תיקון נסגר">נסגר</SelectItem>
                         <SelectItem value="לא ניתן לתיקון">לא ניתן לתיקון</SelectItem>
                     </SelectContent>
@@ -602,7 +602,7 @@ export default function RepairDashboard() {
                                                             <SelectItem value="הוזמן חלק">הוזמן חלק</SelectItem>
                                                             <SelectItem value="מכשיר סיים תיקון וממתין לאיסוף">מוכן לאיסוף</SelectItem>
                                                             <SelectItem value="At_Importer">אצל היבואן</SelectItem>
-                                                            <SelectItem value="Back_From_Importer">חזר מהיבואן</SelectItem>
+                                                            
                                                             <SelectItem value="לא ניתן לתיקון">לא ניתן לתיקון</SelectItem>
                                                             <SelectItem value="תיקון נסגר">תיקון נסגר</SelectItem>
                                                         </SelectContent>

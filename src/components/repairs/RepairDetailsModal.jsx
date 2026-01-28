@@ -362,7 +362,7 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                                                     <SelectItem value="לא ניתן לתיקון">לא ניתן לתיקון</SelectItem>
                                                     <SelectItem value="תיקון נסגר">תיקון נסגר</SelectItem>
                                                     <SelectItem value="At_Importer">אצל היבואן</SelectItem>
-                                                    <SelectItem value="Back_From_Importer">חזר מהיבואן</SelectItem>
+                                                    
                                                 </SelectContent>
                                             </Select>
                                         </div>
