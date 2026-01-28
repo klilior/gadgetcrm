@@ -22,7 +22,6 @@ import SalesVsTarget from '../components/dashboard/SalesVsTarget';
 import LeadsTable from '../components/dashboard/LeadsTable';
 import RemindersAlert from '../components/dashboard/RemindersAlert';
 import TeamPerformanceTable from '../components/dashboard/TeamPerformanceTable';
-import QuickLeadButton from '../components/leads/QuickLeadButton';
 import QuickLeadsToComplete from '../components/dashboard/QuickLeadsToComplete';
 import EditLeadModal from '../components/leads/EditLeadModal';
 import UndeliveredOrdersWidget from '../components/dashboard/UndeliveredOrdersWidget';
@@ -796,8 +795,6 @@ export default function AgentDashboard() {
         </div>
       )}
 
-      {/* Quick Lead FAB */}
-      <QuickLeadButton />
 
       {/* Edit Lead Modal */}
       {editingLead && (
