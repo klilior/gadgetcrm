@@ -162,7 +162,7 @@ export const PAGES = {
 }
 
 export const pagesConfig = {
-    mainPage: "Settings",
+    mainPage: "AgentCommissionAssignment",
     Pages: PAGES,
     Layout: __Layout,
 };

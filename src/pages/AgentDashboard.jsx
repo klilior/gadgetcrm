@@ -745,7 +745,7 @@ export default function AgentDashboard() {
             </CardHeader>
             <CardContent>
               <LeadsTable
-                leads={myLeads}
+                leads={leadFilter === 'all' ? leads.filter(l => l.assigned_to === userId && l.status !== 'Deleted') : myLeads}
                 onStatusChange={handleStatusChange}
                 onMarkReminderDone={handleMarkReminderDone}
                 onEdit={handleOpenEdit}
