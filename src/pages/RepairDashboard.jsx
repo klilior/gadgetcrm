@@ -191,10 +191,22 @@ export default function RepairDashboard() {
         const params = new URLSearchParams(window.location.search);
         const rid = params.get('repairId');
         if (!rid || selectedRepair) return;
-        if (repairs && repairs.length > 0) {
-            const match = repairs.find(r => r.id === rid || r.repair_id === rid);
-            if (match) setSelectedRepair(match);
-        }
+        const tryOpen = async () => {
+            if (repairs && repairs.length > 0) {
+                const match = repairs.find(r => r.id === rid || r.repair_id === rid);
+                if (match) { setSelectedRepair(match); return; }
+            }
+            // Fallback: fetch directly by id, then by repair_id
+            try {
+                const byId = await Repair.get(rid);
+                if (byId) { setSelectedRepair(byId); return; }
+            } catch (_) {}
+            try {
+                const byRid = await Repair.filter({ repair_id: rid });
+                if (byRid && byRid[0]) { setSelectedRepair(byRid[0]); return; }
+            } catch (_) {}
+        };
+        tryOpen();
     }, [repairs, selectedRepair]);
 
     const filteredRepairs = repairs.filter(repair => {
