@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from "@/api/base44Client";
-import { Lead, Target, SalesActivity, Employee, Repair, GoalDefinition, GoalProgress, SalesTransaction, LinetUsersMap } from '@/entities/all';
+import { Lead, Target, SalesActivity, Employee, Repair, Client, GoalDefinition, GoalProgress, SalesTransaction, LinetUsersMap } from '@/entities/all';
 import { useUser } from '../components/UserAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -360,7 +360,18 @@ export default function AgentDashboard() {
 
         // Repairs data
         const repairsList = allRepairs || [];
-        setRepairs(repairsList);
+        if (repairsList.length > 0) {
+          const clientIds = [...new Set(repairsList.map(r => r.client_id).filter(Boolean))];
+          let clientsMap = {};
+          if (clientIds.length > 0) {
+            const clients = await Client.filter({ id: { $in: clientIds } });
+            clientsMap = (clients || []).reduce((acc, c) => { acc[c.id] = c; return acc; }, {});
+          }
+          const enrichedRepairs = repairsList.map(r => ({ ...r, customer: clientsMap[r.client_id] || null }));
+          setRepairs(enrichedRepairs);
+        } else {
+          setRepairs(repairsList);
+        }
       } else {
         // Rep KPIs - use finalActuals (from SalesTransaction)
         setKpiData({
