@@ -396,6 +396,10 @@ export default function AgentDashboard() {
         updateData.quick_incomplete = false;
         updateData.capture_type = 'Full';
       }
+      if (newStatus === 'Closed' && lead?.quick_incomplete) {
+        updateData.quick_incomplete = false;
+        updateData.capture_type = 'Full';
+      }
       await Lead.update(leadId, updateData);
       loadData();
     } catch (error) {
