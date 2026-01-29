@@ -439,7 +439,7 @@ Deno.serve(async (req) => {
     const validationJson = JSON.stringify(validation);
     await base44.asServiceRole.entities.Invoices.update(invoice.id, { ai_debug_last_validation_json: validationJson });
 
-    // Step 4: Supplier linking - improved with normalized VAT ID matching and aliases
+    // Step 4: Supplier linking - improved with learned patterns, normalized VAT ID matching and aliases
     let supplierId = null;
     const rawVatId = extraction.supplier_vat_id && String(extraction.supplier_vat_id).trim();
     
@@ -447,6 +447,41 @@ Deno.serve(async (req) => {
     const digitsOnly = rawVatId ? rawVatId.replace(/\D/g, '') : '';
     // Normalize: if we have 9 digits, use them; otherwise keep the raw value for matching
     const normalizedVatId = digitsOnly.length === 9 ? digitsOnly : (rawVatId ? rawVatId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : null);
+    
+    // First, try to find supplier by learned patterns (highest priority)
+    const learnedPatterns = await base44.asServiceRole.entities.SupplierPattern.filter({ is_active: true }, undefined, 500);
+    
+    // Check VAT ID patterns first
+    if (normalizedVatId) {
+      const vatPattern = learnedPatterns.find(p => 
+        p.pattern_type === 'vat_id' && 
+        (p.pattern_value === normalizedVatId || p.pattern_value === rawVatId)
+      );
+      if (vatPattern) {
+        supplierId = vatPattern.supplier_id;
+        console.log(`Supplier matched by learned VAT pattern: ${supplierId}`);
+      }
+    }
+    
+    // Check name patterns if no VAT match
+    if (!supplierId && extraction.supplier_name) {
+      const supplierName = extraction.supplier_name.trim();
+      const normalizedName = extraction.supplier_name_normalized?.trim();
+      
+      const namePattern = learnedPatterns.find(p => {
+        if (p.pattern_type !== 'name_pattern') return false;
+        const patternLower = p.pattern_value.toLowerCase();
+        const nameLower = supplierName.toLowerCase();
+        const normLower = normalizedName?.toLowerCase() || '';
+        return patternLower === nameLower || patternLower === normLower ||
+               patternLower.includes(nameLower) || nameLower.includes(patternLower) ||
+               (normLower && (patternLower.includes(normLower) || normLower.includes(patternLower)));
+      });
+      if (namePattern) {
+        supplierId = namePattern.supplier_id;
+        console.log(`Supplier matched by learned name pattern: ${supplierId}`);
+      }
+    }
     
     // Helper: check if a supplier matches by VAT ID or aliases
     const matchesSupplier = (supplier, vatId, supplierName) => {
@@ -471,7 +506,16 @@ Deno.serve(async (req) => {
     
     const allSuppliers = await base44.asServiceRole.entities.Suppliers.filter({ is_active: true }, undefined, 500);
     
-    if (normalizedVatId) {
+    // If already found by patterns, skip to supplier update
+    if (supplierId) {
+      // Verify supplier still exists
+      const foundSupplier = allSuppliers.find(s => s.id === supplierId);
+      if (!foundSupplier) {
+        supplierId = null; // Pattern points to deleted supplier, continue with normal search
+      }
+    }
+    
+    if (!supplierId && normalizedVatId) {
       // Try to find by exact vat_id first
       let found = allSuppliers.filter(s => {
         if (!s.vat_id) return false;
@@ -505,8 +549,8 @@ Deno.serve(async (req) => {
         });
         supplierId = created.id;
       }
-    } else {
-      // No VAT ID - try to match by normalized name or aliases
+    } else if (!supplierId) {
+      // No VAT ID and no pattern match - try to match by normalized name or aliases
       const supplierName = extraction.supplier_name || '';
       const normalizedName = supplierName.replace(/['"״׳\-\.]/g, '').replace(/בע"?מ|בעמ|ltd|llc|inc/gi, '').replace(/\s+/g, ' ').trim().toLowerCase();
       
