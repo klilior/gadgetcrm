@@ -39,6 +39,28 @@ export default function InvoicesToReview() {
 
   useEffect(() => { load(); }, []);
 
+  // Generate consistent colors for suppliers
+  const supplierColors = useMemo(() => {
+    const colors = [
+      'bg-blue-50 border-l-4 border-l-blue-500',
+      'bg-green-50 border-l-4 border-l-green-500',
+      'bg-purple-50 border-l-4 border-l-purple-500',
+      'bg-orange-50 border-l-4 border-l-orange-500',
+      'bg-pink-50 border-l-4 border-l-pink-500',
+      'bg-cyan-50 border-l-4 border-l-cyan-500',
+      'bg-amber-50 border-l-4 border-l-amber-500',
+      'bg-indigo-50 border-l-4 border-l-indigo-500',
+      'bg-rose-50 border-l-4 border-l-rose-500',
+      'bg-teal-50 border-l-4 border-l-teal-500',
+    ];
+    const map = {};
+    const uniqueSuppliers = [...new Set(rows.map(r => r.supplier).filter(Boolean))];
+    uniqueSuppliers.forEach((supplierId, idx) => {
+      map[supplierId] = colors[idx % colors.length];
+    });
+    return map;
+  }, [rows]);
+
   const sorted = useMemo(() => {
     const arr = [...rows];
     arr.sort((a, b) => {
@@ -220,11 +242,12 @@ export default function InvoicesToReview() {
                     const hasData = r.supplier || r.doc_number || r.total_with_vat;
                     const confidence = r.confidence_score;
                     const needsReview = !hasData || confidence < 70;
+                    const supplierColorClass = r.supplier ? supplierColors[r.supplier] : '';
                     
                     return (
                       <TableRow 
                         key={r.id} 
-                        className={`cursor-pointer hover:bg-purple-50/50 ${needsReview ? 'bg-amber-50/50' : ''}`} 
+                        className={`cursor-pointer hover:bg-purple-50/50 ${needsReview ? 'bg-amber-50/50' : ''} ${supplierColorClass}`} 
                         onClick={() => openRecord(r)}
                       >
                         <TableCell className="font-medium">

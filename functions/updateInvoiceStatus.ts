@@ -26,6 +26,83 @@ Deno.serve(async (req) => {
         reviewed_by: user.email,
         reviewed_at: now,
       });
+      
+      // Learn supplier patterns for future identification
+      if (invoice.supplier && invoice.ai_debug_last_extraction_json) {
+        try {
+          const extraction = JSON.parse(invoice.ai_debug_last_extraction_json);
+          const patternsToCreate = [];
+          
+          // Learn normalized name pattern
+          const normalizedName = extraction.supplier_name_normalized?.trim();
+          if (normalizedName) {
+            const existingNamePattern = await base44.asServiceRole.entities.SupplierPattern.filter({
+              supplier_id: invoice.supplier,
+              pattern_type: 'name_pattern',
+              pattern_value: normalizedName
+            });
+            if (!existingNamePattern || existingNamePattern.length === 0) {
+              patternsToCreate.push({
+                supplier_id: invoice.supplier,
+                pattern_type: 'name_pattern',
+                pattern_value: normalizedName,
+                confidence: 100,
+                learned_from_invoice: invoice.id,
+                is_active: true
+              });
+            }
+          }
+          
+          // Learn original supplier name pattern
+          const supplierName = extraction.supplier_name?.trim();
+          if (supplierName && supplierName !== normalizedName) {
+            const existingOrigPattern = await base44.asServiceRole.entities.SupplierPattern.filter({
+              supplier_id: invoice.supplier,
+              pattern_type: 'name_pattern',
+              pattern_value: supplierName
+            });
+            if (!existingOrigPattern || existingOrigPattern.length === 0) {
+              patternsToCreate.push({
+                supplier_id: invoice.supplier,
+                pattern_type: 'name_pattern',
+                pattern_value: supplierName,
+                confidence: 100,
+                learned_from_invoice: invoice.id,
+                is_active: true
+              });
+            }
+          }
+          
+          // Learn VAT ID pattern
+          const vatId = extraction.supplier_vat_id?.trim();
+          if (vatId) {
+            const existingVatPattern = await base44.asServiceRole.entities.SupplierPattern.filter({
+              supplier_id: invoice.supplier,
+              pattern_type: 'vat_id',
+              pattern_value: vatId
+            });
+            if (!existingVatPattern || existingVatPattern.length === 0) {
+              patternsToCreate.push({
+                supplier_id: invoice.supplier,
+                pattern_type: 'vat_id',
+                pattern_value: vatId,
+                confidence: 100,
+                learned_from_invoice: invoice.id,
+                is_active: true
+              });
+            }
+          }
+          
+          // Create all patterns
+          for (const pattern of patternsToCreate) {
+            await base44.asServiceRole.entities.SupplierPattern.create(pattern);
+          }
+          
+          console.log(`Learned ${patternsToCreate.length} patterns for supplier ${invoice.supplier}`);
+        } catch (patternErr) {
+          console.log('Pattern learning failed:', patternErr.message);
+        }
+      }
     } else if (action === 'reject') {
       await base44.asServiceRole.entities.Invoices.update(invoice.id, {
         extraction_status: 'נדחה',
