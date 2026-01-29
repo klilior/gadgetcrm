@@ -400,6 +400,24 @@ export default function ManagerControlCenter() {
     window.location.href = url;
   };
 
+  const handleLeadStatusChange = async (leadId, newStatus) => {
+    try {
+      const lead = (quickLeads || []).find(l => l.id === leadId);
+      const updateData = { status: newStatus };
+      if (newStatus === 'Deleted') {
+        updateData.deleted_at = new Date().toISOString();
+      }
+      if ((newStatus === 'InProgress' || newStatus === 'Closed') && lead?.quick_incomplete) {
+        updateData.quick_incomplete = false;
+        updateData.capture_type = 'Full';
+      }
+      await base44.entities.Lead.update(leadId, updateData);
+      await loadData();
+    } catch (e) {
+      console.error('Error updating lead status:', e);
+    }
+  };
+
   return (
     <div className="p-3 md:p-6 space-y-4" style={{ background: 'linear-gradient(135deg, #F8F9FB 0%, #E8ECFF 100%)', minHeight: '100vh' }}>
       {/* Header */}
