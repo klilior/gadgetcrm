@@ -18,6 +18,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import useSuppliers from "../components/hooks/useSuppliers";
 import UndeliveredOrdersWidget from "../components/dashboard/UndeliveredOrdersWidget";
+import QuickLeadsToComplete from "../components/dashboard/QuickLeadsToComplete";
 
 // Ratio thresholds for color coding
 const RATIO_THRESHOLDS = { good: 40, warning: 60 }; // green < 40%, orange 40-60%, red > 60%
@@ -33,6 +34,7 @@ export default function ManagerControlCenter() {
   const [pendingInvoicesCount, setPendingInvoicesCount] = useState(0);
   const { suppliersMap, suppliersList } = useSuppliers();
   const [isLoading, setIsLoading] = useState(false);
+  const [quickLeads, setQuickLeads] = useState([]);
 
   // Global filters
   const [datePreset, setDatePreset] = useState("thisMonth");
@@ -119,6 +121,18 @@ export default function ManagerControlCenter() {
       
       const invoicesData = await base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000);
       setInvoices(invoicesData);
+
+      // Quick leads to complete (global for managers)
+      try {
+        const allLeads = await base44.entities.Lead.filter({ status: { $ne: 'Deleted' } });
+        const quickIncomplete = (allLeads || [])
+          .filter(l => l.quick_incomplete === true && l.status !== 'Closed')
+          .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+        setQuickLeads(quickIncomplete);
+      } catch (e) {
+        console.error('Error loading quick leads:', e);
+        setQuickLeads([]);
+      }
     } catch (e) {
       console.error("Error loading data:", e);
     } finally {
@@ -524,6 +538,14 @@ export default function ManagerControlCenter() {
         isManager={true}
         employees={[]}
         compact={false}
+      />
+
+      {/* Quick Leads to Complete */}
+      <QuickLeadsToComplete
+        leads={quickLeads}
+        onProcess={(id) => handleLeadStatusChange(id, 'InProgress')}
+        onClose={(id) => handleLeadStatusChange(id, 'Closed')}
+        onDelete={(id) => handleLeadStatusChange(id, 'Deleted')}
       />
 
       {/* KPI Cards */}

@@ -14,7 +14,22 @@ export default function QuickLeadsToComplete({
   onSetReminder,
   onDelete
 }) {
-  if (!leads || leads.length === 0) return null;
+  if (!leads || leads.length === 0) {
+    return (
+      <Card className="border-purple-200 bg-purple-50/50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-purple-800 flex items-center gap-2 text-lg">
+            <StickyNote className="w-5 h-5" />
+            פתקים מהירים להשלמה
+            <Badge className="bg-purple-600 text-white mr-2">0</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-sm text-gray-500">אין פתקים מהירים להשלמה כרגע</div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="border-purple-200 bg-purple-50/50">
