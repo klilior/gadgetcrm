@@ -132,12 +132,16 @@ export default function AgentDashboard() {
       );
       setReminders(activeReminders);
 
-      // Quick incomplete leads
+      // Quick incomplete leads - filter out test data
       const quickIncomplete = activeLeads.filter(l => 
         l.quick_incomplete === true &&
         l.status !== 'Closed' &&
         l.status !== 'Deleted' &&
-        (isManager || l.assigned_to === userId)
+        (isManager || l.assigned_to === userId) &&
+        // Filter out test/demo leads
+        !l.customer_name?.includes('בדיקת פתק') &&
+        !l.customer_name?.includes('בדיקת מערכת') &&
+        !l.topic?.includes('בדיקת מערכת')
       ).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
       setQuickLeads(quickIncomplete);
 
@@ -546,8 +550,8 @@ export default function AgentDashboard() {
               <SelectValue placeholder="סינון לידים" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">הכל</SelectItem>
               <SelectItem value="open">פתוחים בלבד</SelectItem>
-              <SelectItem value="all">כולל סגורים</SelectItem>
               <SelectItem value="closed">סגורים</SelectItem>
             </SelectContent>
           </Select>
