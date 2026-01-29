@@ -289,7 +289,7 @@ export default function InvoicesToReview() {
 
       {/* Invoice Detail Dialog with Document Viewer */}
       <Dialog open={!!selected} onOpenChange={(open) => { if (!open) closeDialog(); }}>
-        <DialogContent className="max-w-[95vw] w-[1400px] max-h-[90vh] overflow-hidden p-0" dir="rtl">
+        <DialogContent className="max-w-[95vw] w-[1500px] max-h-[90vh] overflow-hidden p-0" dir="rtl">
           <DialogHeader className="p-4 border-b">
             <DialogTitle className="flex items-center gap-2">
               פרטי חשבונית
@@ -381,20 +381,40 @@ export default function InvoicesToReview() {
               </div>
 
               {/* Right side - Form */}
-              <div className="w-[380px] flex flex-col bg-white">
+              <div className="w-[450px] flex flex-col bg-white">
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">ספק</Label>
-                    <Select value={selected.supplier || ""} onValueChange={(v) => setSelected({ ...selected, supplier: v })}>
-                      <SelectTrigger className="h-9"><SelectValue placeholder="בחר ספק" /></SelectTrigger>
-                      <SelectContent>
-                        {suppliersList.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  {/* Supplier Info Section */}
+                  <div className="bg-blue-50 rounded-lg p-3 space-y-2">
+                    <div className="font-medium text-blue-800 text-sm">פרטי ספק</div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">שם ספק</Label>
+                      <Select value={selected.supplier || ""} onValueChange={(v) => setSelected({ ...selected, supplier: v })}>
+                        <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="בחר ספק" /></SelectTrigger>
+                        <SelectContent>
+                          {suppliersList.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {(() => {
+                      try {
+                        const extraction = selected.ai_debug_last_extraction_json ? JSON.parse(selected.ai_debug_last_extraction_json) : null;
+                        const vatId = extraction?.supplier_vat_id || suppliersMap[selected.supplier]?.vat_id;
+                        if (vatId) {
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">ח.פ.:</span>
+                              <span className="text-sm font-mono bg-white px-2 py-1 rounded">{vatId}</span>
+                            </div>
+                          );
+                        }
+                      } catch (_) {}
+                      return null;
+                    })()}
                   </div>
 
+                  {/* Document Info */}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <Label className="text-xs text-gray-500">סוג מסמך</Label>
@@ -430,6 +450,7 @@ export default function InvoicesToReview() {
                     </div>
                   </div>
 
+                  {/* Totals Section */}
                   <div className="border-t pt-3 mt-3">
                     <Label className="text-xs text-gray-500 mb-2 block">סכומים</Label>
                     <div className="space-y-2">
@@ -438,15 +459,82 @@ export default function InvoicesToReview() {
                         <Input className="h-8 flex-1" type="number" value={selected.subtotal_before_vat ?? ""} onChange={(e) => setSelected({ ...selected, subtotal_before_vat: e.target.value })} />
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 w-24">מע"מ:</span>
+                        <span className="text-xs text-gray-500 w-24">מע"מ (18%):</span>
                         <Input className="h-8 flex-1" type="number" value={selected.vat_amount ?? ""} onChange={(e) => setSelected({ ...selected, vat_amount: e.target.value })} />
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium w-24">סה"כ:</span>
+                        <span className="text-xs font-medium w-24">סה"כ כולל:</span>
                         <Input className="h-9 flex-1 font-bold text-lg" type="number" value={selected.total_with_vat ?? ""} onChange={(e) => setSelected({ ...selected, total_with_vat: e.target.value })} />
                       </div>
                     </div>
                   </div>
+
+                  {/* Line Items Section */}
+                  {(() => {
+                    try {
+                      const extraction = selected.ai_debug_last_extraction_json ? JSON.parse(selected.ai_debug_last_extraction_json) : null;
+                      const lineItems = extraction?.line_items || [];
+                      const totalWithVat = Number(selected.total_with_vat) || 0;
+                      const VAT_RATE = 0.18;
+                      
+                      if (lineItems.length > 0) {
+                        return (
+                          <div className="border-t pt-3 mt-3">
+                            <Label className="text-xs text-gray-500 mb-2 block">פריטים ({lineItems.length})</Label>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {lineItems.map((item, idx) => {
+                                // Calculate prices - if one is missing, derive from the other using VAT
+                                let unitPriceBeforeVat = item.unit_price_before_vat;
+                                let lineTotalBeforeVat = item.line_total_before_vat;
+                                let lineTotalWithVat = item.line_total_with_vat;
+                                const qty = item.quantity || 1;
+                                
+                                // If we have total with VAT but not before VAT
+                                if (lineTotalWithVat && !lineTotalBeforeVat) {
+                                  lineTotalBeforeVat = lineTotalWithVat / (1 + VAT_RATE);
+                                }
+                                // If we have before VAT but not with VAT
+                                if (lineTotalBeforeVat && !lineTotalWithVat) {
+                                  lineTotalWithVat = lineTotalBeforeVat * (1 + VAT_RATE);
+                                }
+                                // Calculate unit price if missing
+                                if (!unitPriceBeforeVat && lineTotalBeforeVat && qty) {
+                                  unitPriceBeforeVat = lineTotalBeforeVat / qty;
+                                }
+                                // If we only have unit price, calculate totals
+                                if (unitPriceBeforeVat && !lineTotalBeforeVat) {
+                                  lineTotalBeforeVat = unitPriceBeforeVat * qty;
+                                  lineTotalWithVat = lineTotalBeforeVat * (1 + VAT_RATE);
+                                }
+                                
+                                const unitPriceWithVat = unitPriceBeforeVat ? unitPriceBeforeVat * (1 + VAT_RATE) : null;
+                                
+                                return (
+                                  <div key={idx} className="bg-gray-50 rounded p-2 text-xs border">
+                                    <div className="flex justify-between items-start mb-1">
+                                      <span className="font-medium text-gray-800 flex-1 truncate" title={item.product_name}>
+                                        {item.product_name || 'ללא שם'}
+                                      </span>
+                                      {item.sku && (
+                                        <span className="text-gray-400 font-mono mr-2 text-[10px]">מק"ט: {item.sku}</span>
+                                      )}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-gray-600">
+                                      <div>כמות: <span className="font-medium">{qty}</span></div>
+                                      <div>מחיר/יח׳ (לפני): <span className="font-medium">{unitPriceBeforeVat ? `₪${unitPriceBeforeVat.toFixed(2)}` : '-'}</span></div>
+                                      <div>סה״כ לפני מע״מ: <span className="font-medium">{lineTotalBeforeVat ? `₪${lineTotalBeforeVat.toFixed(2)}` : '-'}</span></div>
+                                      <div>סה״כ כולל מע״מ: <span className="font-medium text-green-700">{lineTotalWithVat ? `₪${lineTotalWithVat.toFixed(2)}` : '-'}</span></div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      }
+                    } catch (_) {}
+                    return null;
+                  })()}
 
                   <div className="space-y-1">
                     <Label className="text-xs text-gray-500">הערות</Label>
