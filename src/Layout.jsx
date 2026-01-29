@@ -183,6 +183,7 @@ function AppContent({ children, currentPageName }) {
         { title: "תיבת קליטה", url: createPageUrl("IntakeInbox") },
         { title: "העלאה מנייד", url: createPageUrl("MobileInvoiceUpload") },
         { title: "חשבוניות לאימות", url: createPageUrl("InvoicesToReview") },
+        { title: "ריכוז חשבוניות", url: createPageUrl("InvoicesOverview") },
         { title: "התראות מחיר", url: createPageUrl("PriceAlerts") },
         { title: "ספקים", url: createPageUrl("SuppliersManagement") },
         { title: "דשבורד רכישות", url: createPageUrl("PurchasesDashboard") },
