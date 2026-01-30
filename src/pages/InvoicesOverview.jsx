@@ -266,7 +266,7 @@ export default function InvoicesOverview() {
 
       {/* Details dialog */}
       <Dialog open={!!selected} onOpenChange={(open) => { if (!open) closeDialog(); }}>
-        <DialogContent className="max-w-[95vw] w-[1500px] max-h-[90vh] overflow-hidden p-0" dir="rtl">
+        <DialogContent className="w-[95vw] max-w-[1500px] h-[85vh] md:h-[90vh] overflow-hidden p-0" dir="rtl">
           <DialogHeader className="p-4 border-b">
             <DialogTitle className="flex items-center gap-2">
               פירוט חשבונית
@@ -277,9 +277,9 @@ export default function InvoicesOverview() {
           </DialogHeader>
 
           {selected && (
-            <div className="flex h-[calc(90vh-80px)]">
+            <div className="flex flex-col md:flex-row h-[calc(85vh-64px)] md:h-[calc(90vh-80px)]">
               {/* Right side - viewer */}
-              <div className="w-[48%] border-l flex flex-col bg-gray-100">
+              <div className="w-full md:w-[48%] border-l md:border-l border-b md:border-b-0 flex flex-col bg-gray-100">
                 <div className="p-2 border-b bg-white flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-600">תצוגת מסמך מקור</span>
                   <div className="flex items-center gap-2">

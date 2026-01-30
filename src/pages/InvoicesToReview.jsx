@@ -289,7 +289,7 @@ export default function InvoicesToReview() {
 
       {/* Invoice Detail Dialog with Document Viewer */}
       <Dialog open={!!selected} onOpenChange={(open) => { if (!open) closeDialog(); }}>
-        <DialogContent className="max-w-[95vw] w-[1500px] max-h-[90vh] overflow-hidden p-0" dir="rtl">
+        <DialogContent className="w-[95vw] max-w-[1500px] h-[85vh] md:h-[90vh] overflow-hidden p-0" dir="rtl">
           <DialogHeader className="p-4 border-b">
             <DialogTitle className="flex items-center gap-2">
               פרטי חשבונית
@@ -302,7 +302,7 @@ export default function InvoicesToReview() {
           </DialogHeader>
           
           {selected && (
-            <div className="flex h-[calc(90vh-80px)]">
+            <div className="flex flex-col md:flex-row h-[calc(85vh-64px)] md:h-[calc(90vh-80px)]">
               {/* Left side - Document viewer */}
               <div className="flex-1 border-l flex flex-col bg-gray-100">
                 <div className="p-2 border-b bg-white flex items-center justify-between">
@@ -381,7 +381,7 @@ export default function InvoicesToReview() {
               </div>
 
               {/* Right side - Form */}
-              <div className="w-[450px] flex flex-col bg-white">
+              <div className="w-full md:w-[450px] flex flex-col bg-white">
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {/* Supplier Info Section */}
                   <div className="bg-blue-50 rounded-lg p-3 space-y-2">

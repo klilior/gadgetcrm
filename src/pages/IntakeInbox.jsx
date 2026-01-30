@@ -103,7 +103,7 @@ export default function IntakeInbox() {
       </Card>
 
       <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-w-2xl" dir="rtl">
+        <DialogContent className="w-[95vw] max-w-[900px] h-[85vh]" dir="rtl">
           <DialogHeader>
             <DialogTitle>פרטי מסמך</DialogTitle>
           </DialogHeader>
