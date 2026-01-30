@@ -65,6 +65,7 @@ import DebugSchedule from './pages/DebugSchedule';
 import GoalsDashboard from './pages/GoalsDashboard';
 import Home from './pages/Home';
 import IntakeInbox from './pages/IntakeInbox';
+import InvoicesOverview from './pages/InvoicesOverview';
 import InvoicesToReview from './pages/InvoicesToReview';
 import LineContractImport from './pages/LineContractImport';
 import LineProductMapping from './pages/LineProductMapping';
@@ -101,7 +102,6 @@ import VendorReport from './pages/VendorReport';
 import WeeklySchedule from './pages/WeeklySchedule';
 import WhatsAppDebug from './pages/WhatsAppDebug';
 import WhatsAppProviders from './pages/WhatsAppProviders';
-import InvoicesOverview from './pages/InvoicesOverview';
 import __Layout from './Layout.jsx';
 
 
@@ -124,6 +124,7 @@ export const PAGES = {
     "GoalsDashboard": GoalsDashboard,
     "Home": Home,
     "IntakeInbox": IntakeInbox,
+    "InvoicesOverview": InvoicesOverview,
     "InvoicesToReview": InvoicesToReview,
     "LineContractImport": LineContractImport,
     "LineProductMapping": LineProductMapping,
@@ -160,7 +161,6 @@ export const PAGES = {
     "WeeklySchedule": WeeklySchedule,
     "WhatsAppDebug": WhatsAppDebug,
     "WhatsAppProviders": WhatsAppProviders,
-    "InvoicesOverview": InvoicesOverview,
 }
 
 export const pagesConfig = {

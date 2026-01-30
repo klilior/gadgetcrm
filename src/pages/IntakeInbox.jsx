@@ -113,12 +113,41 @@ export default function IntakeInbox() {
                 <div className="text-sm text-gray-600">{selected.file_name || ""}</div>
                 {selected.file && (
                   <a href={selected.file} target="_blank" rel="noreferrer" className="text-indigo-600 flex items-center gap-1">
-                    <FileText className="w-4 h-4"/> צפייה/הורדה
+                    <FileText className="w-4 h-4"/> פתח בחלון חדש
                   </a>
                 )}
               </div>
 
-              {/* Preview removed - use download link instead */}
+              <div className="h-[60vh] bg-gray-50 rounded border overflow-auto flex items-start justify-center p-3">
+                {selected.file ? (
+                  (() => {
+                    const lower = String(selected.file).toLowerCase();
+                    const isPdf = lower.includes('.pdf') || lower.includes('application/pdf');
+                    if (isPdf) {
+                      return (
+                        <iframe
+                          src={selected.file + '#toolbar=1&navpanes=0'}
+                          title="Invoice preview"
+                          className="w-full h-full bg-white rounded"
+                        />
+                      );
+                    }
+                    return (
+                      <img
+                        src={selected.file}
+                        alt="Invoice preview"
+                        className="object-contain max-w-none"
+                        style={{ width: '100%', height: 'auto' }}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    );
+                  })()
+                ) : (
+                  <div className="text-gray-400 flex flex-col items-center justify-center h-full w-full">
+                    אין קובץ להצגה
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 {!canEdit && (<>
