@@ -45,17 +45,9 @@ function FileActions({ invoiceId, sourceIntake }) {
         target="_blank"
         rel="noopener noreferrer"
         className="p-1 hover:bg-blue-100 rounded text-blue-600"
-        title="צפייה"
+        title="פתח בתצוגה"
       >
         <Eye className="w-4 h-4" />
-      </a>
-      <a
-        href={fileUrl}
-        download
-        className="p-1 hover:bg-green-100 rounded text-green-600"
-        title="הורדה"
-      >
-        <Download className="w-4 h-4" />
       </a>
     </div>
   );
