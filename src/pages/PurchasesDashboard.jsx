@@ -102,6 +102,9 @@ export default function PurchasesDashboard() {
   const [customTo, setCustomTo] = useState("");
   const [searchText, setSearchText] = useState("");
   const [sortOrder, setSortOrder] = useState("desc"); // desc = newest first, asc = oldest first
+  // Preview state for row click
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -113,6 +116,17 @@ export default function PurchasesDashboard() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Open preview for a specific invoice row
+  const openPreview = async (inv) => {
+    if (!inv?.source_intake) return;
+    const intakes = await base44.entities.InvoiceIntakeRaw.filter({ id: inv.source_intake });
+    const url = intakes?.[0]?.file;
+    if (url) {
+      setPreviewUrl(url);
+      setPreviewOpen(true);
+    }
+  };
 
 
 
@@ -245,9 +259,36 @@ export default function PurchasesDashboard() {
       <div className="p-6 text-center">
         <h1 className="text-2xl font-bold text-red-600">אין הרשאה</h1>
         <p className="text-gray-600 mt-2">דף זה זמין למנהלים בלבד</p>
+      {/* Preview Dialog for row click */}
+      <Dialog open={previewOpen} onOpenChange={(o) => { if (!o) { setPreviewOpen(false); setPreviewUrl(null); } }}>
+        <DialogContent className="max-w-[95vw] w-[1200px] h-[80vh]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>תצוגה מקדימה</DialogTitle>
+          </DialogHeader>
+          <div className="w-full h-[calc(80vh-60px)]">
+            {previewUrl ? (
+              (() => {
+                const lower = String(previewUrl).toLowerCase();
+                const isPdf = lower.includes('.pdf') || lower.includes('application/pdf');
+                if (isPdf) {
+                  return (
+                    <iframe src={previewUrl + '#toolbar=1&navpanes=0'} title="Invoice preview" className="w-full h-full bg-white rounded" />
+                  );
+                }
+                return (
+                  <img src={previewUrl} alt="Invoice preview" className="object-contain max-w-none w-full h-full bg-white" />
+                );
+              })()
+            ) : (
+              <div className="text-gray-400 flex items-center justify-center w-full h-full">אין קובץ להצגה</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       </div>
-    );
-  }
+      );
+      }
 
   if (loading) {
     return (
@@ -488,7 +529,7 @@ export default function PurchasesDashboard() {
                 {recentInvoices.length === 0 ? (
                   <tr><td colSpan={7} className="text-center py-4 text-gray-500">אין חשבוניות</td></tr>
                 ) : recentInvoices.map(inv => (
-                  <tr key={inv.id} className="border-b hover:bg-gray-50">
+                  <tr key={inv.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => openPreview(inv)}>
                     <td className="py-2 px-2">{suppliersMap[inv.supplier]?.name || inv.supplier || "-"}</td>
                     <td className="py-2 px-2">{inv.doc_type || "-"}</td>
                     <td className="py-2 px-2 font-mono">{inv.doc_number || "-"}</td>
