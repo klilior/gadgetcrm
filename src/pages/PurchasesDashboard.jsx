@@ -10,12 +10,14 @@ import { useUser } from "../components/UserAuth";
 import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, isBefore, startOfDay, endOfDay, subDays, startOfYear, endOfYear, subMonths, subYears, format } from "date-fns";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import useSuppliers from "../components/hooks/useSuppliers";
 
 
 function FileActions({ invoiceId, sourceIntake }) {
   const [fileUrl, setFileUrl] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const loadFile = async () => {
     if (fileUrl || !sourceIntake) return;
@@ -39,17 +41,50 @@ function FileActions({ invoiceId, sourceIntake }) {
   if (!fileUrl) return <span className="text-gray-400 text-xs">אין קובץ</span>;
 
   return (
-    <div className="flex items-center gap-1">
-      <a
-        href={fileUrl}
-        target="_blank"
-        rel="noopener noreferrer"
+    <>
+      <button
+        onClick={() => setOpen(true)}
         className="p-1 hover:bg-blue-100 rounded text-blue-600"
-        title="פתח בתצוגה"
+        title="תצוגה מקדימה"
       >
         <Eye className="w-4 h-4" />
-      </a>
-    </div>
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-[95vw] w-[1200px] h-[80vh]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>תצוגה מקדימה</DialogTitle>
+          </DialogHeader>
+          <div className="w-full h-[calc(80vh-60px)]">
+            {fileUrl ? (
+              (() => {
+                const lower = String(fileUrl).toLowerCase();
+                const isPdf = lower.includes('.pdf') || lower.includes('application/pdf');
+                if (isPdf) {
+                  return (
+                    <iframe
+                      src={fileUrl + '#toolbar=1&navpanes=0'}
+                      title="Invoice preview"
+                      className="w-full h-full bg-white rounded"
+                    />
+                  );
+                }
+                return (
+                  <img
+                    src={fileUrl}
+                    alt="Invoice preview"
+                    className="object-contain max-w-none w-full h-full bg-white"
+                  />
+                );
+              })()
+            ) : (
+              <div className="text-gray-400 flex items-center justify-center w-full h-full">
+                אין קובץ להצגה
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
