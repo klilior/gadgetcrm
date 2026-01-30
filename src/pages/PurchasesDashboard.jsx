@@ -50,7 +50,7 @@ function FileActions({ invoiceId, sourceIntake }) {
         <Eye className="w-4 h-4" />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-[95vw] w-[1200px] h-[80vh]" dir="rtl">
+        <DialogContent className="w-[95vw] max-w-[1200px] h-[85vh] md:h-[80vh]" dir="rtl">
           <DialogHeader>
             <DialogTitle>תצוגה מקדימה</DialogTitle>
           </DialogHeader>
@@ -261,7 +261,7 @@ export default function PurchasesDashboard() {
         <p className="text-gray-600 mt-2">דף זה זמין למנהלים בלבד</p>
       {/* Preview Dialog for row click */}
       <Dialog open={previewOpen} onOpenChange={(o) => { if (!o) { setPreviewOpen(false); setPreviewUrl(null); } }}>
-        <DialogContent className="max-w-[95vw] w-[1200px] h-[80vh]" dir="rtl">
+        <DialogContent className="w-[95vw] max-w-[1200px] h-[85vh] md:h-[80vh]" dir="rtl">
           <DialogHeader>
             <DialogTitle>תצוגה מקדימה</DialogTitle>
           </DialogHeader>
