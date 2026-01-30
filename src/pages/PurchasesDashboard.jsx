@@ -11,12 +11,14 @@ import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, is
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import useSuppliers from "../components/hooks/useSuppliers";
 
 
 function FileActions({ invoiceId, sourceIntake }) {
   const [fileUrl, setFileUrl] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
   const [open, setOpen] = useState(false);
 
   const loadFile = async () => {
