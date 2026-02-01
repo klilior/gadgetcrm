@@ -779,7 +779,7 @@ export default function AgentDashboard() {
                 הלידים שלי
                 <Badge variant="outline" className="mr-2">
                   {leadFilter === 'all' 
-                    ? leads.filter(l => l.assigned_to === currentEmployeeId && l.status !== 'Deleted').length 
+                    ? leads.filter(l => (l.assigned_to === currentEmployeeId || l.assigned_to === userId) && l.status !== 'Deleted').length 
                     : myLeads.length}
                 </Badge>
               </CardTitle>
@@ -787,9 +787,9 @@ export default function AgentDashboard() {
             <CardContent>
               <LeadsTable
                 leads={leadFilter === 'all'
-                  ? leads.filter(l => l.assigned_to === currentEmployeeId && l.status !== 'Deleted')
+                  ? leads.filter(l => (l.assigned_to === currentEmployeeId || l.assigned_to === userId) && l.status !== 'Deleted')
                   : (leadFilter === 'closed'
-                      ? leads.filter(l => l.assigned_to === currentEmployeeId && l.status === 'Closed')
+                      ? leads.filter(l => (l.assigned_to === currentEmployeeId || l.assigned_to === userId) && l.status === 'Closed')
                       : myLeads)
                 }
                 onStatusChange={handleStatusChange}
