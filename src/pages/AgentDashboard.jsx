@@ -138,10 +138,9 @@ export default function AgentDashboard() {
       );
       setReminders(activeReminders);
 
-      // Quick incomplete leads - filter out test data
+      // Quick notes candidates: include capture_type="Quick" OR quick_incomplete flag; let widget filter status
       const quickIncomplete = activeLeads.filter(l => 
-        l.quick_incomplete === true &&
-        l.status !== 'Closed' &&
+        (l.capture_type === 'Quick' || l.quick_incomplete === true) &&
         l.status !== 'Deleted' &&
         (isManager || l.assigned_to === myEmpId || l.assigned_to === userId) &&
         // Filter out test/demo leads
