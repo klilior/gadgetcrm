@@ -98,11 +98,11 @@ import TargetBonusManagement from './pages/TargetBonusManagement';
 import TechnicianReport from './pages/TechnicianReport';
 import Tickets from './pages/Tickets';
 import TodaysCalls from './pages/TodaysCalls';
+import UserRoles from './pages/UserRoles';
 import VendorReport from './pages/VendorReport';
 import WeeklySchedule from './pages/WeeklySchedule';
 import WhatsAppDebug from './pages/WhatsAppDebug';
 import WhatsAppProviders from './pages/WhatsAppProviders';
-import UserRoles from './pages/UserRoles';
 import __Layout from './Layout.jsx';
 
 
@@ -158,11 +158,11 @@ export const PAGES = {
     "TechnicianReport": TechnicianReport,
     "Tickets": Tickets,
     "TodaysCalls": TodaysCalls,
+    "UserRoles": UserRoles,
     "VendorReport": VendorReport,
     "WeeklySchedule": WeeklySchedule,
     "WhatsAppDebug": WhatsAppDebug,
     "WhatsAppProviders": WhatsAppProviders,
-    "UserRoles": UserRoles,
 }
 
 export const pagesConfig = {

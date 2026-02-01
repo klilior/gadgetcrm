@@ -126,7 +126,7 @@ export default function ManagerControlCenter() {
       try {
         const allLeads = await base44.entities.Lead.filter({ status: { $ne: 'Deleted' } });
         const quickIncomplete = (allLeads || [])
-          .filter(l => l.quick_incomplete === true && l.status !== 'Closed')
+          .filter(l => (l.capture_type === 'Quick' || l.quick_incomplete === true) && l.status !== 'Closed')
           .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
         // Include legacy notes by content
         const norm = (s) => (s || '').toString().toLowerCase();
