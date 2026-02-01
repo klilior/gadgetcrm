@@ -68,10 +68,13 @@ export default function AgentDashboard() {
 
   // Determine role: prefer app_role (set by UserAuth from Employee.role), then currentUser.role
   const appRole = currentUser?.app_role || currentUser?.role || currentUser?.data?.app_role;
+  // isManager includes both מנהל and מנהל משמרת for dashboard capabilities
   const isManager = appRole === 'מנהל' || appRole === 'מנהל משמרת' || currentUser?.role === 'admin';
+  // isFullManager is only for full managers (not shift managers) - used for specific admin features
+  const isFullManager = appRole === 'מנהל' || currentUser?.role === 'admin';
   
   // Debug log for role resolution
-  console.log('[AgentDashboard] Role check:', { appRole, role: currentUser?.role, isManager, userName: currentUser?.employee_name });
+  console.log('[AgentDashboard] Role check:', { appRole, role: currentUser?.role, isManager, isFullManager, userName: currentUser?.employee_name });
   const userId = currentUser?.id;
   const currentEmployeeId = employees.find(e => e.employee_name === currentUser?.employee_name)?.id || userId;
 
@@ -143,15 +146,27 @@ export default function AgentDashboard() {
       setReminders(activeReminders);
 
       // Quick notes candidates: include capture_type="Quick" OR quick_incomplete flag; let widget filter status
-      const quickIncomplete = activeLeads.filter(l => 
-        (l.capture_type === 'Quick' || l.quick_incomplete === true) &&
-        l.status !== 'Deleted' &&
-        (isManager || l.assigned_to === myEmpId || l.assigned_to === userId) &&
+      // For managers (including shift managers), show ALL quick notes
+      // For regular reps, show only their own
+      const quickIncomplete = activeLeads.filter(l => {
+        // Must be quick note
+        const isQuickNote = l.capture_type === 'Quick' || l.quick_incomplete === true;
+        if (!isQuickNote) return false;
+        
+        // Must not be deleted
+        if (l.status === 'Deleted') return false;
+        
         // Filter out test/demo leads
-        !l.customer_name?.includes('בדיקת פתק') &&
-        !l.customer_name?.includes('בדיקת מערכת') &&
-        !l.topic?.includes('בדיקת מערכת')
-      ).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+        if (l.customer_name?.includes('בדיקת פתק') || 
+            l.customer_name?.includes('בדיקת מערכת') ||
+            l.topic?.includes('בדיקת מערכת')) return false;
+        
+        // Managers see all, reps see only their own
+        if (isManager) return true;
+        return l.assigned_to === myEmpId || l.assigned_to === userId;
+      }).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+      
+      console.log('[AgentDashboard] Quick notes found:', quickIncomplete.length, 'isManager:', isManager);
 
       // Include legacy notes even if not marked quick_incomplete
       const norm = (s) => (s || '').toString().toLowerCase();
