@@ -165,10 +165,11 @@ function AppContent({ children, currentPageName }) {
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
-  const isManager = currentUser?.role === "מנהל";
-  const isShiftManager = currentUser?.employee_name === "דניאל קריידן" || currentUser?.role === "מנהל משמרת" || isManager;
-  const isTechnicianRole = currentUser?.role === "טכנאי";
-  const isRepresentative = currentUser?.role === "נציג";
+  const appRole = currentUser?.app_role || currentUser?.data?.app_role || currentUser?.role;
+  const isManager = appRole === "מנהל" || currentUser?.role === "admin";
+  const isShiftManager = appRole === "מנהל משמרת" || isManager || currentUser?.employee_name === "דניאל קריידן";
+  const isTechnicianRole = appRole === "טכנאי";
+  const isRepresentative = appRole === "נציג";
 
   // Build menu structure
   const dashboardUrl = isManager ? createPageUrl("ManagerControlCenter") : createPageUrl("AgentDashboard");
