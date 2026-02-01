@@ -37,6 +37,7 @@ export default function QuickLeadsToComplete({
   }
 
   const safeLeads = Array.isArray(leads) ? leads : [];
+  // Show both quick capture and flagged quick_incomplete
   const filteredLeads = safeLeads.filter(l => {
     const isClosed = l.status === 'Closed';
     const statusOk = statusFilter === 'all' ? true : (statusFilter === 'open' ? !isClosed : isClosed);
