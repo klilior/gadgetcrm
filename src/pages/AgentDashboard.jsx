@@ -151,10 +151,10 @@ export default function AgentDashboard() {
 
       // Ensure legacy notes are included even if not marked quick_incomplete
       const legacyNoteKeywords = ['בייסיק a17', 'כבל אייפון ישן'];
+      const normalize = (s) => (s || '').toString().trim().toLowerCase();
       const legacyNotes = activeLeads.filter(l =>
-        (isManager || l.assigned_to === myEmpId || l.assigned_to === userId) &&
         l.status !== 'Deleted' &&
-        legacyNoteKeywords.some(k => (l.topic || '').includes(k) || (l.notes || '').includes(k))
+        legacyNoteKeywords.some(k => normalize(l.topic).includes(normalize(k)) || normalize(l.notes).includes(normalize(k)))
       );
 
       // Merge and deduplicate
