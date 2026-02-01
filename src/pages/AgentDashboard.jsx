@@ -154,7 +154,12 @@ export default function AgentDashboard() {
       const normalize = (s) => (s || '').toString().trim().toLowerCase();
       const legacyNotes = activeLeads.filter(l =>
         l.status !== 'Deleted' &&
-        legacyNoteKeywords.some(k => normalize(l.topic).includes(normalize(k)) || normalize(l.notes).includes(normalize(k)))
+        legacyNoteKeywords.some(k => 
+          normalize(l.topic).includes(normalize(k)) || 
+          normalize(l.notes).includes(normalize(k)) ||
+          normalize(l.customer_name).includes(normalize(k)) ||
+          normalize(l.phone).includes(normalize(k))
+        )
       );
 
       // Merge and deduplicate
