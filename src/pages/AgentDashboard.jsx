@@ -119,9 +119,9 @@ export default function AgentDashboard() {
       const meEmp = (allEmployees || []).find(e => e.employee_name === (currentUser?.employee_name || ''));
       const myEmpId = meEmp?.id || userId;
 
-      // My leads (for rep view)
+      // My leads (for rep view) - include legacy notes assigned to userId
       const myOpenLeads = activeLeads.filter(l => 
-        l.assigned_to === myEmpId && 
+        (l.assigned_to === myEmpId || l.assigned_to === userId) && 
         (l.status === 'New' || l.status === 'InProgress')
       );
       setMyLeads(myOpenLeads);
@@ -129,7 +129,7 @@ export default function AgentDashboard() {
       // Reminders (within next hour or overdue)
       const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
       const activeReminders = activeLeads.filter(l => 
-        l.assigned_to === myEmpId &&
+        (l.assigned_to === myEmpId || l.assigned_to === userId) &&
         l.reminder_at && 
         !l.reminder_done &&
         l.status !== 'Closed' &&
@@ -142,7 +142,7 @@ export default function AgentDashboard() {
         l.quick_incomplete === true &&
         l.status !== 'Closed' &&
         l.status !== 'Deleted' &&
-        (isManager || l.assigned_to === myEmpId) &&
+        (isManager || l.assigned_to === myEmpId || l.assigned_to === userId) &&
         // Filter out test/demo leads
         !l.customer_name?.includes('בדיקת פתק') &&
         !l.customer_name?.includes('בדיקת מערכת') &&
