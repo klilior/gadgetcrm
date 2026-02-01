@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { StickyNote, Phone, Play, CheckCircle, Bell, Edit, Trash2, Clock } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { he } from 'date-fns/locale';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function QuickLeadsToComplete({ 
   leads, 
@@ -14,6 +15,8 @@ export default function QuickLeadsToComplete({
   onSetReminder,
   onDelete
 }) {
+  const [statusFilter, setStatusFilter] = React.useState('open');
+  const [timeFilter, setTimeFilter] = React.useState('30d');
   if (!leads || leads.length === 0) {
     return (
       <Card className="border-purple-200 bg-purple-50/50">
@@ -31,18 +34,62 @@ export default function QuickLeadsToComplete({
     );
   }
 
+  // Apply filters
+  const now = new Date();
+  let fromDate = null;
+  if (timeFilter === 'today') {
+    const d = new Date();
+    fromDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  } else if (timeFilter === '7d') {
+    fromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  } else if (timeFilter === '30d') {
+    fromDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
+
+  const filteredLeads = leads.filter(l => {
+    const isClosed = l.status === 'Closed';
+    const statusOk = statusFilter === 'all' ? true : (statusFilter === 'open' ? !isClosed : isClosed);
+    const timeOk = fromDate ? new Date(l.created_date) >= fromDate : true;
+    return statusOk && timeOk;
+  });
+
   return (
     <Card className="border-purple-200 bg-purple-50/50">
       <CardHeader className="pb-2">
-        <CardTitle className="text-purple-800 flex items-center gap-2 text-lg">
-          <StickyNote className="w-5 h-5" />
-          פתקים מהירים להשלמה
-          <Badge className="bg-purple-600 text-white mr-2">{leads.length}</Badge>
-        </CardTitle>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <CardTitle className="text-purple-800 flex items-center gap-2 text-lg">
+            <StickyNote className="w-5 h-5" />
+            פתקים מהירים להשלמה
+            <Badge className="bg-purple-600 text-white mr-2">{filteredLeads.length}</Badge>
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Select value={timeFilter} onValueChange={setTimeFilter}>
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="טווח זמן" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">היום</SelectItem>
+                <SelectItem value="7d">7 ימים</SelectItem>
+                <SelectItem value="30d">30 ימים</SelectItem>
+                <SelectItem value="all">כל הזמן</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="סטטוס" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="open">פתוח</SelectItem>
+                <SelectItem value="closed">סגור</SelectItem>
+                <SelectItem value="all">הכל</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {leads.map(lead => (
+          {filteredLeads.map(lead => (
             <div 
               key={lead.id} 
               className="bg-white rounded-lg p-4 border border-purple-100 shadow-sm"

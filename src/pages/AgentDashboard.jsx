@@ -148,7 +148,21 @@ export default function AgentDashboard() {
         !l.customer_name?.includes('בדיקת מערכת') &&
         !l.topic?.includes('בדיקת מערכת')
       ).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-      setQuickLeads(quickIncomplete);
+
+      // Ensure legacy notes are included even if not marked quick_incomplete
+      const legacyNoteKeywords = ['בייסיק a17', 'כבל אייפון ישן'];
+      const legacyNotes = activeLeads.filter(l =>
+        (isManager || l.assigned_to === myEmpId || l.assigned_to === userId) &&
+        l.status !== 'Deleted' &&
+        legacyNoteKeywords.some(k => (l.topic || '').includes(k) || (l.notes || '').includes(k))
+      );
+
+      // Merge and deduplicate
+      const mergedQuick = [...quickIncomplete, ...legacyNotes].reduce((acc, item) => {
+        if (!acc.some(x => x.id === item.id)) acc.push(item);
+        return acc;
+      }, []);
+      setQuickLeads(mergedQuick);
 
       // Filter activities by period
       const periodActivities = (allActivities || []).filter(a => {
