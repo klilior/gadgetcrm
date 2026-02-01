@@ -66,7 +66,8 @@ export default function AgentDashboard() {
   const [quickLeads, setQuickLeads] = useState([]);
   const [editingLead, setEditingLead] = useState(null);
 
-  const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'מנהל משמרת';
+  const appRole = currentUser?.app_role || currentUser?.data?.app_role || currentUser?.role;
+  const isManager = appRole === 'מנהל' || appRole === 'מנהל משמרת' || currentUser?.role === 'admin';
   const userId = currentUser?.id;
   const currentEmployeeId = employees.find(e => e.employee_name === currentUser?.employee_name)?.id || userId;
 
