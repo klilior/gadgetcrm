@@ -107,15 +107,24 @@ export function UserProvider({ children }) {
               const emps = await retryApiCall(() => Employee.filter({ email: me.email }));
               emp = (emps || [])[0] || null;
             } catch (_) {}
-            const roleFromUser = me?.data?.app_role || undefined;
-            const derived = emp || {
+            // Priority: 1) User.data.app_role  2) Employee.role  3) fallback 'נציג'
+            const roleFromUserData = me?.data?.app_role || me?.app_role;
+            const roleFromEmployee = emp?.role;
+            const finalRole = roleFromUserData || roleFromEmployee || 'נציג';
+            
+            const derived = emp ? {
+              ...emp,
+              app_role: finalRole,
+              role: finalRole,
+            } : {
               id: me.id,
               employee_name: me.full_name || me.email,
-              role: roleFromUser || 'נציג',
+              role: finalRole,
+              app_role: finalRole,
               email: me.email,
               is_active: true,
             };
-            setCurrentUser({ ...derived, role: roleFromUser || derived.role });
+            setCurrentUser(derived);
             updateLastActivity();
           }
         } catch (e) {
