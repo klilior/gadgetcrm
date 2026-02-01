@@ -102,6 +102,35 @@ function AppContent({ children, currentPageName }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
 
+  // Force cache-bust on new app version (fixes live showing old bundle)
+  useEffect(() => {
+    const VERSION = '2026-02-01-notes-1';
+    try {
+      const stored = localStorage.getItem('app_version');
+      if (stored !== VERSION) {
+        localStorage.setItem('app_version', VERSION);
+        setIsRedirecting(true);
+        (async () => {
+          try {
+            if ('caches' in window) {
+              const names = await caches.keys();
+              await Promise.all(names.map((n) => caches.delete(n)));
+            }
+            if ('serviceWorker' in navigator) {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(regs.map((r) => r.unregister()));
+            }
+          } catch (_) {
+          } finally {
+            const url = new URL(window.location.href);
+            url.searchParams.set('v', VERSION);
+            window.location.replace(url.toString());
+          }
+        })();
+      }
+    } catch (_) {}
+  }, []);
+
   // Redirect logic - check immediately if we need to redirect
   const currentPath = location.pathname;
   const isRoot = currentPath === '/' || currentPath === '';
