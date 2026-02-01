@@ -17,6 +17,11 @@ export default function QuickLeadsToComplete({
 }) {
   const [statusFilter, setStatusFilter] = React.useState('open');
   const [timeFilter, setTimeFilter] = React.useState('all');
+  React.useEffect(() => {
+    // default to 'all' explicitly (fix live default mismatch)
+    setTimeFilter('all');
+    setStatusFilter('all');
+  }, []);
   // מציגים את הווידג׳ט תמיד – גם כשאין תוצאות – כדי לאפשר שינוי מסננים
 
   // Apply filters
