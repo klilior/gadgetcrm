@@ -128,7 +128,21 @@ export default function ManagerControlCenter() {
         const quickIncomplete = (allLeads || [])
           .filter(l => l.quick_incomplete === true && l.status !== 'Closed')
           .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-        setQuickLeads(quickIncomplete);
+        // Include legacy notes by content
+        const norm = (s) => (s || '').toString().toLowerCase();
+        const matchLegacy = (l) => {
+          const t = norm(l.topic);
+          const n = norm(l.notes);
+          const legacyA17 = (t.includes('בייסיק') || n.includes('בייסיק')) && (t.includes('a17') || n.includes('a17'));
+          const legacyCable = (t.includes('כבל') || n.includes('כבל')) && (t.includes('אייפון') || n.includes('אייפון')) && (t.includes('ישן') || n.includes('ישן') || t.includes(' 4') || n.includes(' 4'));
+          return legacyA17 || legacyCable;
+        };
+        const legacyNotes = (allLeads || []).filter(l => l.status !== 'Deleted' && matchLegacy(l));
+        const merged = [...quickIncomplete, ...legacyNotes].reduce((acc, item) => {
+          if (!acc.some(x => x.id === item.id)) acc.push(item);
+          return acc;
+        }, []);
+        setQuickLeads(merged);
       } catch (e) {
         console.error('Error loading quick leads:', e);
         setQuickLeads([]);

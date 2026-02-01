@@ -149,18 +149,18 @@ export default function AgentDashboard() {
         !l.topic?.includes('בדיקת מערכת')
       ).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
 
-      // Ensure legacy notes are included even if not marked quick_incomplete
-      const legacyNoteKeywords = ['בייסיק a17', 'כבל אייפון ישן'];
-      const normalize = (s) => (s || '').toString().trim().toLowerCase();
-      const legacyNotes = activeLeads.filter(l =>
-        l.status !== 'Deleted' &&
-        legacyNoteKeywords.some(k => 
-          normalize(l.topic).includes(normalize(k)) || 
-          normalize(l.notes).includes(normalize(k)) ||
-          normalize(l.customer_name).includes(normalize(k)) ||
-          normalize(l.phone).includes(normalize(k))
-        )
-      );
+      // Include legacy notes even if not marked quick_incomplete
+      const norm = (s) => (s || '').toString().toLowerCase();
+      const matchLegacy = (l) => {
+        const t = norm(l.topic);
+        const n = norm(l.notes);
+        // Legacy 1: contains both "בייסיק" and "a17" (any order)
+        const legacyA17 = (t.includes('בייסיק') || n.includes('בייסיק')) && (t.includes('a17') || n.includes('a17'));
+        // Legacy 2: contains "כבל" and "אייפון" and either "ישן" or " 4"
+        const legacyCable = (t.includes('כבל') || n.includes('כבל')) && (t.includes('אייפון') || n.includes('אייפון')) && (t.includes('ישן') || n.includes('ישן') || t.includes(' 4') || n.includes(' 4'));
+        return legacyA17 || legacyCable;
+      };
+      const legacyNotes = activeLeads.filter(l => l.status !== 'Deleted' && matchLegacy(l));
 
       // Merge and deduplicate
       const mergedQuick = [...quickIncomplete, ...legacyNotes].reduce((acc, item) => {
