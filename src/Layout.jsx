@@ -104,7 +104,7 @@ function AppContent({ children, currentPageName }) {
 
   // Force cache-bust on new app version (fixes live showing old bundle)
   useEffect(() => {
-    const VERSION = '2026-02-01-notes-2';
+    const VERSION = '2026-02-01-roles-1';
     try {
       const stored = localStorage.getItem('app_version');
       if (stored !== VERSION) {
@@ -252,6 +252,7 @@ function AppContent({ children, currentPageName }) {
     { title: "נתוני מכירות", url: createPageUrl("SalesDataAdmin") },
     { title: "סנכרון לינט", url: createPageUrl("SyncManagement") },
     { title: "הגדרות כלליות", url: createPageUrl("Settings") },
+    { title: "תפקידי משתמשים", url: createPageUrl("UserRoles") },
   ] : [];
 
   const toggleSection = (section) => {
