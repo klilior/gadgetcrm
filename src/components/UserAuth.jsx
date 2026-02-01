@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { Employee } from "@/entities/all";
+import { base44 } from "@/api/base44Client";
 
 const UserContext = createContext();
 
@@ -95,6 +96,31 @@ export function UserProvider({ children }) {
           setCurrentUser(users[0]);
         }
         updateLastActivity();
+      } else {
+        // No local shift session -> use Base44 auth and app_role if available
+        try {
+          const isAuth = await base44.auth.isAuthenticated();
+          if (isAuth) {
+            const me = await base44.auth.me();
+            let emp = null;
+            try {
+              const emps = await retryApiCall(() => Employee.filter({ email: me.email }));
+              emp = (emps || [])[0] || null;
+            } catch (_) {}
+            const roleFromUser = me?.data?.app_role || undefined;
+            const derived = emp || {
+              id: me.id,
+              employee_name: me.full_name || me.email,
+              role: roleFromUser || 'נציג',
+              email: me.email,
+              is_active: true,
+            };
+            setCurrentUser({ ...derived, role: roleFromUser || derived.role });
+            updateLastActivity();
+          }
+        } catch (e) {
+          console.error('Auth check failed', e);
+        }
       }
       setIsLoading(false);
     };
