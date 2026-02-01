@@ -16,7 +16,7 @@ export default function QuickLeadsToComplete({
   onDelete
 }) {
   const [statusFilter, setStatusFilter] = React.useState('open');
-  const [timeFilter, setTimeFilter] = React.useState('30d');
+  const [timeFilter, setTimeFilter] = React.useState('all');
   // מציגים את הווידג׳ט תמיד – גם כשאין תוצאות – כדי לאפשר שינוי מסננים
 
   // Apply filters
