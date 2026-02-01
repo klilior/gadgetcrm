@@ -66,8 +66,12 @@ export default function AgentDashboard() {
   const [quickLeads, setQuickLeads] = useState([]);
   const [editingLead, setEditingLead] = useState(null);
 
-  const appRole = currentUser?.app_role || currentUser?.data?.app_role || currentUser?.role;
+  // Determine role: prefer app_role (set by UserAuth from Employee.role), then currentUser.role
+  const appRole = currentUser?.app_role || currentUser?.role || currentUser?.data?.app_role;
   const isManager = appRole === 'מנהל' || appRole === 'מנהל משמרת' || currentUser?.role === 'admin';
+  
+  // Debug log for role resolution
+  console.log('[AgentDashboard] Role check:', { appRole, role: currentUser?.role, isManager, userName: currentUser?.employee_name });
   const userId = currentUser?.id;
   const currentEmployeeId = employees.find(e => e.employee_name === currentUser?.employee_name)?.id || userId;
 

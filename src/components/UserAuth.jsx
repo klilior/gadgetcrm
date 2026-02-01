@@ -107,10 +107,12 @@ export function UserProvider({ children }) {
               const emps = await retryApiCall(() => Employee.filter({ email: me.email }));
               emp = (emps || [])[0] || null;
             } catch (_) {}
-            // Priority: 1) User.data.app_role  2) Employee.role  3) fallback 'נציג'
-            const roleFromUserData = me?.data?.app_role || me?.app_role;
+            // Priority: 1) Employee.role (most accurate)  2) User.data.app_role  3) fallback 'נציג'
             const roleFromEmployee = emp?.role;
-            const finalRole = roleFromUserData || roleFromEmployee || 'נציג';
+            const roleFromUserData = me?.data?.app_role || me?.app_role;
+            const finalRole = roleFromEmployee || roleFromUserData || 'נציג';
+            
+            console.log('[UserAuth] Resolving role:', { roleFromEmployee, roleFromUserData, finalRole, empName: emp?.employee_name });
             
             const derived = emp ? {
               ...emp,
