@@ -29,16 +29,26 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
   useEffect(() => {
     if (isOpen) {
       loadEmployees();
-      // Set default assigned_to to current user
-      if (currentUser) {
-        setFormData(prev => ({
-          ...prev,
-          assigned_to: currentUser.id,
-          assigned_to_name: currentUser.employee_name || currentUser.full_name
-        }));
-      }
     }
-  }, [isOpen, currentUser]);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !currentUser || employees.length === 0) return;
+    const me = employees.find(e => e.employee_name === (currentUser.employee_name || currentUser.full_name));
+    if (me) {
+      setFormData(prev => ({
+        ...prev,
+        assigned_to: me.id,
+        assigned_to_name: me.employee_name
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        assigned_to: currentUser.id,
+        assigned_to_name: currentUser.employee_name || currentUser.full_name
+      }));
+    }
+  }, [isOpen, currentUser, employees]);
 
   const loadEmployees = async () => {
     try {

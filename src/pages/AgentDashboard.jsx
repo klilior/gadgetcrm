@@ -68,6 +68,7 @@ export default function AgentDashboard() {
 
   const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'מנהל משמרת';
   const userId = currentUser?.id;
+  const currentEmployeeId = employees.find(e => e.employee_name === currentUser?.employee_name)?.id || userId;
 
   const loadData = useCallback(async () => {
     if (!currentUser) return;
@@ -114,9 +115,13 @@ export default function AgentDashboard() {
       const activeLeads = (allLeads || []).filter(l => l.status !== 'Deleted');
       setLeads(activeLeads);
 
+      // Map current user to employee id (fallback to user id)
+      const meEmp = (allEmployees || []).find(e => e.employee_name === (currentUser?.employee_name || ''));
+      const myEmpId = meEmp?.id || userId;
+
       // My leads (for rep view)
       const myOpenLeads = activeLeads.filter(l => 
-        l.assigned_to === userId && 
+        l.assigned_to === myEmpId && 
         (l.status === 'New' || l.status === 'InProgress')
       );
       setMyLeads(myOpenLeads);
@@ -124,7 +129,7 @@ export default function AgentDashboard() {
       // Reminders (within next hour or overdue)
       const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
       const activeReminders = activeLeads.filter(l => 
-        l.assigned_to === userId &&
+        l.assigned_to === myEmpId &&
         l.reminder_at && 
         !l.reminder_done &&
         l.status !== 'Closed' &&
@@ -137,7 +142,7 @@ export default function AgentDashboard() {
         l.quick_incomplete === true &&
         l.status !== 'Closed' &&
         l.status !== 'Deleted' &&
-        (isManager || l.assigned_to === userId) &&
+        (isManager || l.assigned_to === myEmpId) &&
         // Filter out test/demo leads
         !l.customer_name?.includes('בדיקת פתק') &&
         !l.customer_name?.includes('בדיקת מערכת') &&
@@ -487,8 +492,8 @@ export default function AgentDashboard() {
     else if (leadFilter === 'all') baseLeads = leads;
     else baseLeads = leads.filter(l => l.status !== 'Closed');
   } else {
-    if (leadFilter === 'closed') baseLeads = leads.filter(l => l.assigned_to === userId && l.status === 'Closed');
-    else if (leadFilter === 'all') baseLeads = leads.filter(l => l.assigned_to === userId && l.status !== 'Deleted');
+    if (leadFilter === 'closed') baseLeads = leads.filter(l => l.assigned_to === currentEmployeeId && l.status === 'Closed');
+    else if (leadFilter === 'all') baseLeads = leads.filter(l => l.assigned_to === currentEmployeeId && l.status !== 'Deleted');
     else baseLeads = myLeads;
   }
   const displayLeads = focusMode ? overdueLeads : baseLeads;
@@ -774,7 +779,7 @@ export default function AgentDashboard() {
                 הלידים שלי
                 <Badge variant="outline" className="mr-2">
                   {leadFilter === 'all' 
-                    ? leads.filter(l => l.assigned_to === userId && l.status !== 'Deleted').length 
+                    ? leads.filter(l => l.assigned_to === currentEmployeeId && l.status !== 'Deleted').length 
                     : myLeads.length}
                 </Badge>
               </CardTitle>
@@ -782,9 +787,9 @@ export default function AgentDashboard() {
             <CardContent>
               <LeadsTable
                 leads={leadFilter === 'all'
-                  ? leads.filter(l => l.assigned_to === userId && l.status !== 'Deleted')
+                  ? leads.filter(l => l.assigned_to === currentEmployeeId && l.status !== 'Deleted')
                   : (leadFilter === 'closed'
-                      ? leads.filter(l => l.assigned_to === userId && l.status === 'Closed')
+                      ? leads.filter(l => l.assigned_to === currentEmployeeId && l.status === 'Closed')
                       : myLeads)
                 }
                 onStatusChange={handleStatusChange}
