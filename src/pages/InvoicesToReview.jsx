@@ -149,14 +149,22 @@ export default function InvoicesToReview() {
     }
   };
 
+  const [approving, setApproving] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+
   const handleApprove = async () => {
+    if (approving) return;
+    setApproving(true);
     try {
       await base44.functions.invoke('updateInvoiceStatus', { invoice_id: selected.id, action: 'approve' });
       toast.success("החשבונית אושרה");
       closeDialog();
       load();
     } catch (e) {
+      console.error("Approve error:", e);
       toast.error("שגיאה באישור: " + (e?.message || "שגיאה"));
+    } finally {
+      setApproving(false);
     }
   };
 
