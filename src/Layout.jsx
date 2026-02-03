@@ -104,7 +104,7 @@ function AppContent({ children, currentPageName }) {
 
   // Force cache-bust on new app version (fixes live showing old bundle)
   useEffect(() => {
-    const VERSION = '2026-02-01-role-fix-4';
+    const VERSION = '2026-02-03-debug-role-5';
     try {
       const stored = localStorage.getItem('app_version');
       if (stored !== VERSION) {

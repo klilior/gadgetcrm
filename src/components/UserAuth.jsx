@@ -100,19 +100,30 @@ export function UserProvider({ children }) {
         // No local shift session -> use Base44 auth and app_role if available
         try {
           const isAuth = await base44.auth.isAuthenticated();
+          console.log('[UserAuth] isAuthenticated:', isAuth);
           if (isAuth) {
             const me = await base44.auth.me();
+            console.log('[UserAuth] me() returned:', { id: me?.id, email: me?.email, role: me?.role, data: me?.data });
+            
             let emp = null;
             try {
+              console.log('[UserAuth] Looking for Employee with email:', me.email);
               const emps = await retryApiCall(() => Employee.filter({ email: me.email }));
+              console.log('[UserAuth] Employee.filter result:', emps?.length, 'records');
               emp = (emps || [])[0] || null;
-            } catch (_) {}
+              if (emp) {
+                console.log('[UserAuth] Found Employee:', { id: emp.id, name: emp.employee_name, role: emp.role });
+              }
+            } catch (empErr) {
+              console.error('[UserAuth] Employee.filter error:', empErr);
+            }
+            
             // Priority: 1) Employee.role (most accurate)  2) User.data.app_role  3) fallback 'נציג'
             const roleFromEmployee = emp?.role;
             const roleFromUserData = me?.data?.app_role || me?.app_role;
             const finalRole = roleFromEmployee || roleFromUserData || 'נציג';
             
-            console.log('[UserAuth] Resolving role:', { roleFromEmployee, roleFromUserData, finalRole, empName: emp?.employee_name });
+            console.log('[UserAuth] Role resolution:', { roleFromEmployee, roleFromUserData, finalRole });
             
             const derived = emp ? {
               ...emp,
@@ -126,11 +137,12 @@ export function UserProvider({ children }) {
               email: me.email,
               is_active: true,
             };
+            console.log('[UserAuth] Final currentUser:', { id: derived.id, name: derived.employee_name, role: derived.role, app_role: derived.app_role });
             setCurrentUser(derived);
             updateLastActivity();
           }
         } catch (e) {
-          console.error('Auth check failed', e);
+          console.error('[UserAuth] Auth check failed:', e);
         }
       }
       setIsLoading(false);
