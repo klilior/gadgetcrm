@@ -169,13 +169,18 @@ export default function InvoicesToReview() {
   };
 
   const handleReject = async () => {
+    if (rejecting) return;
+    setRejecting(true);
     try {
       await base44.functions.invoke('updateInvoiceStatus', { invoice_id: selected.id, action: 'reject' });
       toast.info("החשבונית נדחתה");
       closeDialog();
       load();
     } catch (e) {
+      console.error("Reject error:", e);
       toast.error("שגיאה בדחייה: " + (e?.message || "שגיאה"));
+    } finally {
+      setRejecting(false);
     }
   };
 
