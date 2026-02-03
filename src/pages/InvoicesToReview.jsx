@@ -617,11 +617,11 @@ export default function InvoicesToReview() {
                   </div>
                   {canApprove && (
                     <div className="flex gap-2">
-                      <Button className="flex-1 h-10" onClick={handleApprove} variant="default">
-                        ✓ אשר חשבונית
+                      <Button className="flex-1 h-10" onClick={handleApprove} variant="default" disabled={approving}>
+                        {approving ? "מאשר..." : "✓ אשר חשבונית"}
                       </Button>
-                      <Button className="flex-1 h-10" onClick={handleReject} variant="destructive">
-                        ✗ דחה
+                      <Button className="flex-1 h-10" onClick={handleReject} variant="destructive" disabled={rejecting}>
+                        {rejecting ? "דוחה..." : "✗ דחה"}
                       </Button>
                     </div>
                   )}
