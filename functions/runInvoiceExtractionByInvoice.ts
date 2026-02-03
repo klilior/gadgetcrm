@@ -453,6 +453,14 @@ Deno.serve(async (req) => {
     // Normalize: if we have 9 digits, use them; otherwise keep the raw value for matching
     const normalizedVatId = digitsOnly.length === 9 ? digitsOnly : (rawVatId ? rawVatId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : null);
     
+    // CRITICAL: Check if extracted VAT ID is actually OUR company's VAT ID (buyer, not supplier)
+    const OUR_VAT_ID = '040638660';
+    if (normalizedVatId === OUR_VAT_ID || rawVatId === OUR_VAT_ID) {
+      console.log(`WARNING: Extracted VAT ID ${rawVatId} is OUR company's VAT ID, not supplier's. Ignoring.`);
+      // Don't use this VAT ID for supplier matching - it's ours!
+      // Fall through to name-based matching instead
+    }
+    
     // First, try to find supplier by learned patterns (highest priority)
     const learnedPatterns = await base44.asServiceRole.entities.SupplierPattern.filter({ is_active: true }, undefined, 500);
     
