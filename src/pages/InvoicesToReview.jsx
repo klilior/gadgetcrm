@@ -391,20 +391,33 @@ export default function InvoicesToReview() {
                         </SelectContent>
                       </Select>
                     </div>
-                    {(() => {
+                      {(() => {
                       try {
                         const extraction = selected.ai_debug_last_extraction_json ? JSON.parse(selected.ai_debug_last_extraction_json) : null;
-                        const vatId = extraction?.supplier_vat_id || suppliersMap[selected.supplier]?.vat_id;
-                        if (vatId) {
-                          return (
+                        const extractedVatId = extraction?.supplier_vat_id;
+                        const supplierVatId = suppliersMap[selected.supplier]?.vat_id;
+                        const OUR_VAT_ID = '040638660'; // מספר העוסק שלנו
+                        const isOurVatId = extractedVatId === OUR_VAT_ID;
+                        
+                        return (
+                          <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500">ח.פ.:</span>
-                              <span className="text-sm font-mono bg-white px-2 py-1 rounded">{vatId}</span>
+                              <span className="text-xs text-gray-500">ח.פ. ספק:</span>
+                              <Input 
+                                className="h-7 w-32 font-mono text-sm" 
+                                value={selected._editedVatId ?? extractedVatId ?? supplierVatId ?? ""} 
+                                onChange={(e) => setSelected({ ...selected, _editedVatId: e.target.value })}
+                                placeholder="הזן ח.פ."
+                              />
                             </div>
-                          );
-                        }
-                      } catch (_) {}
-                      return null;
+                            {isOurVatId && (
+                              <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                                ⚠️ זהו מספר העוסק שלנו - כנראה הח.פ. של הספק לא זוהה נכון
+                              </div>
+                            )}
+                          </div>
+                        );
+                      } catch (_) { return null; }
                     })()}
                   </div>
 
