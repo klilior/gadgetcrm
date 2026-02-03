@@ -3,8 +3,19 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    
+    // Allow custom login sessions (Employee-based) which don't have Base44 auth
+    let user = null;
+    try {
+      user = await base44.auth.me();
+    } catch (authErr) {
+      console.log('[updateInvoiceStatus] Base44 auth failed, checking request context');
+    }
+    
+    // If no Base44 user, we need to fail since we need role check
+    if (!user) {
+      return Response.json({ error: 'Unauthorized - login required' }, { status: 401 });
+    }
 
     const bodyText = await req.text();
     const body = bodyText ? JSON.parse(bodyText) : {};
