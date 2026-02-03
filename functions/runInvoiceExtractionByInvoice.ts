@@ -34,6 +34,11 @@ CRITICAL SUPPLIER IDENTIFICATION RULES:
 7. VAT ID is ALWAYS labeled as one of: "עוסק מורשה", "ח.פ.", "מספר חברה", "VAT ID", "Tax ID"
 8. If you cannot find a clearly labeled 9-digit VAT ID, set supplier_vat_id to null - do NOT guess!
 9. If you see multiple numbers, ONLY use the one explicitly labeled as VAT/Tax ID.
+10. VERY IMPORTANT - OUR BUSINESS VAT ID IS: 040638660
+    - This number belongs to the BUYER (us), NOT the supplier!
+    - If you see "040638660" anywhere on the invoice, it is OUR company's VAT ID
+    - NEVER use "040638660" as the supplier_vat_id
+    - The supplier VAT ID is DIFFERENT and should appear in the supplier's header/logo area
 
 STRICT OUTPUT RULES
 1) Output ONLY a single valid JSON object. No markdown, no code fences, no commentary.
