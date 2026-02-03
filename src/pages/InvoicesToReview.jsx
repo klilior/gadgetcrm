@@ -541,41 +541,72 @@ export default function InvoicesToReview() {
                     </div>
                   )}
 
-                  {/* AI Debug Info - Why not auto-approved */}
-                  {(selected.ai_debug_last_validation_json || selected.ai_debug_last_extraction_json) && (
-                    <div className="border-t pt-3 mt-3">
-                      <details className="text-xs">
-                        <summary className="cursor-pointer font-medium text-gray-600 mb-2">🔍 למה לא אושר אוטומטית?</summary>
-                        <div className="space-y-2 bg-gray-50 p-2 rounded text-gray-600">
-                          {selected.ai_debug_last_validation_json && (() => {
-                            try {
-                              const validation = JSON.parse(selected.ai_debug_last_validation_json);
-                              return (
-                                <div>
-                                  <div className="font-medium text-gray-700">בדיקת תקינות:</div>
-                                  {validation.math_consistent === false && <div className="text-red-600">❌ חישוב מתמטי לא תקין</div>}
-                                  {validation.math_consistent === true && <div className="text-green-600">✓ חישוב מתמטי תקין</div>}
-                                  {validation.missing_critical_fields?.length > 0 && (
-                                    <div className="text-amber-600">⚠️ שדות חסרים: {validation.missing_critical_fields.join(', ')}</div>
-                                  )}
-                                  {validation.recommended_status && (
-                                    <div>סטטוס מומלץ: <Badge variant="outline">{validation.recommended_status}</Badge></div>
-                                  )}
-                                  {validation.reason_for_review && (
-                                    <div className="text-amber-700 mt-1">📝 {validation.reason_for_review}</div>
-                                  )}
-                                </div>
-                              );
-                            } catch { return <div className="text-gray-400">לא ניתן לפרסר</div>; }
-                          })()}
-                          {selected.confidence_score != null && selected.confidence_score < 85 && (
-                            <div className="text-amber-600">⚠️ ציון ודאות נמוך ({selected.confidence_score}% - נדרש 85%+)</div>
-                          )}
-                          {!selected.supplier && <div className="text-red-600">❌ ספק לא זוהה</div>}
+                  {/* Why not auto-approved - ALWAYS VISIBLE with problems highlighted in red */}
+                  {(() => {
+                    const problems = [];
+                    let validation = null;
+                    
+                    // Parse validation JSON
+                    if (selected.ai_debug_last_validation_json) {
+                      try {
+                        validation = JSON.parse(selected.ai_debug_last_validation_json);
+                      } catch (_) {}
+                    }
+                    
+                    // Check for problems
+                    if (!selected.supplier) {
+                      problems.push({ type: 'supplier', label: 'ספק לא זוהה', critical: true });
+                    }
+                    if (selected.confidence_score != null && selected.confidence_score < 85) {
+                      problems.push({ type: 'confidence', label: `ציון ודאות נמוך (${selected.confidence_score}%)`, critical: selected.confidence_score < 50 });
+                    }
+                    if (validation?.math_consistent === false) {
+                      problems.push({ type: 'math', label: 'חישוב מתמטי לא תקין', critical: true });
+                    }
+                    if (validation?.missing_critical_fields?.length > 0) {
+                      problems.push({ type: 'fields', label: `שדות חסרים: ${validation.missing_critical_fields.join(', ')}`, critical: true });
+                    }
+                    if (validation?.reason_for_review) {
+                      problems.push({ type: 'reason', label: validation.reason_for_review, critical: false });
+                    }
+                    if (!selected.doc_number) {
+                      problems.push({ type: 'doc_number', label: 'מספר מסמך חסר', critical: true });
+                    }
+                    if (!selected.total_with_vat) {
+                      problems.push({ type: 'total', label: 'סכום כולל חסר', critical: true });
+                    }
+                    
+                    if (problems.length === 0) {
+                      return (
+                        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="text-green-700 font-medium text-sm">✓ כל הנתונים תקינים</div>
+                          <div className="text-green-600 text-xs mt-1">ניתן לאשר את החשבונית</div>
                         </div>
-                      </details>
-                    </div>
-                  )}
+                      );
+                    }
+                    
+                    return (
+                      <div className="p-3 bg-red-50 border-2 border-red-300 rounded-lg">
+                        <div className="text-red-700 font-bold text-sm mb-2 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4" />
+                          בעיות שמנעו אישור אוטומטי:
+                        </div>
+                        <div className="space-y-1">
+                          {problems.map((p, idx) => (
+                            <div 
+                              key={idx} 
+                              className={`text-xs flex items-center gap-1 ${p.critical ? 'text-red-700 font-medium' : 'text-amber-700'}`}
+                            >
+                              {p.critical ? '❌' : '⚠️'} {p.label}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-red-200 text-xs text-red-600">
+                          תקן את הבעיות למעלה ולחץ "אשר חשבונית"
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Action buttons - fixed at bottom */}
