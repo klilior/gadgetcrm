@@ -346,7 +346,7 @@ export default function InvoicesToReview() {
                       if (isPdf) {
                         return (
                           <iframe 
-                            src={intakeFile + '#toolbar=1&navpanes=0'}
+                            src={intakeFile + '#toolbar=0&navpanes=0&view=FitH'}
                             className="w-full h-full border-0 bg-white rounded shadow-lg"
                             title="Document preview"
                             style={{ minHeight: '600px' }}
@@ -354,18 +354,13 @@ export default function InvoicesToReview() {
                         );
                       }
                       
+                      // For images - display inline without triggering download
                       return (
                         <img 
                           src={intakeFile} 
                           alt="Invoice document" 
                           style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
                           className="object-contain shadow-lg bg-white"
-                          onError={(e) => {
-                            // If image fails to load, try showing as PDF iframe
-                            e.target.style.display = 'none';
-                            const fallback = e.target.nextSibling;
-                            if (fallback) fallback.style.display = 'flex';
-                          }}
                         />
                       );
                     })()
@@ -374,20 +369,6 @@ export default function InvoicesToReview() {
                       <FileText className="w-20 h-20 mb-4" />
                       <span className="text-lg">אין מסמך מקור זמין</span>
                       <span className="text-sm mt-1">ייתכן שהמסמך לא הועלה או נמחק</span>
-                    </div>
-                  )}
-                  {/* Fallback - show as iframe or download link */}
-                  {intakeFile && (
-                    <div className="hidden flex-col items-center justify-center w-full h-full" style={{display: 'none'}}>
-                      <iframe 
-                        src={intakeFile}
-                        className="w-full h-full border-0 bg-white rounded shadow-lg"
-                        title="Document preview fallback"
-                        style={{ minHeight: '500px' }}
-                      />
-                      <a href={intakeFile} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline mt-2 text-sm">
-                        פתח בחלון חדש
-                      </a>
                     </div>
                   )}
                 </div>
