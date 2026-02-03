@@ -576,11 +576,24 @@ export default function InvoicesToReview() {
                       problems.push({ type: 'total', label: 'סכום כולל חסר', critical: true });
                     }
                     
+                    // Get the original reason from validation
+                    const originalReason = validation?.reason_for_review || validation?.recommended_status;
+                    
                     if (problems.length === 0) {
                       return (
                         <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <div className="text-green-700 font-medium text-sm">✓ כל הנתונים תקינים</div>
+                          <div className="text-green-700 font-medium text-sm">✓ כל הנתונים תקינים כעת</div>
                           <div className="text-green-600 text-xs mt-1">ניתן לאשר את החשבונית</div>
+                          {originalReason && (
+                            <div className="mt-2 pt-2 border-t border-green-200 text-xs text-gray-600">
+                              <span className="font-medium">סיבת הבדיקה הידנית המקורית:</span> {originalReason}
+                            </div>
+                          )}
+                          {selected.extraction_status === 'ממתין לאימות' && !originalReason && (
+                            <div className="mt-2 pt-2 border-t border-green-200 text-xs text-gray-600">
+                              <span className="font-medium">סיבה:</span> הספק לא זוהה אוטומטית בעת החילוץ (ניתן לקשר ידנית ולאשר)
+                            </div>
+                          )}
                         </div>
                       );
                     }
