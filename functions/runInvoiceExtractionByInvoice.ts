@@ -528,7 +528,10 @@ Deno.serve(async (req) => {
       }
     }
     
-    if (!supplierId && normalizedVatId) {
+    // Only use VAT ID for matching if it's NOT our company's VAT ID
+    const isOurVatId = normalizedVatId === OUR_VAT_ID || rawVatId === OUR_VAT_ID;
+    
+    if (!supplierId && normalizedVatId && !isOurVatId) {
       // Try to find by exact vat_id first
       let found = allSuppliers.filter(s => {
         if (!s.vat_id) return false;
