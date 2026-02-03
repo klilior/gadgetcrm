@@ -100,7 +100,12 @@ export default function AgentDashboard() {
 
       // Load all data in parallel
       // Calculate latest goals progress from sales before loading dashboard targets
-      await base44.functions.invoke('calculateGoalProgress', { calculate_all: true });
+      // Wrap in try/catch to prevent dashboard failure if goal calculation fails
+      try {
+        await base44.functions.invoke('calculateGoalProgress', { calculate_all: true });
+      } catch (goalErr) {
+        console.warn('[AgentDashboard] calculateGoalProgress failed (non-blocking):', goalErr.message);
+      }
 
       const [allLeads, allTargets, allActivities, allEmployees, allRepairs, allGoals, allGoalProgress, allSalesTransactions, allLinetUsersMap] = await Promise.all([
         Lead.filter({ status: { $ne: 'Deleted' } }),
