@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
@@ -128,6 +127,16 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                             <InfoItem icon={Tag} label="מקור" value={order.payment_method_title || 'WooCommerce'} />
                         </div>
                     </div>
+                    
+                    {/* Customer Note */}
+                    {order.customer_note && (
+                        <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-200">
+                            <h3 className="font-semibold flex items-center gap-2 text-yellow-800 mb-2">
+                                <Tag className="w-4 h-4" /> הערת לקוח
+                            </h3>
+                            <p className="text-gray-800 whitespace-pre-wrap">{order.customer_note}</p>
+                        </div>
+                    )}
                     
                     <div>
                         <h3 className="font-semibold mb-3 flex items-center gap-2"><ShoppingCart className="w-4 h-4" /> מוצרים</h3>
