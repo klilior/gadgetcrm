@@ -37,7 +37,19 @@ Deno.serve(async (req) => {
             return Response.json({ error: `WooCommerce API error: ${response.status}` });
         }
 
-        const wooOrders = await response.json();
+        const wooData = await response.json();
+        const wooOrders = orderId ? [wooData] : wooData;
+        
+        // If single order, return full raw data
+        if (orderId) {
+            return Response.json({
+                success: true,
+                orderId,
+                raw_woo_data: wooData,
+                customer_note: wooData.customer_note,
+                meta_data: wooData.meta_data
+            });
+        }
         
         // Step 3: Check what's currently in our database
         const existingOrders = await base44.entities.Order.list("-created_date", 50);
