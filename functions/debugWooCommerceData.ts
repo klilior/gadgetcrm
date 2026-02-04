@@ -42,12 +42,23 @@ Deno.serve(async (req) => {
         
         // If single order, return full raw data
         if (orderId) {
+            // Find meta with notes
+            const notesMeta = (wooData.meta_data || []).filter(m => 
+                m.key?.toLowerCase().includes('note') || 
+                m.key?.toLowerCase().includes('הערה') ||
+                m.key?.toLowerCase().includes('color') ||
+                m.key?.toLowerCase().includes('צבע')
+            );
+            
             return Response.json({
                 success: true,
                 orderId,
-                raw_woo_data: wooData,
                 customer_note: wooData.customer_note,
-                meta_data: wooData.meta_data
+                notes_meta: notesMeta,
+                line_items_meta: wooData.line_items?.map(item => ({
+                    name: item.name,
+                    meta_data: item.meta_data
+                }))
             });
         }
         
