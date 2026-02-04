@@ -229,6 +229,8 @@ Deno.serve(async (req) => {
             }
         };
         
+        console.log('📦 [VeloCheck] Payload:', JSON.stringify(checkPayload, null, 2));
+        
         const checkRes = await fetch(`${VELO_API_BASE}/check`, {
             method: 'POST',
             headers: {
