@@ -78,6 +78,12 @@ Deno.serve(async (req) => {
             try {
                 const clientId = await findOrCreateClient(base44, wooOrder);
                 
+                // Extract billing note from meta_data (custom field used by WooCommerce)
+                const billingNoteMeta = (wooOrder.meta_data || []).find(m => 
+                    m.key === 'billing_note' || m.key === '_billing_note'
+                );
+                const customerNote = wooOrder.customer_note || billingNoteMeta?.value || '';
+                
                 const orderData = {
                     external_order_number: wooOrder.id.toString(),
                     client_id: clientId,
@@ -87,7 +93,7 @@ Deno.serve(async (req) => {
                     shipping_total: wooOrder.shipping_total,
                     shipping_method: wooOrder.shipping_lines?.[0]?.method_title || null,
                     payment_method_title: wooOrder.payment_method_title,
-                    customer_note: wooOrder.customer_note,
+                    customer_note: customerNote,
                     raw_data_billing: JSON.stringify(wooOrder.billing),
                 };
                 
