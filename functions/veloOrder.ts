@@ -154,6 +154,24 @@ Deno.serve(async (req) => {
             console.warn('Failed to parse billing', e);
         }
         
+        // Extract street and number from address_1 (e.g., "הפרחים 35" -> street: "הפרחים", number: "35")
+        let streetName = billingAddress.address_1 || customer.full_address || '';
+        let streetNumber = billingAddress.address_2 || '';
+        
+        // If no address_2, try to extract number from end of address_1
+        if (!streetNumber && streetName) {
+            const match = streetName.match(/^(.+?)\s+(\d+[א-ת]?)$/);
+            if (match) {
+                streetName = match[1].trim();
+                streetNumber = match[2];
+            }
+        }
+        
+        // Fallback to '1' if still no number
+        if (!streetNumber) streetNumber = '1';
+        
+        console.log('📍 [VeloOrder] Address parsed:', { street: streetName, number: streetNumber, city: billingAddress.city || customer.city });
+        
         const hmac = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
         
         const orderPayload = {
@@ -165,8 +183,8 @@ Deno.serve(async (req) => {
             customerAddress: {
                 first_name: billingAddress.first_name || customer.full_name?.split(' ')[0] || 'לקוח',
                 last_name: billingAddress.last_name || customer.full_name?.split(' ').slice(1).join(' ') || '',
-                street: billingAddress.address_1 || customer.full_address || '',
-                number: billingAddress.address_2 || '',
+                street: streetName,
+                number: streetNumber,
                 line2: '',
                 city: billingAddress.city || customer.city || '',
                 zipcode: billingAddress.postcode || '',
