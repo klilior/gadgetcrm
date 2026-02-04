@@ -49,15 +49,8 @@ export default function OrdersPage() {
         setIsLoading(true);
         setLoadError(null);
         try {
-            const Order = (await import("@/entities/all")).Order;
-
-            const OrderProduct = (await import("@/entities/all")).OrderProduct;
-            
-            if (!Order) throw new Error("Order entity not found");
-
-
             const [fetchedOrders, fetchedClients] = await Promise.all([
-              Order.list("-order_date", 10000),
+              base44.entities.Order.list("-order_date", 10000),
               (await import('../components/utils/customersService')).customersService.list(2000)
             ]);
             
@@ -65,19 +58,17 @@ export default function OrdersPage() {
             setClientsList(fetchedClients || []);
             setClients((fetchedClients || []).reduce((acc, c) => ({ ...acc, [c.id]: c }), {}));
             
-            if (OrderProduct) {
-                try {
-                    const fetchedProducts = await OrderProduct.list();
-                    const productsByOrder = (fetchedProducts || []).reduce((acc, p) => {
-                        if (!acc[p.order_id]) acc[p.order_id] = [];
-                        acc[p.order_id].push(p);
-                        return acc;
-                    }, {});
-                    setOrderProducts(productsByOrder);
-                } catch (e) {
-                    console.log("Could not load OrderProduct:", e.message);
-                    setOrderProducts({});
-                }
+            try {
+                const fetchedProducts = await base44.entities.OrderProduct.list();
+                const productsByOrder = (fetchedProducts || []).reduce((acc, p) => {
+                    if (!acc[p.order_id]) acc[p.order_id] = [];
+                    acc[p.order_id].push(p);
+                    return acc;
+                }, {});
+                setOrderProducts(productsByOrder);
+            } catch (e) {
+                console.log("Could not load OrderProduct:", e.message);
+                setOrderProducts({});
             }
             
         } catch (error) {
