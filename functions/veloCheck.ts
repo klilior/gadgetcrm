@@ -244,6 +244,7 @@ Deno.serve(async (req) => {
         
         const responseText = await checkRes.text();
         console.log('📡 [VeloCheck] Response status:', checkRes.status);
+        console.log('📡 [VeloCheck] Response body:', responseText);
         
         let checkData;
         try {
