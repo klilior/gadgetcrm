@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
                 city: billingAddress.city || customer.city || '',
                 zipcode: billingAddress.postcode || '',
                 state: billingAddress.state || '',
-                country: billingAddress.country || 'Israel',
+                country: 'Israel',
                 phone: (billingAddress.phone || customer.phone || '').replace(/\D/g, ''),
                 longitude: '',
                 latitude: ''
