@@ -237,9 +237,18 @@ Deno.serve(async (req) => {
         }
         
         if (!checkRes.ok) {
+            // Build detailed error message from validation errors
+            let errorMsg = checkData.message || checkData.error || 'שגיאה מ-Velo API';
+            if (checkData.errors) {
+                const errorDetails = Object.entries(checkData.errors)
+                    .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+                    .join('; ');
+                errorMsg = `${errorMsg} - ${errorDetails}`;
+            }
+            console.log('❌ [VeloCheck] Validation error:', JSON.stringify(checkData));
             return Response.json({ 
                 success: false, 
-                error: checkData.message || checkData.error || 'שגיאה מ-Velo API', 
+                error: errorMsg, 
                 debug: checkData 
             }, { status: 200 });
         }
