@@ -23,7 +23,13 @@ Deno.serve(async (req) => {
 
         // Step 2: Fetch data from WooCommerce
         const authString = btoa(`${consumerKey}:${consumerSecret}`);
-        const response = await fetch(`${wooCommerceUrl}/wp-json/wc/v3/orders?per_page=3&status=any`, {
+        const { orderId } = await req.json().catch(() => ({}));
+        
+        const fetchUrl = orderId 
+            ? `${wooCommerceUrl}/wp-json/wc/v3/orders/${orderId}`
+            : `${wooCommerceUrl}/wp-json/wc/v3/orders?per_page=3&status=any`;
+            
+        const response = await fetch(fetchUrl, {
             headers: { 'Authorization': `Basic ${authString}` }
         });
 
