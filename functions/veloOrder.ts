@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
                 zipcode: '',
                 state: 'Central',
                 country: 'Israel',
-                phone: '03-0000000',
+                phone: '0300000000',
                 longitude: '34.7655444',
                 latitude: '32.073768'
             },
