@@ -26,6 +26,8 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
     const handleCheckShipping = async () => {
         setIsCheckingShipping(true);
         setError(null);
+        setShippingOptions(null);
+        setSelectedOption(null);
         
         try {
             console.log('📦 [OrderDetails] Starting shipping check for order:', order.id);
@@ -37,31 +39,18 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             console.log('📦 [OrderDetails] Response:', response);
             
             if (response.data.success) {
-                setShippingOptions(response.data.options);
-                alert('✅ אפשרויות משלוח נטענו בהצלחה!');
+                // Handle both direct array and nested data structure
+                const options = response.data.options?.data || response.data.options || [];
+                setShippingOptions(options);
             } else {
                 const errorMsg = response.data.error || 'שגיאה לא ידועה';
                 console.error('❌ [OrderDetails] Error:', errorMsg);
                 setError(errorMsg);
-                alert(`❌ שגיאה: ${errorMsg}`);
-                
-                // Show debug info if available
-                if (response.data.debug) {
-                    console.error('🔍 [OrderDetails] Debug info:', response.data.debug);
-                }
             }
         } catch (error) {
             console.error('❌ [OrderDetails] Exception:', error);
             const errorMsg = error.response?.data?.error || error.message || 'שגיאה בבדיקת אפשרויות משלוח';
             setError(errorMsg);
-            alert(`❌ שגיאה: ${errorMsg}`);
-            
-            // Log full error
-            console.error('Full error:', {
-                message: error.message,
-                response: error.response?.data,
-                stack: error.stack
-            });
         } finally {
             setIsCheckingShipping(false);
         }
