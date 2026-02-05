@@ -61,26 +61,39 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             alert('נא לבחור אפשרות משלוח');
             return;
         }
-        
+
         setIsCreatingShipment(true);
         setError(null);
-        
+
         try {
-            const { data } = await base44.functions.invoke('veloOrder', {
+            console.log('🚀 Creating shipment with:', {
                 orderId: order.id,
                 polygonId: selectedOption.polygon_id,
                 externalServiceId: selectedOption.external_service_id
             });
-            
+
+            const response = await base44.functions.invoke('veloOrder', {
+                orderId: order.id,
+                polygonId: selectedOption.polygon_id,
+                externalServiceId: selectedOption.external_service_id
+            });
+
+            console.log('📦 Velo response:', response);
+
+            // Response from invoke is the full axios response
+            const data = response.data || response;
+
             if (data.success) {
+                console.log('✅ Shipment created:', data.shipment);
                 setShipmentCreated(true);
                 setCreatedShipmentData(data.shipment);
             } else {
                 const errorMsg = data.error || 'שגיאה ביצירת משלוח';
-                setError(errorMsg);
+                console.error('❌ Shipment error:', errorMsg, data.details);
+                setError(errorMsg + (data.details ? ` (${JSON.stringify(data.details)})` : ''));
             }
         } catch (error) {
-            console.error('Error creating shipment:', error);
+            console.error('❌ Error creating shipment:', error);
             const errorMsg = error.response?.data?.error || error.message || 'שגיאה ביצירת משלוח';
             setError(errorMsg);
         } finally {
