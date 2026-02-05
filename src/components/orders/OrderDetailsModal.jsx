@@ -313,20 +313,25 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                         <div className="space-y-4">
                             <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                                 <div className="flex items-center gap-3 mb-3">
-                                    <CheckCircle className="w-6 h-6 text-green-600" />
-                                    <div>
-                                        <p className="font-bold text-green-900 text-lg">משלוח נוצר בהצלחה!</p>
-                                        <p className="text-sm text-green-700">קוד משלוח: {createdShipmentData?.shipping_code || createdShipmentData?.id || 'ממתין לאישור'}</p>
-                                        {createdShipmentData?.status && (
-                                            <p className="text-xs text-green-600 mt-1">סטטוס: {createdShipmentData.status}</p>
-                                        )}
-                                        {createdShipmentData?.tracking_url && (
-                                            <a href={createdShipmentData.tracking_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 block">
-                                                🔗 מעקב משלוח
-                                            </a>
-                                        )}
+                                        <CheckCircle className={`w-6 h-6 ${createdShipmentData?.warning ? 'text-yellow-600' : 'text-green-600'}`} />
+                                        <div>
+                                            <p className={`font-bold text-lg ${createdShipmentData?.warning ? 'text-yellow-900' : 'text-green-900'}`}>
+                                                {createdShipmentData?.warning ? 'משלוח נוצר בטיוטה' : 'משלוח נוצר בהצלחה!'}
+                                            </p>
+                                            <p className="text-sm text-green-700">קוד משלוח: {createdShipmentData?.shipping_code || createdShipmentData?.id || 'ממתין לאישור'}</p>
+                                            {createdShipmentData?.status && (
+                                                <p className="text-xs text-green-600 mt-1">סטטוס: {createdShipmentData.status}</p>
+                                            )}
+                                            {createdShipmentData?.warning && (
+                                                <p className="text-xs text-yellow-700 mt-1 bg-yellow-100 px-2 py-1 rounded">⚠️ {createdShipmentData.warning}</p>
+                                            )}
+                                            {createdShipmentData?.tracking_url && (
+                                                <a href={createdShipmentData.tracking_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 block">
+                                                    🔗 מעקב משלוח
+                                                </a>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
                                 {(createdShipmentData?.label_url || createdShipmentData?.shipping_code) && (
                                     <Button onClick={handlePrintLabel} className="w-full bg-blue-600 hover:bg-blue-700">
                                         <Printer className="w-4 h-4 ml-2" />
