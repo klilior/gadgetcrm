@@ -85,8 +85,11 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
 
             if (data.success) {
                 console.log('✅ Shipment created:', data.shipment);
+                if (data.warning) {
+                    console.warn('⚠️ Warning:', data.warning);
+                }
                 setShipmentCreated(true);
-                setCreatedShipmentData(data.shipment);
+                setCreatedShipmentData({ ...data.shipment, warning: data.warning });
             } else {
                 const errorMsg = data.error || 'שגיאה ביצירת משלוח';
                 console.error('❌ Shipment error:', errorMsg, data.details);
