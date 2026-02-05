@@ -109,41 +109,47 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
     const handlePrintLabel = () => {
         if (!createdShipmentData) return;
         
-        // Open Velo label URL or print shipment details
-        const labelUrl = createdShipmentData.label_url || createdShipmentData.tracking_url;
+        // Open Velo label URL if available
+        const labelUrl = createdShipmentData.label_url;
         if (labelUrl) {
             window.open(labelUrl, '_blank');
-        } else {
-            // Create printable content
-            const printContent = `
-                <html dir="rtl">
-                <head>
-                    <title>שטר משלוח - ${order.external_order_number || order.id}</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; padding: 20px; }
-                        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-                        .info { margin: 10px 0; }
-                        .label { font-weight: bold; }
-                        .barcode { text-align: center; font-size: 24px; font-weight: bold; margin: 20px 0; padding: 10px; border: 2px solid #000; }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <h1>שטר משלוח VELO</h1>
-                        <p>הזמנה: #${order.external_order_number || order.id}</p>
-                    </div>
-                    <div class="barcode">${createdShipmentData.shipping_code || createdShipmentData.id || 'N/A'}</div>
-                    <div class="info"><span class="label">שם:</span> ${order.billing?.first_name || ''} ${order.billing?.last_name || ''}</div>
-                    <div class="info"><span class="label">טלפון:</span> ${order.billing?.phone || ''}</div>
-                    <div class="info"><span class="label">כתובת:</span> ${order.billing?.address_1 || ''}, ${order.billing?.city || ''}</div>
-                </body>
-                </html>
-            `;
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write(printContent);
-            printWindow.document.close();
-            printWindow.print();
+            return;
         }
+        
+        // Fallback: Create printable content with barcode
+        let billingData = {};
+        try { billingData = JSON.parse(order.raw_data_billing || '{}'); } catch (e) {}
+        
+        const printContent = `
+            <html dir="rtl">
+            <head>
+                <title>שטר משלוח - ${order.external_order_number || order.id}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; margin: 0; }
+                    .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+                    .info { margin: 10px 0; font-size: 14px; }
+                    .label { font-weight: bold; }
+                    .barcode { text-align: center; font-size: 32px; font-weight: bold; margin: 20px 0; padding: 15px; border: 3px solid #000; letter-spacing: 3px; }
+                    .tracking { text-align: center; font-size: 12px; margin-top: 10px; color: #666; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>שטר משלוח VELO</h1>
+                    <p>הזמנה: #${order.external_order_number || order.id}</p>
+                </div>
+                <div class="barcode">${createdShipmentData.shipping_code || 'N/A'}</div>
+                ${createdShipmentData.tracking_url ? `<div class="tracking">מעקב: ${createdShipmentData.tracking_url}</div>` : ''}
+                <div class="info"><span class="label">שם:</span> ${billingData.first_name || ''} ${billingData.last_name || ''}</div>
+                <div class="info"><span class="label">טלפון:</span> ${billingData.phone || ''}</div>
+                <div class="info"><span class="label">כתובת:</span> ${billingData.address_1 || ''}, ${billingData.city || ''}</div>
+            </body>
+            </html>
+        `;
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.print();
     };
 
     return (
