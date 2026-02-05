@@ -156,13 +156,20 @@ export default function InvoicesToReview() {
     if (approving) return;
     setApproving(true);
     try {
-      await base44.functions.invoke('updateInvoiceStatus', { invoice_id: selected.id, action: 'approve' });
+      const result = await base44.functions.invoke('updateInvoiceStatus', { 
+        invoice_id: selected.id, 
+        action: 'approve',
+        employee_role: currentUser?.role 
+      });
+      if (result.data?.error) {
+        throw new Error(result.data.error);
+      }
       toast.success("החשבונית אושרה");
       closeDialog();
       load();
     } catch (e) {
       console.error("Approve error:", e);
-      toast.error("שגיאה באישור: " + (e?.message || "שגיאה"));
+      toast.error("שגיאה באישור: " + (e?.response?.data?.error || e?.message || "שגיאה"));
     } finally {
       setApproving(false);
     }
@@ -172,13 +179,20 @@ export default function InvoicesToReview() {
     if (rejecting) return;
     setRejecting(true);
     try {
-      await base44.functions.invoke('updateInvoiceStatus', { invoice_id: selected.id, action: 'reject' });
+      const result = await base44.functions.invoke('updateInvoiceStatus', { 
+        invoice_id: selected.id, 
+        action: 'reject',
+        employee_role: currentUser?.role 
+      });
+      if (result.data?.error) {
+        throw new Error(result.data.error);
+      }
       toast.info("החשבונית נדחתה");
       closeDialog();
       load();
     } catch (e) {
       console.error("Reject error:", e);
-      toast.error("שגיאה בדחייה: " + (e?.message || "שגיאה"));
+      toast.error("שגיאה בדחייה: " + (e?.response?.data?.error || e?.message || "שגיאה"));
     } finally {
       setRejecting(false);
     }
