@@ -128,19 +128,15 @@ Deno.serve(async (req) => {
 
         const provider = providers[0];
         const config = provider.config || {};
-        const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, baseUrl } = config;
-        const VELO_API_BASE = baseUrl || 'https://api.veloapp.io/api/enterprise';
+        const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL } = config;
         
-        if (!VELO_API_KEY || !VELO_API_SECRET) {
-            return Response.json({ success: false, error: 'חסרים פרטי התחברות ל-Velo' }, { status: 200 });
+        if (!VELO_API_KEY || !VELO_API_SECRET || !VELO_EMAIL) {
+            return Response.json({ success: false, error: 'חסרים פרטי התחברות ל-Velo (apiKey, apiSecret, email)' }, { status: 200 });
         }
         
-        let jwt;
-        try {
-            jwt = await getVeloJwt(base44, config);
-        } catch (e) {
-            return Response.json({ success: false, error: `שגיאת אימות: ${e.message}` }, { status: 200 });
-        }
+        // Generate HMAC for JSON API (email + apiKey)
+        const hmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+        console.log('🔑 [VeloOrder] Generated HMAC for:', VELO_EMAIL);
         
         const order = await base44.asServiceRole.entities.Order.get(orderId);
         if (!order) return Response.json({ success: false, error: 'Order not found' }, { status: 200 });
