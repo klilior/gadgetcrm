@@ -34,8 +34,13 @@ Deno.serve(async (req) => {
     const allowed = (userRole === 'מנהל') || (userRole === 'admin');
     if (!allowed) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
-    const invList = await base44.asServiceRole.entities.Invoices.filter({ id: invoice_id });
-    const invoice = invList?.[0];
+    let invoice;
+    try {
+      invoice = await base44.asServiceRole.entities.Invoices.get(invoice_id);
+    } catch (e) {
+      console.log('[updateInvoiceStatus] Error fetching invoice:', e.message);
+      return Response.json({ error: 'Invoice not found' }, { status: 404 });
+    }
     if (!invoice) return Response.json({ error: 'Invoice not found' }, { status: 404 });
 
     const now = new Date().toISOString();
