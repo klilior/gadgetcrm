@@ -340,12 +340,19 @@ Deno.serve(async (req) => {
         
         console.log('✅ [VeloOrder] Order status:', JSON.stringify(infoData, null, 2));
         
-        // Extract shipping code and label URL from info response
-        // Velo returns shipping_code after accept, and label_pdf for the label
-        const shippingCode = infoData.data?.shipping_code || acceptData.data?.shipping_code || orderData.data?.shipping_code;
-        const labelUrl = infoData.data?.label_pdf || acceptData.data?.label_pdf || null;
-        const trackingUrl = infoData.data?.external_tracking_url || infoData.data?.tracking_link || null;
-        const orderStatus = infoData.data?.status || acceptData.data?.status || orderData.data?.status || 'unknown';
+        // Extract shipping code and label URL from responses
+        // Check transmit response first, then status, then order creation
+        const shippingCode = transmitData.data?.barcode || transmitData.barcode || 
+                            infoData.data?.barcode || infoData.barcode ||
+                            orderData.data?.barcode || orderData.barcode ||
+                            infoData.data?.shipping_code || orderData.data?.shipping_code;
+        const labelUrl = transmitData.data?.label || transmitData.label ||
+                        infoData.data?.label || infoData.label ||
+                        orderData.data?.label || orderData.label || null;
+        const trackingUrl = transmitData.data?.tracking_url || transmitData.data?.courier_tracking_url ||
+                           infoData.data?.tracking_url || infoData.data?.courier_tracking_url ||
+                           orderData.data?.tracking_url || orderData.data?.courier_tracking_url || null;
+        const orderStatus = transmitData.data?.status || infoData.data?.status || orderData.data?.status || 'unknown';
         
         console.log('📋 [VeloOrder] Final data:', { shippingCode, labelUrl, trackingUrl, orderStatus });
         
