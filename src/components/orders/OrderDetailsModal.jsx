@@ -7,13 +7,16 @@ import { base44 } from "@/api/base44Client";
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export default function OrderDetailsModal({ order, open, onClose, getStatusColor, STATUS_MAPPING }) {
+export default function OrderDetailsModal({ order, open, onClose, getStatusColor, STATUS_MAPPING, onStatusChange }) {
     const [isCheckingShipping, setIsCheckingShipping] = useState(false);
     const [shippingOptions, setShippingOptions] = useState(null);
     const [selectedOption, setSelectedOption] = useState(null);
     const [isCreatingShipment, setIsCreatingShipment] = useState(false);
     const [shipmentCreated, setShipmentCreated] = useState(false);
+    const [createdShipmentData, setCreatedShipmentData] = useState(null);
     const [error, setError] = useState(null);
+    const [newStatus, setNewStatus] = useState(order?.status || '');
+    const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
     
     if (!order) return null;
     
