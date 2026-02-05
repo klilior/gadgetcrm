@@ -80,7 +80,12 @@ Deno.serve(async (req) => {
         const hmac = await veloHmac({ jwt, apiKey, apiSecret });
         console.log('🔐 Generated HMAC:', hmac.slice(0, 20) + '...');
         
-        // Build exact payload matching what support sent
+        // Build exact payload - test with Tel Aviv address
+        const body = await req.json().catch(() => ({}));
+        const testCity = body.city || "תל אביב";
+        const testStreet = body.street || "דיזנגוף";
+        const testNumber = body.number || "50";
+        
         const checkPayload = {
             weight: 1,
             dimensions: {
@@ -89,16 +94,16 @@ Deno.serve(async (req) => {
                 depth: 15
             },
             customerAddress: {
-                first_name: "עומר",
-                last_name: "ענבר",
-                street: "הפרחים",
-                number: "35",
+                first_name: "בדיקה",
+                last_name: "טסט",
+                street: testStreet,
+                number: testNumber,
                 line2: "",
-                city: "כרמיאל",
-                zipcode: "2160237",
+                city: testCity,
+                zipcode: "",
                 state: "",
                 country: "Israel",
-                phone: "972547827289",
+                phone: "0501234567",
                 longitude: "",
                 latitude: ""
             },
@@ -110,13 +115,15 @@ Deno.serve(async (req) => {
                 line2: "",
                 city: "יהוד",
                 zipcode: "",
-                state: "Central",
+                state: "",
                 country: "Israel",
-                phone: "0300000000",
-                longitude: "34.7655444",
-                latitude: "32.073768"
+                phone: "0501234567",
+                longitude: "",
+                latitude: ""
             }
         };
+        
+        console.log('🏙️ Testing with city:', testCity, 'street:', testStreet, testNumber);
         
         // Build headers exactly
         const headers = {
