@@ -277,76 +277,68 @@ Deno.serve(async (req) => {
         
         console.log('📦 [VeloOrder] Velo Order ID:', veloOrderId);
         
-        // Wait a moment for Velo to process the order
+        // The WooCommerce API should auto-confirm, but let's also try the transmit endpoint
+        // Wait a moment for Velo to process
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        // Step 2: Confirm delivery (accept) - this transmits to delivery company and generates barcode
-        // Per Velo API: POST /accept with { order: "order_name" } confirms the order
-        console.log('📦 [VeloOrder] Confirming delivery for order:', veloOrderId);
+        // Step 2: Transmit the order (this sends it to the courier and generates barcode/label)
+        console.log('📦 [VeloOrder] Transmitting order to courier:', veloOrderId);
         
-        // Need to regenerate HMAC for the accept call
-        const acceptHmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
-        console.log('🔑 [VeloOrder] Accept HMAC generated');
+        // Regenerate HMAC for transmit call
+        const transmitHmac = await veloHmacWoo({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
         
-        const acceptPayload = { order: veloOrderId };
-        console.log('📦 [VeloOrder] Accept payload:', JSON.stringify(acceptPayload));
-        
-        const acceptResponse = await fetch('https://api.veloapp.io/api/json/v1/accept', {
+        const transmitResponse = await fetch('https://api.veloapp.io/api/woocommerce/transmit', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': acceptHmac
+                'X-Velo-Hmac': transmitHmac,
+                'Authorization': `Bearer ${jwt}`
             },
-            body: JSON.stringify(acceptPayload)
+            body: JSON.stringify({ order: veloOrderId })
         });
         
-        const acceptText = await acceptResponse.text();
-        console.log('📦 [VeloOrder] Accept raw response:', acceptText);
+        const transmitText = await transmitResponse.text();
+        console.log('📦 [VeloOrder] Transmit raw response:', transmitText);
         
-        let acceptData;
+        let transmitData;
         try {
-            acceptData = JSON.parse(acceptText);
+            transmitData = JSON.parse(transmitText);
         } catch (e) {
-            console.error('Failed to parse accept response:', acceptText);
-            acceptData = { error: 'Invalid accept response' };
+            console.error('Failed to parse transmit response:', transmitText);
+            transmitData = { error: 'Invalid transmit response' };
         }
         
-        console.log('✅ [VeloOrder] Accept response:', JSON.stringify(acceptData, null, 2));
+        console.log('✅ [VeloOrder] Transmit response:', JSON.stringify(transmitData, null, 2));
         
-        // Check if accept failed
-        if (acceptData.fail === true || (acceptData.code && acceptData.code !== 200)) {
-            console.error('❌ [VeloOrder] Accept failed:', acceptData.message);
-            // Continue anyway to get info, but log the error
-        }
+        // Step 3: Get order info/status to retrieve shipping code and label
+        console.log('📦 [VeloOrder] Getting order status...');
         
-        // Step 3: Get order info to retrieve shipping code and label
-        console.log('📦 [VeloOrder] Getting order info...');
+        // Regenerate HMAC for status call
+        const statusHmac = await veloHmacWoo({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
         
-        // Need to regenerate HMAC for the info call
-        const infoHmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
-        
-        const infoResponse = await fetch(`https://api.veloapp.io/api/json/v1/info/${veloOrderId}`, {
+        const infoResponse = await fetch(`https://api.veloapp.io/api/woocommerce/status/${veloOrderId}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': infoHmac
+                'X-Velo-Hmac': statusHmac,
+                'Authorization': `Bearer ${jwt}`
             }
         });
         
         const infoText = await infoResponse.text();
-        console.log('📦 [VeloOrder] Info raw response:', infoText);
+        console.log('📦 [VeloOrder] Status raw response:', infoText);
         
         let infoData;
         try {
             infoData = JSON.parse(infoText);
         } catch (e) {
-            console.error('Failed to parse info response:', infoText);
+            console.error('Failed to parse status response:', infoText);
             infoData = {};
         }
         
-        console.log('✅ [VeloOrder] Order info:', JSON.stringify(infoData, null, 2));
+        console.log('✅ [VeloOrder] Order status:', JSON.stringify(infoData, null, 2));
         
         // Extract shipping code and label URL from info response
         // Velo returns shipping_code after accept, and label_pdf for the label
