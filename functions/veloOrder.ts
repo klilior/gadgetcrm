@@ -291,12 +291,15 @@ Deno.serve(async (req) => {
         // Step 3: Get order info to retrieve shipping code and label
         console.log('📦 [VeloOrder] Getting order info...');
         
+        // Need to regenerate HMAC for the info call
+        const infoHmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+        
         const infoResponse = await fetch(`https://api.veloapp.io/api/json/v1/info/${veloOrderId}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': hmac
+                'X-Velo-Hmac': infoHmac
             }
         });
         
