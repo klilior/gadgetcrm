@@ -22,6 +22,8 @@ async function veloHmac({ email, apiKey, apiSecret }) {
         .join('');
 }
 
+// Note: The JSON API uses HMAC-based auth (email+apiKey), not JWT
+// Keeping this for legacy enterprise API if needed
 async function getVeloJwt(base44, config) {
     const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL, password: VELO_PASSWORD, baseUrl } = config;
     const VELO_API_BASE = baseUrl || 'https://api.veloapp.io/api/enterprise';
@@ -40,7 +42,7 @@ async function getVeloJwt(base44, config) {
         }
 
         try {
-            const hmac = await veloHmac({ jwt: session.jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+            const hmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
             const refreshRes = await fetch(`${VELO_API_BASE}/refresh`, {
                 method: 'POST',
                 headers: {
