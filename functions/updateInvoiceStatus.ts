@@ -6,15 +6,17 @@ Deno.serve(async (req) => {
     
     const bodyText = await req.text();
     const body = bodyText ? JSON.parse(bodyText) : {};
-    const { invoice_id, action, employee_role } = body;
+    const { invoice_id, action, employee_role, employee_email } = body;
     if (!invoice_id || !action) return Response.json({ error: 'Missing params' }, { status: 400 });
 
     // Try Base44 auth first
     let userRole = null;
+    let userEmail = null;
     try {
       const user = await base44.auth.me();
       if (user) {
         userRole = user.role;
+        userEmail = user.email;
       }
     } catch (authErr) {
       console.log('[updateInvoiceStatus] Base44 auth not available');
@@ -23,6 +25,7 @@ Deno.serve(async (req) => {
     // If no Base44 user, use employee_role passed from frontend (Employee-based login system)
     if (!userRole && employee_role) {
       userRole = employee_role;
+      userEmail = employee_email || 'employee';
       console.log('[updateInvoiceStatus] Using employee role from frontend:', userRole);
     }
     
