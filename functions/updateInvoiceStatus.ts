@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
     if (action === 'approve') {
       await base44.asServiceRole.entities.Invoices.update(invoice.id, {
         extraction_status: 'אושר',
-        reviewed_by: user.email,
+        reviewed_by: userEmail,
         reviewed_at: now,
       });
       
