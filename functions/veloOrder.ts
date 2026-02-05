@@ -213,9 +213,8 @@ Deno.serve(async (req) => {
             customerAddress: {
                 first_name: billingAddress.first_name || customer.full_name?.split(' ')[0] || 'לקוח',
                 last_name: billingAddress.last_name || customer.full_name?.split(' ').slice(1).join(' ') || '',
-                street: streetName,
-                number: streetNumber,
-                line2: '',
+                line1: `${streetName} ${streetNumber}`.trim(),
+                line2: billingAddress.address_2 || '',
                 city: billingAddress.city || customer.city || '',
                 zip: billingAddress.postcode || '',
                 country: 'Israel',
