@@ -171,8 +171,6 @@ Deno.serve(async (req) => {
         
         console.log('📍 [VeloOrder] Address parsed:', { street: streetName, number: streetNumber, city: billingAddress.city || customer.city });
         
-        const hmac = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
-        
         const orderPayload = {
             polygon_id: polygonId,
             external_service_id: externalServiceId || null,
