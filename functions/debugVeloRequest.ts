@@ -151,8 +151,27 @@ Deno.serve(async (req) => {
         
         const responseText = await checkRes.text();
         console.log('📥 Response Status:', checkRes.status);
-        console.log('📥 Response Headers:', JSON.stringify(Object.fromEntries(checkRes.headers.entries()), null, 2));
         console.log('📥 Response Body:', responseText);
+        
+        // Also test with different user-agent and accept headers
+        const headers2 = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0',
+            'X-Velo-Api-Key': apiKey,
+            'X-Velo-Hmac': hmac,
+            'Authorization': `Bearer ${jwt}`
+        };
+        
+        console.log('🔄 Testing with extra headers...');
+        const checkRes2 = await fetch(`${VELO_API_BASE}/check`, {
+            method: 'POST',
+            headers: headers2,
+            body: JSON.stringify(checkPayload)
+        });
+        const responseText2 = await checkRes2.text();
+        console.log('📥 Response 2 Status:', checkRes2.status);
+        console.log('📥 Response 2 Body:', responseText2);
         
         let responseData;
         try {
