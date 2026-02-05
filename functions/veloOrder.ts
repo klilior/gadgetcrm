@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
 // HMAC for JSON API: email + apiKey
-async function veloHmacJson({ email, apiKey, apiSecret }) {
+async function veloHmac({ email, apiKey, apiSecret }) {
     const payload = `${email}${apiKey}`;
     const encoder = new TextEncoder();
     const keyData = encoder.encode(apiSecret);
@@ -20,110 +20,6 @@ async function veloHmacJson({ email, apiKey, apiSecret }) {
     return Array.from(new Uint8Array(signature))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
-}
-
-// HMAC for WooCommerce API: jwt + apiKey (used for authenticated requests)
-async function veloHmacWoo({ jwt, apiKey, apiSecret }) {
-    const payload = `${jwt}${apiKey}`;
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(apiSecret);
-    const messageData = encoder.encode(payload);
-    
-    const key = await crypto.subtle.importKey(
-        'raw',
-        keyData,
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-    );
-    
-    const signature = await crypto.subtle.sign('HMAC', key, messageData);
-    
-    return Array.from(new Uint8Array(signature))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-}
-
-// WooCommerce API uses JWT-based auth with HMAC (jwt+apiKey)
-async function getVeloJwt(base44, config) {
-    const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL, password: VELO_PASSWORD } = config;
-    const VELO_API_BASE = 'https://api.veloapp.io/api/woocommerce';
-
-    const sessions = await base44.asServiceRole.entities.VeloSession.list('-issued_at', 1);
-
-    if (sessions.length > 0) {
-        const session = sessions[0];
-        const issuedAt = new Date(session.issued_at).getTime() / 1000;
-        const now = Date.now() / 1000;
-        const expiry = Number(session.expiry) || 0;
-        const timeLeft = (issuedAt + expiry) - now;
-
-        if (timeLeft > 120) {
-            return session.jwt;
-        }
-
-        try {
-            // Refresh uses JWT + apiKey for HMAC
-            const hmac = await veloHmacWoo({ jwt: session.jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
-            const refreshRes = await fetch(`${VELO_API_BASE}/refresh`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Velo-Api-Key': VELO_API_KEY,
-                    'X-Velo-Hmac': hmac,
-                    'Authorization': `Bearer ${session.jwt}`
-                },
-                body: JSON.stringify({})
-            });
-
-            if (refreshRes.ok) {
-                const refreshData = await refreshRes.json();
-                await base44.asServiceRole.entities.VeloSession.update(session.id, {
-                    jwt: refreshData.jwt,
-                    expiry: refreshData.expiry,
-                    issued_at: new Date().toISOString()
-                });
-                return refreshData.jwt;
-            }
-        } catch (e) {
-            console.warn('JWT Refresh failed:', e);
-        }
-    }
-
-    // Login to get new JWT
-    const loginRes = await fetch(`${VELO_API_BASE}/login`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Velo-Api-Key': VELO_API_KEY
-        },
-        body: JSON.stringify({ email: VELO_EMAIL, password: VELO_PASSWORD })
-    });
-
-    if (!loginRes.ok) {
-        const err = await loginRes.text();
-        throw new Error(`Velo Login Failed: ${err}`);
-    }
-
-    const loginData = await loginRes.json();
-    
-    if (sessions.length > 0) {
-        await base44.asServiceRole.entities.VeloSession.update(sessions[0].id, {
-            jwt: loginData.jwt,
-            expiry: loginData.expiry,
-            issued_at: new Date().toISOString(),
-            user_email: VELO_EMAIL
-        });
-    } else {
-        await base44.asServiceRole.entities.VeloSession.create({
-            jwt: loginData.jwt,
-            expiry: loginData.expiry,
-            issued_at: new Date().toISOString(),
-            user_email: VELO_EMAIL
-        });
-    }
-
-    return loginData.jwt;
 }
 
 Deno.serve(async (req) => {
