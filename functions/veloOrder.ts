@@ -374,7 +374,7 @@ Deno.serve(async (req) => {
             package_details: { weight: orderPayload.weight, dimensions: orderPayload.dimensions },
             created_by: currentUser?.id || null,
             raw_request: orderPayload,
-            raw_response: { order: orderData, accept: acceptData, info: infoData }
+            raw_response: { order: orderData, transmit: transmitData, info: infoData }
         });
         
         // If still draft, return warning
