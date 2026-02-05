@@ -307,9 +307,16 @@ Deno.serve(async (req) => {
         console.log('✅ [VeloOrder] Order info:', JSON.stringify(infoData, null, 2));
         
         // Extract shipping code and label URL from info response
+        // Velo returns shipping_code after accept, and label_pdf for the label
         const shippingCode = infoData.data?.shipping_code || acceptData.data?.shipping_code || orderData.data?.shipping_code;
         const labelUrl = infoData.data?.label_pdf || acceptData.data?.label_pdf || null;
         const trackingUrl = infoData.data?.external_tracking_url || infoData.data?.tracking_link || null;
+        const orderStatus = infoData.data?.status || acceptData.data?.status || orderData.data?.status || 'unknown';
+        
+        console.log('📋 [VeloOrder] Final data:', { shippingCode, labelUrl, trackingUrl, orderStatus });
+        
+        // Determine if the order was successfully confirmed (not draft)
+        const isConfirmed = orderStatus !== 'draft' && orderStatus !== 'placed' && (shippingCode || acceptData.success !== false);
         
         const currentUser = await base44.auth.me().catch(() => null);
         
@@ -318,7 +325,7 @@ Deno.serve(async (req) => {
             external_order_number: order.external_order_number,
             client_id: order.client_id,
             provider_id: 'velo',
-            status: acceptData.success ? 'confirmed' : 'created',
+            status: isConfirmed ? 'confirmed' : 'draft',
             tracking_number: shippingCode || null,
             shipment_id: veloOrderId?.toString() || null,
             shipping_address: orderPayload.customerAddress,
@@ -329,6 +336,22 @@ Deno.serve(async (req) => {
             raw_response: { order: orderData, accept: acceptData, info: infoData }
         });
         
+        // If still draft, return warning
+        if (!isConfirmed) {
+            return Response.json({
+                success: true,
+                warning: 'המשלוח נוצר בטיוטה - יש לאשר ידנית במערכת Velo',
+                shipment: {
+                    id: veloOrderId,
+                    shipping_code: shippingCode,
+                    label_url: labelUrl,
+                    tracking_url: trackingUrl,
+                    status: orderStatus
+                },
+                shipment_id: shipment.id
+            });
+        }
+        
         return Response.json({
             success: true,
             shipment: {
@@ -336,7 +359,7 @@ Deno.serve(async (req) => {
                 shipping_code: shippingCode,
                 label_url: labelUrl,
                 tracking_url: trackingUrl,
-                status: infoData.data?.status || 'accepted'
+                status: orderStatus
             },
             shipment_id: shipment.id
         });
