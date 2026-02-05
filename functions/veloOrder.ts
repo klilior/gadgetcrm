@@ -153,13 +153,20 @@ Deno.serve(async (req) => {
         const config = provider.config || {};
         const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL } = config;
         
-        if (!VELO_API_KEY || !VELO_API_SECRET || !VELO_EMAIL) {
-            return Response.json({ success: false, error: 'חסרים פרטי התחברות ל-Velo (apiKey, apiSecret, email)' }, { status: 200 });
+        const VELO_PASSWORD = config.password;
+        
+        if (!VELO_API_KEY || !VELO_API_SECRET || !VELO_EMAIL || !VELO_PASSWORD) {
+            return Response.json({ success: false, error: 'חסרים פרטי התחברות ל-Velo (apiKey, apiSecret, email, password)' }, { status: 200 });
         }
         
-        // Generate HMAC for JSON API (email + apiKey)
-        const hmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
-        console.log('🔑 [VeloOrder] Generated HMAC for:', VELO_EMAIL);
+        // Get JWT for WooCommerce API (this is the proper way to confirm orders)
+        console.log('🔑 [VeloOrder] Getting JWT...');
+        const jwt = await getVeloJwt(base44, config);
+        console.log('🔑 [VeloOrder] Got JWT');
+        
+        // Generate HMAC for WooCommerce API (jwt + apiKey)
+        const hmac = await veloHmacWoo({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+        console.log('🔑 [VeloOrder] Generated HMAC for WooCommerce API');
         
         const order = await base44.asServiceRole.entities.Order.get(orderId);
         if (!order) return Response.json({ success: false, error: 'Order not found' }, { status: 200 });
