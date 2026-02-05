@@ -226,8 +226,9 @@ Deno.serve(async (req) => {
         
         console.log('📦 [VeloOrder] Parsed response:', JSON.stringify(orderData, null, 2));
         
-        // Check for errors - Velo uses fail:true or code != 200 for errors
-        if (orderData.fail === true || (orderData.code && orderData.code !== 200)) {
+        // Check for errors - Velo uses fail:true for errors
+        // Note: code 201 is success for creation
+        if (orderData.fail === true) {
             return Response.json({ 
                 success: false, 
                 error: orderData.message || 'Order creation failed', 
