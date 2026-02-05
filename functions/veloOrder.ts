@@ -245,9 +245,16 @@ Deno.serve(async (req) => {
         
         console.log('📦 [VeloOrder] Velo Order ID:', veloOrderId);
         
+        // Wait a moment for Velo to process the order
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         // Step 2: Confirm delivery (accept) - this transmits to delivery company and generates barcode
         // Per Velo API: POST /accept with { order: "order_name" } confirms the order
         console.log('📦 [VeloOrder] Confirming delivery for order:', veloOrderId);
+        
+        // Need to regenerate HMAC for the accept call
+        const acceptHmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+        console.log('🔑 [VeloOrder] Accept HMAC generated');
         
         const acceptPayload = { order: veloOrderId };
         console.log('📦 [VeloOrder] Accept payload:', JSON.stringify(acceptPayload));
