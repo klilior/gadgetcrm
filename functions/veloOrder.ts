@@ -1,7 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
-async function veloHmac({ jwt, apiKey, apiSecret }) {
-    const payload = `${jwt}${apiKey}`;
+async function veloHmac({ email, apiKey, apiSecret }) {
+    // HMAC is computed from: email + apiKey, using apiSecret as the key
+    const payload = `${email}${apiKey}`;
     const encoder = new TextEncoder();
     const keyData = encoder.encode(apiSecret);
     const messageData = encoder.encode(payload);
