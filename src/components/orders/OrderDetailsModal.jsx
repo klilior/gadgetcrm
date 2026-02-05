@@ -74,19 +74,75 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             
             if (data.success) {
                 setShipmentCreated(true);
-                alert(`✅ משלוח נוצר בהצלחה!\nקוד משלוח: ${data.shipment.shipping_code || 'N/A'}`);
+                setCreatedShipmentData(data.shipment);
             } else {
                 const errorMsg = data.error || 'שגיאה ביצירת משלוח';
                 setError(errorMsg);
-                alert(`❌ שגיאה: ${errorMsg}`);
             }
         } catch (error) {
             console.error('Error creating shipment:', error);
             const errorMsg = error.response?.data?.error || error.message || 'שגיאה ביצירת משלוח';
             setError(errorMsg);
-            alert(`❌ שגיאה: ${errorMsg}`);
         } finally {
             setIsCreatingShipment(false);
+        }
+    };
+
+    const handleUpdateStatus = async () => {
+        if (!newStatus || newStatus === order.status) return;
+        
+        setIsUpdatingStatus(true);
+        try {
+            await base44.entities.Order.update(order.id, { status: newStatus });
+            if (onStatusChange) {
+                onStatusChange(order.id, newStatus);
+            }
+            alert('✅ סטטוס עודכן בהצלחה');
+        } catch (error) {
+            console.error('Error updating status:', error);
+            alert('❌ שגיאה בעדכון סטטוס');
+        } finally {
+            setIsUpdatingStatus(false);
+        }
+    };
+
+    const handlePrintLabel = () => {
+        if (!createdShipmentData) return;
+        
+        // Open Velo label URL or print shipment details
+        const labelUrl = createdShipmentData.label_url || createdShipmentData.tracking_url;
+        if (labelUrl) {
+            window.open(labelUrl, '_blank');
+        } else {
+            // Create printable content
+            const printContent = `
+                <html dir="rtl">
+                <head>
+                    <title>שטר משלוח - ${order.external_order_number || order.id}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+                        .info { margin: 10px 0; }
+                        .label { font-weight: bold; }
+                        .barcode { text-align: center; font-size: 24px; font-weight: bold; margin: 20px 0; padding: 10px; border: 2px solid #000; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>שטר משלוח VELO</h1>
+                        <p>הזמנה: #${order.external_order_number || order.id}</p>
+                    </div>
+                    <div class="barcode">${createdShipmentData.shipping_code || createdShipmentData.id || 'N/A'}</div>
+                    <div class="info"><span class="label">שם:</span> ${order.billing?.first_name || ''} ${order.billing?.last_name || ''}</div>
+                    <div class="info"><span class="label">טלפון:</span> ${order.billing?.phone || ''}</div>
+                    <div class="info"><span class="label">כתובת:</span> ${order.billing?.address_1 || ''}, ${order.billing?.city || ''}</div>
+                </body>
+                </html>
+            `;
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+            printWindow.print();
         }
     };
 
