@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
     } else if (action === 'reject') {
       await base44.asServiceRole.entities.Invoices.update(invoice.id, {
         extraction_status: 'נדחה',
-        reviewed_by: user.email,
+        reviewed_by: userEmail,
         reviewed_at: now,
       });
     } else {
