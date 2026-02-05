@@ -120,15 +120,14 @@ Deno.serve(async (req) => {
         
         console.log('📦 [VeloOrder] Order payload:', JSON.stringify(orderPayload, null, 2));
         
-        // Step 1: Create order using WooCommerce API (which auto-confirms)
-        console.log('📦 [VeloOrder] Creating order via WooCommerce API...');
-        const orderResponse = await fetch('https://api.veloapp.io/api/woocommerce/order', {
+        // Step 1: Create order via JSON API
+        console.log('📦 [VeloOrder] Creating order via JSON API...');
+        const orderResponse = await fetch('https://api.veloapp.io/api/json/v1/order', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': hmac,
-                'Authorization': `Bearer ${jwt}`
+                'X-Velo-Hmac': hmac
             },
             body: JSON.stringify(orderPayload)
         });
