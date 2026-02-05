@@ -1,8 +1,30 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
-async function veloHmac({ email, apiKey, apiSecret }) {
-    // HMAC is computed from: email + apiKey, using apiSecret as the key
+// HMAC for JSON API: email + apiKey
+async function veloHmacJson({ email, apiKey, apiSecret }) {
     const payload = `${email}${apiKey}`;
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(apiSecret);
+    const messageData = encoder.encode(payload);
+    
+    const key = await crypto.subtle.importKey(
+        'raw',
+        keyData,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    );
+    
+    const signature = await crypto.subtle.sign('HMAC', key, messageData);
+    
+    return Array.from(new Uint8Array(signature))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+}
+
+// HMAC for WooCommerce API: jwt + apiKey (used for authenticated requests)
+async function veloHmacWoo({ jwt, apiKey, apiSecret }) {
+    const payload = `${jwt}${apiKey}`;
     const encoder = new TextEncoder();
     const keyData = encoder.encode(apiSecret);
     const messageData = encoder.encode(payload);
