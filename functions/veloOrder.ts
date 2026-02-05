@@ -225,18 +225,16 @@ Deno.serve(async (req) => {
         console.log('✅ [VeloOrder] Order info:', JSON.stringify(infoData, null, 2));
         
         // Extract shipping code and label URL from responses
-        // Check transmit response first, then status, then order creation
-        const shippingCode = transmitData.data?.barcode || transmitData.barcode || 
-                            infoData.data?.barcode || infoData.barcode ||
-                            orderData.data?.barcode || orderData.barcode ||
-                            infoData.data?.shipping_code || orderData.data?.shipping_code;
-        const labelUrl = transmitData.data?.label || transmitData.label ||
-                        infoData.data?.label || infoData.label ||
-                        orderData.data?.label || orderData.label || null;
-        const trackingUrl = transmitData.data?.tracking_url || transmitData.data?.courier_tracking_url ||
-                           infoData.data?.tracking_url || infoData.data?.courier_tracking_url ||
-                           orderData.data?.tracking_url || orderData.data?.courier_tracking_url || null;
-        const orderStatus = transmitData.data?.status || infoData.data?.status || orderData.data?.status || 'unknown';
+        const shippingCode = acceptData.data?.shipping_code || acceptData.data?.barcode ||
+                            infoData.data?.shipping_code || infoData.data?.barcode ||
+                            orderData.data?.shipping_code || orderData.data?.barcode;
+        const labelUrl = acceptData.data?.label_pdf || acceptData.data?.label ||
+                        infoData.data?.label_pdf || infoData.data?.label ||
+                        orderData.data?.label_pdf || orderData.data?.label || null;
+        const trackingUrl = acceptData.data?.external_tracking_url || acceptData.data?.tracking_link ||
+                           infoData.data?.external_tracking_url || infoData.data?.tracking_link ||
+                           orderData.data?.external_tracking_url || null;
+        const orderStatus = acceptData.data?.status || infoData.data?.status || orderData.data?.status || 'unknown';
         
         console.log('📋 [VeloOrder] Final data:', { shippingCode, labelUrl, trackingUrl, orderStatus });
         
