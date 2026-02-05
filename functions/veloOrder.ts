@@ -264,7 +264,7 @@ Deno.serve(async (req) => {
             headers: {
                 'Content-Type': 'application/json',
                 'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': hmac
+                'X-Velo-Hmac': acceptHmac
             },
             body: JSON.stringify(acceptPayload)
         });
