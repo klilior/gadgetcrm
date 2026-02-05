@@ -44,11 +44,10 @@ async function veloHmacWoo({ jwt, apiKey, apiSecret }) {
         .join('');
 }
 
-// Note: The JSON API uses HMAC-based auth (email+apiKey), not JWT
-// Keeping this for legacy enterprise API if needed
+// WooCommerce API uses JWT-based auth with HMAC (jwt+apiKey)
 async function getVeloJwt(base44, config) {
-    const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL, password: VELO_PASSWORD, baseUrl } = config;
-    const VELO_API_BASE = baseUrl || 'https://api.veloapp.io/api/enterprise';
+    const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL, password: VELO_PASSWORD } = config;
+    const VELO_API_BASE = 'https://api.veloapp.io/api/woocommerce';
 
     const sessions = await base44.asServiceRole.entities.VeloSession.list('-issued_at', 1);
 
@@ -64,7 +63,8 @@ async function getVeloJwt(base44, config) {
         }
 
         try {
-            const hmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+            // Refresh uses JWT + apiKey for HMAC
+            const hmac = await veloHmacWoo({ jwt: session.jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
             const refreshRes = await fetch(`${VELO_API_BASE}/refresh`, {
                 method: 'POST',
                 headers: {
@@ -90,6 +90,7 @@ async function getVeloJwt(base44, config) {
         }
     }
 
+    // Login to get new JWT
     const loginRes = await fetch(`${VELO_API_BASE}/login`, {
         method: 'POST',
         headers: {
