@@ -4,26 +4,34 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     
-    // Allow custom login sessions (Employee-based) which don't have Base44 auth
-    let user = null;
+    const bodyText = await req.text();
+    const body = bodyText ? JSON.parse(bodyText) : {};
+    const { invoice_id, action, employee_role } = body;
+    if (!invoice_id || !action) return Response.json({ error: 'Missing params' }, { status: 400 });
+
+    // Try Base44 auth first
+    let userRole = null;
     try {
-      user = await base44.auth.me();
+      const user = await base44.auth.me();
+      if (user) {
+        userRole = user.role;
+      }
     } catch (authErr) {
-      console.log('[updateInvoiceStatus] Base44 auth failed, checking request context');
+      console.log('[updateInvoiceStatus] Base44 auth not available');
     }
     
-    // If no Base44 user, we need to fail since we need role check
-    if (!user) {
+    // If no Base44 user, use employee_role passed from frontend (Employee-based login system)
+    if (!userRole && employee_role) {
+      userRole = employee_role;
+      console.log('[updateInvoiceStatus] Using employee role from frontend:', userRole);
+    }
+    
+    if (!userRole) {
       return Response.json({ error: 'Unauthorized - login required' }, { status: 401 });
     }
 
-    const bodyText = await req.text();
-    const body = bodyText ? JSON.parse(bodyText) : {};
-    const { invoice_id, action } = body;
-    if (!invoice_id || !action) return Response.json({ error: 'Missing params' }, { status: 400 });
-
     // Only higher-privilege roles
-    const allowed = (user.role === 'מנהל') || (user.role === 'admin');
+    const allowed = (userRole === 'מנהל') || (userRole === 'admin');
     if (!allowed) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
     const invList = await base44.asServiceRole.entities.Invoices.filter({ id: invoice_id });
