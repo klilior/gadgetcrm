@@ -215,6 +215,8 @@ Deno.serve(async (req) => {
         });
         
         const responseText = await orderResponse.text();
+        console.log('📦 [VeloOrder] Raw response:', responseText);
+        
         let orderData;
         try {
             orderData = JSON.parse(responseText);
@@ -222,35 +224,43 @@ Deno.serve(async (req) => {
             return Response.json({ success: false, error: 'Invalid response from Velo', details: responseText }, { status: 200 });
         }
         
-        if (!orderResponse.ok || !orderData.success) {
-            return Response.json({ success: false, error: 'Order creation failed', details: orderData }, { status: 200 });
+        console.log('📦 [VeloOrder] Parsed response:', JSON.stringify(orderData, null, 2));
+        
+        // Check for errors - Velo uses fail:true or code != 200 for errors
+        if (orderData.fail === true || (orderData.code && orderData.code !== 200)) {
+            return Response.json({ 
+                success: false, 
+                error: orderData.message || 'Order creation failed', 
+                details: orderData 
+            }, { status: 200 });
         }
         
         console.log('✅ [VeloOrder] Order created:', orderData);
         
-        // Get the order ID from response
-        const veloOrderId = orderData.data?.id || orderData.id;
+        // Get the order ID from response - could be in data.name or data.id
+        const veloOrderId = orderData.data?.name || orderData.data?.id || orderData.id;
         if (!veloOrderId) {
             return Response.json({ success: false, error: 'No order ID returned from Velo', details: orderData }, { status: 200 });
         }
         
-        // Step 2: Confirm delivery (accept) - this generates the barcode/shipping_code
-        console.log('📦 [VeloOrder] Confirming delivery for order:', veloOrderId);
+        console.log('📦 [VeloOrder] Velo Order ID:', veloOrderId);
         
-        // Generate fresh HMAC for accept call
-        const hmacAccept = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+        // Step 2: Confirm delivery (accept) - this transmits to delivery company and generates barcode
+        console.log('📦 [VeloOrder] Confirming delivery for order:', veloOrderId);
         
         const acceptResponse = await fetch('https://api.veloapp.io/api/json/v1/accept', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': hmacAccept
+                'X-Velo-Hmac': hmac
             },
             body: JSON.stringify({ order: veloOrderId })
         });
         
         const acceptText = await acceptResponse.text();
+        console.log('📦 [VeloOrder] Accept raw response:', acceptText);
+        
         let acceptData;
         try {
             acceptData = JSON.parse(acceptText);
@@ -259,23 +269,23 @@ Deno.serve(async (req) => {
             acceptData = { error: 'Invalid accept response' };
         }
         
-        console.log('✅ [VeloOrder] Accept response:', acceptData);
+        console.log('✅ [VeloOrder] Accept response:', JSON.stringify(acceptData, null, 2));
         
         // Step 3: Get order info to retrieve shipping code and label
         console.log('📦 [VeloOrder] Getting order info...');
-        
-        const hmacInfo = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
         
         const infoResponse = await fetch(`https://api.veloapp.io/api/json/v1/info/${veloOrderId}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': hmacInfo
+                'X-Velo-Hmac': hmac
             }
         });
         
         const infoText = await infoResponse.text();
+        console.log('📦 [VeloOrder] Info raw response:', infoText);
+        
         let infoData;
         try {
             infoData = JSON.parse(infoText);
@@ -284,11 +294,11 @@ Deno.serve(async (req) => {
             infoData = {};
         }
         
-        console.log('✅ [VeloOrder] Order info:', infoData);
+        console.log('✅ [VeloOrder] Order info:', JSON.stringify(infoData, null, 2));
         
         // Extract shipping code and label URL from info response
         const shippingCode = infoData.data?.shipping_code || acceptData.data?.shipping_code || orderData.data?.shipping_code;
-        const labelUrl = infoData.data?.label_pdf || null;
+        const labelUrl = infoData.data?.label_pdf || acceptData.data?.label_pdf || null;
         const trackingUrl = infoData.data?.external_tracking_url || infoData.data?.tracking_link || null;
         
         const currentUser = await base44.auth.me().catch(() => null);
