@@ -171,12 +171,15 @@ Deno.serve(async (req) => {
         
         console.log('📍 [VeloOrder] Address parsed:', { street: streetName, number: streetNumber, city: billingAddress.city || customer.city });
         
+        // Build order payload per Velo JSON API spec
         const orderPayload = {
-            polygon_id: polygonId,
-            external_service_id: externalServiceId || null,
-            weight: weight || 1.0,
+            polygonId: polygonId,
+            externalServiceId: externalServiceId || null,
+            externalId: `Order${order.external_order_number || order.id}`,
+            weight: weight || 1,
             dimensions: dimensions || { width: 20, height: 10, depth: 15 },
             note: `הזמנה #${order.external_order_number}`,
+            packagesCount: 1,
             customerAddress: {
                 first_name: billingAddress.first_name || customer.full_name?.split(' ')[0] || 'לקוח',
                 last_name: billingAddress.last_name || customer.full_name?.split(' ').slice(1).join(' ') || '',
@@ -184,22 +187,20 @@ Deno.serve(async (req) => {
                 number: streetNumber,
                 line2: '',
                 city: billingAddress.city || customer.city || '',
-                zipcode: billingAddress.postcode || '',
-                state: billingAddress.state || '',
+                zip: billingAddress.postcode || '',
                 country: 'Israel',
-                phone: (billingAddress.phone || customer.phone || '').replace(/\D/g, ''),
-                longitude: '',
-                latitude: ''
+                phone: (billingAddress.phone || customer.phone || '').replace(/\D/g, '')
             },
-            billingAddress: null,
             products: products.map(p => ({
-                name: p.name,
+                name: p.name || 'מוצר',
                 code: p.product_id?.toString() || 'UNKNOWN',
                 variation: '',
                 price: parseFloat(p.total) || 0,
                 quantity: p.quantity || 1
             }))
         };
+        
+        console.log('📦 [VeloOrder] Order payload:', JSON.stringify(orderPayload, null, 2));
         
         // Step 1: Create order (status: "placed")
         console.log('📦 [VeloOrder] Creating order...');
