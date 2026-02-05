@@ -195,20 +195,6 @@ Deno.serve(async (req) => {
                 latitude: ''
             },
             billingAddress: null,
-            storeAddress: {
-                first_name: 'Gadget',
-                last_name: 'Team',
-                street: 'סביונים',
-                number: '1',
-                line2: '',
-                city: 'יהוד',
-                zipcode: '',
-                state: 'Central',
-                country: 'Israel',
-                phone: '0300000000',
-                longitude: '34.7655444',
-                latitude: '32.073768'
-            },
             products: products.map(p => ({
                 name: p.name,
                 code: p.product_id?.toString() || 'UNKNOWN',
@@ -218,7 +204,8 @@ Deno.serve(async (req) => {
             }))
         };
         
-        const orderResponse = await fetch(`${VELO_API_BASE}/order`, {
+        // Use the new JSON API endpoint
+        const orderResponse = await fetch('https://api.veloapp.io/api/json/v1/order', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
