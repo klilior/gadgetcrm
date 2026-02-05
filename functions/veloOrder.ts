@@ -246,7 +246,11 @@ Deno.serve(async (req) => {
         console.log('📦 [VeloOrder] Velo Order ID:', veloOrderId);
         
         // Step 2: Confirm delivery (accept) - this transmits to delivery company and generates barcode
+        // Per Velo API: POST /accept with { order: "order_name" } confirms the order
         console.log('📦 [VeloOrder] Confirming delivery for order:', veloOrderId);
+        
+        const acceptPayload = { order: veloOrderId };
+        console.log('📦 [VeloOrder] Accept payload:', JSON.stringify(acceptPayload));
         
         const acceptResponse = await fetch('https://api.veloapp.io/api/json/v1/accept', {
             method: 'POST',
@@ -255,7 +259,7 @@ Deno.serve(async (req) => {
                 'X-Velo-Api-Key': VELO_API_KEY,
                 'X-Velo-Hmac': hmac
             },
-            body: JSON.stringify({ order: veloOrderId })
+            body: JSON.stringify(acceptPayload)
         });
         
         const acceptText = await acceptResponse.text();
@@ -270,6 +274,12 @@ Deno.serve(async (req) => {
         }
         
         console.log('✅ [VeloOrder] Accept response:', JSON.stringify(acceptData, null, 2));
+        
+        // Check if accept failed
+        if (acceptData.fail === true || (acceptData.code && acceptData.code !== 200)) {
+            console.error('❌ [VeloOrder] Accept failed:', acceptData.message);
+            // Continue anyway to get info, but log the error
+        }
         
         // Step 3: Get order info to retrieve shipping code and label
         console.log('📦 [VeloOrder] Getting order info...');
