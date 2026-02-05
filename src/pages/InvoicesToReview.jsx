@@ -183,7 +183,8 @@ export default function InvoicesToReview() {
       const result = await base44.functions.invoke('updateInvoiceStatus', { 
         invoice_id: selected.id, 
         action: 'reject',
-        employee_role: currentUser?.role 
+        employee_role: currentUser?.role,
+        employee_email: currentUser?.email || currentUser?.employee_name 
       });
       if (result.data?.error) {
         throw new Error(result.data.error);
