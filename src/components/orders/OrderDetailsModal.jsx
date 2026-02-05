@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
-import { X, User, Mail, Phone, MapPin, Truck, Hash, Calendar, Tag, ShoppingCart, Send, Package, CheckCircle } from 'lucide-react';
+import { X, User, Mail, Phone, MapPin, Truck, Hash, Calendar, Tag, ShoppingCart, Send, Package, CheckCircle, Printer, Check } from 'lucide-react';
 import { format } from "date-fns";
 import { base44 } from "@/api/base44Client";
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function OrderDetailsModal({ order, open, onClose, getStatusColor, STATUS_MAPPING }) {
     const [isCheckingShipping, setIsCheckingShipping] = useState(false);
