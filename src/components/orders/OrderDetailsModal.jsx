@@ -335,26 +335,15 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                 <DialogFooter className="p-6 border-t flex justify-between items-center">
                     <div className="flex gap-2">
                         {!shipmentCreated && (
-                            <>
-                                <Button 
-                                    variant="outline" 
-                                    onClick={handleCheckShipping}
-                                    disabled={isCheckingShipping}
-                                >
-                                    <Package className="w-4 h-4 ml-2"/>
-                                    {isCheckingShipping ? 'בודק...' : 'בדוק משלוח'}
-                                </Button>
-                                {shippingOptions && (
-                                    <Button 
-                                        onClick={handleCreateShipment}
-                                        disabled={!selectedOption || isCreatingShipment}
-                                        className="bg-green-600 hover:bg-green-700"
-                                    >
-                                        <Send className="w-4 h-4 ml-2"/>
-                                        {isCreatingShipment ? 'יוצר...' : 'צור משלוח'}
-                                    </Button>
-                                )}
-                            </>
+                            <Button 
+                                variant="outline" 
+                                onClick={handleCheckShipping}
+                                disabled={isCheckingShipping}
+                                className="bg-blue-50 border-blue-300 hover:bg-blue-100"
+                            >
+                                <Package className="w-4 h-4 ml-2"/>
+                                {isCheckingShipping ? 'טוען אפשרויות...' : 'אפשרויות משלוח'}
+                            </Button>
                         )}
                     </div>
                     <div className="flex items-center gap-4">
