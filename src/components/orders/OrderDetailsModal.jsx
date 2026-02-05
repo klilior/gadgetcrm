@@ -224,47 +224,109 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                     )}
                     
                     {/* Shipping Options */}
-                    {shippingOptions && (
-                        <div className="space-y-3 p-4 bg-blue-50 rounded-lg">
-                            <h3 className="font-semibold flex items-center gap-2">
+                    {shippingOptions && shippingOptions.length > 0 && !shipmentCreated && (
+                        <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <h3 className="font-semibold flex items-center gap-2 text-blue-800">
                                 <Package className="w-4 h-4" />
-                                אפשרויות משלוח
+                                אפשרויות משלוח זמינות ({shippingOptions.length})
                             </h3>
-                            {Array.isArray(shippingOptions) && shippingOptions.map((option, idx) => (
-                                <div 
-                                    key={idx}
-                                    onClick={() => setSelectedOption(option)}
-                                    className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                                        selectedOption === option 
-                                            ? 'border-blue-500 bg-blue-100' 
-                                            : 'border-gray-200 bg-white hover:border-blue-300'
-                                    }`}
+                            <div className="space-y-2">
+                                {shippingOptions.map((option, idx) => {
+                                    const price = option.shipping_code?.prices?.[0]?.price || option.rate || 0;
+                                    return (
+                                        <div 
+                                            key={idx}
+                                            onClick={() => setSelectedOption(option)}
+                                            className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                                selectedOption === option 
+                                                    ? 'border-blue-500 bg-blue-100 shadow-md' 
+                                                    : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
+                                            }`}
+                                        >
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-bold text-gray-900">{option.service_name || option.courier || 'שליח'}</p>
+                                                        {selectedOption === option && (
+                                                            <Badge className="bg-blue-600"><Check className="w-3 h-3 ml-1" />נבחר</Badge>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm text-gray-600 mt-1">{option.description || ''}</p>
+                                                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                                                        <span>שליח: {option.courier || '-'}</span>
+                                                        {option.pickup_max_days && <span>איסוף: עד {option.pickup_max_days} ימים</span>}
+                                                        {option.dropoff_max_days && <span>משלוח: עד {option.dropoff_max_days} ימים</span>}
+                                                    </div>
+                                                </div>
+                                                <div className="text-left mr-4">
+                                                    <p className="font-bold text-xl text-blue-600">₪{price}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            
+                            {selectedOption && (
+                                <Button 
+                                    onClick={handleCreateShipment}
+                                    disabled={isCreatingShipment}
+                                    className="w-full bg-green-600 hover:bg-green-700 mt-3"
+                                    size="lg"
                                 >
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <p className="font-medium">{option.courier || 'שליח'}</p>
-                                            <p className="text-sm text-gray-600">
-                                                זמן: {option.delivery_time || 'N/A'}
-                                            </p>
-                                        </div>
-                                        <div className="text-left">
-                                            <p className="font-bold text-lg">₪{option.price || '0'}</p>
-                                            {selectedOption === option && (
-                                                <Badge className="bg-blue-600">נבחר</Badge>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                                    <Send className="w-4 h-4 ml-2"/>
+                                    {isCreatingShipment ? 'יוצר משלוח...' : 'צור שטר משלוח'}
+                                </Button>
+                            )}
+                        </div>
+                    )}
+
+                    {shippingOptions && shippingOptions.length === 0 && !shipmentCreated && (
+                        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p className="text-yellow-800">לא נמצאו אפשרויות משלוח זמינות לכתובת זו</p>
                         </div>
                     )}
                     
                     {shipmentCreated && (
-                        <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
-                            <CheckCircle className="w-5 h-5 text-green-600" />
-                            <div>
-                                <p className="font-semibold text-green-900">משלוח נוצר בהצלחה!</p>
-                                <p className="text-sm text-green-700">ההזמנה נשלחה לאישור ב-Velo Dashboard</p>
+                        <div className="space-y-4">
+                            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <CheckCircle className="w-6 h-6 text-green-600" />
+                                    <div>
+                                        <p className="font-bold text-green-900 text-lg">משלוח נוצר בהצלחה!</p>
+                                        <p className="text-sm text-green-700">קוד משלוח: {createdShipmentData?.shipping_code || createdShipmentData?.id || 'N/A'}</p>
+                                    </div>
+                                </div>
+                                <Button onClick={handlePrintLabel} className="w-full bg-blue-600 hover:bg-blue-700">
+                                    <Printer className="w-4 h-4 ml-2" />
+                                    הדפס שטר משלוח
+                                </Button>
+                            </div>
+
+                            {/* Status Change Section */}
+                            <div className="p-4 bg-gray-50 border rounded-lg">
+                                <h4 className="font-semibold mb-3">עדכן סטטוס הזמנה</h4>
+                                <div className="flex gap-2">
+                                    <Select value={newStatus} onValueChange={setNewStatus}>
+                                        <SelectTrigger className="flex-1">
+                                            <SelectValue placeholder="בחר סטטוס" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="processing">בטיפול</SelectItem>
+                                            <SelectItem value="completed">הושלם</SelectItem>
+                                            <SelectItem value="shipped">נשלח</SelectItem>
+                                            <SelectItem value="on-hold">בהמתנה</SelectItem>
+                                            <SelectItem value="cancelled">בוטל</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Button 
+                                        onClick={handleUpdateStatus} 
+                                        disabled={isUpdatingStatus || !newStatus || newStatus === order.status}
+                                        className="bg-purple-600 hover:bg-purple-700"
+                                    >
+                                        {isUpdatingStatus ? 'מעדכן...' : 'עדכן סטטוס'}
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     )}
