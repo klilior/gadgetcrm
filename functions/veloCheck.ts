@@ -212,26 +212,13 @@ Deno.serve(async (req) => {
                 phone: (billing.phone || customer.phone || '0500000000').replace(/\D/g, ''),
                 longitude: '',
                 latitude: ''
-            },
-            storeAddress: {
-                first_name: 'Gadget',
-                last_name: 'Team',
-                street: 'סביונים',
-                number: '1',
-                line2: '',
-                city: 'יהוד',
-                zipcode: '',
-                state: 'Central',
-                country: 'Israel',
-                phone: '0300000000',
-                longitude: '34.7655444',
-                latitude: '32.073768'
             }
         };
         
         console.log('📦 [VeloCheck] Payload:', JSON.stringify(checkPayload, null, 2));
         
-        const checkRes = await fetch(`${VELO_API_BASE}/check`, {
+        // Use the new JSON API endpoint
+        const checkRes = await fetch('https://api.veloapp.io/api/json/v1/check', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
