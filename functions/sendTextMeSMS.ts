@@ -294,8 +294,9 @@ Deno.serve(async (req) => {
         },
       };
 
-      console.log(`[SMS-TEST] Sending to ${apiPhone}, payload: ${JSON.stringify(payload)}`);
-      const res = await fetch('https://my.textme.co.il/api/test', {
+      const testEndpoint = config.test_mode ? 'https://my.textme.co.il/api/test' : 'https://my.textme.co.il/api';
+      console.log(`[SMS-TEST] Sending to ${apiPhone} via ${testEndpoint} (test_mode=${config.test_mode}), payload: ${JSON.stringify(payload)}`);
+      const res = await fetch(testEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiToken}` },
         body: JSON.stringify(payload),
