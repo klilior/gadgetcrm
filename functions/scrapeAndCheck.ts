@@ -3,39 +3,136 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // ─── helpers ───
 const cleanPrice = (txt) => {
   if (!txt) return null;
-  const cleaned = txt.replace(/[₪,\s]/g, '').replace(/[^\d.]/g, '');
+  const cleaned = String(txt).replace(/[₪,\s]/g, '').replace(/[^\d.]/g, '');
   const n = Math.round(parseFloat(cleaned));
-  return (n >= 10 && n <= 100000) ? n : null;
+  return (n >= 100 && n <= 100000) ? n : null;
 };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const today = () => new Date().toISOString().slice(0, 10);
 const PRIORITY_ORDER = { "קריטי": 0, "גבוה": 1, "בינוני": 2, "נמוך": 3 };
 const safeDelta = (a, b) => (a != null && b != null) ? a - b : null;
 
-// ─── Scrape WooCommerce ───
-async function scrapeWooPrice(url) {
+// ─── Scrape WooCommerce — Multi-Strategy + Validation ───
+async function scrapeWooPrice(url, zapMyPrice) {
   if (!url) return { ok: false, error: 'אין קישור WooCommerce' };
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Cache-Control': 'no-cache',
+      },
       redirect: 'follow',
     });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const html = await res.text();
 
-    let m = html.match(/itemprop=["']price["']\s+content=["']([^"']+)["']/i);
-    if (m) { const p = cleanPrice(m[1]); if (p) return { ok: true, price: p }; }
+    // Extract page title for debug
+    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const pageTitle = titleMatch ? titleMatch[1].replace(/\s+/g, ' ').trim().substring(0, 120) : '(no title)';
 
-    const priceMatches = [...html.matchAll(/<(?:span|bdi)[^>]*class="[^"]*woocommerce-Price-amount[^"]*"[^>]*>([\s\S]*?)<\/(?:span|bdi)>/gi)];
-    for (const pm of priceMatches) {
-      const p = cleanPrice(pm[1]);
-      if (p) return { ok: true, price: p };
+    const candidates = [];
+
+    // S1: JSON-LD
+    const jsonLdBlocks = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+    for (const block of jsonLdBlocks) {
+      try {
+        const data = JSON.parse(block[1]);
+        const items = Array.isArray(data) ? data : [data];
+        for (const item of items) {
+          const price = item?.offers?.price || item?.offers?.[0]?.price || item?.price;
+          if (price) {
+            const p = cleanPrice(price);
+            if (p) candidates.push({ value: p, strategy: 'S1_JSON_LD', snippet: `offers.price=${price}` });
+          }
+        }
+      } catch (_) {}
     }
 
-    const genericMatch = html.match(/₪\s*([\d,]+(?:\.\d+)?)/);
-    if (genericMatch) { const p = cleanPrice(genericMatch[1]); if (p) return { ok: true, price: p }; }
+    // S2: Meta itemprop price
+    const metaMatches = [...html.matchAll(/itemprop=["']price["']\s+content=["']([^"']+)["']/gi)];
+    for (const mm of metaMatches) {
+      const p = cleanPrice(mm[1]);
+      if (p) candidates.push({ value: p, strategy: 'S2_META_ITEMPROP', snippet: mm[0].substring(0, 80) });
+    }
+    // Also check content before itemprop
+    const metaMatches2 = [...html.matchAll(/content=["']([^"']+)["']\s+itemprop=["']price["']/gi)];
+    for (const mm of metaMatches2) {
+      const p = cleanPrice(mm[1]);
+      if (p) candidates.push({ value: p, strategy: 'S2_META_ITEMPROP', snippet: mm[0].substring(0, 80) });
+    }
 
-    return { ok: false, error: 'לא נמצא מחיר בדף WooCommerce' };
+    // S3: WooCommerce Price-amount class extraction
+    const wcMatches = [...html.matchAll(/<(?:span|bdi|ins|p)[^>]*class="[^"]*woocommerce-Price-amount[^"]*"[^>]*>([\s\S]*?)<\/(?:span|bdi|ins|p)>/gi)];
+    for (const wm of wcMatches) {
+      const inner = wm[1].replace(/<[^>]+>/g, ''); // strip inner tags like <span class="woocommerce-Price-currencySymbol">
+      const p = cleanPrice(inner);
+      if (p) candidates.push({ value: p, strategy: 'S3_WC_PRICE_CLASS', snippet: wm[0].substring(0, 100) });
+    }
+
+    // S4: Anchored regex near woocommerce-Price-amount (NOT generic ₪ scan)
+    const s4Matches = [...html.matchAll(/woocommerce-Price-amount[^>]*>[^<]*?₪?\s*([\d,]+(?:\.\d+)?)/gi)];
+    for (const sm of s4Matches) {
+      const p = cleanPrice(sm[1]);
+      if (p) candidates.push({ value: p, strategy: 'S4_WC_ANCHORED_REGEX', snippet: sm[0].substring(0, 100) });
+    }
+
+    console.log(`[WC] ${url} → ${candidates.length} raw candidates: ${JSON.stringify(candidates.map(c => ({ v: c.value, s: c.strategy })))}`);
+
+    // Deduplicate by value+strategy
+    const seen = new Set();
+    const uniqueCandidates = candidates.filter(c => {
+      const key = `${c.value}|${c.strategy}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Validation — reject bad candidates
+    const validCandidates = uniqueCandidates.filter(c => {
+      if (c.value < 100 || c.value > 100000) return false;
+      if (String(c.value).length >= 8) return false; // looks like ID
+      // If zap price available, reject if >25% off
+      if (zapMyPrice && zapMyPrice > 0) {
+        const diff = Math.abs(c.value - zapMyPrice) / zapMyPrice;
+        if (diff > 0.25) return false;
+      }
+      return true;
+    });
+
+    console.log(`[WC] ${validCandidates.length} valid candidates after filtering`);
+
+    if (validCandidates.length === 0) {
+      return {
+        ok: false,
+        error: `לא נמצא מחיר תקין בדף מוצר (${uniqueCandidates.length} מועמדים נפסלו)`,
+        debug: { candidates: uniqueCandidates, pageTitle },
+      };
+    }
+
+    // Choose best candidate
+    let chosen;
+    if (zapMyPrice && zapMyPrice > 0) {
+      // Pick closest to Zap price
+      validCandidates.sort((a, b) => Math.abs(a.value - zapMyPrice) - Math.abs(b.value - zapMyPrice));
+      chosen = validCandidates[0];
+    } else {
+      // Pick by strategy priority
+      const stratPriority = { 'S1_JSON_LD': 0, 'S2_META_ITEMPROP': 1, 'S3_WC_PRICE_CLASS': 2, 'S4_WC_ANCHORED_REGEX': 3 };
+      validCandidates.sort((a, b) => (stratPriority[a.strategy] ?? 9) - (stratPriority[b.strategy] ?? 9));
+      chosen = validCandidates[0];
+    }
+
+    console.log(`[WC] Chosen: ₪${chosen.value} via ${chosen.strategy}`);
+
+    return {
+      ok: true,
+      price: chosen.value,
+      debug_wc_source: chosen.strategy,
+      debug_wc_candidates: JSON.stringify(uniqueCandidates),
+      debug_wc_html_sample: `${pageTitle} | ${chosen.snippet}`.substring(0, 500),
+    };
   } catch (e) {
     return { ok: false, error: `שגיאת WooCommerce: ${e.message}` };
   }
