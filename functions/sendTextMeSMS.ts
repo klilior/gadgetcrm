@@ -77,13 +77,14 @@ async function sendSMSInternal(base44, config, params) {
   const apiPhone = normalizedPhone.startsWith('0') ? normalizedPhone.slice(1) : normalizedPhone;
 
   const payload = {
-    username: config.username,
+    user: { username: config.username },
     source: config.default_source,
-    destinations: { phone: apiPhone },
+    destinations: { phone: [apiPhone] },
     message,
   };
 
   console.log(`[SMS] Sending to ${apiPhone} via ${endpoint} (test=${config.test_mode})`);
+  console.log(`[SMS] Payload: ${JSON.stringify(payload)}`);
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -183,8 +184,8 @@ Deno.serve(async (req) => {
       const apiPhone = normalizedPhone.startsWith('0') ? normalizedPhone.slice(1) : normalizedPhone;
 
       const payloadObj = {
-        username: config.username, source: finalSource,
-        destinations: { phone: apiPhone }, message,
+        user: { username: config.username }, source: finalSource,
+        destinations: { phone: [apiPhone] }, message,
       };
       if (timing) payloadObj.timing = timing;
 
@@ -274,11 +275,11 @@ Deno.serve(async (req) => {
 
       const apiPhone = normalizedPhone.startsWith('0') ? normalizedPhone.slice(1) : normalizedPhone;
       const payload = {
-        username: config.username, source: config.default_source,
-        destinations: { phone: apiPhone }, message,
+        user: { username: config.username }, source: config.default_source,
+        destinations: { phone: [apiPhone] }, message,
       };
 
-      console.log(`[SMS-TEST] Sending to ${apiPhone}`);
+      console.log(`[SMS-TEST] Sending to ${apiPhone}, payload: ${JSON.stringify(payload)}`);
       const res = await fetch('https://my.textme.co.il/api/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiToken}` },
