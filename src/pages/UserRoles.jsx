@@ -18,9 +18,11 @@ export default function UserRoles() {
       try {
         const user = await base44.auth.me();
         setMe(user);
-        if (user?.role !== "admin") { setLoading(false); return; }
-        const list = await base44.entities.User.list();
-        setUsers(list || []);
+        const isManager = user?.role === "admin" || user?.app_role === "מנהל" || user?.data?.app_role === "מנהל";
+        if (!isManager) { setLoading(false); return; }
+        const res = await base44.functions.invoke('listUsers');
+        const list = res.data?.users || res.data || [];
+        setUsers(list);
       } finally { setLoading(false); }
     })();
   }, []);
@@ -28,7 +30,7 @@ export default function UserRoles() {
   const updateRole = async (userId, newRole) => {
     setSaving((s) => ({ ...s, [userId]: true }));
     try {
-      await base44.entities.User.update(userId, { app_role: newRole });
+      await base44.functions.invoke('updateUserRole', { userId, app_role: newRole });
       setUsers((prev) => prev.map(u => u.id === userId ? { ...u, app_role: newRole, data: { ...(u.data||{}), app_role: newRole } } : u));
     } finally {
       setSaving((s) => ({ ...s, [userId]: false }));
@@ -36,7 +38,8 @@ export default function UserRoles() {
   };
 
   if (loading) return <div className="p-6">טוען...</div>;
-  if (me?.role !== "admin") return <div className="p-6 text-red-600">אין לך הרשאה לצפות בדף זה</div>;
+  const canManage = me?.role === "admin" || me?.app_role === "מנהל" || me?.data?.app_role === "מנהל";
+  if (!canManage) return <div className="p-6 text-red-600">אין לך הרשאה לצפות בדף זה</div>;
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
