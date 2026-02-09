@@ -109,6 +109,44 @@ async function scrapeWooPrice(url, zapMyPrice) {
       }
     }
 
+    // S9: WooCommerce API / REST data attributes (data-product_price, data-price)
+    const dataPriceMatches = [...html.matchAll(/data-(?:product_)?price=["']([^"']+)["']/gi)];
+    for (const dp of dataPriceMatches) {
+      const p = cleanPrice(dp[1]);
+      if (p) candidates.push({ value: p, strategy: 'S9_DATA_ATTR', snippet: dp[0].substring(0, 100) });
+    }
+
+    // S10: Elementor/JetWoo price widget — look in jet-woo-builder-archive-sale-price or cart form
+    // The real product price often appears in the add-to-cart form or hidden input
+    const cartPriceMatches = [...html.matchAll(/name=["'](?:quantity|add-to-cart)["'][^>]*value=["']([^"']+)["']/gi)];
+    // Not useful for price — skip
+
+    // S11: Look for price in JSON embedded by WooCommerce/Elementor variations or product data
+    const wcSettingsMatch = html.match(/var\s+(?:wc_single_product_params|product_data|woocommerce_params)\s*=\s*({[\s\S]*?});/i);
+    if (wcSettingsMatch) {
+      try {
+        const wcData = JSON.parse(wcSettingsMatch[1]);
+        const possiblePrice = wcData.price || wcData.sale_price || wcData.display_price;
+        if (possiblePrice) {
+          const p = cleanPrice(possiblePrice);
+          if (p) candidates.push({ value: p, strategy: 'S11_WC_JS_VAR', snippet: `JS var price=${possiblePrice}` });
+        }
+      } catch (_) {}
+    }
+
+    // S12: Broader search — screen reader text with price pattern
+    // WooCommerce outputs: <span class="screen-reader-text">המחיר המקורי היה: ₪1,599.00.</span><span aria-hidden="true"><del>...
+    // And: <span class="screen-reader-text">המחיר הנוכחי הוא: ₪1,161.00.</span>
+    const srAllMatches = [...html.matchAll(/המחיר הנוכחי הוא:\s*₪?([\d,.]+)/gi)];
+    for (const sr of srAllMatches) {
+      const p = cleanPrice(sr[1]);
+      if (p) candidates.push({ value: p, strategy: 'S12_SR_CURRENT', snippet: sr[0].substring(0, 120) });
+    }
+
+    // S13: The product page may not show price in initial HTML (loaded via JS/AJAX).
+    // Last resort: use LLM to extract price from the page URL
+    // (only if no candidates found at all — handled below)
+
     console.log(`[WC] ${url} → ${candidates.length} raw candidates: ${JSON.stringify(candidates.map(c => ({ v: c.value, s: c.strategy })))}`);
 
     // Deduplicate by value+strategy
