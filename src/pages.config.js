@@ -80,6 +80,7 @@ import Orders from './pages/Orders';
 import PaymentReturn from './pages/PaymentReturn';
 import PaymentSettings from './pages/PaymentSettings';
 import PriceAlerts from './pages/PriceAlerts';
+import PriceMonitor from './pages/PriceMonitor';
 import Products from './pages/Products';
 import PurchasesDashboard from './pages/PurchasesDashboard';
 import RawLinesImport from './pages/RawLinesImport';
@@ -102,7 +103,6 @@ import VendorReport from './pages/VendorReport';
 import WeeklySchedule from './pages/WeeklySchedule';
 import WhatsAppDebug from './pages/WhatsAppDebug';
 import WhatsAppProviders from './pages/WhatsAppProviders';
-import PriceMonitor from './pages/PriceMonitor';
 import __Layout from './Layout.jsx';
 
 
@@ -140,6 +140,7 @@ export const PAGES = {
     "PaymentReturn": PaymentReturn,
     "PaymentSettings": PaymentSettings,
     "PriceAlerts": PriceAlerts,
+    "PriceMonitor": PriceMonitor,
     "Products": Products,
     "PurchasesDashboard": PurchasesDashboard,
     "RawLinesImport": RawLinesImport,
@@ -162,7 +163,6 @@ export const PAGES = {
     "WeeklySchedule": WeeklySchedule,
     "WhatsAppDebug": WhatsAppDebug,
     "WhatsAppProviders": WhatsAppProviders,
-    "PriceMonitor": PriceMonitor,
 }
 
 export const pagesConfig = {

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, Plus, Package, Bell, Lightbulb, Archive } from "lucide-react";
+import { RefreshCw, Plus, Package, Bell, Lightbulb, Archive, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 import SummaryCards from "../components/price-monitor/SummaryCards";
 import ActiveProductsTable from "../components/price-monitor/ActiveProductsTable";
@@ -20,6 +21,8 @@ export default function PriceMonitor() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [detailProduct, setDetailProduct] = useState(null);
   const [manualCheckProduct, setManualCheckProduct] = useState(null);
+  const [refreshingId, setRefreshingId] = useState(null);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const [tab, setTab] = useState("products");
 
   const loadData = useCallback(async () => {
@@ -53,13 +56,46 @@ export default function PriceMonitor() {
     loadData();
   };
 
-  const handleRefreshProduct = (product) => {
-    // Placeholder — automation will handle this later
-    alert(`רענון מוצר "${product.product_name}" — יופעל בשלב הבא`);
+  const handleRefreshProduct = async (product) => {
+    setRefreshingId(product.id);
+    try {
+      const res = await base44.functions.invoke("scrapeAndCheck", {
+        action: "refresh_single",
+        product_id: product.id,
+      });
+      const data = res.data || res;
+      if (data.success) {
+        toast.success(data.message?.replace(/\n/g, " | ") || "הרענון הושלם");
+      } else {
+        toast.error(data.error || "שגיאה ברענון");
+      }
+      loadData();
+    } catch (e) {
+      toast.error("שגיאה: " + e.message);
+    } finally {
+      setRefreshingId(null);
+    }
   };
 
-  const handleRefreshAll = () => {
-    alert("רענון כל המוצרים — יופעל בשלב הבא");
+  const handleRefreshAll = async () => {
+    setRefreshingAll(true);
+    toast.info("מתחיל בדיקת כל המוצרים... זה עשוי לקחת כמה דקות");
+    try {
+      const res = await base44.functions.invoke("scrapeAndCheck", {
+        action: "refresh_all",
+      });
+      const data = res.data || res;
+      if (data.success) {
+        toast.success(data.message?.replace(/\n/g, " | ") || "הבדיקה הושלמה");
+      } else {
+        toast.error(data.error || "שגיאה בבדיקה");
+      }
+      loadData();
+    } catch (e) {
+      toast.error("שגיאה: " + e.message);
+    } finally {
+      setRefreshingAll(false);
+    }
   };
 
   const handleMarkAlertRead = async (alert) => {
@@ -86,9 +122,9 @@ export default function PriceMonitor() {
           <p className="text-sm text-gray-500 mt-0.5">מעקב אחר מחירי מתחרים והמלצות תמחור</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleRefreshAll} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 ml-1 ${loading ? "animate-spin" : ""}`} />
-            רענן כל המוצרים
+          <Button variant="outline" onClick={handleRefreshAll} disabled={loading || refreshingAll}>
+            {refreshingAll ? <Loader2 className="w-4 h-4 ml-1 animate-spin" /> : <RefreshCw className="w-4 h-4 ml-1" />}
+            {refreshingAll ? "בודק..." : "רענן כל המוצרים"}
           </Button>
           <Button onClick={() => setShowAddModal(true)} className="bg-blue-600 hover:bg-blue-700">
             <Plus className="w-4 h-4 ml-1" />
@@ -136,6 +172,7 @@ export default function PriceMonitor() {
             onRefresh={handleRefreshProduct}
             onDetails={(p) => setDetailProduct(p)}
             onManualCheck={(p) => setManualCheckProduct(p)}
+            refreshingId={refreshingId}
           />
         </TabsContent>
 
@@ -158,6 +195,7 @@ export default function PriceMonitor() {
             onRefresh={handleRefreshProduct}
             onDetails={(p) => setDetailProduct(p)}
             onManualCheck={(p) => setManualCheckProduct(p)}
+            refreshingId={refreshingId}
           />
         </TabsContent>
       </Tabs>
