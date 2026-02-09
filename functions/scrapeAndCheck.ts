@@ -85,11 +85,28 @@ async function scrapeWooPrice(url, zapMyPrice) {
       if (p) candidates.push({ value: p, strategy: 'S5_INS_SALE_PRICE', snippet: im[0].substring(0, 120) });
     }
 
-    // S6: Direct ₪ + digits near "המחיר הנוכחי" or "current" text (Hebrew WC pattern)
+    // S6: "המחיר הנוכחי הוא:" pattern (Hebrew WC sale text)
     const currentPriceMatch = html.match(/המחיר הנוכחי[^₪]*₪([\d,]+(?:\.\d+)?)/i);
     if (currentPriceMatch) {
       const p = cleanPrice(currentPriceMatch[1]);
       if (p) candidates.push({ value: p, strategy: 'S6_CURRENT_PRICE_TEXT', snippet: currentPriceMatch[0].substring(0, 120) });
+    }
+
+    // S7: Screen-reader sale text pattern (WC outputs aria text like "המחיר המקורי היה: ₪X. המחיר הנוכחי הוא: ₪Y.")
+    const srCurrentMatch = html.match(/המחיר הנוכחי הוא:\s*₪([\d,.]+)/i);
+    if (srCurrentMatch) {
+      const p = cleanPrice(srCurrentMatch[1]);
+      if (p) candidates.push({ value: p, strategy: 'S7_SR_CURRENT_PRICE', snippet: srCurrentMatch[0].substring(0, 120) });
+    }
+
+    // S8: <ins> tag containing woocommerce-Price-amount (sale price is always inside <ins>)
+    const insBlockMatches = [...html.matchAll(/<ins[^>]*>([\s\S]*?)<\/ins>/gi)];
+    for (const ib of insBlockMatches) {
+      if (ib[1].includes('woocommerce-Price-amount') || ib[1].includes('₪')) {
+        const innerText = ib[1].replace(/<[^>]+>/g, '');
+        const p = cleanPrice(innerText);
+        if (p) candidates.push({ value: p, strategy: 'S8_INS_BLOCK', snippet: ib[0].substring(0, 150) });
+      }
     }
 
     console.log(`[WC] ${url} → ${candidates.length} raw candidates: ${JSON.stringify(candidates.map(c => ({ v: c.value, s: c.strategy })))}`);
