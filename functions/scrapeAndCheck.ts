@@ -173,6 +173,11 @@ async function scrapeWooPrice(url, zapMyPrice) {
     console.log(`[WC] ${validCandidates.length} valid candidates after filtering`);
 
     if (validCandidates.length === 0) {
+      // Log rejected candidates for debugging
+      console.log(`[WC] ALL unique candidates (pre-validation): ${JSON.stringify(uniqueCandidates)}`);
+      if (zapMyPrice) {
+        console.log(`[WC] Zap reference price: ${zapMyPrice}, 25% range: ${Math.round(zapMyPrice * 0.75)}-${Math.round(zapMyPrice * 1.25)}`);
+      }
       return {
         ok: false,
         error: `לא נמצא מחיר תקין בדף מוצר (${uniqueCandidates.length} מועמדים נפסלו)`,
