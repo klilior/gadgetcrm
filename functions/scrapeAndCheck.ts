@@ -7,10 +7,12 @@ const cleanPrice = (txt) => {
   const n = Math.round(parseFloat(cleaned));
   return (n >= 10 && n <= 100000) ? n : null;
 };
-
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const today = () => new Date().toISOString().slice(0, 10);
+const PRIORITY_ORDER = { "קריטי": 0, "גבוה": 1, "בינוני": 2, "נמוך": 3 };
+const safeDelta = (a, b) => (a != null && b != null) ? a - b : null;
 
-// ─── Scrape WooCommerce price via fetch + regex ───
+// ─── Scrape WooCommerce ───
 async function scrapeWooPrice(url) {
   if (!url) return { ok: false, error: 'אין קישור WooCommerce' };
   try {
@@ -21,19 +23,15 @@ async function scrapeWooPrice(url) {
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const html = await res.text();
 
-    // Try multiple patterns
-    // 1) <meta itemprop="price" content="...">
     let m = html.match(/itemprop=["']price["']\s+content=["']([^"']+)["']/i);
     if (m) { const p = cleanPrice(m[1]); if (p) return { ok: true, price: p }; }
 
-    // 2) <span class="woocommerce-Price-amount ...">...₪</span>  (last one = current)
     const priceMatches = [...html.matchAll(/<(?:span|bdi)[^>]*class="[^"]*woocommerce-Price-amount[^"]*"[^>]*>([\s\S]*?)<\/(?:span|bdi)>/gi)];
     for (const pm of priceMatches) {
       const p = cleanPrice(pm[1]);
       if (p) return { ok: true, price: p };
     }
 
-    // 3) Generic ₪ pattern near "price"
     const genericMatch = html.match(/₪\s*([\d,]+(?:\.\d+)?)/);
     if (genericMatch) { const p = cleanPrice(genericMatch[1]); if (p) return { ok: true, price: p }; }
 
@@ -43,7 +41,7 @@ async function scrapeWooPrice(url) {
   }
 }
 
-// ─── Scrape Zap comparison via LLM with internet context ───
+// ─── Scrape Zap comparison via LLM ───
 async function scrapeZapComparison(base44, url, myStoreName) {
   if (!url) return { ok: false, error: 'אין קישור Zap' };
   const storeName = myStoreName || 'GADGET TEAM';
@@ -77,38 +75,22 @@ If the page cannot be loaded or no stores found, return:
       response_json_schema: {
         type: "object",
         properties: {
-          stores: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                store: { type: "string" },
-                price: { type: "number" }
-              }
-            }
-          },
+          stores: { type: "array", items: { type: "object", properties: { store: { type: "string" }, price: { type: "number" } } } },
           error: { type: "string" }
         }
       }
     });
 
     const stores = result?.stores || [];
-    if (!stores.length) {
-      return { ok: false, error: result?.error || 'לא נמצאו חנויות בדף Zap' };
-    }
+    if (!stores.length) return { ok: false, error: result?.error || 'לא נמצאו חנויות בדף Zap' };
 
-    // Sort ascending by price
     stores.sort((a, b) => a.price - b.price);
-
-    // Filter out invalid
     const valid = stores.filter(s => s.store && s.price >= 10 && s.price <= 100000);
     if (!valid.length) return { ok: false, error: 'לא נמצאו מחירים תקינים' };
 
-    // Find our store — priority matching
+    // Priority matching: A) exact, B) fallback tokens
     const lowerName = storeName.toLowerCase();
-    // A) Exact contains (case-insensitive) myStoreName
     let myIdx = valid.findIndex(s => s.store.toLowerCase().includes(lowerName));
-    // B) Fallback tokens
     if (myIdx === -1) {
       const fallbackTokens = ['gadget-team', 'gadget team', 'gadget-team.co.il', 'גאדג', "גאדג'ט"];
       for (const token of fallbackTokens) {
@@ -116,7 +98,6 @@ If the page cannot be loaded or no stores found, return:
         if (myIdx !== -1) break;
       }
     }
-
     if (myIdx === -1) {
       return { ok: false, error: `החנות שלנו ("${storeName}") לא נמצאה בדף Zap (בדוק שם חנות בזאפ). חנויות שנמצאו: ${valid.map(s => s.store).join(', ')}` };
     }
@@ -155,12 +136,10 @@ function computeRecommendation(product, my_price, zapData) {
   const below_price = zapData.position_below_me_price;
   const above_price = zapData.position_above_me_price;
 
-  // desired_position_price from sorted competitors
   let competitors = [];
   try { competitors = JSON.parse(zapData.competitors_json || '[]'); } catch (_) {}
   const desired_entry = competitors[desired_pos - 1] || null;
   const desired_price = desired_entry?.price || null;
-
   const min_allowed_price = Math.ceil(cost * (1 + min_margin_pct / 100));
 
   let suggested, recommendation_type;
@@ -168,9 +147,7 @@ function computeRecommendation(product, my_price, zapData) {
   if (my_pos > desired_pos) {
     const price_needed = desired_price ? desired_price - 1 : my_price - 1;
     suggested = Math.max(price_needed, min_allowed_price);
-    recommendation_type = price_needed >= min_allowed_price
-      ? "הורד מחיר כדי להגיע ליעד"
-      : "לא ניתן להגיע ליעד";
+    recommendation_type = price_needed >= min_allowed_price ? "הורד מחיר כדי להגיע ליעד" : "לא ניתן להגיע ליעד";
   } else if (my_pos === desired_pos) {
     if (below_price && below_price >= my_price + 2) {
       suggested = below_price - 1;
@@ -180,15 +157,9 @@ function computeRecommendation(product, my_price, zapData) {
       recommendation_type = "הישאר במחיר נוכחי";
     }
   } else {
-    if (desired_price) {
-      const max_price_at_target = desired_price - 1;
-      if (max_price_at_target > my_price) {
-        suggested = max_price_at_target;
-        recommendation_type = "העלה מחיר - יש מקום";
-      } else {
-        suggested = my_price;
-        recommendation_type = "הישאר במחיר נוכחי";
-      }
+    if (desired_price && desired_price - 1 > my_price) {
+      suggested = desired_price - 1;
+      recommendation_type = "העלה מחיר - יש מקום";
     } else {
       suggested = my_price;
       recommendation_type = "הישאר במחיר נוכחי";
@@ -216,99 +187,141 @@ function computeRecommendation(product, my_price, zapData) {
   };
 }
 
+// ─── Alert deduplication helper ───
+async function isDuplicateAlert(base44, fingerprint) {
+  try {
+    const existing = await base44.asServiceRole.entities.PriceAlert.filter({ fingerprint }, '-alert_timestamp', 1);
+    return existing && existing.length > 0;
+  } catch (_) { return false; }
+}
+
+// ─── Create deduped alert ───
+async function createDedupedAlert(base44, alertData) {
+  if (!alertData.fingerprint) return null;
+  const dup = await isDuplicateAlert(base44, alertData.fingerprint);
+  if (dup) { console.log(`Alert deduped: ${alertData.fingerprint}`); return null; }
+  return await base44.asServiceRole.entities.PriceAlert.create(alertData);
+}
+
+// ─── AI alert message ───
+async function generateAlertMessage(base44, alertType, facts) {
+  try {
+    const prompt = `כתוב הודעת התראה בעברית (1–2 משפטים), עובדתית וקצרה.
+אל תחשב מספרים ואל תשנה מספרים.
+הצג: מה השתנה ומה ההשפעה, ומה כדאי לעשות.
+
+סוג התראה: ${alertType}
+עובדות: ${JSON.stringify(facts)}
+
+Output ONLY Hebrew text.`;
+    const r = await base44.asServiceRole.integrations.Core.InvokeLLM({ prompt });
+    if (typeof r === 'string' && r.length > 5) return r;
+  } catch (_) {}
+  return null;
+}
+
+// ─── Price war detection ───
+async function detectPriceWar(base44, productId) {
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const snaps = await base44.asServiceRole.entities.PriceSnapshot.filter({ linked_product: productId }, '-check_timestamp', 20);
+    const recent = snaps.filter(s => s.check_timestamp >= cutoff);
+    if (recent.length < 4) return false;
+    let posChanges = 0;
+    let priceAbsSum = 0;
+    for (const s of recent) {
+      if (s.position_delta != null && s.position_delta !== 0) posChanges++;
+      if (s.price_site_delta != null) priceAbsSum += Math.abs(s.price_site_delta);
+    }
+    return posChanges >= 3 || priceAbsSum >= 100;
+  } catch (_) { return false; }
+}
+
 // ─── Process single product ───
-async function processProduct(base44, product) {
+async function processProduct(base44, product, runMode) {
   const productId = product.id;
   const now = new Date().toISOString();
-  const errors = [];
+  const currentFailures = product.consecutive_failures || 0;
+
+  // Helper for error handling
+  const handleError = async (errMsg) => {
+    const newFailCount = currentFailures + 1;
+    await base44.asServiceRole.entities.ProductsMonitor.update(productId, {
+      last_error: errMsg,
+      needs_attention: true,
+      last_check_time: now,
+      consecutive_failures: newFailCount,
+      last_run_mode: runMode || 'ידני',
+    });
+
+    // Only create alert for repeated failures (>=3) or first failure, deduped
+    let alertCreated = 0;
+    if (newFailCount >= 3) {
+      const fp = `${productId}|שגיאת בדיקה חוזרת|${today()}|failures:${newFailCount}`;
+      const alert = await createDedupedAlert(base44, {
+        linked_product: productId,
+        alert_timestamp: now,
+        alert_type: "שגיאת בדיקה חוזרת",
+        priority: "גבוה",
+        is_read: false,
+        requires_action: true,
+        fingerprint: fp,
+        message: `${newFailCount} כישלונות רצופים: ${errMsg}`,
+      });
+      if (alert) alertCreated = 1;
+    }
+    return { ok: false, error: errMsg, alertsCreated: alertCreated };
+  };
 
   // 1. Scrape Zap
   const zap = await scrapeZapComparison(base44, product.zap_comparison_url, product.my_store_name_zap || 'GADGET TEAM');
-  if (!zap.ok) {
-    await base44.asServiceRole.entities.ProductsMonitor.update(productId, {
-      last_error: zap.error,
-      needs_attention: true,
-      last_check_time: now,
-    });
-    await base44.asServiceRole.entities.PriceAlert.create({
-      linked_product: productId,
-      alert_timestamp: now,
-      alert_type: "מלחמת מחירים",
-      priority: "גבוה",
-      is_read: false,
-      requires_action: true,
-      message: `שגיאה בבדיקת Zap: ${zap.error}`,
-    });
-    return { ok: false, error: zap.error, alertCreated: true };
-  }
+  if (!zap.ok) return handleError(`שגיאת Zap: ${zap.error}`);
 
   // 2. Scrape Woo
   let wooPrice = null;
   if (product.my_woocommerce_url) {
     const woo = await scrapeWooPrice(product.my_woocommerce_url);
-    if (!woo.ok) {
-      await base44.asServiceRole.entities.ProductsMonitor.update(productId, {
-        last_error: woo.error,
-        needs_attention: true,
-        last_check_time: now,
-      });
-      await base44.asServiceRole.entities.PriceAlert.create({
-        linked_product: productId,
-        alert_timestamp: now,
-        alert_type: "מלחמת מחירים",
-        priority: "גבוה",
-        is_read: false,
-        requires_action: true,
-        message: `שגיאה בבדיקת מחיר באתר: ${woo.error}`,
-      });
-      return { ok: false, error: woo.error, alertCreated: true };
-    }
+    if (!woo.ok) return handleError(`שגיאת WooCommerce: ${woo.error}`);
     wooPrice = woo.price;
   } else {
-    // No woo URL - use zap price as site price
     wooPrice = zap.my_price_on_zap;
   }
 
   const my_price = wooPrice;
   const cost = product.cost_price || 0;
-  const min_margin_pct = product.min_profit_margin ?? 15;
   const desired_pos = product.desired_position || 1;
 
-  // 2b. Strict validation before snapshot
+  // 2b. Strict validation
   const validationErrors = [];
-  if (!zap.my_position || zap.my_position < 1) validationErrors.push('מיקום לא תקין (חייב להיות >= 1)');
-  if (!zap.total_competitors || zap.total_competitors < 3) validationErrors.push(`מספר מתחרים נמוך מדי (${zap.total_competitors || 0}, נדרש >= 3)`);
+  if (!zap.my_position || zap.my_position < 1) validationErrors.push('מיקום לא תקין');
+  if (!zap.total_competitors || zap.total_competitors < 3) validationErrors.push(`מספר מתחרים נמוך (${zap.total_competitors || 0})`);
   if (!my_price || my_price < 10 || my_price > 100000) validationErrors.push(`מחיר WooCommerce לא תקין (₪${my_price})`);
   if (!zap.my_price_on_zap || zap.my_price_on_zap < 10 || zap.my_price_on_zap > 100000) validationErrors.push(`מחיר Zap לא תקין (₪${zap.my_price_on_zap})`);
+  if (validationErrors.length > 0) return handleError(`נתונים לא תקינים: ${validationErrors.join('; ')}`);
 
-  if (validationErrors.length > 0) {
-    const errMsg = `נתונים לא תקינים: ${validationErrors.join('; ')}`;
-    await base44.asServiceRole.entities.ProductsMonitor.update(productId, {
-      last_error: errMsg,
-      needs_attention: true,
-      last_check_time: now,
-    });
-    await base44.asServiceRole.entities.PriceAlert.create({
-      linked_product: productId,
-      alert_timestamp: now,
-      alert_type: "מלחמת מחירים",
-      priority: "גבוה",
-      is_read: false,
-      requires_action: true,
-      message: errMsg,
-    });
-    return { ok: false, error: errMsg, alertCreated: true };
-  }
+  // 3. Get previous snapshot for deltas
+  let prevSnapshot = null;
+  try {
+    const prevSnaps = await base44.asServiceRole.entities.PriceSnapshot.filter({ linked_product: productId }, '-check_timestamp', 1);
+    if (prevSnaps && prevSnaps.length > 0) prevSnapshot = prevSnaps[0];
+  } catch (_) {}
 
-  // 3. Compute recommendation
+  // 4. Compute deltas
+  const position_delta = safeDelta(zap.my_position, prevSnapshot?.my_position);
+  const price_site_delta = safeDelta(my_price, prevSnapshot?.my_price_on_site);
+  const price_zap_delta = safeDelta(zap.my_price_on_zap, prevSnapshot?.my_price_on_zap);
+  const above_price_delta = safeDelta(zap.position_above_me_price, prevSnapshot?.position_above_me_price);
+  const below_price_delta = safeDelta(zap.position_below_me_price, prevSnapshot?.position_below_me_price);
+
+  // 5. Recommendation
   const rec = computeRecommendation(product, my_price, zap);
 
-  // 4. Snapshot formulas
+  // 6. Snapshot formulas
   const markup_percent = cost > 0 ? Math.round(((my_price - cost) / cost) * 1000) / 10 : null;
   const gross_margin_percent = my_price > 0 ? Math.round(((my_price - cost) / my_price) * 1000) / 10 : null;
   const gap_to_first = zap.first_place_price ? my_price - zap.first_place_price : null;
 
-  // 5. Create snapshot
+  // 7. Create snapshot
   const snapshot = await base44.asServiceRole.entities.PriceSnapshot.create({
     linked_product: productId,
     check_timestamp: now,
@@ -318,31 +331,22 @@ async function processProduct(base44, product) {
     my_price_on_zap: zap.my_price_on_zap,
     cost_price_snapshot: cost,
     desired_position_snapshot: desired_pos,
-    first_place_price: zap.first_place_price,
-    first_place_store: zap.first_place_store,
-    second_place_price: zap.second_place_price,
-    second_place_store: zap.second_place_store,
-    third_place_price: zap.third_place_price,
-    third_place_store: zap.third_place_store,
-    position_above_me_price: zap.position_above_me_price,
-    position_above_me_store: zap.position_above_me_store,
-    position_below_me_price: zap.position_below_me_price,
-    position_below_me_store: zap.position_below_me_store,
-    desired_position_price: rec.desired_position_price,
-    desired_position_store: rec.desired_position_store,
-    markup_percent,
-    gross_margin_percent,
-    gap_to_first_place: gap_to_first,
+    first_place_price: zap.first_place_price, first_place_store: zap.first_place_store,
+    second_place_price: zap.second_place_price, second_place_store: zap.second_place_store,
+    third_place_price: zap.third_place_price, third_place_store: zap.third_place_store,
+    position_above_me_price: zap.position_above_me_price, position_above_me_store: zap.position_above_me_store,
+    position_below_me_price: zap.position_below_me_price, position_below_me_store: zap.position_below_me_store,
+    desired_position_price: rec.desired_position_price, desired_position_store: rec.desired_position_store,
+    markup_percent, gross_margin_percent, gap_to_first_place: gap_to_first,
     competitors_json: zap.competitors_json,
+    prev_snapshot: prevSnapshot?.id || null,
+    position_delta, price_site_delta, price_zap_delta, above_price_delta, below_price_delta,
   });
 
-  // 6. Create recommendation
+  // 8. Create recommendation
   const recommendation = await base44.asServiceRole.entities.PriceRecommendation.create({
-    linked_product: productId,
-    linked_snapshot: snapshot.id,
-    recommendation_time: now,
-    current_position: zap.my_position,
-    desired_position: desired_pos,
+    linked_product: productId, linked_snapshot: snapshot.id,
+    recommendation_time: now, current_position: zap.my_position, desired_position: desired_pos,
     recommendation_type: rec.recommendation_type,
     new_suggested_price: rec.new_suggested_price,
     profit_at_suggested_price: rec.profit_at_suggested_price,
@@ -353,7 +357,7 @@ async function processProduct(base44, product) {
     status: "חדש",
   });
 
-  // 7. AI text
+  // 9. AI text for recommendation
   let aiText = rec.recommendation_type;
   try {
     const aiPrompt = `You are writing a pricing recommendation in Hebrew for an Israeli electronics retailer.
@@ -371,6 +375,7 @@ Data:
 - סוג המלצה: ${rec.recommendation_type}
 ${zap.position_above_me_price ? `- מתחרה מעל: ₪${zap.position_above_me_price} (${zap.position_above_me_store})` : ''}
 ${zap.position_below_me_price ? `- מתחרה מתחת: ₪${zap.position_below_me_price} (${zap.position_below_me_store})` : ''}
+${position_delta != null ? `- שינוי מיקום: ${position_delta > 0 ? '+' : ''}${position_delta}` : ''}
 
 Write 2-4 sentences in Hebrew:
 1) מה לעשות עכשיו
@@ -381,57 +386,111 @@ Tone: ברור, ישיר, מקצועי. Output ONLY Hebrew text.`;
     if (typeof aiResult === 'string' && aiResult.length > 5) aiText = aiResult;
   } catch (_) {}
 
-  await base44.asServiceRole.entities.PriceRecommendation.update(recommendation.id, {
-    recommended_action: aiText,
-  });
+  await base44.asServiceRole.entities.PriceRecommendation.update(recommendation.id, { recommended_action: aiText });
 
-  // 8. Alerts
+  // 10. Smart alerts — collect candidates, pick top 2 by priority
+  const alertCandidates = [];
   const min_allowed_price = rec.min_allowed_price;
+  const prevPos = prevSnapshot?.my_position;
+  const d = today();
+
+  // E) Below minimum margin
+  if (my_price < min_allowed_price) {
+    alertCandidates.push({
+      alert_type: "מתחת לרווח מינימלי",
+      priority: "קריטי",
+      requires_action: true,
+      fingerprint: `${productId}|מתחת לרווח מינימלי|${d}|min:${min_allowed_price}|price:${my_price}`,
+      facts: { מחיר_נוכחי: my_price, מחיר_מינימלי: min_allowed_price, מוצר: product.product_name },
+    });
+  }
+
+  // A) Position dropped below desired
+  if (zap.my_position > desired_pos) {
+    const shouldAlert = !prevPos || prevPos <= desired_pos || (position_delta != null && position_delta >= 1);
+    if (shouldAlert) {
+      const prio = zap.my_position >= desired_pos + 3 ? "גבוה" : "בינוני";
+      alertCandidates.push({
+        alert_type: "ירדנו מתחת למיקום רצוי",
+        priority: prio,
+        requires_action: true,
+        fingerprint: `${productId}|ירדנו מתחת למיקום רצוי|${d}|pos:${prevPos || '?'}->${zap.my_position}|target:${desired_pos}`,
+        facts: { מיקום_ישן: prevPos, מיקום_חדש: zap.my_position, יעד: desired_pos, מוצר: product.product_name },
+      });
+    }
+  }
+
+  // F) Price war
+  const priceWar = await detectPriceWar(base44, productId);
+  if (priceWar) {
+    alertCandidates.push({
+      alert_type: "מלחמת מחירים",
+      priority: "גבוה",
+      requires_action: true,
+      fingerprint: `${productId}|מלחמת מחירים|${d}`,
+      facts: { מוצר: product.product_name, מיקום: zap.my_position, מחיר: my_price },
+    });
+  }
+
+  // B) Competitor above changed price
+  if (above_price_delta != null && Math.abs(above_price_delta) >= 20) {
+    alertCandidates.push({
+      alert_type: "מתחרה מעלינו שינה מחיר",
+      priority: "בינוני",
+      requires_action: false,
+      fingerprint: `${productId}|מתחרה מעלינו שינה מחיר|${d}|above:${prevSnapshot?.position_above_me_price}->${zap.position_above_me_price}`,
+      facts: { מתחרה: zap.position_above_me_store, מחיר_ישן: prevSnapshot?.position_above_me_price, מחיר_חדש: zap.position_above_me_price, מוצר: product.product_name },
+    });
+  }
+
+  // C) Competitor below changed price
+  if (below_price_delta != null && Math.abs(below_price_delta) >= 20) {
+    alertCandidates.push({
+      alert_type: "מתחרה מתחתינו שינה מחיר",
+      priority: "בינוני",
+      requires_action: false,
+      fingerprint: `${productId}|מתחרה מתחתינו שינה מחיר|${d}|below:${prevSnapshot?.position_below_me_price}->${zap.position_below_me_price}`,
+      facts: { מתחרה: zap.position_below_me_store, מחיר_ישן: prevSnapshot?.position_below_me_price, מחיר_חדש: zap.position_below_me_price, מוצר: product.product_name },
+    });
+  }
+
+  // D) Opportunity to raise price
+  if (zap.my_position === desired_pos && zap.position_below_me_price && (zap.position_below_me_price - my_price) >= 50) {
+    alertCandidates.push({
+      alert_type: "הזדמנות להעלות מחיר",
+      priority: "בינוני",
+      requires_action: false,
+      fingerprint: `${productId}|הזדמנות להעלות מחיר|${d}|gap:${zap.position_below_me_price - my_price}`,
+      facts: { מחיר_שלנו: my_price, מחיר_מתחרה_מתחת: zap.position_below_me_price, פער: zap.position_below_me_price - my_price, מוצר: product.product_name },
+    });
+  }
+
+  // Sort by priority, pick top 2
+  alertCandidates.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9));
+  const topAlerts = alertCandidates.slice(0, 2);
   let alertsCreated = 0;
 
-  if (my_price < min_allowed_price) {
-    let msg = `מתחת לרווח מינימלי: מחיר ₪${my_price}, מינימום ₪${min_allowed_price}`;
-    try {
-      const a = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt: `Write 1-2 sentence Hebrew alert. Alert: מתחת לרווח מינימלי. Product: ${product.product_name}. Price: ₪${my_price}, Min allowed: ₪${min_allowed_price}. Output ONLY Hebrew.`
-      });
-      if (typeof a === 'string' && a.length > 5) msg = a;
-    } catch (_) {}
-    await base44.asServiceRole.entities.PriceAlert.create({
-      linked_product: productId, linked_recommendation: recommendation.id,
-      alert_timestamp: now, alert_type: "מתחת לרווח מינימלי",
-      priority: "קריטי", is_read: false, requires_action: true,
-      new_position: zap.my_position, message: msg,
+  for (const ac of topAlerts) {
+    const msg = await generateAlertMessage(base44, ac.alert_type, ac.facts) || `${ac.alert_type}: ${JSON.stringify(ac.facts)}`;
+    const alert = await createDedupedAlert(base44, {
+      linked_product: productId,
+      linked_recommendation: recommendation.id,
+      alert_timestamp: now,
+      alert_type: ac.alert_type,
+      priority: ac.priority,
+      is_read: false,
+      requires_action: ac.requires_action,
+      fingerprint: ac.fingerprint,
+      old_position: prevPos || null,
+      new_position: zap.my_position,
+      source_snapshot: snapshot.id,
+      source_prev_snapshot: prevSnapshot?.id || null,
+      message: msg,
     });
-    alertsCreated++;
+    if (alert) alertsCreated++;
   }
 
-  if (zap.my_position > desired_pos) {
-    let msg = `המיקום ירד ל-${zap.my_position}, היעד הוא ${desired_pos}`;
-    try {
-      const a = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt: `Write 1-2 sentence Hebrew alert. Alert: ירדנו מתחת למיקום רצוי. Product: ${product.product_name}. Position: ${zap.my_position}, Target: ${desired_pos}. Output ONLY Hebrew.`
-      });
-      if (typeof a === 'string' && a.length > 5) msg = a;
-    } catch (_) {}
-    await base44.asServiceRole.entities.PriceAlert.create({
-      linked_product: productId, linked_recommendation: recommendation.id,
-      alert_timestamp: now, alert_type: "ירדנו מתחת למיקום רצוי",
-      priority: "גבוה", is_read: false, requires_action: true,
-      new_position: zap.my_position, message: msg,
-    });
-    alertsCreated++;
-  } else if (zap.my_position < desired_pos) {
-    await base44.asServiceRole.entities.PriceAlert.create({
-      linked_product: productId, linked_recommendation: recommendation.id,
-      alert_timestamp: now, alert_type: "המיקום שלנו השתפר",
-      priority: "בינוני", is_read: false, requires_action: false,
-      new_position: zap.my_position, message: `המיקום שלנו השתפר ל-${zap.my_position}, היעד הוא ${desired_pos}`,
-    });
-    alertsCreated++;
-  }
-
-  // 9. Update product
+  // 11. Update product
   let newStatus = "🟡 קרוב ליעד";
   if (my_price < min_allowed_price) newStatus = "⚠️ רווח נמוך";
   else if (zap.my_position <= desired_pos) newStatus = "🟢 תקין";
@@ -440,12 +499,17 @@ Tone: ברור, ישיר, מקצועי. Output ONLY Hebrew text.`;
 
   await base44.asServiceRole.entities.ProductsMonitor.update(productId, {
     last_check_time: now,
+    last_success_time: now,
+    consecutive_failures: 0,
     my_current_price: my_price,
     current_position: zap.my_position,
     last_error: '',
     needs_attention: my_price < min_allowed_price,
     status_code: newStatus,
     last_recommendation_short: aiText.substring(0, 80),
+    last_snapshot: snapshot.id,
+    last_recommendation: recommendation.id,
+    last_run_mode: runMode || 'ידני',
   });
 
   return {
@@ -455,6 +519,7 @@ Tone: ברור, ישיר, מקצועי. Output ONLY Hebrew text.`;
     new_suggested_price: rec.new_suggested_price,
     recommendation_type: rec.recommendation_type,
     alertsCreated,
+    position_delta,
   };
 }
 
@@ -466,60 +531,74 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { action, product_id } = body;
+    const { action, product_id, run_mode } = body;
+    const mode = run_mode || 'ידני';
 
-    // Single product refresh
     if (action === 'refresh_single') {
       if (!product_id) return Response.json({ error: 'חסר product_id' }, { status: 400 });
       const product = await base44.asServiceRole.entities.ProductsMonitor.get(product_id);
       if (!product) return Response.json({ error: 'מוצר לא נמצא' }, { status: 404 });
       if (!product.is_active) return Response.json({ success: false, error: 'המוצר לא פעיל במעקב' });
 
-      const result = await processProduct(base44, product);
-      if (!result.ok) {
-        return Response.json({ success: false, error: result.error });
-      }
+      const result = await processProduct(base44, product, mode);
+      if (!result.ok) return Response.json({ success: false, error: result.error });
+
+      const deltaStr = result.position_delta != null ? ` (${result.position_delta > 0 ? '+' : ''}${result.position_delta})` : '';
       return Response.json({
         success: true,
-        message: `✅ הרענון הושלם\nמיקום: #${result.my_position}\nמחיר באתר: ₪${result.my_price}\nהמלצה: ₪${result.new_suggested_price} (${result.recommendation_type})`,
+        message: `✅ הרענון הושלם\nמיקום: #${result.my_position}${deltaStr}\nמחיר באתר: ₪${result.my_price}\nהמלצה: ₪${result.new_suggested_price} (${result.recommendation_type})`,
         ...result,
       });
     }
 
-    // Refresh all active products
     if (action === 'refresh_all') {
+      const startTime = Date.now();
       const products = await base44.asServiceRole.entities.ProductsMonitor.filter({ is_active: true });
       let checked = 0, alertsTotal = 0, errorsTotal = 0;
+      const errorDetails = [];
 
       for (let i = 0; i < products.length; i++) {
         try {
-          const result = await processProduct(base44, products[i]);
+          const result = await processProduct(base44, products[i], mode);
           if (result.ok) {
             checked++;
             alertsTotal += result.alertsCreated || 0;
           } else {
             errorsTotal++;
+            errorDetails.push(`${products[i].product_name}: ${result.error}`);
           }
         } catch (e) {
           console.error(`Error processing ${products[i].product_name}:`, e.message);
           errorsTotal++;
+          errorDetails.push(`${products[i].product_name}: ${e.message}`);
         }
-        // Delay between products (except last)
-        if (i < products.length - 1) {
-          await sleep(12000);
-        }
+        if (i < products.length - 1) await sleep(12000);
       }
+
+      const durationSec = Math.round((Date.now() - startTime) / 1000);
+
+      // Write run log
+      try {
+        await base44.asServiceRole.entities.PriceMonitorLog.create({
+          run_time: new Date().toISOString(),
+          run_mode: mode,
+          products_checked: checked + errorsTotal,
+          successes: checked,
+          failures: errorsTotal,
+          alerts_created: alertsTotal,
+          duration_sec: durationSec,
+          notes: errorDetails.length > 0 ? errorDetails.join('\n') : 'הכל תקין',
+        });
+      } catch (_) { console.error('Failed to write run log'); }
 
       return Response.json({
         success: true,
-        message: `✅ בדיקת מחירים הושלמה\nנבדקו ${checked} מוצרים\nנוצרו ${alertsTotal} התראות חדשות\nשגיאות: ${errorsTotal}`,
-        checked,
-        alerts: alertsTotal,
-        errors: errorsTotal,
+        message: `✅ בדיקת מחירים הושלמה\nנבדקו ${checked + errorsTotal} מוצרים\nהצלחות: ${checked}\nהתראות: ${alertsTotal}\nשגיאות: ${errorsTotal}\nזמן: ${durationSec} שניות`,
+        checked, alerts: alertsTotal, errors: errorsTotal, duration_sec: durationSec,
       });
     }
 
-    return Response.json({ error: 'פעולה לא מוכרת. השתמש ב-refresh_single או refresh_all' }, { status: 400 });
+    return Response.json({ error: 'פעולה לא מוכרת' }, { status: 400 });
   } catch (error) {
     console.error('scrapeAndCheck error:', error);
     return Response.json({ error: error.message }, { status: 500 });
