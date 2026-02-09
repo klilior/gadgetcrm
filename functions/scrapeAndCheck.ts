@@ -221,57 +221,79 @@ async function scrapeWooPrice(url, zapMyPrice) {
   }
 }
 
-// ─── Scrape Zap comparison via LLM ───
+// ─── Scrape Zap comparison via direct HTML parsing ───
+// Zap's HTML has structured data attributes on each store listing:
+//   div.compare-item-row with data-site-name, data-product-price, data-index, data-sale-type
+//   data-sale-type: 1=new, 2=refurbished/display, 3=eilat — we only count type 1 for ranking
 async function scrapeZapComparison(base44, url, myStoreName) {
   if (!url) return { ok: false, error: 'אין קישור Zap' };
   const storeName = myStoreName || 'GADGET TEAM';
 
   try {
-    const prompt = `You are a data extraction bot. Go to this Zap.co.il price comparison page and extract ALL store listings with their prices.
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Cache-Control': 'no-cache',
+      },
+      redirect: 'follow',
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status} from Zap` };
+    const html = await res.text();
 
-URL: ${url}
-
-IMPORTANT INSTRUCTIONS:
-1. Extract EVERY store/retailer listing on the page with their price in ILS
-2. Return ONLY a valid JSON object, no other text
-3. Sort by price ascending (cheapest first)
-4. Clean prices to integers (no decimals, no ₪ symbol)
-5. Store names should be exactly as shown on the page
-
-Return this exact JSON format:
-{
-  "stores": [
-    {"store": "Store Name", "price": 1234},
-    {"store": "Another Store", "price": 1299}
-  ]
-}
-
-If the page cannot be loaded or no stores found, return:
-{"stores": [], "error": "description"}`;
-
-    const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-      prompt,
-      add_context_from_internet: true,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          stores: { type: "array", items: { type: "object", properties: { store: { type: "string" }, price: { type: "number" } } } },
-          error: { type: "string" }
+    // Parse all compare-item-row divs with data attributes
+    const rowRegex = /<div[^>]*class="[^"]*compare-item-row[^"]*"[^>]*data-site-name="([^"]*)"[^>]*>/gi;
+    const allRows = [];
+    let match;
+    while ((match = rowRegex.exec(html)) !== null) {
+      const fullTag = match[0];
+      const siteName = match[1];
+      
+      // Extract data attributes from the full tag
+      const priceMatch = fullTag.match(/data-product-price="([^"]*)"/);
+      const indexMatch = fullTag.match(/data-index="([^"]*)"/);
+      const saleTypeMatch = fullTag.match(/data-sale-type="([^"]*)"/);
+      
+      if (priceMatch && siteName) {
+        const priceStr = priceMatch[1].replace(/,/g, '');
+        const price = Math.round(parseFloat(priceStr));
+        const index = indexMatch ? parseInt(indexMatch[1]) : 999;
+        const saleType = saleTypeMatch ? parseInt(saleTypeMatch[1]) : 1;
+        
+        if (price >= 10 && price <= 100000) {
+          allRows.push({ store: siteName, price, index, saleType });
         }
       }
-    });
+    }
 
-    const stores = result?.stores || [];
-    if (!stores.length) return { ok: false, error: result?.error || 'לא נמצאו חנויות בדף Zap' };
+    console.log(`[Zap] Parsed ${allRows.length} total rows from HTML`);
 
-    stores.sort((a, b) => a.price - b.price);
-    const valid = stores.filter(s => s.store && s.price >= 10 && s.price <= 100000);
-    if (!valid.length) return { ok: false, error: 'לא נמצאו מחירים תקינים' };
+    if (allRows.length === 0) {
+      // Fallback: try LLM-based extraction
+      console.log('[Zap] No rows found via HTML parsing, falling back to LLM');
+      return await scrapeZapComparisonLLM(base44, url, storeName);
+    }
+
+    // Filter to only NEW products (sale-type 1) for position ranking
+    const newProducts = allRows.filter(r => r.saleType === 1);
+    if (newProducts.length === 0) {
+      return { ok: false, error: 'לא נמצאו מוצרים חדשים בדף Zap' };
+    }
+
+    // Sort by index (Zap's own ordering = position on page)
+    newProducts.sort((a, b) => a.index - b.index);
+
+    // Build the valid list (position = 1-based index in sorted array)
+    const valid = newProducts.map((r, i) => ({ store: r.store, price: r.price }));
+
+    // Debug log
+    console.log(`[Zap] ${valid.length} new-product stores: ${JSON.stringify(valid.map((s, i) => ({ pos: i+1, store: s.store, price: s.price })))}`);
 
     // Build debug top 5
     const debug_zap_top5 = valid.slice(0, 5).map((s, i) => ({ pos: i + 1, store: s.store, price: s.price }));
 
-    // Priority matching: A) exact, B) fallback tokens
+    // Find our store
     const lowerName = storeName.toLowerCase();
     let myIdx = valid.findIndex(s => s.store.toLowerCase().includes(lowerName));
     let matchedVia = lowerName;
@@ -314,6 +336,89 @@ If the page cannot be loaded or no stores found, return:
     };
   } catch (e) {
     return { ok: false, error: `שגיאת Zap scraping: ${e.message}` };
+  }
+}
+
+// ─── Fallback: Scrape Zap via LLM (if HTML parsing fails) ───
+async function scrapeZapComparisonLLM(base44, url, storeName) {
+  try {
+    const prompt = `You are a data extraction bot. Go to this Zap.co.il price comparison page and extract ALL store listings with their prices.
+IMPORTANT: Only extract NEW products (not refurbished/display/eilat). The page groups them separately.
+
+URL: ${url}
+
+Return this exact JSON format:
+{
+  "stores": [
+    {"store": "Store Name", "price": 1234}
+  ]
+}
+
+Sort by price ascending. Clean prices to integers. If no stores found, return: {"stores": [], "error": "description"}`;
+
+    const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+      prompt,
+      add_context_from_internet: true,
+      response_json_schema: {
+        type: "object",
+        properties: {
+          stores: { type: "array", items: { type: "object", properties: { store: { type: "string" }, price: { type: "number" } } } },
+          error: { type: "string" }
+        }
+      }
+    });
+
+    const stores = result?.stores || [];
+    if (!stores.length) return { ok: false, error: result?.error || 'לא נמצאו חנויות בדף Zap' };
+
+    stores.sort((a, b) => a.price - b.price);
+    const valid = stores.filter(s => s.store && s.price >= 10 && s.price <= 100000);
+    if (!valid.length) return { ok: false, error: 'לא נמצאו מחירים תקינים' };
+
+    const debug_zap_top5 = valid.slice(0, 5).map((s, i) => ({ pos: i + 1, store: s.store, price: s.price }));
+
+    const lowerName = storeName.toLowerCase();
+    let myIdx = valid.findIndex(s => s.store.toLowerCase().includes(lowerName));
+    let matchedVia = lowerName;
+    if (myIdx === -1) {
+      const fallbackTokens = ['gadget-team', 'gadget team', 'gadget-team.co.il', 'גאדג', "גאדג'ט"];
+      for (const token of fallbackTokens) {
+        myIdx = valid.findIndex(s => s.store.toLowerCase().includes(token));
+        if (myIdx !== -1) { matchedVia = token; break; }
+      }
+    }
+    if (myIdx === -1) {
+      return { ok: false, error: `החנות שלנו ("${storeName}") לא נמצאה בדף Zap (LLM fallback). חנויות: ${valid.map(s => s.store).join(', ')}` };
+    }
+
+    const foundStoreName = valid[myIdx].store;
+    console.log(`[Zap-LLM] Matched "${foundStoreName}" via "${matchedVia}" at pos ${myIdx + 1}`);
+
+    const above = myIdx > 0 ? valid[myIdx - 1] : null;
+    const below = myIdx < valid.length - 1 ? valid[myIdx + 1] : null;
+
+    return {
+      ok: true,
+      my_position: myIdx + 1,
+      my_price_on_zap: valid[myIdx].price,
+      position_above_me_store: above?.store || null,
+      position_above_me_price: above?.price || null,
+      position_below_me_store: below?.store || null,
+      position_below_me_price: below?.price || null,
+      first_place_store: valid[0]?.store || null,
+      first_place_price: valid[0]?.price || null,
+      second_place_store: valid[1]?.store || null,
+      second_place_price: valid[1]?.price || null,
+      third_place_store: valid[2]?.store || null,
+      third_place_price: valid[2]?.price || null,
+      total_competitors: valid.length,
+      competitors_json: JSON.stringify(valid),
+      debug_zap_found_store_name: foundStoreName,
+      debug_zap_my_price: valid[myIdx].price,
+      debug_zap_top5: JSON.stringify(debug_zap_top5),
+    };
+  } catch (e) {
+    return { ok: false, error: `שגיאת Zap LLM fallback: ${e.message}` };
   }
 }
 
