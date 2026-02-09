@@ -12,6 +12,7 @@ import AddProductModal from "../components/price-monitor/AddProductModal";
 import RecommendationsTable from "../components/price-monitor/RecommendationsTable";
 import ProductDetailModal from "../components/price-monitor/ProductDetailModal";
 import ManualCheckModal from "../components/price-monitor/ManualCheckModal";
+import EditProductModal from "../components/price-monitor/EditProductModal";
 
 export default function PriceMonitor() {
   const [products, setProducts] = useState([]);
@@ -23,6 +24,7 @@ export default function PriceMonitor() {
   const [manualCheckProduct, setManualCheckProduct] = useState(null);
   const [refreshingId, setRefreshingId] = useState(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
+  const [editProduct, setEditProduct] = useState(null);
   const [tab, setTab] = useState("products");
 
   const [latestSnapshots, setLatestSnapshots] = useState([]);
@@ -62,6 +64,21 @@ export default function PriceMonitor() {
 
   const handleAddProduct = async (data) => {
     await base44.entities.ProductsMonitor.create(data);
+    loadData();
+  };
+
+  const handleEditProduct = async (id, data) => {
+    await base44.entities.ProductsMonitor.update(id, data);
+    toast.success("המוצר עודכן בהצלחה");
+    loadData();
+  };
+
+  const handleRemoveProduct = async (productOrId) => {
+    const id = typeof productOrId === 'string' ? productOrId : productOrId.id;
+    const product = products.find(p => p.id === id);
+    if (typeof productOrId !== 'string' && !confirm(`האם להסיר את "${product?.product_name}" מהניטור?`)) return;
+    await base44.entities.ProductsMonitor.delete(id);
+    toast.success("המוצר הוסר מהניטור");
     loadData();
   };
 
@@ -181,6 +198,8 @@ export default function PriceMonitor() {
             onRefresh={handleRefreshProduct}
             onDetails={(p) => setDetailProduct(p)}
             onManualCheck={(p) => setManualCheckProduct(p)}
+            onEdit={(p) => setEditProduct(p)}
+            onRemove={handleRemoveProduct}
             refreshingId={refreshingId}
             latestSnapshots={latestSnapshots}
           />
@@ -205,6 +224,8 @@ export default function PriceMonitor() {
             onRefresh={handleRefreshProduct}
             onDetails={(p) => setDetailProduct(p)}
             onManualCheck={(p) => setManualCheckProduct(p)}
+            onEdit={(p) => setEditProduct(p)}
+            onRemove={handleRemoveProduct}
             refreshingId={refreshingId}
             latestSnapshots={latestSnapshots}
           />
@@ -219,6 +240,13 @@ export default function PriceMonitor() {
         open={!!manualCheckProduct}
         onClose={() => setManualCheckProduct(null)}
         onComplete={loadData}
+      />
+      <EditProductModal
+        product={editProduct}
+        open={!!editProduct}
+        onClose={() => setEditProduct(null)}
+        onSave={handleEditProduct}
+        onRemove={handleRemoveProduct}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, BarChart3, FlaskConical, Loader2, AlertTriangle } from "lucide-react";
+import { RefreshCw, BarChart3, FlaskConical, Loader2, AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
 const statusColors = {
@@ -21,7 +21,7 @@ function DeltaBadge({ value, suffix = "" }) {
   );
 }
 
-export default function ActiveProductsTable({ products, onRefresh, onDetails, onManualCheck, refreshingId, latestSnapshots }) {
+export default function ActiveProductsTable({ products, onRefresh, onDetails, onManualCheck, onEdit, onRemove, refreshingId, latestSnapshots }) {
   if (!products || products.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -109,6 +109,11 @@ export default function ActiveProductsTable({ products, onRefresh, onDetails, on
                 </td>
                 <td className="p-3 text-center">
                   <div className="flex gap-1 justify-center">
+                    {onEdit && (
+                      <Button size="sm" variant="ghost" onClick={() => onEdit(p)} title="עריכה" className="text-blue-600 hover:text-blue-700">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
                     {onManualCheck && (
                       <Button size="sm" variant="ghost" onClick={() => onManualCheck(p)} title="בדיקה ידנית" className="text-purple-600 hover:text-purple-700">
                         <FlaskConical className="w-3.5 h-3.5" />
@@ -120,6 +125,11 @@ export default function ActiveProductsTable({ products, onRefresh, onDetails, on
                     <Button size="sm" variant="ghost" onClick={() => onDetails(p)} title="פרטים">
                       <BarChart3 className="w-3.5 h-3.5" />
                     </Button>
+                    {onRemove && (
+                      <Button size="sm" variant="ghost" onClick={() => onRemove(p)} title="הסר מניטור" className="text-red-500 hover:text-red-700">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>
