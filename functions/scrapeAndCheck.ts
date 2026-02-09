@@ -104,19 +104,21 @@ If the page cannot be loaded or no stores found, return:
     const valid = stores.filter(s => s.store && s.price >= 10 && s.price <= 100000);
     if (!valid.length) return { ok: false, error: 'לא נמצאו מחירים תקינים' };
 
-    // Find our store
+    // Find our store — priority matching
     const lowerName = storeName.toLowerCase();
-    const aliases = ['gadget', 'gadget-team', 'gadget team', 'גאדג', 'גדג\'ט', 'גאג\'ט'];
+    // A) Exact contains (case-insensitive) myStoreName
     let myIdx = valid.findIndex(s => s.store.toLowerCase().includes(lowerName));
+    // B) Fallback tokens
     if (myIdx === -1) {
-      for (const alias of aliases) {
-        myIdx = valid.findIndex(s => s.store.toLowerCase().includes(alias));
+      const fallbackTokens = ['gadget-team', 'gadget team', 'gadget-team.co.il', 'גאדג', "גאדג'ט"];
+      for (const token of fallbackTokens) {
+        myIdx = valid.findIndex(s => s.store.toLowerCase().includes(token));
         if (myIdx !== -1) break;
       }
     }
 
     if (myIdx === -1) {
-      return { ok: false, error: `החנות שלנו ("${storeName}") לא נמצאה בדף Zap. חנויות שנמצאו: ${valid.map(s => s.store).join(', ')}` };
+      return { ok: false, error: `החנות שלנו ("${storeName}") לא נמצאה בדף Zap (בדוק שם חנות בזאפ). חנויות שנמצאו: ${valid.map(s => s.store).join(', ')}` };
     }
 
     const above = myIdx > 0 ? valid[myIdx - 1] : null;
@@ -271,6 +273,32 @@ async function processProduct(base44, product) {
   const cost = product.cost_price || 0;
   const min_margin_pct = product.min_profit_margin ?? 15;
   const desired_pos = product.desired_position || 1;
+
+  // 2b. Strict validation before snapshot
+  const validationErrors = [];
+  if (!zap.my_position || zap.my_position < 1) validationErrors.push('מיקום לא תקין (חייב להיות >= 1)');
+  if (!zap.total_competitors || zap.total_competitors < 3) validationErrors.push(`מספר מתחרים נמוך מדי (${zap.total_competitors || 0}, נדרש >= 3)`);
+  if (!my_price || my_price < 10 || my_price > 100000) validationErrors.push(`מחיר WooCommerce לא תקין (₪${my_price})`);
+  if (!zap.my_price_on_zap || zap.my_price_on_zap < 10 || zap.my_price_on_zap > 100000) validationErrors.push(`מחיר Zap לא תקין (₪${zap.my_price_on_zap})`);
+
+  if (validationErrors.length > 0) {
+    const errMsg = `נתונים לא תקינים: ${validationErrors.join('; ')}`;
+    await base44.asServiceRole.entities.ProductsMonitor.update(productId, {
+      last_error: errMsg,
+      needs_attention: true,
+      last_check_time: now,
+    });
+    await base44.asServiceRole.entities.PriceAlert.create({
+      linked_product: productId,
+      alert_timestamp: now,
+      alert_type: "מלחמת מחירים",
+      priority: "גבוה",
+      is_read: false,
+      requires_action: true,
+      message: errMsg,
+    });
+    return { ok: false, error: errMsg, alertCreated: true };
+  }
 
   // 3. Compute recommendation
   const rec = computeRecommendation(product, my_price, zap);
