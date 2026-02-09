@@ -271,7 +271,9 @@ Deno.serve(async (req) => {
 
     // ═══════ ACTION: test ═══════
     if (action === 'test') {
-      const { to_phone, message } = body;
+      const to_phone = body.to_phone || body.phone;
+      const message = body.message;
+      console.log(`[SMS-TEST] to_phone=${to_phone}, message=${message}`);
       if (!to_phone || !message) return Response.json({ success: false, error: 'חסר טלפון או הודעה' });
 
       const normalizedPhone = normalizePhone(to_phone);
