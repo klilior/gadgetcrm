@@ -463,6 +463,13 @@ async function processProduct(base44, product, runMode) {
     competitors_json: zap.competitors_json,
     prev_snapshot: prevSnapshot?.id || null,
     position_delta, price_site_delta, price_zap_delta, above_price_delta, below_price_delta,
+    // Debug fields
+    debug_wc_source: wooDebug.debug_wc_source || null,
+    debug_wc_candidates: wooDebug.debug_wc_candidates || null,
+    debug_wc_html_sample: wooDebug.debug_wc_html_sample || null,
+    debug_zap_found_store_name: zap.debug_zap_found_store_name || null,
+    debug_zap_my_price: zap.debug_zap_my_price || null,
+    debug_zap_top5: zap.debug_zap_top5 || null,
   });
 
   // 8. Create recommendation
