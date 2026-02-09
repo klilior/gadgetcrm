@@ -384,14 +384,29 @@ async function processProduct(base44, product, runMode) {
   const zap = await scrapeZapComparison(base44, product.zap_comparison_url, product.my_store_name_zap || 'GADGET TEAM');
   if (!zap.ok) return handleError(`שגיאת Zap: ${zap.error}`);
 
-  // 2. Scrape Woo
+  // 2. Scrape Woo — pass zap price for cross-validation
   let wooPrice = null;
+  let wooDebug = {};
   if (product.my_woocommerce_url) {
-    const woo = await scrapeWooPrice(product.my_woocommerce_url);
-    if (!woo.ok) return handleError(`שגיאת WooCommerce: ${woo.error}`);
+    const woo = await scrapeWooPrice(product.my_woocommerce_url, zap.my_price_on_zap);
+    if (!woo.ok) {
+      // Store debug info on product even on error
+      try {
+        await base44.asServiceRole.entities.ProductsMonitor.update(productId, {
+          debug_last_wc_error: woo.error + (woo.debug ? ` | candidates: ${JSON.stringify(woo.debug.candidates?.map(c => c.value))}` : ''),
+        });
+      } catch (_) {}
+      return handleError(`שגיאת WooCommerce: ${woo.error}`);
+    }
     wooPrice = woo.price;
+    wooDebug = {
+      debug_wc_source: woo.debug_wc_source || '',
+      debug_wc_candidates: woo.debug_wc_candidates || '',
+      debug_wc_html_sample: woo.debug_wc_html_sample || '',
+    };
   } else {
     wooPrice = zap.my_price_on_zap;
+    wooDebug = { debug_wc_source: 'ZAP_FALLBACK', debug_wc_candidates: '', debug_wc_html_sample: '' };
   }
 
   const my_price = wooPrice;
