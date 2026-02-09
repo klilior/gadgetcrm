@@ -16,6 +16,7 @@ import { useSearchParams } from "react-router-dom";
 import { importerReminders } from "@/functions/importerReminders";
 import TextMeConfigPanel from "../components/sms/TextMeConfigPanel";
 import SmsLogTable from "../components/sms/SmsLogTable";
+import SmsTemplatesManager from "../components/sms/SmsTemplatesManager";
 
 export default function SettingsPage() {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -1511,6 +1512,7 @@ GADGET-TEAM`);
 
                 <TabsContent value="sms" className="space-y-6 mt-6">
                     <TextMeConfigPanel />
+                    <SmsTemplatesManager />
                     <SmsLogTable />
                 </TabsContent>
 

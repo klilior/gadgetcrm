@@ -15,6 +15,7 @@ import { createPageUrl } from '@/utils';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import OrderDetailsModal from '../orders/OrderDetailsModal';
+import SendSmsModal from '../sms/SendSmsModal';
 
 export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [customer, setCustomer] = useState(null);
@@ -34,6 +35,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [isLoading, setIsLoading] = useState(true);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+    const [showSmsModal, setShowSmsModal] = useState(false);
     const navigate = useNavigate();
 
     const handleCreateTicket = () => {
@@ -343,8 +345,12 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                                                 {customer.phone}
                                                             </a>
                                                         </div>
-                                                        <Button size="sm" variant="outline">
-                                                            <PhoneIcon className="w-4 h-4" />
+                                                        <Button size="sm" variant="outline" onClick={() => setShowSmsModal(true)} className="gap-1 text-teal-700 border-teal-300 hover:bg-teal-50">
+                                                            <MessageCircle className="w-4 h-4" />
+                                                            SMS
+                                                        </Button>
+                                                        <Button size="sm" variant="outline" asChild>
+                                                            <a href={`tel:${customer.phone}`}><PhoneIcon className="w-4 h-4" /></a>
                                                         </Button>
                                                     </div>
                                                 )}
@@ -618,6 +624,14 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                     </div>
                 </div>
             </div>
+
+            {/* SMS Modal */}
+            <SendSmsModal
+                isOpen={showSmsModal}
+                onClose={() => setShowSmsModal(false)}
+                phone={customer?.phone}
+                customerName={customer?.full_name}
+            />
 
             {/* Order Details Modal */}
             {selectedOrder && (

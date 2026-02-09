@@ -10,10 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { X, Save, Loader2, AlertTriangle, History, Trash2, User, Printer } from "lucide-react";
 import { format } from 'date-fns';
 import { sendWhatsapp } from "@/functions/sendWhatsapp";
+import { sendTextMeSMS } from "@/functions/sendTextMeSMS";
 import { useUser } from '../UserAuth';
 import RepairLabel from './RepairLabel';
 import RepairReceipt from './RepairReceipt';
-import CustomerCard from '../customers/CustomerCard'; // Added import for CustomerCard
+import CustomerCard from '../customers/CustomerCard';
+import SendSmsModal from '../sms/SendSmsModal';
 
 export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }) {
     const { currentUser } = useUser();
@@ -33,7 +35,8 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showPrintLabel, setShowPrintLabel] = useState(false);
     const [showPrintReceipt, setShowPrintReceipt] = useState(false);
-    const [showCustomerCard, setShowCustomerCard] = useState(false); // Added state for CustomerCard
+    const [showCustomerCard, setShowCustomerCard] = useState(false);
+    const [showSmsModal, setShowSmsModal] = useState(false);
 
     const loadRelatedData = useCallback(async () => {
         if (!repair) return;
@@ -141,33 +144,40 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                 let message = null;
                 switch (formData.status) {
                     case 'מכשיר סיים תיקון וממתין לאיסוף':
-                        message = `שלום ${client.full_name}, 🎉\n\nתיקון #${repair.repair_id} הושלם בהצלחה! המכשיר שלך מוכן לאיסוף.`;
+                        message = `שלום ${client.full_name}, תיקון #${repair.repair_id} הושלם בהצלחה! המכשיר שלך מוכן לאיסוף.`;
                         if (updateData.final_price > 0) {
-                            message += `\n💰 סכום לתשלום: ₪${updateData.final_price}`;
+                            message += ` סכום לתשלום: ${updateData.final_price} ש"ח.`;
                         }
-                        message += `\n\n📍 ניתן לאסוף מהמעבדה בשעות העבודה.\n🕐 א'-ה' 9:00-18:00, ו' 9:00-13:00`;
+                        message += ` ניתן לאסוף מהמעבדה בשעות העבודה. א'-ה' 9:00-18:00, ו' 9:00-13:00. Gadget-Team`;
                         break;
                     case 'הוזמן חלק':
-                        message = `שלום ${client.full_name},\n\n🔧 עבור תיקון #${repair.repair_id} - הוזמן חלק ספציפי.\n⏱️ נעדכן כשהח חלק יגיע למעבדה.\n\nתודה על הסבלנות! 🙏`;
+                        message = `שלום ${client.full_name}, עבור תיקון #${repair.repair_id} - הוזמן חלק ספציפי. נעדכן כשהחלק יגיע למעבדה. תודה על הסבלנות! Gadget-Team`;
                         break;
                     case 'לא ניתן לתיקון':
-                        message = `שלום ${client.full_name},\n\n😔 לאחר בדיקה מעמיקה, לצערנו לא ניתן לתקן את המכשיר (תיקון #${repair.repair_id}).\n\n📞 נציג ייצור עמך קשר בקרוב להסבר מפורט ולחזרת המכשיר.`;
+                        message = `שלום ${client.full_name}, לאחר בדיקה מעמיקה, לצערנו לא ניתן לתקן את המכשיר (תיקון #${repair.repair_id}). נציג ייצור עמך קשר בקרוב. Gadget-Team`;
                         break;
                     case 'תיקון נסגר':
-                        message = `שלום ${client.full_name},\n\n✅ תיקון #${repair.repair_id} הושלם בהצלחה! 🎉\n\nתודה שבחרת בנו! מקווים שהמכשיר יעבוד מעולה.\n\n💫 Gadget-Team`;
+                        message = `שלום ${client.full_name}, תיקון #${repair.repair_id} הושלם בהצלחה! תודה שבחרת בנו! Gadget-Team`;
                         break;
                 }
 
                 if (message) {
-                    sendWhatsapp({
-                        to: client.phone,
-                        messageObject: { type: "text", text: { body: message } }
-                    }).then(response => {
-                        if (response?.data?.success) {
-                            console.log(`✅ WhatsApp sent for status "${formData.status}"`);
+                    // Send via SMS (TextMe)
+                    sendTextMeSMS({
+                        action: "send",
+                        to_phone: client.phone,
+                        message,
+                        event_type: `repair_status_${formData.status}`,
+                        fingerprint: `repair|${repair.id}|${formData.status}`,
+                    }).then(res => {
+                        const data = res.data || res;
+                        if (data.success) {
+                            console.log(`✅ SMS sent for status "${formData.status}"`);
+                        } else {
+                            console.log(`ℹ️ SMS failed:`, data.error);
                         }
                     }).catch(err => {
-                        console.log(`ℹ️ WhatsApp error (ignored):`, err.message);
+                        console.log(`ℹ️ SMS error (ignored):`, err.message);
                     });
                 }
             }
@@ -263,14 +273,26 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                                 </CardHeader>
                                 <CardContent className="space-y-3">
                                     {client && (
-                                        <div 
-                                            className="cursor-pointer hover:bg-blue-50 p-2 rounded-lg transition-colors"
-                                            onClick={() => setShowCustomerCard(true)}
-                                        >
-                                            <Label className="font-semibold">לקוח:</Label>
-                                            <p className="text-blue-600 hover:underline">
-                                                {client.full_name} • {client.phone}
-                                            </p>
+                                        <div className="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 transition-colors">
+                                            <div 
+                                                className="cursor-pointer flex-1"
+                                                onClick={() => setShowCustomerCard(true)}
+                                            >
+                                                <Label className="font-semibold">לקוח:</Label>
+                                                <p className="text-blue-600 hover:underline">
+                                                    {client.full_name} • {client.phone}
+                                                </p>
+                                            </div>
+                                            {client.phone && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => setShowSmsModal(true)}
+                                                    className="text-teal-700 border-teal-300 hover:bg-teal-50 gap-1 text-xs"
+                                                >
+                                                    SMS
+                                                </Button>
+                                            )}
                                         </div>
                                     )}
                                     {device && (
@@ -526,9 +548,22 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                     customerId={client.id}
                     isOpen={showCustomerCard}
                     onClose={() => setShowCustomerCard(false)}
-                    onEdit={() => {}} // Placeholder for potential future edit functionality
+                    onEdit={() => {}}
                 />
             )}
+
+            <SendSmsModal
+                isOpen={showSmsModal}
+                onClose={() => setShowSmsModal(false)}
+                phone={client?.phone}
+                customerName={client?.full_name}
+                context={{
+                    repair_id: repair?.repair_id,
+                    status: repair?.status,
+                    device: device ? `${device.manufacturer} ${device.model}` : "",
+                    final_price: repair?.final_price?.toString() || "",
+                }}
+            />
         </>
     );
 }
