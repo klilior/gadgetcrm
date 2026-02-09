@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, BarChart3, FlaskConical, Loader2 } from "lucide-react";
+import { RefreshCw, BarChart3, FlaskConical, Loader2, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 
 const statusColors = {
@@ -11,7 +11,17 @@ const statusColors = {
   "⚠️ רווח נמוך": "bg-orange-100 text-orange-800 border-orange-200",
 };
 
-export default function ActiveProductsTable({ products, onRefresh, onDetails, onManualCheck, refreshingId }) {
+function DeltaBadge({ value, suffix = "" }) {
+  if (value == null || value === 0) return null;
+  const isPositive = value > 0;
+  return (
+    <span className={`text-[10px] font-medium ${isPositive ? "text-red-600" : "text-green-600"}`}>
+      {isPositive ? "+" : ""}{value}{suffix}
+    </span>
+  );
+}
+
+export default function ActiveProductsTable({ products, onRefresh, onDetails, onManualCheck, refreshingId, latestSnapshots }) {
   if (!products || products.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -19,6 +29,13 @@ export default function ActiveProductsTable({ products, onRefresh, onDetails, on
         <p className="text-sm mt-1">הוסף מוצר חדש כדי להתחיל במעקב</p>
       </div>
     );
+  }
+
+  const snapshotMap = {};
+  if (latestSnapshots) {
+    for (const s of latestSnapshots) {
+      snapshotMap[s.linked_product] = s;
+    }
   }
 
   return (
@@ -30,7 +47,7 @@ export default function ActiveProductsTable({ products, onRefresh, onDetails, on
             <th className="p-3 text-center font-medium text-gray-600">מחיר נוכחי</th>
             <th className="p-3 text-center font-medium text-gray-600">מיקום</th>
             <th className="p-3 text-center font-medium text-gray-600">יעד</th>
-            <th className="p-3 text-center font-medium text-gray-600">בדיקה אחרונה</th>
+            <th className="p-3 text-center font-medium text-gray-600">בדיקה מוצלחת</th>
             <th className="p-3 text-center font-medium text-gray-600">סטטוס</th>
             <th className="p-3 text-right font-medium text-gray-600 hidden lg:table-cell">המלצה</th>
             <th className="p-3 text-center font-medium text-gray-600">פעולות</th>
@@ -39,23 +56,34 @@ export default function ActiveProductsTable({ products, onRefresh, onDetails, on
         <tbody>
           {products.map(p => {
             const isRefreshing = refreshingId === p.id;
+            const snap = snapshotMap[p.id];
+            const failures = p.consecutive_failures || 0;
             return (
               <tr key={p.id} className={`border-b hover:bg-gray-50/50 transition-colors ${isRefreshing ? "opacity-60" : ""}`}>
                 <td className="p-3 font-medium text-gray-900">
-                  {p.product_name}
-                  {p.needs_attention && <span className="text-red-500 mr-1 text-xs">⚠</span>}
+                  <div className="flex items-center gap-1.5">
+                    {failures >= 1 && (
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" title={`${failures} כישלונות רצופים`} />
+                    )}
+                    <span>{p.product_name}</span>
+                    {p.needs_attention && <span className="text-red-500 text-xs">⚠</span>}
+                  </div>
                 </td>
                 <td className="p-3 text-center">
-                  {p.my_current_price ? `₪${p.my_current_price.toLocaleString()}` : "—"}
+                  <div>{p.my_current_price ? `₪${p.my_current_price.toLocaleString()}` : "—"}</div>
+                  {snap?.price_site_delta != null && snap.price_site_delta !== 0 && (
+                    <DeltaBadge value={snap.price_site_delta} suffix="₪" />
+                  )}
                 </td>
-                <td className="p-3 text-center font-bold">
-                  {p.current_position ? `#${p.current_position}` : "—"}
+                <td className="p-3 text-center">
+                  <div className="font-bold">{p.current_position ? `#${p.current_position}` : "—"}</div>
+                  {snap?.position_delta != null && snap.position_delta !== 0 && (
+                    <DeltaBadge value={snap.position_delta} />
+                  )}
                 </td>
-                <td className="p-3 text-center text-gray-500">
-                  {p.desired_position ?? "—"}
-                </td>
+                <td className="p-3 text-center text-gray-500">{p.desired_position ?? "—"}</td>
                 <td className="p-3 text-center text-gray-500 text-xs">
-                  {p.last_check_time ? format(new Date(p.last_check_time), "dd/MM HH:mm") : "טרם נבדק"}
+                  {p.last_success_time ? format(new Date(p.last_success_time), "dd/MM HH:mm") : (p.last_check_time ? format(new Date(p.last_check_time), "dd/MM HH:mm") : "טרם נבדק")}
                 </td>
                 <td className="p-3 text-center">
                   <Badge className={`${statusColors[p.status_code] || "bg-gray-100 text-gray-700"} text-xs`}>
@@ -72,7 +100,7 @@ export default function ActiveProductsTable({ products, onRefresh, onDetails, on
                         <FlaskConical className="w-3.5 h-3.5" />
                       </Button>
                     )}
-                    <Button size="sm" variant="ghost" onClick={() => onRefresh(p)} title="🔄 רענן עכשיו (סקרייפינג)" disabled={isRefreshing}>
+                    <Button size="sm" variant="ghost" onClick={() => onRefresh(p)} title="🔄 רענן עכשיו" disabled={isRefreshing}>
                       {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => onDetails(p)} title="פרטים">
