@@ -25,16 +25,25 @@ export default function PriceMonitor() {
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [tab, setTab] = useState("products");
 
+  const [latestSnapshots, setLatestSnapshots] = useState([]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [prods, alrts, recs] = await Promise.all([
+    const [prods, alrts, recs, snaps] = await Promise.all([
       base44.entities.ProductsMonitor.list("-created_date", 200),
       base44.entities.PriceAlert.filter({ is_read: false }, "-alert_timestamp", 50),
       base44.entities.PriceRecommendation.filter({ status: "חדש" }, "-recommendation_time", 50),
+      base44.entities.PriceSnapshot.list("-check_timestamp", 50),
     ]);
     setProducts(prods || []);
     setAlerts(alrts || []);
     setRecommendations(recs || []);
+    // Keep only latest snapshot per product
+    const snapMap = {};
+    for (const s of (snaps || [])) {
+      if (!snapMap[s.linked_product]) snapMap[s.linked_product] = s;
+    }
+    setLatestSnapshots(Object.values(snapMap));
     setLoading(false);
   }, []);
 
@@ -173,6 +182,7 @@ export default function PriceMonitor() {
             onDetails={(p) => setDetailProduct(p)}
             onManualCheck={(p) => setManualCheckProduct(p)}
             refreshingId={refreshingId}
+            latestSnapshots={latestSnapshots}
           />
         </TabsContent>
 
@@ -196,6 +206,7 @@ export default function PriceMonitor() {
             onDetails={(p) => setDetailProduct(p)}
             onManualCheck={(p) => setManualCheckProduct(p)}
             refreshingId={refreshingId}
+            latestSnapshots={latestSnapshots}
           />
         </TabsContent>
       </Tabs>
