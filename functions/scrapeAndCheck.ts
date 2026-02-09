@@ -196,23 +196,16 @@ async function scrapeWooPrice(url, zapMyPrice) {
       };
     }
 
-    // Choose best candidate
-    let chosen;
-    if (zapMyPrice && zapMyPrice > 0) {
-      // Pick closest to Zap price
-      validCandidates.sort((a, b) => Math.abs(a.value - zapMyPrice) - Math.abs(b.value - zapMyPrice));
-      chosen = validCandidates[0];
-    } else {
-      // Pick by strategy priority
-      const stratPriority = {
-        'S1_JSON_LD': 0, 'S2_META_ITEMPROP': 1, 'S12_SR_CURRENT': 2,
-        'S7_SR_CURRENT_PRICE': 3, 'S8_INS_BLOCK': 4, 'S5_INS_SALE_PRICE': 5,
-        'S6_CURRENT_PRICE_TEXT': 6, 'S9_DATA_ATTR': 7, 'S11_WC_JS_VAR': 8,
-        'S3_WC_PRICE_CLASS': 9, 'S4_WC_ANCHORED_REGEX': 10
-      };
-      validCandidates.sort((a, b) => (stratPriority[a.strategy] ?? 99) - (stratPriority[b.strategy] ?? 99));
-      chosen = validCandidates[0];
-    }
+    // Choose best candidate — ALWAYS prioritize by strategy reliability, NOT proximity to Zap
+    // High-confidence strategies that directly identify the main product price
+    const stratPriority = {
+      'S1_JSON_LD': 0, 'S2_META_ITEMPROP': 1, 'S12_SR_CURRENT': 2,
+      'S7_SR_CURRENT_PRICE': 3, 'S8_INS_MAIN_PRODUCT': 4, 'S6_CURRENT_PRICE_TEXT': 5,
+      'S5_INS_SALE_PRICE': 6, 'S9_DATA_ATTR': 7, 'S11_WC_JS_VAR': 8,
+      'S3_WC_PRICE_CLASS': 9, 'S4_WC_ANCHORED_REGEX': 10, 'S8b_INS_RELATED': 11
+    };
+    validCandidates.sort((a, b) => (stratPriority[a.strategy] ?? 99) - (stratPriority[b.strategy] ?? 99));
+    const chosen = validCandidates[0];
 
     console.log(`[WC] Chosen: ₪${chosen.value} via ${chosen.strategy}`);
 
