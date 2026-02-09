@@ -1,8 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
-// HMAC for JSON API: email + apiKey
-async function veloHmac({ email, apiKey, apiSecret }) {
-    const payload = `${email}${apiKey}`;
+// HMAC for Velo API: jwt + apiKey (same as veloCheck)
+async function veloHmac({ jwt, apiKey, apiSecret }) {
+    const payload = `${jwt}${apiKey}`;
     const encoder = new TextEncoder();
     const keyData = encoder.encode(apiSecret);
     const messageData = encoder.encode(payload);
@@ -20,6 +20,94 @@ async function veloHmac({ email, apiKey, apiSecret }) {
     return Array.from(new Uint8Array(signature))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
+}
+
+async function getVeloJwt(base44, config) {
+    const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL, password: VELO_PASSWORD, baseUrl } = config;
+    const VELO_API_BASE = baseUrl || 'https://api.veloapp.io/api/enterprise';
+
+    // Check for existing session
+    const sessions = await base44.asServiceRole.entities.VeloSession.list('-issued_at', 1);
+
+    if (sessions.length > 0) {
+        const session = sessions[0];
+        const issuedAt = new Date(session.issued_at).getTime() / 1000;
+        const now = Date.now() / 1000;
+        const expiry = Number(session.expiry) || 0;
+        const timeLeft = (issuedAt + expiry) - now;
+
+        if (timeLeft > 120) {
+            console.log('✅ Using cached JWT');
+            return session.jwt;
+        }
+
+        // Try refresh
+        try {
+            console.log('🔄 Attempting JWT refresh...');
+            const hmac = await veloHmac({ jwt: session.jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+            const refreshRes = await fetch(`${VELO_API_BASE}/refresh`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Velo-Api-Key': VELO_API_KEY,
+                    'X-Velo-Hmac': hmac,
+                    'Authorization': `Bearer ${session.jwt}`
+                },
+                body: JSON.stringify({})
+            });
+
+            if (refreshRes.ok) {
+                const refreshData = await refreshRes.json();
+                await base44.asServiceRole.entities.VeloSession.update(session.id, {
+                    jwt: refreshData.jwt,
+                    expiry: refreshData.expiry,
+                    issued_at: new Date().toISOString()
+                });
+                console.log('✅ JWT refreshed successfully');
+                return refreshData.jwt;
+            }
+        } catch (e) {
+            console.warn('⚠️ JWT Refresh failed:', e.message);
+        }
+    }
+
+    // Login
+    console.log('🔐 Performing fresh login...');
+    const loginRes = await fetch(`${VELO_API_BASE}/login`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Velo-Api-Key': VELO_API_KEY
+        },
+        body: JSON.stringify({ email: VELO_EMAIL, password: VELO_PASSWORD })
+    });
+
+    if (!loginRes.ok) {
+        const err = await loginRes.text();
+        throw new Error(`Velo Login Failed: ${err}`);
+    }
+
+    const loginData = await loginRes.json();
+    
+    // Save session
+    if (sessions.length > 0) {
+        await base44.asServiceRole.entities.VeloSession.update(sessions[0].id, {
+            jwt: loginData.jwt,
+            expiry: loginData.expiry,
+            issued_at: new Date().toISOString(),
+            user_email: VELO_EMAIL
+        });
+    } else {
+        await base44.asServiceRole.entities.VeloSession.create({
+            jwt: loginData.jwt,
+            expiry: loginData.expiry,
+            issued_at: new Date().toISOString(),
+            user_email: VELO_EMAIL
+        });
+    }
+
+    console.log('✅ Fresh login successful');
+    return loginData.jwt;
 }
 
 Deno.serve(async (req) => {
@@ -47,14 +135,19 @@ Deno.serve(async (req) => {
 
         const provider = providers[0];
         const config = provider.config || {};
-        const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL } = config;
+        const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL, password: VELO_PASSWORD } = config;
         
-        if (!VELO_API_KEY || !VELO_API_SECRET || !VELO_EMAIL) {
-            return Response.json({ success: false, error: 'חסרים פרטי התחברות ל-Velo (apiKey, apiSecret, email)' }, { status: 200 });
+        if (!VELO_API_KEY || !VELO_API_SECRET || !VELO_EMAIL || !VELO_PASSWORD) {
+            return Response.json({ success: false, error: 'חסרים פרטי התחברות ל-Velo (apiKey, apiSecret, email, password)' }, { status: 200 });
         }
         
-        // Generate HMAC for JSON API (email + apiKey)
-        const hmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+        // Get JWT (same as veloCheck)
+        console.log('🔑 [VeloOrder] Getting JWT...');
+        const jwt = await getVeloJwt(base44, config);
+        console.log('🔑 [VeloOrder] Got JWT');
+        
+        // Generate HMAC (jwt + apiKey - same as veloCheck)
+        const hmac = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
         console.log('🔑 [VeloOrder] Generated HMAC');
         
         const order = await base44.asServiceRole.entities.Order.get(orderId);
@@ -102,12 +195,16 @@ Deno.serve(async (req) => {
             customerAddress: {
                 first_name: billingAddress.first_name || customer.full_name?.split(' ')[0] || 'לקוח',
                 last_name: billingAddress.last_name || customer.full_name?.split(' ').slice(1).join(' ') || '',
-                line1: `${streetName} ${streetNumber}`.trim(),
+                street: streetName,
+                number: streetNumber,
                 line2: billingAddress.address_2 || '',
                 city: billingAddress.city || customer.city || '',
-                zip: billingAddress.postcode || '',
+                zipcode: billingAddress.postcode || '',
+                state: billingAddress.state || '',
                 country: 'Israel',
-                phone: (billingAddress.phone || customer.phone || '').replace(/\D/g, '')
+                phone: (billingAddress.phone || customer.phone || '').replace(/\D/g, ''),
+                longitude: '',
+                latitude: ''
             },
             products: products.map(p => ({
                 name: p.name || 'מוצר',
@@ -120,14 +217,15 @@ Deno.serve(async (req) => {
         
         console.log('📦 [VeloOrder] Order payload:', JSON.stringify(orderPayload, null, 2));
         
-        // Step 1: Create order via JSON API
+        // Step 1: Create order via JSON API (with JWT auth like veloCheck)
         console.log('📦 [VeloOrder] Creating order via JSON API...');
         const orderResponse = await fetch('https://api.veloapp.io/api/json/v1/order', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': hmac
+                'X-Velo-Hmac': hmac,
+                'Authorization': `Bearer ${jwt}`
             },
             body: JSON.stringify(orderPayload)
         });
@@ -145,7 +243,6 @@ Deno.serve(async (req) => {
         console.log('📦 [VeloOrder] Parsed response:', JSON.stringify(orderData, null, 2));
         
         // Check for errors - Velo uses fail:true for errors
-        // Note: code 201 is success for creation
         if (orderData.fail === true) {
             return Response.json({ 
                 success: false, 
@@ -165,20 +262,21 @@ Deno.serve(async (req) => {
         console.log('📦 [VeloOrder] Velo Order ID:', veloOrderId);
         
         // Wait a moment for Velo to process
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Step 2: Accept/Confirm the order (transmit to courier)
         console.log('📦 [VeloOrder] Accepting order:', veloOrderId);
         
         // Regenerate HMAC for accept call
-        const acceptHmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+        const acceptHmac = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
         
         const acceptResponse = await fetch('https://api.veloapp.io/api/json/v1/accept', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': acceptHmac
+                'X-Velo-Hmac': acceptHmac,
+                'Authorization': `Bearer ${jwt}`
             },
             body: JSON.stringify({ order: veloOrderId })
         });
@@ -200,14 +298,15 @@ Deno.serve(async (req) => {
         console.log('📦 [VeloOrder] Getting order info...');
         
         // Regenerate HMAC for info call
-        const infoHmac = await veloHmac({ email: VELO_EMAIL, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+        const infoHmac = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
         
         const infoResponse = await fetch(`https://api.veloapp.io/api/json/v1/info/${veloOrderId}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': infoHmac
+                'X-Velo-Hmac': infoHmac,
+                'Authorization': `Bearer ${jwt}`
             }
         });
         
