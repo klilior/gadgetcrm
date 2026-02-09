@@ -114,8 +114,15 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const body = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (parseErr) {
+      console.error('[SMS] Failed to parse body:', parseErr.message);
+      return Response.json({ error: 'Failed to parse request body' }, { status: 400 });
+    }
     const { action } = body;
+    console.log(`[SMS] Action: ${action}, body keys: ${Object.keys(body).join(', ')}`);
 
     // Load config once
     const configs = await base44.asServiceRole.entities.TextMeConfig.list('-created_date', 1);
