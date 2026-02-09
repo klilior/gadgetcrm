@@ -179,6 +179,7 @@ function AppContent({ children, currentPageName }) {
     { title: "דוח התחשבנות", url: createPageUrl("VendorReport"), icon: BarChart3 }
   ] : [
     { title: "דשבורד", url: dashboardUrl, icon: Home },
+    ...((isManager || isShiftManager) ? [{ title: "ניטור מחירים Zap", url: createPageUrl("PriceMonitor"), icon: BarChart3 }] : []),
     { title: "קווים לטיפול", url: createPageUrl("LinesToWorkOn"), icon: Phone },
     { title: "ביצועי נציגים", url: createPageUrl("AgentPerformanceDashboard"), icon: Trophy },
   ];

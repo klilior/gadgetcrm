@@ -19,6 +19,7 @@ import { createPageUrl } from "@/utils";
 import useSuppliers from "../components/hooks/useSuppliers";
 import UndeliveredOrdersWidget from "../components/dashboard/UndeliveredOrdersWidget";
 import QuickLeadsToComplete from "../components/dashboard/QuickLeadsToComplete";
+import ZapPriceMonitorWidget from "../components/dashboard/ZapPriceMonitorWidget";
 
 // Ratio thresholds for color coding
 const RATIO_THRESHOLDS = { good: 40, warning: 60 }; // green < 40%, orange 40-60%, red > 60%
@@ -571,6 +572,9 @@ export default function ManagerControlCenter() {
         employees={[]}
         compact={false}
       />
+
+      {/* Zap Price Monitor Widget */}
+      <ZapPriceMonitorWidget />
 
       {/* Quick Leads to Complete */}
       <QuickLeadsToComplete
