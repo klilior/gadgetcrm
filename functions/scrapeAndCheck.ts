@@ -185,19 +185,26 @@ If the page cannot be loaded or no stores found, return:
     const valid = stores.filter(s => s.store && s.price >= 10 && s.price <= 100000);
     if (!valid.length) return { ok: false, error: 'לא נמצאו מחירים תקינים' };
 
+    // Build debug top 5
+    const debug_zap_top5 = valid.slice(0, 5).map((s, i) => ({ pos: i + 1, store: s.store, price: s.price }));
+
     // Priority matching: A) exact, B) fallback tokens
     const lowerName = storeName.toLowerCase();
     let myIdx = valid.findIndex(s => s.store.toLowerCase().includes(lowerName));
+    let matchedVia = lowerName;
     if (myIdx === -1) {
       const fallbackTokens = ['gadget-team', 'gadget team', 'gadget-team.co.il', 'גאדג', "גאדג'ט"];
       for (const token of fallbackTokens) {
         myIdx = valid.findIndex(s => s.store.toLowerCase().includes(token));
-        if (myIdx !== -1) break;
+        if (myIdx !== -1) { matchedVia = token; break; }
       }
     }
     if (myIdx === -1) {
       return { ok: false, error: `החנות שלנו ("${storeName}") לא נמצאה בדף Zap (בדוק שם חנות בזאפ). חנויות שנמצאו: ${valid.map(s => s.store).join(', ')}` };
     }
+
+    const foundStoreName = valid[myIdx].store;
+    console.log(`[Zap] Matched store "${foundStoreName}" via token "${matchedVia}" at position ${myIdx + 1}`);
 
     const above = myIdx > 0 ? valid[myIdx - 1] : null;
     const below = myIdx < valid.length - 1 ? valid[myIdx + 1] : null;
@@ -218,6 +225,9 @@ If the page cannot be loaded or no stores found, return:
       third_place_price: valid[2]?.price || null,
       total_competitors: valid.length,
       competitors_json: JSON.stringify(valid),
+      debug_zap_found_store_name: foundStoreName,
+      debug_zap_my_price: valid[myIdx].price,
+      debug_zap_top5: JSON.stringify(debug_zap_top5),
     };
   } catch (e) {
     return { ok: false, error: `שגיאת Zap scraping: ${e.message}` };
