@@ -44,10 +44,11 @@ export default function ActiveProductsTable({ products, onRefresh, onDetails, on
         <thead>
           <tr className="border-b bg-gray-50/80">
             <th className="p-3 text-right font-medium text-gray-600">שם מוצר</th>
-            <th className="p-3 text-center font-medium text-gray-600">מחיר נוכחי</th>
+            <th className="p-3 text-center font-medium text-gray-600">מחיר באתר</th>
             <th className="p-3 text-center font-medium text-gray-600">מיקום</th>
             <th className="p-3 text-center font-medium text-gray-600">יעד</th>
-            <th className="p-3 text-center font-medium text-gray-600">בדיקה מוצלחת</th>
+            <th className="p-3 text-center font-medium text-gray-600 hidden md:table-cell">מעליי</th>
+            <th className="p-3 text-center font-medium text-gray-600 hidden md:table-cell">מתחתיי</th>
             <th className="p-3 text-center font-medium text-gray-600">סטטוס</th>
             <th className="p-3 text-right font-medium text-gray-600 hidden lg:table-cell">המלצה</th>
             <th className="p-3 text-center font-medium text-gray-600">פעולות</th>
@@ -82,8 +83,21 @@ export default function ActiveProductsTable({ products, onRefresh, onDetails, on
                   )}
                 </td>
                 <td className="p-3 text-center text-gray-500">{p.desired_position ?? "—"}</td>
-                <td className="p-3 text-center text-gray-500 text-xs">
-                  {p.last_success_time ? format(new Date(p.last_success_time), "dd/MM HH:mm") : (p.last_check_time ? format(new Date(p.last_check_time), "dd/MM HH:mm") : "טרם נבדק")}
+                <td className="p-3 text-center text-gray-500 text-xs hidden md:table-cell">
+                  {snap?.position_above_me_price ? (
+                    <div>
+                      <div>₪{snap.position_above_me_price.toLocaleString()}</div>
+                      {snap.position_above_me_store && <div className="text-[10px] text-gray-400 truncate max-w-[80px]">{snap.position_above_me_store}</div>}
+                    </div>
+                  ) : "—"}
+                </td>
+                <td className="p-3 text-center text-gray-500 text-xs hidden md:table-cell">
+                  {snap?.position_below_me_price ? (
+                    <div>
+                      <div>₪{snap.position_below_me_price.toLocaleString()}</div>
+                      {snap.position_below_me_store && <div className="text-[10px] text-gray-400 truncate max-w-[80px]">{snap.position_below_me_store}</div>}
+                    </div>
+                  ) : "—"}
                 </td>
                 <td className="p-3 text-center">
                   <Badge className={`${statusColors[p.status_code] || "bg-gray-100 text-gray-700"} text-xs`}>
