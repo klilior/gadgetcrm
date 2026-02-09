@@ -105,13 +105,18 @@ async function scrapeWooPrice(url, zapMyPrice) {
       if (p) candidates.push({ value: p, strategy: 'S7_SR_CURRENT_PRICE', snippet: srCurrentMatch[0].substring(0, 120) });
     }
 
-    // S8: <ins> tag containing woocommerce-Price-amount (sale price is always inside <ins>)
+    // S8: FIRST <ins> tag containing woocommerce-Price-amount is the main product sale price
+    // Later <ins> blocks are related products — only take the first one
     const insBlockMatches = [...html.matchAll(/<ins[^>]*>([\s\S]*?)<\/ins>/gi)];
+    let firstInsFound = false;
     for (const ib of insBlockMatches) {
-      if (ib[1].includes('woocommerce-Price-amount') || ib[1].includes('₪')) {
+      if (ib[1].includes('woocommerce-Price-amount') || ib[1].includes('₪') || ib[1].includes('&#8362;')) {
         const innerText = ib[1].replace(/<[^>]+>/g, '');
         const p = cleanPrice(innerText);
-        if (p) candidates.push({ value: p, strategy: 'S8_INS_BLOCK', snippet: ib[0].substring(0, 150) });
+        if (p) {
+          candidates.push({ value: p, strategy: firstInsFound ? 'S8b_INS_RELATED' : 'S8_INS_MAIN_PRODUCT', snippet: ib[0].substring(0, 150) });
+          if (!firstInsFound) firstInsFound = true;
+        }
       }
     }
 
