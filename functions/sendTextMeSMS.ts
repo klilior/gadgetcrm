@@ -77,10 +77,12 @@ async function sendSMSInternal(base44, config, params) {
   const apiPhone = normalizedPhone.startsWith('0') ? normalizedPhone.slice(1) : normalizedPhone;
 
   const payload = {
-    user: { username: config.username },
-    source: config.default_source,
-    destinations: { phone: [apiPhone] },
-    message,
+    sms: {
+      user: { username: config.username },
+      source: config.default_source,
+      destinations: { phone: apiPhone },
+      message,
+    },
   };
 
   console.log(`[SMS] Sending to ${apiPhone} via ${endpoint} (test=${config.test_mode})`);
@@ -191,10 +193,12 @@ Deno.serve(async (req) => {
       const apiPhone = normalizedPhone.startsWith('0') ? normalizedPhone.slice(1) : normalizedPhone;
 
       const payloadObj = {
-        user: { username: config.username }, source: finalSource,
-        destinations: { phone: [apiPhone] }, message,
+        sms: {
+          user: { username: config.username }, source: finalSource,
+          destinations: { phone: apiPhone }, message,
+        },
       };
-      if (timing) payloadObj.timing = timing;
+      if (timing) payloadObj.sms.timing = timing;
 
       console.log(`[SMS] Sending to ${apiPhone} via ${endpoint}`);
       const res = await fetch(endpoint, {
@@ -284,8 +288,10 @@ Deno.serve(async (req) => {
 
       const apiPhone = normalizedPhone.startsWith('0') ? normalizedPhone.slice(1) : normalizedPhone;
       const payload = {
-        user: { username: config.username }, source: config.default_source,
-        destinations: { phone: [apiPhone] }, message,
+        sms: {
+          user: { username: config.username }, source: config.default_source,
+          destinations: { phone: apiPhone }, message,
+        },
       };
 
       console.log(`[SMS-TEST] Sending to ${apiPhone}, payload: ${JSON.stringify(payload)}`);
