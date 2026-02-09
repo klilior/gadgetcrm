@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, Plus, Package, Bell, Lightbulb, Archive, Loader2 } from "lucide-react";
+import { RefreshCw, Plus, Package, Bell, Lightbulb, Archive, Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 
 import SummaryCards from "../components/price-monitor/SummaryCards";
@@ -13,6 +13,7 @@ import RecommendationsTable from "../components/price-monitor/RecommendationsTab
 import ProductDetailModal from "../components/price-monitor/ProductDetailModal";
 import ManualCheckModal from "../components/price-monitor/ManualCheckModal";
 import EditProductModal from "../components/price-monitor/EditProductModal";
+import SmsLogTable from "../components/sms/SmsLogTable";
 
 export default function PriceMonitor() {
   const [products, setProducts] = useState([]);
@@ -164,7 +165,7 @@ export default function PriceMonitor() {
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="products" className="flex items-center gap-1.5">
             <Package className="w-3.5 h-3.5" />
             <span>מוצרים פעילים</span>
@@ -189,6 +190,10 @@ export default function PriceMonitor() {
           <TabsTrigger value="all" className="flex items-center gap-1.5">
             <Archive className="w-3.5 h-3.5" />
             <span>כל המוצרים</span>
+          </TabsTrigger>
+          <TabsTrigger value="sms" className="flex items-center gap-1.5">
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>SMS</span>
           </TabsTrigger>
         </TabsList>
 
@@ -229,6 +234,9 @@ export default function PriceMonitor() {
             refreshingId={refreshingId}
             latestSnapshots={latestSnapshots}
           />
+        </TabsContent>
+        <TabsContent value="sms" className="mt-3">
+          <SmsLogTable />
         </TabsContent>
       </Tabs>
 
