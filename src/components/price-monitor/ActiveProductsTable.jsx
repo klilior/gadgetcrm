@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, BarChart3 } from "lucide-react";
+import { RefreshCw, BarChart3, FlaskConical } from "lucide-react";
 import { format } from "date-fns";
 
 const statusColors = {
@@ -11,7 +11,7 @@ const statusColors = {
   "⚠️ רווח נמוך": "bg-orange-100 text-orange-800 border-orange-200",
 };
 
-export default function ActiveProductsTable({ products, onRefresh, onDetails }) {
+export default function ActiveProductsTable({ products, onRefresh, onDetails, onManualCheck }) {
   if (!products || products.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -52,6 +52,11 @@ export default function ActiveProductsTable({ products, onRefresh, onDetails }) 
               </td>
               <td className="p-3 text-center">
                 <div className="flex gap-1 justify-center">
+                  {onManualCheck && (
+                    <Button size="sm" variant="ghost" onClick={() => onManualCheck(p)} title="בדיקה ידנית (שלב 2)" className="text-purple-600 hover:text-purple-700">
+                      <FlaskConical className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => onRefresh(p)} title="רענן עכשיו">
                     <RefreshCw className="w-3.5 h-3.5" />
                   </Button>

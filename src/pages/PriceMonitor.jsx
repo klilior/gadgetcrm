@@ -10,6 +10,7 @@ import AlertsFeed from "../components/price-monitor/AlertsFeed";
 import AddProductModal from "../components/price-monitor/AddProductModal";
 import RecommendationsTable from "../components/price-monitor/RecommendationsTable";
 import ProductDetailModal from "../components/price-monitor/ProductDetailModal";
+import ManualCheckModal from "../components/price-monitor/ManualCheckModal";
 
 export default function PriceMonitor() {
   const [products, setProducts] = useState([]);
@@ -18,6 +19,7 @@ export default function PriceMonitor() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [detailProduct, setDetailProduct] = useState(null);
+  const [manualCheckProduct, setManualCheckProduct] = useState(null);
   const [tab, setTab] = useState("products");
 
   const loadData = useCallback(async () => {
@@ -133,6 +135,7 @@ export default function PriceMonitor() {
             products={activeProducts}
             onRefresh={handleRefreshProduct}
             onDetails={(p) => setDetailProduct(p)}
+            onManualCheck={(p) => setManualCheckProduct(p)}
           />
         </TabsContent>
 
@@ -154,6 +157,7 @@ export default function PriceMonitor() {
             products={products}
             onRefresh={handleRefreshProduct}
             onDetails={(p) => setDetailProduct(p)}
+            onManualCheck={(p) => setManualCheckProduct(p)}
           />
         </TabsContent>
       </Tabs>
@@ -161,6 +165,12 @@ export default function PriceMonitor() {
       {/* Modals */}
       <AddProductModal open={showAddModal} onClose={() => setShowAddModal(false)} onSubmit={handleAddProduct} />
       <ProductDetailModal product={detailProduct} open={!!detailProduct} onClose={() => setDetailProduct(null)} />
+      <ManualCheckModal
+        product={manualCheckProduct}
+        open={!!manualCheckProduct}
+        onClose={() => setManualCheckProduct(null)}
+        onComplete={loadData}
+      />
     </div>
   );
 }
