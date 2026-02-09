@@ -288,7 +288,7 @@ function AppContent({ children, currentPageName }) {
       </div>
 
       {/* Menu */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-1">
+      <div className="flex-1 overflow-y-auto p-3 pb-24 space-y-1">
         {/* Main Items */}
         {mainItems.map(item => (
           <MenuItem key={item.url} item={item} isActive={location.pathname === item.url} />
