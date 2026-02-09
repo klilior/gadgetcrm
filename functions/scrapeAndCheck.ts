@@ -133,7 +133,7 @@ async function scrapeWooPrice(url, zapMyPrice) {
       chosen = validCandidates[0];
     } else {
       // Pick by strategy priority
-      const stratPriority = { 'S1_JSON_LD': 0, 'S2_META_ITEMPROP': 1, 'S3_WC_PRICE_CLASS': 2, 'S4_WC_ANCHORED_REGEX': 3 };
+      const stratPriority = { 'S1_JSON_LD': 0, 'S2_META_ITEMPROP': 1, 'S5_INS_SALE_PRICE': 2, 'S6_CURRENT_PRICE_TEXT': 3, 'S3_WC_PRICE_CLASS': 4, 'S4_WC_ANCHORED_REGEX': 5 };
       validCandidates.sort((a, b) => (stratPriority[a.strategy] ?? 9) - (stratPriority[b.strategy] ?? 9));
       chosen = validCandidates[0];
     }
