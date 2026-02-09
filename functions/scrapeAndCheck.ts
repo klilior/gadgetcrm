@@ -63,19 +63,33 @@ async function scrapeWooPrice(url, zapMyPrice) {
       if (p) candidates.push({ value: p, strategy: 'S2_META_ITEMPROP', snippet: mm[0].substring(0, 80) });
     }
 
-    // S3: WooCommerce Price-amount class extraction
-    const wcMatches = [...html.matchAll(/<(?:span|bdi|ins|p)[^>]*class="[^"]*woocommerce-Price-amount[^"]*"[^>]*>([\s\S]*?)<\/(?:span|bdi|ins|p)>/gi)];
+    // S3: WooCommerce Price-amount class extraction (any tag)
+    const wcMatches = [...html.matchAll(/<[^>]*class="[^"]*woocommerce-Price-amount[^"]*"[^>]*>([\s\S]*?)<\/[^>]+>/gi)];
     for (const wm of wcMatches) {
-      const inner = wm[1].replace(/<[^>]+>/g, ''); // strip inner tags like <span class="woocommerce-Price-currencySymbol">
+      const inner = wm[1].replace(/<[^>]+>/g, ''); // strip inner tags
       const p = cleanPrice(inner);
-      if (p) candidates.push({ value: p, strategy: 'S3_WC_PRICE_CLASS', snippet: wm[0].substring(0, 100) });
+      if (p) candidates.push({ value: p, strategy: 'S3_WC_PRICE_CLASS', snippet: wm[0].substring(0, 120) });
     }
 
     // S4: Anchored regex near woocommerce-Price-amount (NOT generic ₪ scan)
-    const s4Matches = [...html.matchAll(/woocommerce-Price-amount[^>]*>[^<]*?₪?\s*([\d,]+(?:\.\d+)?)/gi)];
+    const s4Matches = [...html.matchAll(/woocommerce-Price-amount[^>]*>[\s\S]*?₪?\s*([\d,]+(?:\.\d+)?)/gi)];
     for (const sm of s4Matches) {
       const p = cleanPrice(sm[1]);
-      if (p) candidates.push({ value: p, strategy: 'S4_WC_ANCHORED_REGEX', snippet: sm[0].substring(0, 100) });
+      if (p) candidates.push({ value: p, strategy: 'S4_WC_ANCHORED_REGEX', snippet: sm[0].substring(0, 120) });
+    }
+
+    // S5: Sale price inside <ins> tag (WooCommerce sale pattern: <del>old</del><ins>new</ins>)
+    const insMatches = [...html.matchAll(/<ins[^>]*>[\s\S]*?₪?\s*([\d,]+(?:\.\d+)?)[\s\S]*?<\/ins>/gi)];
+    for (const im of insMatches) {
+      const p = cleanPrice(im[1]);
+      if (p) candidates.push({ value: p, strategy: 'S5_INS_SALE_PRICE', snippet: im[0].substring(0, 120) });
+    }
+
+    // S6: Direct ₪ + digits near "המחיר הנוכחי" or "current" text (Hebrew WC pattern)
+    const currentPriceMatch = html.match(/המחיר הנוכחי[^₪]*₪([\d,]+(?:\.\d+)?)/i);
+    if (currentPriceMatch) {
+      const p = cleanPrice(currentPriceMatch[1]);
+      if (p) candidates.push({ value: p, strategy: 'S6_CURRENT_PRICE_TEXT', snippet: currentPriceMatch[0].substring(0, 120) });
     }
 
     console.log(`[WC] ${url} → ${candidates.length} raw candidates: ${JSON.stringify(candidates.map(c => ({ v: c.value, s: c.strategy })))}`);
