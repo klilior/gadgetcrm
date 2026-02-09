@@ -14,6 +14,8 @@ import { useUser } from "../components/UserAuth";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import { importerReminders } from "@/functions/importerReminders";
+import TextMeConfigPanel from "../components/sms/TextMeConfigPanel";
+import SmsLogTable from "../components/sms/SmsLogTable";
 
 export default function SettingsPage() {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -463,6 +465,10 @@ GADGET-TEAM`);
                     <TabsTrigger value="linet" className="rounded-xl data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
                         <FileText className="w-4 h-4 mr-2" />
                         <span className="hidden sm:inline">Linet</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="sms" className="rounded-xl data-[state=active]:bg-teal-500 data-[state=active]:text-white">
+                        <MessageCircle className="w-4 h-4 mr-2" />
+                        <span className="hidden sm:inline">SMS</span>
                     </TabsTrigger>
                     <TabsTrigger value="advanced" className="rounded-xl data-[state=active]:bg-gray-500 data-[state=active]:text-white">
                         <SettingsIcon className="w-4 h-4 mr-2" />
@@ -1501,6 +1507,11 @@ GADGET-TEAM`);
                             </Button>
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                <TabsContent value="sms" className="space-y-6 mt-6">
+                    <TextMeConfigPanel />
+                    <SmsLogTable />
                 </TabsContent>
 
                 <TabsContent value="advanced" className="space-y-6 mt-6">
