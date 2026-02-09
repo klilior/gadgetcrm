@@ -804,7 +804,21 @@ Tone: ברור, ישיר, מקצועי. Output ONLY Hebrew text.`;
       source_prev_snapshot: prevSnapshot?.id || null,
       message: msg,
     });
-    if (alert) alertsCreated++;
+    if (alert) {
+      alertsCreated++;
+      // Send SMS for high-priority actionable alerts
+      if (['קריטי', 'גבוה'].includes(ac.priority) && ac.requires_action) {
+        try {
+          await base44.asServiceRole.functions.invoke('sendTextMeSMS', {
+            action: 'send_alert_sms',
+            alert_id: alert.id,
+          });
+          console.log(`[SMS] Alert SMS triggered for alert ${alert.id}`);
+        } catch (smsErr) {
+          console.error(`[SMS] Failed to send alert SMS: ${smsErr.message}`);
+        }
+      }
+    }
   }
 
   // 11. Update product
