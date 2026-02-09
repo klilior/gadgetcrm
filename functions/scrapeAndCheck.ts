@@ -3,7 +3,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // ─── helpers ───
 const cleanPrice = (txt) => {
   if (!txt) return null;
-  const cleaned = String(txt).replace(/[₪,\s]/g, '').replace(/[^\d.]/g, '');
+  // First strip HTML entities for shekel (&#8362;) and other common HTML entities
+  let cleaned = String(txt)
+    .replace(/&#8362;/g, '')     // HTML entity for ₪
+    .replace(/&[a-z]+;/gi, '')   // other HTML entities like &nbsp;
+    .replace(/₪/g, '')           // literal ₪
+    .replace(/[,\s]/g, '')       // commas, spaces
+    .replace(/[^\d.]/g, '');     // keep only digits and dot
   const n = Math.round(parseFloat(cleaned));
   return (n >= 100 && n <= 100000) ? n : null;
 };
