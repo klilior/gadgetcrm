@@ -252,8 +252,7 @@ function AppContent({ children, currentPageName }) {
     { title: "הגדרות נוכחות", url: createPageUrl("AttendanceSettings") },
     { title: "נתוני מכירות", url: createPageUrl("SalesDataAdmin") },
     { title: "סנכרון לינט", url: createPageUrl("SyncManagement") },
-    { title: "הגדרות כלליות", url: createPageUrl("Settings") },
-    { title: "ניטור מחירים Zap", url: createPageUrl("PriceMonitor") }
+    { title: "הגדרות כלליות", url: createPageUrl("Settings") }
   ] : [];
 
   const toggleSection = (section) => {
