@@ -858,11 +858,15 @@ Tone: ברור, ישיר, מקצועי. Output ONLY Hebrew text.`;
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   try {
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-
     const body = await req.json();
-    const { action, product_id, run_mode } = body;
+    const { action, product_id, run_mode, service_call } = body;
+
+    // Allow service-to-service calls (from scheduledPriceCheck) without user auth
+    if (!service_call) {
+      const user = await base44.auth.me();
+      if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const mode = run_mode || 'ידני';
 
     if (action === 'refresh_single') {
