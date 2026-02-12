@@ -326,6 +326,35 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     }
   }
 
+  // Duplicate check - same doc_number + same supplier
+  const extractedDocNumber = extraction.doc_number?.trim();
+  if (extractedDocNumber && supplierId) {
+    const existingWithSameDocNum = await base44.asServiceRole.entities.Invoices.filter({ doc_number: extractedDocNumber }, undefined, 50);
+    const duplicate = existingWithSameDocNum.find(inv => 
+      inv.id !== invoice.id && 
+      inv.supplier === supplierId && 
+      inv.extraction_status !== 'נדחה'
+    );
+    if (duplicate) {
+      const dupKey = `${extractedDocNumber}|${vatId || supplierId}`;
+      const dupNote = `כפילות - חשבונית ${extractedDocNumber} מספק זה כבר קיימת במערכת (מזהה: ${duplicate.id}). נדחתה אוטומטית.`;
+      await base44.asServiceRole.entities.Invoices.update(invoice.id, {
+        supplier: supplierId,
+        doc_type: extraction.doc_type_he || undefined,
+        doc_number: extractedDocNumber,
+        extraction_status: 'נדחה',
+        duplicate_key: dupKey,
+        notes: dupNote,
+        ai_debug_last_extraction_json: JSON.stringify(extraction)
+      });
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
+        status: 'כפילות',
+        status_reason: dupNote
+      });
+      return { success: true, skipped: true, reason: 'duplicate', duplicate_of: duplicate.id };
+    }
+  }
+
   // Update invoice
   const indexNote = invoiceIndex !== null ? `[חשבונית ${invoiceIndex + 1} מתוך קובץ מרובה]\n` : '';
   const notes = `${indexNote}${extraction.display_summary_he || ''}\n${validation.display_validation_he || ''}`.trim();

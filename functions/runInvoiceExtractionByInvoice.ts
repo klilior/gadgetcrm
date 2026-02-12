@@ -602,6 +602,48 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Step 4b: Duplicate check - same doc_number + same supplier (by vat_id)
+    const extractedDocNumber = extraction.doc_number?.trim();
+    const extractedVatId = normalizedVatId && !isOurVatId ? normalizedVatId : null;
+    
+    if (extractedDocNumber && supplierId) {
+      // Find all existing invoices with the same doc_number
+      const existingWithSameDocNum = await base44.asServiceRole.entities.Invoices.filter({ doc_number: extractedDocNumber }, undefined, 50);
+      const duplicate = existingWithSameDocNum.find(inv => 
+        inv.id !== invoice.id && 
+        inv.supplier === supplierId && 
+        inv.extraction_status !== 'נדחה'
+      );
+      
+      if (duplicate) {
+        const dupKey = `${extractedDocNumber}|${extractedVatId || supplierId}`;
+        const dupNote = `כפילות - חשבונית ${extractedDocNumber} מספק זה כבר קיימת במערכת (מזהה: ${duplicate.id}). נדחתה אוטומטית.`;
+        await base44.asServiceRole.entities.Invoices.update(invoice.id, {
+          supplier: supplierId,
+          doc_type: extraction.doc_type_he || undefined,
+          doc_number: extractedDocNumber,
+          doc_date: extraction.doc_date || undefined,
+          currency: extraction.currency || undefined,
+          subtotal_before_vat: extraction.subtotal_before_vat ?? undefined,
+          vat_amount: extraction.vat_amount ?? undefined,
+          total_with_vat: extraction.total_with_vat ?? undefined,
+          confidence_score: extraction.overall_confidence ?? undefined,
+          extraction_status: 'נדחה',
+          duplicate_key: dupKey,
+          notes: dupNote,
+          ai_debug_last_extraction_json: JSON.stringify(extraction),
+          ai_debug_last_validation_json: JSON.stringify(validation)
+        });
+        // Update intake
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
+          status: 'כפילות',
+          status_reason: dupNote
+        });
+        console.log(`Duplicate invoice rejected: ${extractedDocNumber} for supplier ${supplierId}`);
+        return Response.json({ success: true, skipped: true, reason: 'duplicate', duplicate_of: duplicate.id, doc_number: extractedDocNumber });
+      }
+    }
+
     // Step 5: Update invoice (mapping + safe auto-approval)
     const baseNotes = `${extraction.display_summary_he || ''}\n${validation.display_validation_he || ''}`.trim();
 
