@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import OrderDetailsModal from '../orders/OrderDetailsModal';
 import SendSmsModal from '../sms/SendSmsModal';
+import CustomerDevicesList from './CustomerDevicesList';
 
 export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [customer, setCustomer] = useState(null);
@@ -32,6 +33,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [repairs, setRepairs] = useState([]);
     const [activities, setActivities] = useState([]);
     const [timeline, setTimeline] = useState([]);
+    const [devices, setDevices] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -108,10 +110,12 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
             const customerData = await customersService.get(customerId);
             setCustomer(customerData);
 
-            const [ordersData, ticketsData, repairsData, activitiesData] = await Promise.all([
+            const { RepairDevice } = await import('@/entities/all');
+            const [ordersData, ticketsData, repairsData, activitiesData, devicesData] = await Promise.all([
                 Order.filter({ client_id: customerId }, '-order_date'),
                 Ticket.filter({ customer_id: customerId }, '-created_date'),
                 Repair.filter({ client_id: customerId }, '-created_date'),
+                RepairDevice.filter({ client_id: customerId }, '-created_date'),
                 Activity.filter({ 
                     $or: [
                         { order_id: customerId },
@@ -124,6 +128,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
             setTickets(ticketsData);
             setRepairs(repairsData);
             setActivities(activitiesData);
+            setDevices(devicesData || []);
 
             const totalSpent = ordersData.reduce((sum, order) => sum + parseFloat(order.total || 0), 0);
             const lastOrder = ordersData.length > 0 ? ordersData[0].order_date : null;
@@ -316,8 +321,9 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                             </div>
                         ) : (
                             <Tabs defaultValue="overview" className="w-full">
-                                <TabsList className="grid w-full grid-cols-5 mb-6">
+                                <TabsList className="grid w-full grid-cols-6 mb-6">
                                     <TabsTrigger value="overview">סקירה</TabsTrigger>
+                                    <TabsTrigger value="devices">מכשירים ({devices.length})</TabsTrigger>
                                     <TabsTrigger value="orders">הזמנות ({stats.totalOrders})</TabsTrigger>
                                     <TabsTrigger value="tickets">פניות ({stats.totalTickets})</TabsTrigger>
                                     <TabsTrigger value="repairs">תיקונים ({stats.totalRepairs})</TabsTrigger>
@@ -444,6 +450,11 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                             </CardContent>
                                         </Card>
                                     )}
+                                </TabsContent>
+
+                                {/* Devices Tab */}
+                                <TabsContent value="devices">
+                                    <CustomerDevicesList customerId={customerId} />
                                 </TabsContent>
 
                                 {/* Orders Tab */}
