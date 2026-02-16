@@ -59,6 +59,8 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
     });
 
     const [quoteRequired, setQuoteRequired] = useState(false); // New state
+    const [loanerDevice, setLoanerDevice] = useState(false);
+    const [validationErrors, setValidationErrors] = useState({});
 
     const [showLabel, setShowLabel] = useState(false); // Renamed 'showPrintLabel'
     const [createdRepair, setCreatedRepair] = useState(null); // Renamed 'createdRepairForPrint'
@@ -85,6 +87,8 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
             setShowLabel(false); // Updated state name
             setCreatedRepair(null); // Updated state name
             setQuoteRequired(false); // Reset new state
+            setLoanerDevice(false);
+            setValidationErrors({});
             
             loadData();
         }
@@ -222,15 +226,25 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
     };
 
     const handleCreateRepair = async () => {
-        if (!selectedDevice) { // New check
+        if (!selectedDevice) {
             setError('נא לבחור או ליצור מכשיר');
             return;
         }
 
-        if (!repairData.lock_code || repairData.issue_categories.length === 0 || !repairData.issue_description) { // Updated state name
-            setError('נא למלא את כל השדות הנדרשים (כולל לפחות תקלה אחת)'); // Updated error state
+        // Validate required fields and mark errors
+        const errors = {};
+        if (!repairData.repair_type) errors.repair_type = true;
+        if (!repairData.lock_code) errors.lock_code = true;
+        if (repairData.issue_categories.length === 0) errors.issue_categories = true;
+        if (!repairData.issue_description) errors.issue_description = true;
+        if (repairData.repair_type === 'מעבדת יבואן' && !repairData.vendor_id) errors.vendor_id = true;
+
+        if (Object.keys(errors).length > 0) {
+            setValidationErrors(errors);
+            setError('❌ נא למלא את כל השדות המסומנים באדום');
             return;
         }
+        setValidationErrors({});
         
         setIsLoading(true);
         setError(null); // Clears previous error
@@ -259,11 +273,12 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
                 vendor_id: repairData.repair_type === 'מעבדת יבואן' ? repairData.vendor_id : undefined, // Updated state name
                 lock_code: repairData.lock_code, // Updated state name
                 issue_category: repairData.issue_categories.join(', '), // Join multiple categories
-                issue_description: repairData.issue_description, // Updated state name
-                existing_damage: repairData.existing_damage || undefined, // Updated state name
-                expected_price: parseFloat(repairData.expected_price) || 0, // Updated state name
-                quote_required: quoteRequired, // New field
-                quote_approved: false, // New field, default to false
+                issue_description: repairData.issue_description,
+                existing_damage: repairData.existing_damage || undefined,
+                expected_price: parseFloat(repairData.expected_price) || 0,
+                quote_required: quoteRequired,
+                quote_approved: false,
+                loaner_device: loanerDevice,
                 repair_id: repairId,
                 client_id: selectedClient.id, // Uses selectedClient.id
                 device_id: selectedDevice.id, // Uses selectedDevice.id
@@ -585,36 +600,43 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
                                     </Button>
                                 </div>
                                 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <Label htmlFor="repair-type">סוג תיקון *</Label>
-                                        <Select 
-                                            value={repairData.repair_type} // Updated state name
-                                            onValueChange={(value) => setRepairData({...repairData, repair_type: value})} // Updated state name
-                                        >
-                                            <SelectTrigger id="repair-type">
-                                                <SelectValue placeholder="בחר סוג תיקון..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="בטיפול החנות">בטיפול החנות</SelectItem>
-                                                <SelectItem value="מעבדת Gadget-Team">מעבדת Gadget-Team</SelectItem>
-                                                <SelectItem value="מעבדת יבואן">מעבדת יבואן</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                {/* סוג תיקון - מודגש ובולט */}
+                                <div className={`p-4 rounded-xl border-2 ${validationErrors.repair_type ? 'border-red-500 bg-red-50' : 'border-red-300 bg-red-50/50'}`}>
+                                    <Label htmlFor="repair-type" className="text-lg font-bold text-red-700 mb-2 block">⚠️ סוג תיקון *</Label>
+                                    <Select 
+                                        value={repairData.repair_type}
+                                        onValueChange={(value) => {
+                                            setRepairData({...repairData, repair_type: value});
+                                            setValidationErrors(prev => ({...prev, repair_type: false}));
+                                        }}
+                                    >
+                                        <SelectTrigger id="repair-type" className={`text-base font-semibold h-12 ${validationErrors.repair_type ? 'border-red-500 ring-2 ring-red-300' : 'border-red-300'}`}>
+                                            <SelectValue placeholder="בחר סוג תיקון..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="בטיפול החנות" className="text-base font-medium">בטיפול החנות</SelectItem>
+                                            <SelectItem value="מעבדת Gadget-Team" className="text-base font-medium">מעבדת Gadget-Team</SelectItem>
+                                            <SelectItem value="מעבדת יבואן" className="text-base font-medium">מעבדת יבואן</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                                    {repairData.repair_type === 'מעבדת יבואן' && ( // Updated state name
+                                <div className="grid grid-cols-2 gap-4">
+                                    {repairData.repair_type === 'מעבדת יבואן' && (
                                         <div>
-                                            <Label htmlFor="vendor-select">יבואן/מעבדה *</Label>
+                                            <Label htmlFor="vendor-select" className={validationErrors.vendor_id ? 'text-red-600 font-bold' : ''}>יבואן/מעבדה *</Label>
                                             <Select 
-                                                value={repairData.vendor_id} // Updated state name
-                                                onValueChange={(value) => setRepairData({...repairData, vendor_id: value})} // Updated state name
+                                                value={repairData.vendor_id}
+                                                onValueChange={(value) => {
+                                                    setRepairData({...repairData, vendor_id: value});
+                                                    setValidationErrors(prev => ({...prev, vendor_id: false}));
+                                                }}
                                             >
-                                                <SelectTrigger id="vendor-select">
+                                                <SelectTrigger id="vendor-select" className={validationErrors.vendor_id ? 'border-red-500 ring-2 ring-red-300' : ''}>
                                                     <SelectValue placeholder="בחר יבואן..." />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {allVendors.map(vendor => ( // Updated state name
+                                                    {allVendors.map(vendor => (
                                                         <SelectItem key={vendor.id} value={vendor.id}>
                                                             {vendor.name}
                                                         </SelectItem>
@@ -625,18 +647,22 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
                                     )}
 
                                     <div>
-                                        <Label htmlFor="lock-code">קוד נעילה *</Label>
+                                        <Label htmlFor="lock-code" className={validationErrors.lock_code ? 'text-red-600 font-bold' : ''}>קוד נעילה *</Label>
                                         <Input 
                                             id="lock-code"
-                                            value={repairData.lock_code} // Updated state name
-                                            onChange={(e) => setRepairData({...repairData, lock_code: e.target.value})} // Updated state name
+                                            value={repairData.lock_code}
+                                            onChange={(e) => {
+                                                setRepairData({...repairData, lock_code: e.target.value});
+                                                setValidationErrors(prev => ({...prev, lock_code: false}));
+                                            }}
                                             placeholder="קוד פין/דפוס/פנים"
+                                            className={validationErrors.lock_code ? 'border-red-500 ring-2 ring-red-300' : ''}
                                         />
                                     </div>
 
                                     <div className="col-span-2">
-                                        <Label>נושאי התקלה * (ניתן לבחור מספר תקלות)</Label>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2 p-3 border rounded-lg bg-gray-50">
+                                        <Label className={validationErrors.issue_categories ? 'text-red-600 font-bold' : ''}>נושאי התקלה * (ניתן לבחור מספר תקלות)</Label>
+                                        <div className={`grid grid-cols-2 md:grid-cols-3 gap-2 mt-2 p-3 border rounded-lg ${validationErrors.issue_categories ? 'border-red-500 ring-2 ring-red-300 bg-red-50' : 'bg-gray-50'}`}>
                                             {issueCategories.map(category => (
                                                 <div key={category} className="flex items-center gap-2">
                                                     <Checkbox
@@ -682,13 +708,17 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
                                 </div>
 
                                 <div>
-                                    <Label htmlFor="issue-description">תיאור התקלה *</Label>
+                                    <Label htmlFor="issue-description" className={validationErrors.issue_description ? 'text-red-600 font-bold' : ''}>תיאור התקלה *</Label>
                                     <Textarea 
                                         id="issue-description"
-                                        value={repairData.issue_description} // Updated state name
-                                        onChange={(e) => setRepairData({...repairData, issue_description: e.target.value})} // Updated state name
+                                        value={repairData.issue_description}
+                                        onChange={(e) => {
+                                            setRepairData({...repairData, issue_description: e.target.value});
+                                            setValidationErrors(prev => ({...prev, issue_description: false}));
+                                        }}
                                         placeholder="פרט את התקלה..."
                                         rows={3}
+                                        className={validationErrors.issue_description ? 'border-red-500 ring-2 ring-red-300' : ''}
                                     />
                                 </div>
 
@@ -702,6 +732,27 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
                                         rows={2}
                                     />
                                 </div>
+
+                                {/* מכשיר חליפי */}
+                                <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <Checkbox
+                                        id="loaner-device"
+                                        checked={loanerDevice}
+                                        onCheckedChange={setLoanerDevice}
+                                    />
+                                    <Label htmlFor="loaner-device" className="flex items-center gap-2 cursor-pointer text-blue-900 font-medium">
+                                        📱 הלקוח קיבל מכשיר חליפי
+                                    </Label>
+                                </div>
+
+                                {loanerDevice && (
+                                    <div className="p-4 bg-orange-100 border-2 border-orange-400 rounded-lg">
+                                        <p className="text-orange-900 font-bold text-base flex items-center gap-2">
+                                            <AlertTriangle className="w-5 h-5 text-orange-600" />
+                                            ⚠️ שים לב: הלקוח קיבל מכשיר חליפי - יש להחזירו בסיום התיקון!
+                                        </p>
+                                    </div>
+                                )}
 
                                 {/* New quote required checkbox */}
                                 <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
