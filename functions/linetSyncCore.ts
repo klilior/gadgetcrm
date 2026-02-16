@@ -447,7 +447,33 @@ export async function executeLinetSync(base44, body = {}) {
       console.log('⚠️ Customer sync skipped:', customerErr.message);
     }
 
-    return { success: true, stats, customer_sync: customerSyncStats, message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים, ${stats.undelivered_tasks_created} משימות הזמנות` };
+    // --- Step: Process invoice devices (match customers + attach smartphones) ---
+    let deviceSyncStats = null;
+    try {
+      if (allDocuments.length > 0) {
+        // Enrich documents with category data for device detection
+        const enrichedDocs = allDocuments.map(doc => {
+          const enrichedCategories = {};
+          if (Array.isArray(doc.docDetailes)) {
+            for (const line of doc.docDetailes) {
+              if (line.sku && productCache[line.sku]) {
+                line.category_name = productCache[line.sku];
+                enrichedCategories[line.sku] = productCache[line.sku];
+              }
+            }
+          }
+          return { ...doc, _enriched_categories: enrichedCategories };
+        });
+
+        const deviceResult = await base44.asServiceRole.functions.invoke('processInvoiceDevices', { documents: enrichedDocs });
+        deviceSyncStats = deviceResult.stats;
+        console.log('📱 Device sync result:', JSON.stringify(deviceSyncStats));
+      }
+    } catch (deviceErr) {
+      console.log('⚠️ Device sync skipped:', deviceErr.message);
+    }
+
+    return { success: true, stats, customer_sync: customerSyncStats, device_sync: deviceSyncStats, message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים, ${stats.undelivered_tasks_created} משימות הזמנות` };
   } catch (error) {
     const errorMessage = error?.message || error?.toString() || String(error);
     try {
