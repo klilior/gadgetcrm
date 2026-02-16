@@ -150,6 +150,9 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                         }
                         message += ` ניתן לאסוף מהמעבדה בשעות העבודה. א'-ה' 9:00-18:00, ו' 9:00-13:00. Gadget-Team`;
                         break;
+                    case 'בטיפול/אבחון':
+                        message = `שלום ${client.full_name}, המכשיר שלך התקבל במעבדה לטיפול (תיקון #${repair.repair_id}). נעדכן אותך בהמשך התהליך. Gadget-Team`;
+                        break;
                     case 'הוזמן חלק':
                         message = `שלום ${client.full_name}, עבור תיקון #${repair.repair_id} - הוזמן חלק ספציפי. נעדכן כשהחלק יגיע למעבדה. תודה על הסבלנות! Gadget-Team`;
                         break;
