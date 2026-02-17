@@ -144,6 +144,66 @@ async function upsertTransaction(base44, txData) {
   }
 }
 
+// Find or create a Client from Linet invoice data
+async function findOrCreateClientFromLinetDoc(sr, doc) {
+  const phone = normalizePhoneNumber(doc.mobile || doc.phone || doc.account_phone);
+  const email = doc.email || null;
+  const name = doc.company_name || doc.account_name || doc.company || 'לקוח לינט';
+  const accountId = doc.account_id ? Number(doc.account_id) : null;
+  const city = doc.city || null;
+  const address = doc.address || null;
+
+  // 1. By linet_account_id
+  if (accountId) {
+    const byLinet = await sr.Client.filter({ linet_account_id: accountId }, null, 1);
+    if (byLinet.length > 0) {
+      const updates = {};
+      if (phone && !byLinet[0].phone) updates.phone = phone;
+      if (email && !byLinet[0].email) updates.email = email;
+      if (city && !byLinet[0].city) updates.city = city;
+      if (!byLinet[0].full_name || byLinet[0].full_name === 'לקוח חדש') updates.full_name = name;
+      updates.last_interaction_date = new Date().toISOString();
+      if (Object.keys(updates).length > 0) await sr.Client.update(byLinet[0].id, updates);
+      return byLinet[0].id;
+    }
+  }
+
+  // 2. By phone
+  if (phone) {
+    const byPhone = await sr.Client.filter({ phone }, null, 1);
+    if (byPhone.length > 0) {
+      const updates = { last_interaction_date: new Date().toISOString() };
+      if (accountId && !byPhone[0].linet_account_id) updates.linet_account_id = accountId;
+      if (email && !byPhone[0].email) updates.email = email;
+      await sr.Client.update(byPhone[0].id, updates);
+      return byPhone[0].id;
+    }
+  }
+
+  // 3. By name (only exact match)
+  const byName = await sr.Client.filter({ full_name: name }, null, 1);
+  if (byName.length > 0) {
+    const updates = { last_interaction_date: new Date().toISOString() };
+    if (accountId && !byName[0].linet_account_id) updates.linet_account_id = accountId;
+    if (phone && !byName[0].phone) updates.phone = phone;
+    if (email && !byName[0].email) updates.email = email;
+    await sr.Client.update(byName[0].id, updates);
+    return byName[0].id;
+  }
+
+  // 4. Create
+  const newClient = await sr.Client.create({
+    full_name: name,
+    phone: phone || null,
+    email: email || null,
+    city: city || null,
+    full_address: address || null,
+    linet_account_id: accountId,
+    source: 'Linet',
+  });
+  return newClient.id;
+}
+
 async function createLineContractFromSale(base44, sale, carrierCode, carrierName, carrierPolicy) {
   const existing = await base44.asServiceRole.entities.LineContract.filter(
     { original_invoice_id: sale.linet_doc_id, customer_name: sale.customer_name },
@@ -159,12 +219,21 @@ async function createLineContractFromSale(base44, sale, carrierCode, carrierName
   const today = new Date();
   const status = safeDate <= today ? 'ELIGIBLE' : 'LOCKED';
 
-  let customers = await base44.asServiceRole.entities.Client.filter({ full_name: sale.customer_name }, null, 1);
+  // Use the improved client finder
   let customer_id;
-  if (customers.length > 0) customer_id = customers[0].id;
-  else {
-    const newCustomer = await base44.asServiceRole.entities.Client.create({ full_name: sale.customer_name, source: 'LINET_SYNC' });
-    customer_id = newCustomer.id;
+  try {
+    customer_id = await findOrCreateClientFromLinetDoc(base44.asServiceRole.entities, {
+      company_name: sale.customer_name,
+      account_id: sale.linet_account_id,
+    });
+  } catch (_e) {
+    // Fallback to old logic
+    let customers = await base44.asServiceRole.entities.Client.filter({ full_name: sale.customer_name }, null, 1);
+    if (customers.length > 0) customer_id = customers[0].id;
+    else {
+      const newCustomer = await base44.asServiceRole.entities.Client.create({ full_name: sale.customer_name, source: 'LINET_SYNC' });
+      customer_id = newCustomer.id;
+    }
   }
 
   const agentMaps = await base44.asServiceRole.entities.LinetUsersMap.filter({ user_name: sale.sales_rep }, null, 1);
