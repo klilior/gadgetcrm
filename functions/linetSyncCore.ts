@@ -421,6 +421,18 @@ export async function executeLinetSync(base44, body = {}) {
         const is_credit = raw_doctype === 4;
         const doc_type_name = is_credit ? 'חשבונית זיכוי' : 'חשבונית מס קבלה';
 
+        // For invoices (type 9 = tax invoice receipt), create/link client
+        // This handles the case where phone was sold via website (WooCommerce order in "processing") 
+        // but invoice is issued manually in Linet with serial number
+        if (raw_doctype === 9 && !is_credit) {
+          try {
+            await findOrCreateClientFromLinetDoc(base44.asServiceRole.entities, doc);
+            stats.clients_created++;
+          } catch (_clientErr) {
+            // Non-blocking - continue with sales data sync
+          }
+        }
+
         if (Array.isArray(doc.docDetailes)) {
           const hasUndeliveredTrigger = doc.docDetailes?.some((line) => line.sku === UNDELIVERED_TRIGGER_SKU);
           if (hasUndeliveredTrigger && !is_credit) {
