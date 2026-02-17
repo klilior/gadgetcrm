@@ -4,14 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, User, Phone, Mail, MessageCircle, MapPin, Plus, Trash2, AlertTriangle, Loader2, PlusCircle } from "lucide-react";
+import { Search, User, Phone, Mail, MessageCircle, MapPin, Plus, Trash2, AlertTriangle, Loader2, PlusCircle, Trophy, Star, Medal, Award, Sparkles, BarChart3, RefreshCw } from "lucide-react";
 import EditCustomerModal from "../components/customers/EditCustomerModal";
 import SendMessageModal from "../components/customers/SendMessageModal";
 import CustomerCard from "../components/customers/CustomerCard";
+import CustomerScoreBadge from "../components/customers/CustomerScoreBadge";
 import { base44 } from "@/api/base44Client";
 import { useUser } from "../components/UserAuth";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { calculateCustomerScore } from "@/functions/calculateCustomerScore";
 
 export default function CustomersPage() {
     const { currentUser } = useUser();
@@ -28,6 +30,8 @@ export default function CustomersPage() {
     const [cleanupResult, setCleanupResult] = useState(null);
     const [showCustomerCard, setShowCustomerCard] = useState(false);
     const [selectedCustomerForCard, setSelectedCustomerForCard] = useState(null);
+    const [isScoring, setIsScoring] = useState(false);
+    const [sortBy, setSortBy] = useState('name'); // name | score | spent
 
     const isManager = currentUser?.role === "מנהל";
 
@@ -36,19 +40,23 @@ export default function CustomersPage() {
     }, []);
 
     useEffect(() => {
-        if (searchTerm === "") {
-            setFilteredClients(clients);
-        } else {
+        let result = clients;
+        if (searchTerm) {
             const term = searchTerm.toLowerCase();
-            const filtered = clients.filter(client => 
+            result = result.filter(client => 
                 client.full_name?.toLowerCase().includes(term) ||
                 client.phone?.includes(term) ||
                 client.email?.toLowerCase().includes(term) ||
-                client.city?.toLowerCase().includes(term)
+                client.city?.toLowerCase().includes(term) ||
+                client.customer_tier?.includes(term)
             );
-            setFilteredClients(filtered);
         }
-    }, [searchTerm, clients]);
+        // Sort
+        if (sortBy === 'score') result = [...result].sort((a, b) => (b.customer_score || 0) - (a.customer_score || 0));
+        else if (sortBy === 'spent') result = [...result].sort((a, b) => (b.total_spent || 0) - (a.total_spent || 0));
+        else result = [...result].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+        setFilteredClients(result);
+    }, [searchTerm, clients, sortBy]);
 
     const loadClients = async () => {
         setIsLoading(true);
@@ -86,18 +94,14 @@ export default function CustomersPage() {
         setCleanupResult(null);
 
         try {
-            const response = await base44.functions.invoke('cleanupDuplicateClients', {});
+            const response = await base44.functions.invoke('cleanupClientsNoPhone', { phase: 'delete_no_phone', batch_size: 20 });
             
             if (response.error) {
                 throw new Error(response.error);
             }
             
             setCleanupResult(response.data);
-            alert(`✅ ניקוי הושלם!\n\n` + 
-                  `סה"כ לקוחות: ${response.data.summary.totalClients}\n` +
-                  `קבוצות כפילויות: ${response.data.summary.duplicateGroups}\n` +
-                  `לקוחות שנמחקו: ${response.data.summary.clientsDeleted}\n` +
-                  `לקוחות שנותרו: ${response.data.summary.clientsRemaining}`);
+            alert(`✅ באצ' הושלם!\n\nנמחקו: ${response.data.deleted}\nדולגו (יש רשומות): ${response.data.skipped}\nעוד באצ'ים: ${response.data.has_more ? 'כן' : 'לא'}`);
             await loadClients();
         } catch (error) {
             console.error("Error cleaning up duplicates:", error);
@@ -118,24 +122,42 @@ export default function CustomersPage() {
                     <p className="text-gray-600 mt-1">ניהול מאגר הלקוחות</p>
                 </div>
                 {isManager && (
-                    <Button
-                        onClick={handleCleanupDuplicates}
-                        disabled={isCleaningDuplicates}
-                        variant="outline"
-                        className="bg-orange-50 hover:bg-orange-100 border-orange-300"
-                    >
-                        {isCleaningDuplicates ? (
-                            <>
-                                <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                                מנקה כפילויות...
-                            </>
-                        ) : (
-                            <>
-                                <Trash2 className="w-4 h-4 ml-2" />
-                                נקה כפילויות לקוחות
-                            </>
-                        )}
-                    </Button>
+                    <div className="flex gap-2 flex-wrap">
+                        <Button
+                            onClick={handleCleanupDuplicates}
+                            disabled={isCleaningDuplicates}
+                            variant="outline"
+                            size="sm"
+                            className="bg-orange-50 hover:bg-orange-100 border-orange-300"
+                        >
+                            {isCleaningDuplicates ? (
+                                <><Loader2 className="w-4 h-4 ml-1 animate-spin" />מנקה...</>
+                            ) : (
+                                <><Trash2 className="w-4 h-4 ml-1" />ניקוי כפילויות</>
+                            )}
+                        </Button>
+                        <Button
+                            onClick={async () => {
+                                setIsScoring(true);
+                                try {
+                                    await calculateCustomerScore({ batch_size: 50, offset: 0 });
+                                    alert('✅ ציונים חושבו! רענן את הדף.');
+                                    await loadClients();
+                                } catch (e) { alert('שגיאה: ' + e.message); }
+                                setIsScoring(false);
+                            }}
+                            disabled={isScoring}
+                            variant="outline"
+                            size="sm"
+                            className="bg-purple-50 hover:bg-purple-100 border-purple-300"
+                        >
+                            {isScoring ? (
+                                <><Loader2 className="w-4 h-4 ml-1 animate-spin" />מחשב...</>
+                            ) : (
+                                <><BarChart3 className="w-4 h-4 ml-1" />חשב ציונים</>
+                            )}
+                        </Button>
+                    </div>
                 )}
             </div>
 
@@ -178,9 +200,20 @@ export default function CustomersPage() {
                                 className="pr-10 glass-button"
                             />
                         </div>
-                        <Badge variant="outline" className="text-sm">
-                            {filteredClients.length} לקוחות
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                            <select 
+                                value={sortBy} 
+                                onChange={e => setSortBy(e.target.value)}
+                                className="text-xs border rounded-lg px-2 py-1.5 bg-white"
+                            >
+                                <option value="name">מיון: שם</option>
+                                <option value="score">מיון: ציון</option>
+                                <option value="spent">מיון: הוצאות</option>
+                            </select>
+                            <Badge variant="outline" className="text-sm">
+                                {filteredClients.length} לקוחות
+                            </Badge>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -205,22 +238,24 @@ export default function CustomersPage() {
                                                 </div>
                                                 <div>
                                                    <h3 
-                                                       className="font-bold text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
-                                                       onClick={() => {
-                                                           setSelectedCustomerForCard(client.id);
-                                                           setShowCustomerCard(true);
-                                                       }}
-                                                   >
-                                                       {client.full_name}
-                                                   </h3>
-                                                   {client.preferred_channel && (
-                                                        <Badge variant="outline" className="text-xs mt-1">
-                                                            {client.preferred_channel === 'whatsapp' ? '💬 WhatsApp' : 
-                                                             client.preferred_channel === 'phone' ? '📞 טלפון' :
-                                                             client.preferred_channel === 'email' ? '✉️ אימייל' : 
-                                                             client.preferred_channel}
-                                                        </Badge>
-                                                    )}
+                                                        className="font-bold text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                                                        onClick={() => {
+                                                            setSelectedCustomerForCard(client.id);
+                                                            setShowCustomerCard(true);
+                                                        }}
+                                                    >
+                                                        {client.full_name}
+                                                    </h3>
+                                                    <div className="flex gap-1.5 mt-1 flex-wrap">
+                                                        {client.customer_tier && (
+                                                            <CustomerScoreBadge score={client.customer_score || 0} tier={client.customer_tier} size="sm" />
+                                                        )}
+                                                        {client.total_spent > 0 && (
+                                                            <Badge variant="secondary" className="text-[10px]">
+                                                                ₪{(client.total_spent || 0).toLocaleString()}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
