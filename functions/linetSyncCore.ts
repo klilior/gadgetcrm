@@ -563,7 +563,7 @@ export async function executeLinetSync(base44, body = {}) {
       console.log('⚠️ Device sync skipped:', deviceErr.message);
     }
 
-    return { success: true, stats, customer_sync: customerSyncStats, device_sync: deviceSyncStats, message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים, ${stats.undelivered_tasks_created} משימות הזמנות` };
+    return { success: true, stats, customer_sync: customerSyncStats, device_sync: deviceSyncStats, message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים, ${stats.clients_created} לקוחות, ${stats.undelivered_tasks_created} משימות הזמנות` };
   } catch (error) {
     const errorMessage = error?.message || error?.toString() || String(error);
     try {
