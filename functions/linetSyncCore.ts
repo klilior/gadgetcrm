@@ -390,7 +390,7 @@ export async function executeLinetSync(base44, body = {}) {
 
     let offset = 0;
     let moreData = true;
-    let stats = { fetched: 0, created: 0, updated: 0, skipped: 0, line_contracts_created: 0, undelivered_tasks_created: 0, undelivered_tasks_updated: 0 };
+    let stats = { fetched: 0, created: 0, updated: 0, skipped: 0, line_contracts_created: 0, undelivered_tasks_created: 0, undelivered_tasks_updated: 0, clients_created: 0 };
     const startTime = Date.now();
     const allDocuments = [];
     const UNDELIVERED_TRIGGER_SKU = '963258741';
