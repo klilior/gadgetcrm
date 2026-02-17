@@ -8,186 +8,166 @@ function normalizePhone(phone) {
     return cleaned;
 }
 
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function safeOp(fn, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try { return await fn(); }
+        catch (err) {
+            if ((err.message?.includes('Rate limit') || err.message?.includes('AsyncWrap')) && i < retries - 1) {
+                await sleep(3000 * (i + 1));
+                continue;
+            }
+            throw err;
+        }
+    }
+}
+
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
         const user = await base44.auth.me();
         if (user?.role !== 'admin') {
-            return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+            return Response.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const body = await req.json().catch(() => ({}));
-        const dryRun = body.dry_run !== false; // default to dry run for safety
+        const phase = body.phase || 'delete_no_phone'; // 'delete_no_phone' | 'merge_duplicates'
+        const batchSize = body.batch_size || 30;
+        const offset = body.offset || 0;
 
-        console.log(`🧹 Starting client cleanup (dry_run: ${dryRun})...`);
+        const sr = base44.asServiceRole.entities;
+        
+        console.log(`🧹 Phase: ${phase}, batch: ${batchSize}, offset: ${offset}`);
 
-        // Fetch all clients
-        const allClients = await base44.asServiceRole.entities.Client.list('-created_date', 5000);
+        const allClients = await sr.Client.list('-created_date', 5000);
         console.log(`📊 Total clients: ${allClients.length}`);
 
-        const stats = {
-            total_clients: allClients.length,
-            clients_no_phone: 0,
-            clients_invalid_phone: 0,
-            clients_deleted_no_phone: 0,
-            duplicate_groups: 0,
-            duplicates_merged: 0,
-            records_reassigned: 0,
-            errors: []
-        };
-
-        // --- Phase 1: Delete clients without valid phone ---
-        const clientsWithPhone = [];
-        const clientsToDelete = [];
-
-        for (const client of allClients) {
-            const normalized = normalizePhone(client.phone);
-            if (!normalized) {
-                clientsToDelete.push(client);
-                if (!client.phone) stats.clients_no_phone++;
-                else stats.clients_invalid_phone++;
-            } else {
-                client._normalizedPhone = normalized;
-                clientsWithPhone.push(client);
-            }
-        }
-
-        console.log(`🗑️ Clients to delete (no valid phone): ${clientsToDelete.length}`);
-        console.log(`✅ Clients with valid phone: ${clientsWithPhone.length}`);
-
-        if (!dryRun) {
-            for (const client of clientsToDelete) {
+        if (phase === 'delete_no_phone') {
+            // Find clients without valid phone
+            const toDelete = allClients.filter(c => !normalizePhone(c.phone));
+            const batch = toDelete.slice(offset, offset + batchSize);
+            
+            let deleted = 0, skipped = 0, errors = [];
+            
+            for (const client of batch) {
+                await sleep(500); // throttle
                 try {
-                    // Check if client has any linked records
+                    // Check for linked records
                     const [repairs, orders, tickets, devices] = await Promise.all([
-                        base44.asServiceRole.entities.Repair.filter({ client_id: client.id }, null, 1),
-                        base44.asServiceRole.entities.Order.filter({ client_id: client.id }, null, 1),
-                        base44.asServiceRole.entities.Ticket.filter({ customer_id: client.id }, null, 1),
-                        base44.asServiceRole.entities.RepairDevice.filter({ client_id: client.id }, null, 1),
+                        safeOp(() => sr.Repair.filter({ client_id: client.id }, null, 1)),
+                        safeOp(() => sr.Order.filter({ client_id: client.id }, null, 1)),
+                        safeOp(() => sr.Ticket.filter({ customer_id: client.id }, null, 1)),
+                        safeOp(() => sr.RepairDevice.filter({ client_id: client.id }, null, 1)),
                     ]);
 
-                    const hasRecords = repairs.length > 0 || orders.length > 0 || tickets.length > 0 || devices.length > 0;
-                    
-                    if (hasRecords) {
-                        console.log(`⚠️ Client ${client.id} (${client.full_name}) has linked records, skipping delete`);
-                        stats.errors.push({ id: client.id, name: client.full_name, error: 'has linked records' });
+                    if (repairs.length > 0 || orders.length > 0 || tickets.length > 0 || devices.length > 0) {
+                        skipped++;
                         continue;
                     }
 
-                    await base44.asServiceRole.entities.Client.delete(client.id);
-                    stats.clients_deleted_no_phone++;
-                    console.log(`🗑️ Deleted: ${client.full_name} (no valid phone)`);
+                    await safeOp(() => sr.Client.delete(client.id));
+                    deleted++;
                 } catch (err) {
-                    stats.errors.push({ id: client.id, name: client.full_name, error: err.message });
+                    errors.push({ id: client.id, name: client.full_name, error: err.message });
                 }
             }
-        } else {
-            stats.clients_deleted_no_phone = clientsToDelete.length;
-        }
 
-        // --- Phase 2: Merge duplicates by normalized phone ---
-        const phoneGroups = new Map();
-        for (const client of clientsWithPhone) {
-            const key = client._normalizedPhone;
-            if (!phoneGroups.has(key)) phoneGroups.set(key, []);
-            phoneGroups.get(key).push(client);
-        }
+            return Response.json({
+                success: true, phase,
+                total_no_phone: toDelete.length,
+                batch_processed: batch.length,
+                deleted, skipped, errors: errors.length,
+                next_offset: offset + batchSize,
+                has_more: offset + batchSize < toDelete.length,
+                error_details: errors.slice(0, 10)
+            });
 
-        const duplicateGroups = [];
-        for (const [phone, clients] of phoneGroups) {
-            if (clients.length > 1) {
-                duplicateGroups.push({ phone, clients });
+        } else if (phase === 'merge_duplicates') {
+            // Group by normalized phone
+            const phoneGroups = new Map();
+            for (const c of allClients) {
+                const norm = normalizePhone(c.phone);
+                if (!norm) continue;
+                if (!phoneGroups.has(norm)) phoneGroups.set(norm, []);
+                phoneGroups.get(norm).push(c);
             }
-        }
 
-        stats.duplicate_groups = duplicateGroups.length;
-        console.log(`🔍 Duplicate groups found: ${duplicateGroups.length}`);
+            const dupGroups = [];
+            for (const [phone, clients] of phoneGroups) {
+                if (clients.length > 1) dupGroups.push({ phone, clients });
+            }
 
-        if (!dryRun) {
-            for (const group of duplicateGroups) {
+            const batch = dupGroups.slice(offset, offset + batchSize);
+            let merged = 0, reassigned = 0, errors = [];
+
+            for (const group of batch) {
+                await sleep(800); // throttle per group
                 try {
-                    // Keep oldest client as primary
                     const sorted = group.clients.sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
                     const primary = sorted[0];
-                    const duplicates = sorted.slice(1);
+                    const dups = sorted.slice(1);
 
-                    // Merge data into primary
-                    const mergeData = {};
-                    for (const dup of [primary, ...duplicates]) {
-                        if (!mergeData.email && dup.email) mergeData.email = dup.email;
-                        if (!mergeData.city && dup.city) mergeData.city = dup.city;
-                        if (!mergeData.full_address && dup.full_address) mergeData.full_address = dup.full_address;
-                        if (!mergeData.woo_customer_id && dup.woo_customer_id) mergeData.woo_customer_id = dup.woo_customer_id;
-                        if (!mergeData.linet_account_id && dup.linet_account_id) mergeData.linet_account_id = dup.linet_account_id;
-                        if (!mergeData.source && dup.source) mergeData.source = dup.source;
+                    // Merge fields into primary
+                    const mergeData = { phone: group.phone };
+                    for (const c of [primary, ...dups]) {
+                        if (!mergeData.email && c.email) mergeData.email = c.email;
+                        if (!mergeData.city && c.city) mergeData.city = c.city;
+                        if (!mergeData.full_address && c.full_address) mergeData.full_address = c.full_address;
+                        if (!mergeData.woo_customer_id && c.woo_customer_id) mergeData.woo_customer_id = c.woo_customer_id;
+                        if (!mergeData.linet_account_id && c.linet_account_id) mergeData.linet_account_id = c.linet_account_id;
+                        if (!mergeData.source && c.source) mergeData.source = c.source;
                     }
 
-                    // Normalize the phone on primary
-                    mergeData.phone = primary._normalizedPhone;
-                    
-                    await base44.asServiceRole.entities.Client.update(primary.id, mergeData);
+                    await safeOp(() => sr.Client.update(primary.id, mergeData));
 
-                    for (const dup of duplicates) {
-                        // Reassign all linked records
+                    for (const dup of dups) {
+                        await sleep(300);
+                        
                         const [repairs, orders, tickets, devices] = await Promise.all([
-                            base44.asServiceRole.entities.Repair.filter({ client_id: dup.id }),
-                            base44.asServiceRole.entities.Order.filter({ client_id: dup.id }),
-                            base44.asServiceRole.entities.Ticket.filter({ customer_id: dup.id }),
-                            base44.asServiceRole.entities.RepairDevice.filter({ client_id: dup.id }),
+                            safeOp(() => sr.Repair.filter({ client_id: dup.id })),
+                            safeOp(() => sr.Order.filter({ client_id: dup.id })),
+                            safeOp(() => sr.Ticket.filter({ customer_id: dup.id })),
+                            safeOp(() => sr.RepairDevice.filter({ client_id: dup.id })),
                         ]);
 
                         for (const r of repairs) {
-                            await base44.asServiceRole.entities.Repair.update(r.id, { client_id: primary.id });
-                            stats.records_reassigned++;
+                            await safeOp(() => sr.Repair.update(r.id, { client_id: primary.id }));
+                            reassigned++;
                         }
                         for (const o of orders) {
-                            await base44.asServiceRole.entities.Order.update(o.id, { client_id: primary.id });
-                            stats.records_reassigned++;
+                            await safeOp(() => sr.Order.update(o.id, { client_id: primary.id }));
+                            reassigned++;
                         }
                         for (const t of tickets) {
-                            await base44.asServiceRole.entities.Ticket.update(t.id, { customer_id: primary.id });
-                            stats.records_reassigned++;
+                            await safeOp(() => sr.Ticket.update(t.id, { customer_id: primary.id }));
+                            reassigned++;
                         }
                         for (const d of devices) {
-                            await base44.asServiceRole.entities.RepairDevice.update(d.id, { client_id: primary.id });
-                            stats.records_reassigned++;
+                            await safeOp(() => sr.RepairDevice.update(d.id, { client_id: primary.id }));
+                            reassigned++;
                         }
 
-                        await base44.asServiceRole.entities.Client.delete(dup.id);
-                        stats.duplicates_merged++;
-                        console.log(`🔄 Merged: ${dup.full_name} → ${primary.full_name}`);
+                        await safeOp(() => sr.Client.delete(dup.id));
+                        merged++;
                     }
                 } catch (err) {
-                    stats.errors.push({ phone: group.phone, error: err.message });
+                    errors.push({ phone: group.phone, error: err.message });
                 }
             }
-        } else {
-            stats.duplicates_merged = duplicateGroups.reduce((sum, g) => sum + g.clients.length - 1, 0);
+
+            return Response.json({
+                success: true, phase,
+                total_duplicate_groups: dupGroups.length,
+                batch_processed: batch.length,
+                merged, reassigned, errors: errors.length,
+                next_offset: offset + batchSize,
+                has_more: offset + batchSize < dupGroups.length,
+                error_details: errors.slice(0, 10)
+            });
         }
 
-        const remaining = allClients.length - stats.clients_deleted_no_phone - stats.duplicates_merged;
-
-        console.log(`✅ Cleanup complete. Remaining: ${remaining}`);
-
-        return Response.json({
-            success: true,
-            dry_run: dryRun,
-            message: dryRun 
-                ? `הרצת סימולציה: ${stats.clients_deleted_no_phone} לקוחות ללא טלפון ימחקו, ${stats.duplicates_merged} כפילויות ימוזגו` 
-                : `✅ ניקוי הושלם! ${stats.clients_deleted_no_phone} נמחקו, ${stats.duplicates_merged} מוזגו`,
-            stats,
-            remaining_clients: remaining,
-            duplicate_details: dryRun ? duplicateGroups.map(g => ({
-                phone: g.phone,
-                count: g.clients.length,
-                names: g.clients.map(c => c.full_name)
-            })) : undefined,
-            no_phone_details: dryRun ? clientsToDelete.slice(0, 50).map(c => ({
-                id: c.id,
-                name: c.full_name,
-                phone: c.phone || '(ריק)'
-            })) : undefined
-        });
+        return Response.json({ error: 'Unknown phase' }, { status: 400 });
 
     } catch (error) {
         console.error('❌ Cleanup error:', error);
