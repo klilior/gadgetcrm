@@ -2,24 +2,10 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
  * Customer Score Algorithm (0-100):
+ * 1. Purchase Value (30pts) | 2. Frequency (20pts) | 3. Recency (20pts)
+ * 4. Engagement (15pts)     | 5. Loyalty (15pts)
  * 
- * 1. Purchase Value (30 points max)
- *    - ₪0-500: 5pts | ₪500-2000: 10pts | ₪2000-5000: 20pts | ₪5000+: 30pts
- * 
- * 2. Purchase Frequency (20 points max)
- *    - 1 order: 5pts | 2-3: 10pts | 4-6: 15pts | 7+: 20pts
- * 
- * 3. Recency (20 points max)
- *    - Last 30 days: 20pts | 30-90 days: 15pts | 90-180 days: 10pts | 180-365: 5pts | 365+: 0pts
- * 
- * 4. Engagement (15 points max)
- *    - Has multiple interaction types (orders + repairs + tickets): up to 15pts
- * 
- * 5. Loyalty (15 points max)
- *    - Customer age: 0-3mo: 3pts | 3-6mo: 6pts | 6-12mo: 10pts | 12mo+: 15pts
- * 
- * Tiers:
- *   VIP: 80-100 | זהב: 60-79 | כסף: 40-59 | ברונזה: 20-39 | חדש: 0-19
+ * Tiers: VIP(80+) | זהב(60-79) | כסף(40-59) | ברונזה(20-39) | חדש(0-19)
  */
 
 function getTier(score) {
@@ -30,8 +16,26 @@ function getTier(score) {
     return 'חדש';
 }
 
-function daysBetween(date1, date2) {
-    return Math.floor(Math.abs(date2 - date1) / (1000 * 60 * 60 * 24));
+function daysBetween(d1, d2) {
+    return Math.floor(Math.abs(d2 - d1) / (1000 * 60 * 60 * 24));
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function safeFilter(entity, query, sort, limit) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            return await entity.filter(query, sort || null, limit || 100);
+        } catch (err) {
+            if (err.message?.includes('Rate limit') && attempt < 2) {
+                await sleep(2000 * (attempt + 1));
+                continue;
+            }
+            throw err;
+        }
+    }
 }
 
 Deno.serve(async (req) => {
@@ -43,141 +47,116 @@ Deno.serve(async (req) => {
         }
 
         const body = await req.json().catch(() => ({}));
-        const targetClientId = body.client_id; // optional - score single client
+        const targetClientId = body.client_id;
         const dryRun = body.dry_run === true;
+        const batchSize = body.batch_size || 50;
+        const offset = body.offset || 0;
+
+        const sr = base44.asServiceRole.entities;
 
         let clients;
         if (targetClientId) {
-            const client = await base44.asServiceRole.entities.Client.filter({ id: targetClientId }, null, 1);
-            clients = client;
+            const found = await safeFilter(sr.Client, { id: targetClientId });
+            clients = found;
         } else {
-            clients = await base44.asServiceRole.entities.Client.list('-created_date', 5000);
+            // Process in batches to avoid rate limits
+            const allClients = await sr.Client.list('-created_date', 5000);
+            // Only take clients with phone (already cleaned)
+            const validClients = allClients.filter(c => c.phone);
+            clients = validClients.slice(offset, offset + batchSize);
+            console.log(`📊 Batch: offset=${offset}, size=${clients.length}, total valid=${validClients.length}`);
         }
 
-        console.log(`📊 Scoring ${clients.length} clients...`);
         const now = new Date();
         const results = [];
 
-        for (const client of clients) {
+        for (let i = 0; i < clients.length; i++) {
+            const client = clients[i];
             try {
-                // Fetch all client data in parallel
-                const [orders, repairs, tickets, smsLogs] = await Promise.all([
-                    base44.asServiceRole.entities.Order.filter({ client_id: client.id }),
-                    base44.asServiceRole.entities.Repair.filter({ client_id: client.id }),
-                    base44.asServiceRole.entities.Ticket.filter({ customer_id: client.id }),
-                    client.phone 
-                        ? base44.asServiceRole.entities.NotificationLog.filter({ to_phone: client.phone }, '-sent_at', 5)
-                        : Promise.resolve([])
+                // Throttle: 1 client per ~500ms to stay under rate limits
+                if (i > 0 && i % 5 === 0) await sleep(1000);
+
+                const [orders, repairs, tickets] = await Promise.all([
+                    safeFilter(sr.Order, { client_id: client.id }),
+                    safeFilter(sr.Repair, { client_id: client.id }),
+                    safeFilter(sr.Ticket, { customer_id: client.id }),
                 ]);
 
-                // --- 1. Purchase Value (30pts) ---
-                const totalSpent = orders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
-                let valueScore = 0;
-                if (totalSpent >= 5000) valueScore = 30;
-                else if (totalSpent >= 2000) valueScore = 20;
-                else if (totalSpent >= 500) valueScore = 10;
-                else if (totalSpent > 0) valueScore = 5;
+                // 1. Purchase Value (30pts)
+                const totalSpent = orders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+                const valueScore = totalSpent >= 5000 ? 30 : totalSpent >= 2000 ? 20 : totalSpent >= 500 ? 10 : totalSpent > 0 ? 5 : 0;
 
-                // --- 2. Purchase Frequency (20pts) ---
+                // 2. Frequency (20pts)
                 const orderCount = orders.length;
-                let freqScore = 0;
-                if (orderCount >= 7) freqScore = 20;
-                else if (orderCount >= 4) freqScore = 15;
-                else if (orderCount >= 2) freqScore = 10;
-                else if (orderCount >= 1) freqScore = 5;
+                const freqScore = orderCount >= 7 ? 20 : orderCount >= 4 ? 15 : orderCount >= 2 ? 10 : orderCount >= 1 ? 5 : 0;
 
-                // --- 3. Recency (20pts) ---
+                // 3. Recency (20pts)
                 const allDates = [
                     ...orders.map(o => o.order_date),
                     ...repairs.map(r => r.created_date),
                     ...tickets.map(t => t.created_date),
-                    ...smsLogs.map(s => s.sent_at)
                 ].filter(Boolean).map(d => new Date(d));
                 
                 const lastInteraction = allDates.length > 0 
-                    ? new Date(Math.max(...allDates.map(d => d.getTime())))
-                    : null;
+                    ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null;
 
                 let recencyScore = 0;
                 if (lastInteraction) {
-                    const daysSince = daysBetween(now, lastInteraction);
-                    if (daysSince <= 30) recencyScore = 20;
-                    else if (daysSince <= 90) recencyScore = 15;
-                    else if (daysSince <= 180) recencyScore = 10;
-                    else if (daysSince <= 365) recencyScore = 5;
+                    const days = daysBetween(now, lastInteraction);
+                    recencyScore = days <= 30 ? 20 : days <= 90 ? 15 : days <= 180 ? 10 : days <= 365 ? 5 : 0;
                 }
 
-                // --- 4. Engagement (15pts) ---
-                let engagementScore = 0;
-                const hasOrders = orders.length > 0;
-                const hasRepairs = repairs.length > 0;
-                const hasTickets = tickets.length > 0;
-                const interactionTypes = [hasOrders, hasRepairs, hasTickets].filter(Boolean).length;
-                if (interactionTypes >= 3) engagementScore = 15;
-                else if (interactionTypes >= 2) engagementScore = 10;
-                else if (interactionTypes >= 1) engagementScore = 5;
+                // 4. Engagement (15pts)
+                const types = [orders.length > 0, repairs.length > 0, tickets.length > 0].filter(Boolean).length;
+                const engagementScore = types >= 3 ? 15 : types >= 2 ? 10 : types >= 1 ? 5 : 0;
 
-                // --- 5. Loyalty (15pts) ---
-                const customerAge = client.created_date 
-                    ? daysBetween(now, new Date(client.created_date))
-                    : 0;
-                let loyaltyScore = 0;
-                if (customerAge >= 365) loyaltyScore = 15;
-                else if (customerAge >= 180) loyaltyScore = 10;
-                else if (customerAge >= 90) loyaltyScore = 6;
-                else loyaltyScore = 3;
+                // 5. Loyalty (15pts)
+                const age = client.created_date ? daysBetween(now, new Date(client.created_date)) : 0;
+                const loyaltyScore = age >= 365 ? 15 : age >= 180 ? 10 : age >= 90 ? 6 : 3;
 
-                // --- Total ---
                 const totalScore = Math.min(100, valueScore + freqScore + recencyScore + engagementScore + loyaltyScore);
                 const tier = getTier(totalScore);
 
-                const updateData = {
-                    customer_score: totalScore,
-                    customer_tier: tier,
-                    total_spent: Math.round(totalSpent),
-                    total_orders: orderCount,
-                    total_repairs: repairs.length,
-                    last_interaction_date: lastInteraction ? lastInteraction.toISOString() : null
-                };
-
                 if (!dryRun) {
-                    await base44.asServiceRole.entities.Client.update(client.id, updateData);
+                    await safeFilter(sr.Client, {}, null, 0); // dummy to keep alive
+                    await base44.asServiceRole.entities.Client.update(client.id, {
+                        customer_score: totalScore,
+                        customer_tier: tier,
+                        total_spent: Math.round(totalSpent),
+                        total_orders: orderCount,
+                        total_repairs: repairs.length,
+                        last_interaction_date: lastInteraction ? lastInteraction.toISOString() : null
+                    });
                 }
 
                 results.push({
-                    id: client.id,
-                    name: client.full_name,
-                    score: totalScore,
-                    tier,
+                    id: client.id, name: client.full_name, score: totalScore, tier,
                     breakdown: { valueScore, freqScore, recencyScore, engagementScore, loyaltyScore },
-                    totalSpent: Math.round(totalSpent),
-                    orders: orderCount,
-                    repairs: repairs.length,
-                    tickets: tickets.length
+                    totalSpent: Math.round(totalSpent), orders: orderCount,
+                    repairs: repairs.length, tickets: tickets.length
                 });
 
             } catch (err) {
                 console.error(`Error scoring ${client.full_name}:`, err.message);
+                results.push({ id: client.id, name: client.full_name, error: err.message });
             }
         }
 
-        // Summary
         const tierCounts = { VIP: 0, 'זהב': 0, 'כסף': 0, 'ברונזה': 0, 'חדש': 0 };
-        for (const r of results) tierCounts[r.tier]++;
-
-        console.log(`✅ Scoring complete. Tier distribution:`, JSON.stringify(tierCounts));
+        for (const r of results) if (r.tier) tierCounts[r.tier]++;
 
         return Response.json({
-            success: true,
-            dry_run: dryRun,
-            scored: results.length,
+            success: true, dry_run: dryRun,
+            scored: results.filter(r => r.score !== undefined).length,
+            errors: results.filter(r => r.error).length,
             tier_distribution: tierCounts,
-            top_customers: results.sort((a, b) => b.score - a.score).slice(0, 20),
-            average_score: Math.round(results.reduce((s, r) => s + r.score, 0) / (results.length || 1))
+            next_offset: offset + batchSize,
+            top_customers: results.filter(r => r.score).sort((a, b) => b.score - a.score).slice(0, 20),
+            average_score: Math.round(results.filter(r => r.score).reduce((s, r) => s + r.score, 0) / (results.filter(r => r.score).length || 1))
         });
 
     } catch (error) {
-        console.error('❌ Score calculation error:', error);
+        console.error('❌ Score error:', error);
         return Response.json({ success: false, error: error.message }, { status: 500 });
     }
 });
