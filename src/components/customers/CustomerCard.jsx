@@ -17,6 +17,8 @@ import { he } from 'date-fns/locale';
 import OrderDetailsModal from '../orders/OrderDetailsModal';
 import SendSmsModal from '../sms/SendSmsModal';
 import CustomerDevicesList from './CustomerDevicesList';
+import CustomerScoreBadge from './CustomerScoreBadge';
+import CustomerAISummary from './CustomerAISummary';
 
 export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [customer, setCustomer] = useState(null);
@@ -47,54 +49,53 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
         navigate(url);
     };
 
-    const buildTimeline = useCallback((ordersData, ticketsData, repairsData, activitiesData) => {
+    const buildTimeline = useCallback((ordersData, ticketsData, repairsData, activitiesData, smsData) => {
         const events = [];
 
         ordersData.forEach(order => {
             events.push({
-                type: 'order',
-                date: order.order_date,
+                type: 'order', date: order.order_date,
                 title: `הזמנה #${order.external_order_number}`,
                 description: `סכום: ₪${order.total}`,
-                icon: ShoppingCart,
-                color: 'text-green-600 bg-green-50'
+                icon: ShoppingCart, color: 'text-green-600 bg-green-50'
             });
         });
 
         ticketsData.forEach(ticket => {
             events.push({
-                type: 'ticket',
-                date: ticket.created_date,
+                type: 'ticket', date: ticket.created_date,
                 title: `פנייה #${ticket.ticket_number}`,
                 description: ticket.subject,
-                icon: FileText,
-                color: 'text-blue-600 bg-blue-50'
+                icon: FileText, color: 'text-blue-600 bg-blue-50'
             });
         });
 
         repairsData.forEach(repair => {
             events.push({
-                type: 'repair',
-                date: repair.created_date,
+                type: 'repair', date: repair.created_date,
                 title: `תיקון #${repair.repair_id}`,
                 description: `${repair.issue_category} - ${repair.status}`,
-                icon: Wrench,
-                color: 'text-orange-600 bg-orange-50'
+                icon: Wrench, color: 'text-orange-600 bg-orange-50'
             });
         });
 
         activitiesData.forEach(activity => {
             const isWhatsapp = activity.activity_type?.includes('וואטסאפ');
-            const isIncoming = activity.activity_type?.includes('נכנס');
-            const isOutgoing = activity.activity_type?.includes('יוצא');
-            
             events.push({
-                type: 'activity',
-                date: activity.created_date,
+                type: 'activity', date: activity.created_date,
                 title: activity.activity_type,
                 description: activity.content?.substring(0, 100) || activity.summary,
                 icon: MessageCircle,
-                color: isWhatsapp ? (isIncoming ? 'text-green-600 bg-green-50' : 'text-blue-600 bg-blue-50') : 'text-purple-600 bg-purple-50'
+                color: isWhatsapp ? 'text-green-600 bg-green-50' : 'text-purple-600 bg-purple-50'
+            });
+        });
+
+        (smsData || []).forEach(sms => {
+            events.push({
+                type: 'sms', date: sms.sent_at || sms.created_date,
+                title: `SMS ${sms.event_type || ''}`,
+                description: sms.message?.substring(0, 100),
+                icon: Send, color: 'text-teal-600 bg-teal-50'
             });
         });
 
@@ -110,8 +111,8 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
             const customerData = await customersService.get(customerId);
             setCustomer(customerData);
 
-            const { RepairDevice } = await import('@/entities/all');
-            const [ordersData, ticketsData, repairsData, activitiesData, devicesData] = await Promise.all([
+            const { RepairDevice, NotificationLog } = await import('@/entities/all');
+            const [ordersData, ticketsData, repairsData, devicesData, activitiesData, smsData] = await Promise.all([
                 Order.filter({ client_id: customerId }, '-order_date'),
                 Ticket.filter({ customer_id: customerId }, '-created_date'),
                 Repair.filter({ client_id: customerId }, '-created_date'),
@@ -121,7 +122,10 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                         { order_id: customerId },
                         { ticket_id: { $in: (await Ticket.filter({ customer_id: customerId })).map(t => t.id) } }
                     ]
-                }, '-created_date')
+                }, '-created_date'),
+                customerData?.phone 
+                    ? NotificationLog.filter({ to_phone: customerData.phone }, '-sent_at', 20)
+                    : Promise.resolve([])
             ]);
 
             setOrders(ordersData);
@@ -140,10 +144,11 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                 totalTickets: ticketsData.length,
                 totalRepairs: repairsData.length,
                 lastOrderDate: lastOrder,
-                lastContactDate: lastContact
+                lastContactDate: lastContact,
+                smsCount: smsData?.length || 0
             });
 
-            buildTimeline(ordersData, ticketsData, repairsData, activitiesData);
+            buildTimeline(ordersData, ticketsData, repairsData, activitiesData, smsData);
 
         } catch (error) {
             console.error('Error loading customer data:', error);
@@ -245,10 +250,11 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                 <div>
                                     <h2 className="text-3xl font-bold mb-2">{customer?.full_name || 'טוען...'}</h2>
                                     <div className="flex gap-2 items-center flex-wrap">
-                                        <Badge className={customerLevel.color}>
-                                            <Star className="w-3 h-3 ml-1" />
-                                            {customerLevel.label}
-                                        </Badge>
+                                        <CustomerScoreBadge 
+                                            score={customer?.customer_score || 0} 
+                                            tier={customer?.customer_tier || 'חדש'} 
+                                            size="sm" 
+                                        />
                                         <Badge variant="outline" className="bg-white/20 border-white/40 text-white">
                                             לקוח מ-{customer?.created_date ? format(new Date(customer.created_date), 'MM/yyyy', { locale: he }) : '...'}
                                         </Badge>
@@ -435,6 +441,15 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                             </CardContent>
                                         </Card>
                                     </div>
+
+                                        {/* AI Summary */}
+                                    <CustomerAISummary 
+                                        customer={customer} 
+                                        orders={orders} 
+                                        repairs={repairs} 
+                                        tickets={tickets} 
+                                        devices={devices} 
+                                    />
 
                                     {/* Notes */}
                                     {customer?.notes && (
