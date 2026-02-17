@@ -5,6 +5,15 @@ const SYNC_KEY = "linet_main_sync";
 const MAX_EXECUTION_TIME = 240000; // 4 minutes
 const BATCH_SIZE = 50;
 
+function normalizePhoneNumber(phone) {
+    if (!phone) return null;
+    let cleaned = phone.replace(/[\s\-\(\)\.+]/g, '');
+    if (cleaned.startsWith('972')) cleaned = '0' + cleaned.slice(3);
+    if (cleaned.startsWith('+972')) cleaned = '0' + cleaned.slice(4);
+    if (cleaned.length < 9 || cleaned.length > 11) return null;
+    return cleaned;
+}
+
 function parseNum(value) {
   if (value === null || value === undefined) return 0;
   const cleaned = String(value).replace(/,/g, '');
