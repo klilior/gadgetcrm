@@ -167,21 +167,14 @@ export default function CustomersPage() {
                         <div className="flex items-start gap-3">
                             <AlertTriangle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                             <div className="flex-1">
-                                <h3 className="font-bold text-green-900 mb-2">✅ ניקוי הושלם בהצלחה!</h3>
+                                <h3 className="font-bold text-green-900 mb-2">✅ באצ' הושלם!</h3>
                                 <div className="text-sm text-green-800 space-y-1">
-                                    <p>• סה"כ לקוחות: {cleanupResult.summary.totalClients}</p>
-                                    <p>• קבוצות כפילויות שנמצאו: {cleanupResult.summary.duplicateGroups}</p>
-                                    <p>• לקוחות שנמחקו: {cleanupResult.summary.clientsDeleted}</p>
-                                    <p>• לקוחות שנותרו: {cleanupResult.summary.clientsRemaining}</p>
+                                    <p>• נמחקו: {cleanupResult.deleted || 0}</p>
+                                    <p>• דולגו (יש רשומות): {cleanupResult.skipped || 0}</p>
+                                    <p>• מוזגו: {cleanupResult.merged || 0}</p>
+                                    {cleanupResult.has_more && <p className="text-orange-700 font-medium">⚠️ יש עוד באצ'ים - לחץ שוב על "ניקוי כפילויות"</p>}
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setCleanupResult(null)}
-                                    className="mt-2"
-                                >
-                                    סגור
-                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => setCleanupResult(null)} className="mt-2">סגור</Button>
                             </div>
                         </div>
                     </CardContent>
