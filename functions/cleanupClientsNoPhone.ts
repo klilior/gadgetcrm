@@ -10,12 +10,12 @@ function normalizePhone(phone) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function safeOp(fn, retries = 3) {
+async function safeOp(fn, retries = 4) {
     for (let i = 0; i < retries; i++) {
         try { return await fn(); }
         catch (err) {
             if ((err.message?.includes('Rate limit') || err.message?.includes('AsyncWrap')) && i < retries - 1) {
-                await sleep(3000 * (i + 1));
+                await sleep(5000 * (i + 1));
                 continue;
             }
             throw err;
@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
             let deleted = 0, skipped = 0, errors = [];
             
             for (const client of batch) {
-                await sleep(500); // throttle
+                await sleep(1500); // throttle
                 try {
                     // Check for linked records
                     const [repairs, orders, tickets, devices] = await Promise.all([
@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
             let merged = 0, reassigned = 0, errors = [];
 
             for (const group of batch) {
-                await sleep(800); // throttle per group
+                await sleep(2000); // throttle per group
                 try {
                     const sorted = group.clients.sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
                     const primary = sorted[0];
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
                     await safeOp(() => sr.Client.update(primary.id, mergeData));
 
                     for (const dup of dups) {
-                        await sleep(300);
+                        await sleep(1500);
                         
                         const [repairs, orders, tickets, devices] = await Promise.all([
                             safeOp(() => sr.Repair.filter({ client_id: dup.id })),
