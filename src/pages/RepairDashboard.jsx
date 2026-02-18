@@ -271,14 +271,55 @@ export default function RepairDashboard() {
         return match ? match[1] : repairId.slice(-4);
     };
 
-    // Handle inline status change
+    // Handle inline status change (with SMS notification)
     const handleStatusChange = async (repair, newStatus) => {
         try {
-            await Repair.update(repair.id, { status: newStatus });
+            const updateData = { status: newStatus };
+            if (newStatus === 'הוזמן חלק' && repair.status !== 'הוזמן חלק') {
+                updateData.part_ordered_date = new Date().toISOString();
+            }
+            await Repair.update(repair.id, updateData);
             // Update local state
             setRepairs(prev => prev.map(r => 
                 r.id === repair.id ? { ...r, status: newStatus } : r
             ));
+
+            // Send SMS notification if client data is available
+            const clientData = repair.customer;
+            if (clientData?.full_name && clientData?.phone) {
+                let message = null;
+                switch (newStatus) {
+                    case 'מכשיר סיים תיקון וממתין לאיסוף':
+                        message = `שלום ${clientData.full_name}, תיקון #${repair.repair_id} הושלם בהצלחה! המכשיר שלך מוכן לאיסוף.`;
+                        if (repair.final_price > 0) message += ` סכום לתשלום: ${repair.final_price} ש"ח.`;
+                        message += ` ניתן לאסוף מהמעבדה בשעות העבודה. א'-ה' 9:00-18:00, ו' 9:00-13:00. Gadget-Team`;
+                        break;
+                    case 'בטיפול/אבחון':
+                        message = `שלום ${clientData.full_name}, המכשיר שלך התקבל במעבדה לטיפול (תיקון #${repair.repair_id}). נעדכן אותך בהמשך התהליך. Gadget-Team`;
+                        break;
+                    case 'הוזמן חלק':
+                        message = `שלום ${clientData.full_name}, עבור תיקון #${repair.repair_id} - הוזמן חלק ספציפי. נעדכן כשהחלק יגיע למעבדה. תודה על הסבלנות! Gadget-Team`;
+                        break;
+                    case 'לא ניתן לתיקון':
+                        message = `שלום ${clientData.full_name}, לאחר בדיקה מעמיקה, לצערנו לא ניתן לתקן את המכשיר (תיקון #${repair.repair_id}). נציג ייצור עמך קשר בקרוב. Gadget-Team`;
+                        break;
+                    case 'תיקון נסגר':
+                        message = `שלום ${clientData.full_name}, תיקון #${repair.repair_id} הושלם בהצלחה! תודה שבחרת בנו! Gadget-Team`;
+                        break;
+                }
+                if (message) {
+                    sendTextMeSMS({
+                        action: "send",
+                        to_phone: clientData.phone,
+                        message,
+                        event_type: `repair_status_${newStatus}`,
+                        fingerprint: `repair|${repair.id}|${newStatus}`,
+                    }).then(res => {
+                        const data = res.data || res;
+                        console.log(data.success ? `✅ SMS sent for status "${newStatus}"` : `ℹ️ SMS failed: ${data.error}`);
+                    }).catch(err => console.log(`ℹ️ SMS error (ignored):`, err.message));
+                }
+            }
         } catch (error) {
             console.error("Error updating status:", error);
             alert("שגיאה בעדכון סטטוס");
