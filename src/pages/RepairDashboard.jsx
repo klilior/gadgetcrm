@@ -16,6 +16,7 @@ import { Repair as RepairEntity } from "@/entities/all";
 import RepairDetailsModal from "../components/repairs/RepairDetailsModal";
 import NewRepairModal from "../components/repairs/NewRepairModal";
 import { useUser } from "../components/UserAuth";
+import { sendTextMeSMS } from "@/functions/sendTextMeSMS";
 import { customersService } from "../components/utils/customersService";
 
 const StatCard = ({ title, value, icon: Icon, color, onClick }) => (
