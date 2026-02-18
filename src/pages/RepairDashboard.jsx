@@ -288,24 +288,25 @@ export default function RepairDashboard() {
             // Send SMS notification if client data is available
             const clientData = repair.customer;
             if (clientData?.full_name && clientData?.phone) {
+                const shortId = getShortRepairId(repair.repair_id);
                 let message = null;
                 switch (newStatus) {
                     case 'מכשיר סיים תיקון וממתין לאיסוף':
-                        message = `שלום ${clientData.full_name}, תיקון #${repair.repair_id} הושלם בהצלחה! המכשיר שלך מוכן לאיסוף.`;
+                        message = `שלום ${clientData.full_name}, תיקון #${shortId} הושלם בהצלחה! המכשיר שלך מוכן לאיסוף.`;
                         if (repair.final_price > 0) message += ` סכום לתשלום: ${repair.final_price} ש"ח.`;
                         message += ` ניתן לאסוף מהמעבדה בשעות העבודה. א'-ה' 9:00-18:00, ו' 9:00-13:00. Gadget-Team`;
                         break;
                     case 'בטיפול/אבחון':
-                        message = `שלום ${clientData.full_name}, המכשיר שלך התקבל במעבדה לטיפול (תיקון #${repair.repair_id}). נעדכן אותך בהמשך התהליך. Gadget-Team`;
+                        message = `שלום ${clientData.full_name}, המכשיר שלך התקבל במעבדה לטיפול (תיקון #${shortId}). נעדכן אותך בהמשך התהליך. Gadget-Team`;
                         break;
                     case 'הוזמן חלק':
-                        message = `שלום ${clientData.full_name}, עבור תיקון #${repair.repair_id} - הוזמן חלק ספציפי. נעדכן כשהחלק יגיע למעבדה. תודה על הסבלנות! Gadget-Team`;
+                        message = `שלום ${clientData.full_name}, עבור תיקון #${shortId} - הוזמן חלק ספציפי. נעדכן כשהחלק יגיע למעבדה. תודה על הסבלנות! Gadget-Team`;
                         break;
                     case 'לא ניתן לתיקון':
-                        message = `שלום ${clientData.full_name}, לאחר בדיקה מעמיקה, לצערנו לא ניתן לתקן את המכשיר (תיקון #${repair.repair_id}). נציג ייצור עמך קשר בקרוב. Gadget-Team`;
+                        message = `שלום ${clientData.full_name}, לאחר בדיקה מעמיקה, לצערנו לא ניתן לתקן את המכשיר (תיקון #${shortId}). נציג ייצור עמך קשר בקרוב. Gadget-Team`;
                         break;
                     case 'תיקון נסגר':
-                        message = `שלום ${clientData.full_name}, תיקון #${repair.repair_id} הושלם בהצלחה! תודה שבחרת בנו! Gadget-Team`;
+                        message = `שלום ${clientData.full_name}, תיקון #${shortId} הושלם בהצלחה! תודה שבחרת בנו! Gadget-Team`;
                         break;
                 }
                 if (message) {
