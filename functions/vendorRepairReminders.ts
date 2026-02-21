@@ -130,15 +130,8 @@ Deno.serve(async (req) => {
         const phones = [vendor.mobile, ...(vendor.additional_phones || [])].filter(Boolean);
 
         for (const phone of phones) {
-          const result = await base44.asServiceRole.functions.invoke('sendTextMeSMS', {
-            action: 'send',
-            to_phone: phone,
-            message,
-            event_type: 'vendor_weekly_summary',
-            fingerprint: `${fingerprint}|${phone}`,
-          });
-          const data = result?.data || result;
-          if (data?.success) totalSent++; else totalFailed++;
+          const result = await sendSMS(base44, phone, message, 'vendor_weekly_summary', `${fingerprint}|${phone}`);
+          if (result.success) totalSent++; else totalFailed++;
         }
       }
 
