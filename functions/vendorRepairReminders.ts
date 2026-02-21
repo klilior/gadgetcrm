@@ -108,6 +108,13 @@ Deno.serve(async (req) => {
     }
 
     const now = new Date();
+    // Check if today is Friday (5) or Saturday (6) in Israel timezone - skip sending
+    const israelDay = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' })).getDay();
+    if (israelDay === 5 || israelDay === 6) {
+      console.log(`[VendorReminders] Skipping - today is ${israelDay === 5 ? 'Friday' : 'Saturday'}`);
+      return Response.json({ success: true, message: 'Skipped - Friday/Saturday', sent: 0 });
+    }
+
     let totalSent = 0;
     let totalFailed = 0;
 
