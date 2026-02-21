@@ -77,19 +77,12 @@ Deno.serve(async (req) => {
         const message = `שלום ${vendor.name}, תזכורת מ-Gadget-Team: תיקון #${shortId} נמצא אצלכם כבר ${daysAtImporter} ימים. לקוח: ${clientName}, מכשיר: ${model}. נודה לעדכון סטטוס. תודה!`;
         const fingerprint = `vendor_7day|${repair.id}|day${daysAtImporter}`;
 
-        // Send to main mobile
+        // Send to main mobile + additional phones
         const phones = [vendor.mobile, ...(vendor.additional_phones || [])].filter(Boolean);
 
         for (const phone of phones) {
-          const result = await base44.asServiceRole.functions.invoke('sendTextMeSMS', {
-            action: 'send',
-            to_phone: phone,
-            message,
-            event_type: 'vendor_reminder_7day',
-            fingerprint: `${fingerprint}|${phone}`,
-          });
-          const data = result?.data || result;
-          if (data?.success) totalSent++; else totalFailed++;
+          const result = await sendSMS(base44, phone, message, 'vendor_reminder_7day', `${fingerprint}|${phone}`);
+          if (result.success) totalSent++; else totalFailed++;
         }
       }
 
