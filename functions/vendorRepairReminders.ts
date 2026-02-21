@@ -9,6 +9,61 @@ function getShortRepairId(repairId) {
   return match ? match[1] : repairId.slice(-4);
 }
 
+// Direct SMS send helper (avoids cross-function auth issues)
+async function sendSMS(base44, to_phone, message, event_type, fingerprint) {
+  try {
+    // Normalize phone
+    let p = String(to_phone).replace(/[\s\-\(\)]/g, '');
+    if (p.startsWith('+972')) p = '0' + p.slice(4);
+    if (p.startsWith('972')) p = '0' + p.slice(3);
+    if (/^5\d{8}$/.test(p)) p = '0' + p;
+    if (!/^05\d{8}$/.test(p)) {
+      console.log(`[SMS] Invalid phone: ${to_phone}`);
+      return { success: false, error: 'bad phone' };
+    }
+
+    const configs = await base44.asServiceRole.entities.TextMeConfig.list('-created_date', 1);
+    if (!configs?.length || !configs[0].is_enabled) return { success: false, error: 'disabled' };
+    const config = configs[0];
+
+    const apiToken = Deno.env.get('TEXTME_API_TOKEN');
+    if (!apiToken) return { success: false, error: 'no token' };
+
+    const apiPhone = p.startsWith('0') ? p.slice(1) : p;
+    const endpoint = config.test_mode ? 'https://my.textme.co.il/api/test' : 'https://my.textme.co.il/api';
+
+    const payload = {
+      sms: {
+        user: { username: config.username },
+        source: config.default_source,
+        destinations: { phone: apiPhone },
+        message,
+      },
+    };
+
+    console.log(`[SMS] Sending to ${apiPhone} via ${endpoint}`);
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiToken}` },
+      body: JSON.stringify(payload),
+    });
+    const responseText = await res.text();
+    console.log(`[SMS] Response ${res.status}: ${responseText.substring(0, 300)}`);
+
+    await base44.asServiceRole.entities.NotificationLog.create({
+      event_type, to_phone: p, message,
+      status: res.ok ? 'נשלח' : 'נכשל',
+      fingerprint: fingerprint || '', sent_at: new Date().toISOString(),
+      provider_response: `HTTP ${res.status}: ${responseText.substring(0, 500)}`,
+    });
+
+    return { success: res.ok };
+  } catch (err) {
+    console.error('[SMS] Error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
 
