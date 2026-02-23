@@ -24,7 +24,18 @@ export default function SendSmsModal({ isOpen, onClose, phone, customerName, con
 
   const loadTemplates = async () => {
     const all = await base44.entities.NotificationTemplate.filter({ is_active: true });
-    setTemplates(all || []);
+    // If context has repair info, show repair templates first, then general ones
+    if (context?.repair_id) {
+      const repairKeys = ["repair_received", "repair_ready", "repair_in_progress", "part_ordered", "repair_unrepairable", "repair_closed"];
+      const sorted = [...(all || [])].sort((a, b) => {
+        const aIsRepair = repairKeys.includes(a.template_key) ? 0 : 1;
+        const bIsRepair = repairKeys.includes(b.template_key) ? 0 : 1;
+        return aIsRepair - bIsRepair;
+      });
+      setTemplates(sorted);
+    } else {
+      setTemplates(all || []);
+    }
   };
 
   const applyTemplate = (template) => {
