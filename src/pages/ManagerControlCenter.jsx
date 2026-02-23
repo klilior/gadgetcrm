@@ -64,96 +64,93 @@ export default function ManagerControlCenter() {
     );
   }
 
+  // Load everything in parallel on mount + when filters change
   useEffect(() => {
-    loadInitialData();
-  }, []);
-
-  useEffect(() => {
-    loadData();
+    loadAllData();
   }, [dateFrom, dateTo, selectedRep, selectedCategory, selectedSupplier]);
 
-  const loadInitialData = async () => {
-    try {
-      const [mappingsData, pendingInvoices] = await Promise.all([
-        base44.entities.CommissionGroupMapping.filter({ is_active: true }),
-        base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200)
-      ]);
-      setMappings(mappingsData);
-      // Count only invoices with actual data
-      const filtered = (pendingInvoices || []).filter(inv => 
-        inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
-      );
-      setPendingInvoicesCount(filtered.length);
-    } catch (e) {
-      console.error("Error loading mappings:", e);
-    }
-  };
-
-  const loadData = async () => {
+  const loadAllData = async () => {
     setIsLoading(true);
-    try {
-      // Load sales
-      let salesQuery = { issue_date: { $gte: dateFrom, $lte: dateTo } };
-      if (selectedRep !== "all") salesQuery.sales_rep = selectedRep;
-      
-      const salesData = await base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 10000);
-      
-      // Filter by category if selected
-      let filteredSales = salesData;
-      if (selectedCategory !== "all") {
-        const categoryMapping = { 'devices': 'DEVICES', 'lines': 'LINES', 'accessories': 'ACCESSORIES_GROUP' };
-        filteredSales = salesData.filter(s => getCommissionGroup(s) === categoryMapping[selectedCategory]);
-      }
-      
-      setSales(filteredSales);
 
-      // Extract available reps and categories
-      const reps = [...new Set(salesData.map(s => s.sales_rep).filter(Boolean))].sort();
-      setAvailableReps(reps);
-      
-      const cats = [...new Set(salesData.map(s => s.category).filter(Boolean))].sort();
-      setAvailableCategories(cats);
+    // Build queries
+    let salesQuery = { issue_date: { $gte: dateFrom, $lte: dateTo } };
+    if (selectedRep !== "all") salesQuery.sales_rep = selectedRep;
 
-      // Load invoices (approved only for calculations)
-      let invoiceQuery = { 
-        doc_date: { $gte: dateFrom, $lte: dateTo },
-        extraction_status: 'אושר'
-      };
-      if (selectedSupplier !== "all") invoiceQuery.supplier = selectedSupplier;
-      
-      const invoicesData = await base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000);
-      setInvoices(invoicesData);
+    let invoiceQuery = { 
+      doc_date: { $gte: dateFrom, $lte: dateTo },
+      extraction_status: 'אושר'
+    };
+    if (selectedSupplier !== "all") invoiceQuery.supplier = selectedSupplier;
 
-      // Quick leads to complete (global for managers)
-      try {
-        const allLeads = await base44.entities.Lead.filter({ status: { $ne: 'Deleted' } });
-        const quickIncomplete = (allLeads || [])
-          .filter(l => (l.capture_type === 'Quick' || l.quick_incomplete === true) && l.status !== 'Closed')
-          .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-        // Include legacy notes by content
-        const norm = (s) => (s || '').toString().toLowerCase();
-        const matchLegacy = (l) => {
-          const t = norm(l.topic);
-          const n = norm(l.notes);
-          const legacyA17 = (t.includes('בייסיק') || n.includes('בייסיק')) && (t.includes('a17') || n.includes('a17'));
-          const legacyCable = (t.includes('כבל') || n.includes('כבל')) && (t.includes('אייפון') || n.includes('אייפון')) && (t.includes('ישן') || n.includes('ישן') || t.includes(' 4') || n.includes(' 4'));
-          return legacyA17 || legacyCable;
-        };
-        const legacyNotes = (allLeads || []).filter(l => l.status !== 'Deleted' && matchLegacy(l));
-        const merged = [...quickIncomplete, ...legacyNotes].reduce((acc, item) => {
-          if (!acc.some(x => x.id === item.id)) acc.push(item);
-          return acc;
-        }, []);
-        setQuickLeads(merged);
-      } catch (e) {
-        console.error('Error loading quick leads:', e);
-        setQuickLeads([]);
-      }
-    } catch (e) {
-      console.error("Error loading data:", e);
-    } finally {
-      setIsLoading(false);
+    // Fire ALL requests in parallel
+    const [
+      salesData,
+      invoicesData,
+      mappingsData,
+      pendingInvoices,
+      allLeads
+    ] = await Promise.all([
+      base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 10000).catch(() => []),
+      base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000).catch(() => []),
+      mappings.length > 0 ? Promise.resolve(mappings) : base44.entities.CommissionGroupMapping.filter({ is_active: true }).catch(() => []),
+      base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200).catch(() => []),
+      base44.entities.Lead.filter({ status: { $ne: 'Deleted' } }).catch(() => [])
+    ]);
+
+    // Process mappings (only first load)
+    if (mappings.length === 0 && mappingsData.length > 0) {
+      setMappings(mappingsData);
     }
+
+    // Process pending invoices count
+    const filtered = (pendingInvoices || []).filter(inv => 
+      inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
+    );
+    setPendingInvoicesCount(filtered.length);
+
+    // Process sales
+    const currentMappings = mappings.length > 0 ? mappings : mappingsData;
+    let filteredSales = salesData;
+    if (selectedCategory !== "all" && currentMappings.length > 0) {
+      const categoryMapping = { 'devices': 'DEVICES', 'lines': 'LINES', 'accessories': 'ACCESSORIES_GROUP' };
+      const getGroup = (sale) => {
+        for (const mapping of [...currentMappings].sort((a, b) => (b.priority || 0) - (a.priority || 0))) {
+          if (checkFilters(sale, mapping.filters_json)) return mapping.commission_group_code;
+        }
+        return null;
+      };
+      filteredSales = salesData.filter(s => getGroup(s) === categoryMapping[selectedCategory]);
+    }
+    setSales(filteredSales);
+
+    const reps = [...new Set(salesData.map(s => s.sales_rep).filter(Boolean))].sort();
+    setAvailableReps(reps);
+    const cats = [...new Set(salesData.map(s => s.category).filter(Boolean))].sort();
+    setAvailableCategories(cats);
+
+    // Process invoices
+    setInvoices(invoicesData);
+
+    // Process quick leads
+    const quickIncomplete = (allLeads || [])
+      .filter(l => (l.capture_type === 'Quick' || l.quick_incomplete === true) && l.status !== 'Closed')
+      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    const norm = (s) => (s || '').toString().toLowerCase();
+    const matchLegacy = (l) => {
+      const t = norm(l.topic);
+      const n = norm(l.notes);
+      const legacyA17 = (t.includes('בייסיק') || n.includes('בייסיק')) && (t.includes('a17') || n.includes('a17'));
+      const legacyCable = (t.includes('כבל') || n.includes('כבל')) && (t.includes('אייפון') || n.includes('אייפון')) && (t.includes('ישן') || n.includes('ישן') || t.includes(' 4') || n.includes(' 4'));
+      return legacyA17 || legacyCable;
+    };
+    const legacyNotes = (allLeads || []).filter(l => l.status !== 'Deleted' && matchLegacy(l));
+    const merged = [...quickIncomplete, ...legacyNotes].reduce((acc, item) => {
+      if (!acc.some(x => x.id === item.id)) acc.push(item);
+      return acc;
+    }, []);
+    setQuickLeads(merged);
+
+    setIsLoading(false);
   };
 
   const handleDatePreset = (preset) => {
