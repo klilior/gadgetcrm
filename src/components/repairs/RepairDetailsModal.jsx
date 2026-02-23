@@ -16,6 +16,7 @@ import RepairLabel from './RepairLabel';
 import RepairReceipt from './RepairReceipt';
 import CustomerCard from '../customers/CustomerCard';
 import SendSmsModal from '../sms/SendSmsModal';
+import RepairSmsHistory from './RepairSmsHistory';
 
 export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }) {
     const { currentUser } = useUser();
@@ -439,6 +440,15 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                                             </>
                                         )}
                                     </Button>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {/* SMS History */}
+                        {client?.phone && repair?.id && (
+                            <Card className="glass-card">
+                                <CardContent className="pt-4">
+                                    <RepairSmsHistory repairId={repair.id} clientPhone={client.phone} />
                                 </CardContent>
                             </Card>
                         )}
