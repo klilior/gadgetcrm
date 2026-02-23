@@ -905,13 +905,11 @@ export default function ManagerControlCenter() {
         </CardContent>
       </Card>
 
-      {/* Loading Overlay */}
+      {/* Loading indicator - non-blocking */}
       {isLoading && (
-        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
-          <Card className="p-6">
-            <RefreshCw className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
-            <p className="text-sm text-gray-600 mt-2">טוען נתונים...</p>
-          </Card>
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-white/90 backdrop-blur shadow-lg rounded-full px-4 py-2 flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+          <span className="text-xs text-gray-600">טוען נתונים...</span>
         </div>
       )}
     </div>
