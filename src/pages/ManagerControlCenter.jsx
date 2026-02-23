@@ -34,8 +34,9 @@ export default function ManagerControlCenter() {
   const [mappings, setMappings] = useState([]);
   const [pendingInvoicesCount, setPendingInvoicesCount] = useState(0);
   const { suppliersMap, suppliersList } = useSuppliers();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [quickLeads, setQuickLeads] = useState([]);
+  const [sectionsReady, setSectionsReady] = useState({ kpi: false, leads: false, invoiceAlert: false });
 
   // Global filters
   const [datePreset, setDatePreset] = useState("thisMonth");
