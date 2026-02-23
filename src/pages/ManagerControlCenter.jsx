@@ -36,7 +36,6 @@ export default function ManagerControlCenter() {
   const { suppliersMap, suppliersList } = useSuppliers();
   const [isLoading, setIsLoading] = useState(true);
   const [quickLeads, setQuickLeads] = useState([]);
-  const [sectionsReady, setSectionsReady] = useState({ kpi: false, leads: false, invoiceAlert: false });
 
   // Global filters
   const [datePreset, setDatePreset] = useState("thisMonth");
@@ -425,7 +424,7 @@ export default function ManagerControlCenter() {
         updateData.capture_type = 'Full';
       }
       await base44.entities.Lead.update(leadId, updateData);
-      await loadData();
+      await loadAllData();
     } catch (e) {
       console.error('Error updating lead status:', e);
     }
@@ -442,7 +441,7 @@ export default function ManagerControlCenter() {
           </h1>
           <p className="text-gray-600 text-sm mt-1">סקירה כוללת: מכירות, ביצועי נציגים ורכישות</p>
         </div>
-        <Button onClick={loadData} disabled={isLoading} variant="outline" size="sm">
+        <Button onClick={loadAllData} disabled={isLoading} variant="outline" size="sm">
           <RefreshCw className={`w-4 h-4 ml-2 ${isLoading ? 'animate-spin' : ''}`} />
           רענן
         </Button>
