@@ -81,33 +81,14 @@ export default function ManagerControlCenter() {
     };
     if (selectedSupplier !== "all") invoiceQuery.supplier = selectedSupplier;
 
-    // Fire ALL requests in parallel
-    const [
-      salesData,
-      invoicesData,
-      mappingsData,
-      pendingInvoices,
-      allLeads
-    ] = await Promise.all([
+    // Phase 1: Load critical data first (sales + mappings)
+    const [salesData, mappingsData] = await Promise.all([
       base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 10000).catch(() => []),
-      base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000).catch(() => []),
       mappings.length > 0 ? Promise.resolve(mappings) : base44.entities.CommissionGroupMapping.filter({ is_active: true }).catch(() => []),
-      base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200).catch(() => []),
-      base44.entities.Lead.filter({ status: { $ne: 'Deleted' } }).catch(() => [])
     ]);
 
-    // Process mappings (only first load)
-    if (mappings.length === 0 && mappingsData.length > 0) {
-      setMappings(mappingsData);
-    }
-
-    // Process pending invoices count
-    const filtered = (pendingInvoices || []).filter(inv => 
-      inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
-    );
-    setPendingInvoicesCount(filtered.length);
-
-    // Process sales
+    // Show sales data immediately
+    if (mappings.length === 0 && mappingsData.length > 0) setMappings(mappingsData);
     const currentMappings = mappings.length > 0 ? mappings : mappingsData;
     let filteredSales = salesData;
     if (selectedCategory !== "all" && currentMappings.length > 0) {
@@ -121,11 +102,24 @@ export default function ManagerControlCenter() {
       filteredSales = salesData.filter(s => getGroup(s) === categoryMapping[selectedCategory]);
     }
     setSales(filteredSales);
-
     const reps = [...new Set(salesData.map(s => s.sales_rep).filter(Boolean))].sort();
     setAvailableReps(reps);
     const cats = [...new Set(salesData.map(s => s.category).filter(Boolean))].sort();
     setAvailableCategories(cats);
+    setIsLoading(false); // Show UI now with sales data
+
+    // Phase 2: Load secondary data in background (non-blocking)
+    const [invoicesData, pendingInvoices, allLeads] = await Promise.all([
+      base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000).catch(() => []),
+      base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200).catch(() => []),
+      base44.entities.Lead.filter({ status: { $ne: 'Deleted' } }).catch(() => [])
+    ]);
+
+    // Process pending invoices count
+    const filtered = (pendingInvoices || []).filter(inv => 
+      inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
+    );
+    setPendingInvoicesCount(filtered.length);
 
     // Process invoices
     setInvoices(invoicesData);
@@ -148,8 +142,6 @@ export default function ManagerControlCenter() {
       return acc;
     }, []);
     setQuickLeads(merged);
-
-    setIsLoading(false);
   };
 
   const handleDatePreset = (preset) => {

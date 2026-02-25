@@ -218,7 +218,10 @@ export default function RepairDashboard() {
             repair.device?.model?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             repair.device?.serial_imei?.toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesStatus = statusFilter === "all" || repair.status === statusFilter;
+        const closedStatuses = ["תיקון נסגר", "לא ניתן לתיקון", "Closed", "Return_Unrepaired"];
+        const matchesStatus = statusFilter === "all" 
+            || (statusFilter === "all_open" && !closedStatuses.includes(repair.status))
+            || repair.status === statusFilter;
 
         // סינון מהיר מהסיכום
         let matchesQuickFilter = true;
@@ -532,12 +535,12 @@ export default function RepairDashboard() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">כל הסטטוסים</SelectItem>
+                        <SelectItem value="all_open">כל הפתוחים (לא נסגרו)</SelectItem>
                         <SelectItem value="בטיפול/אבחון">בטיפול/אבחון</SelectItem>
-                        <SelectItem value="בטיפול החנות">בטיפול החנות</SelectItem> {/* New filter option */}
+                        <SelectItem value="בטיפול החנות">בטיפול החנות</SelectItem>
                         <SelectItem value="הוזמן חלק">הוזמן חלק</SelectItem>
                         <SelectItem value="מכשיר סיים תיקון וממתין לאיסוף">מוכן לאיסוף</SelectItem>
                         <SelectItem value="At_Importer">אצל היבואן</SelectItem>
-                        
                         <SelectItem value="תיקון נסגר">נסגר</SelectItem>
                         <SelectItem value="לא ניתן לתיקון">לא ניתן לתיקון</SelectItem>
                     </SelectContent>

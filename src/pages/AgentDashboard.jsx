@@ -98,26 +98,21 @@ export default function AgentDashboard() {
         dateEnd = endOfMonth(now);
       }
 
-      // Load all data in parallel
-      // Calculate latest goals progress from sales before loading dashboard targets
-      // Wrap in try/catch to prevent dashboard failure if goal calculation fails
-      try {
-        await base44.functions.invoke('calculateGoalProgress', { calculate_all: true });
-      } catch (goalErr) {
-        console.warn('[AgentDashboard] calculateGoalProgress failed (non-blocking):', goalErr.message);
-      }
-
+      // Load all data in parallel - NO blocking calculateGoalProgress
       const [allLeads, allTargets, allActivities, allEmployees, allRepairs, allGoals, allGoalProgress, allSalesTransactions, allLinetUsersMap] = await Promise.all([
         Lead.filter({ status: { $ne: 'Deleted' } }),
         Target.list(),
         SalesActivity.list(),
         Employee.filter({ is_active: true }),
-        isManager ? Repair.list() : Promise.resolve([]),
+        isManager ? Repair.filter({ status: { $nin: ['תיקון נסגר', 'Closed'] } }, '-updated_date', 100) : Promise.resolve([]),
         GoalDefinition.filter({ is_active: true }),
         GoalProgress.list(),
         SalesTransaction.list(),
         LinetUsersMap.list()
       ]);
+
+      // Fire calculateGoalProgress in background (non-blocking)
+      base44.functions.invoke('calculateGoalProgress', { calculate_all: true }).catch(() => {});
       
       // Build employee map with all aliases for matching
       const employeeMap = buildEmployeeMap(allEmployees || [], allLinetUsersMap || []);
@@ -409,20 +404,9 @@ export default function AgentDashboard() {
           });
         setTeamData(teamPerf);
 
-        // Repairs data
+        // Repairs data - set immediately without enrichment, enrich in background
         const repairsList = allRepairs || [];
-        if (repairsList.length > 0) {
-          const clientIds = [...new Set(repairsList.map(r => r.client_id).filter(Boolean))];
-          let clientsMap = {};
-          if (clientIds.length > 0) {
-            const clients = await Client.filter({ id: { $in: clientIds } });
-            clientsMap = (clients || []).reduce((acc, c) => { acc[c.id] = c; return acc; }, {});
-          }
-          const enrichedRepairs = repairsList.map(r => ({ ...r, customer: clientsMap[r.client_id] || null }));
-          setRepairs(enrichedRepairs);
-        } else {
-          setRepairs(repairsList);
-        }
+        setRepairs(repairsList);
       } else {
         // Rep KPIs - use finalActuals (from SalesTransaction)
         setKpiData({
