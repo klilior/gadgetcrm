@@ -1,6 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// Helper: get short repair ID (last digits after last dash)
 function getShortRepairId(repairId) {
   if (!repairId) return '----';
   const parts = repairId.split('-');
@@ -9,10 +8,14 @@ function getShortRepairId(repairId) {
   return match ? match[1] : repairId.slice(-4);
 }
 
-// Direct SMS send helper (avoids cross-function auth issues)
+function formatDate(dateStr) {
+  if (!dateStr) return '--';
+  const d = new Date(dateStr);
+  return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+}
+
 async function sendSMS(base44, to_phone, message, event_type, fingerprint) {
   try {
-    // Normalize phone
     let p = String(to_phone).replace(/[\s\-\(\)]/g, '');
     if (p.startsWith('+972')) p = '0' + p.slice(4);
     if (p.startsWith('972')) p = '0' + p.slice(3);
@@ -64,17 +67,16 @@ async function sendSMS(base44, to_phone, message, event_type, fingerprint) {
   }
 }
 
+// Admin phone to receive copy of all reminders
+const ADMIN_PHONE = '0525052175';
+
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
 
   try {
-    // Auth check
-    let user = null;
-    try { user = await base44.auth.me(); } catch (_) { user = { role: 'user' }; }
-
     let body = {};
     try { body = await req.json(); } catch (_) {}
-    const action = body.action || 'daily_7day_check';
+    const action = body.action || 'daily_reminders';
 
     console.log(`[VendorReminders] Action: ${action}`);
 
@@ -88,27 +90,18 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, message: 'No repairs at importer', sent: 0 });
     }
 
-    // Load vendors and devices
+    // Load vendors, devices, clients
     const vendors = await base44.asServiceRole.entities.RepairVendor.filter({ active: true });
     const vendorsMap = vendors.reduce((acc, v) => ({ ...acc, [v.id]: v }), {});
 
-    const deviceIds = [...new Set(atImporterRepairs.map(r => r.device_id).filter(Boolean))];
-    let devicesMap = {};
-    if (deviceIds.length > 0) {
-      const devices = await base44.asServiceRole.entities.RepairDevice.list('-created_date', 500);
-      devicesMap = devices.reduce((acc, d) => ({ ...acc, [d.id]: d }), {});
-    }
+    const devices = await base44.asServiceRole.entities.RepairDevice.list('-created_date', 500);
+    const devicesMap = devices.reduce((acc, d) => ({ ...acc, [d.id]: d }), {});
 
-    // Load clients for names
-    const clientIds = [...new Set(atImporterRepairs.map(r => r.client_id).filter(Boolean))];
-    let clientsMap = {};
-    if (clientIds.length > 0) {
-      const clients = await base44.asServiceRole.entities.Client.list('-created_date', 1000);
-      clientsMap = clients.reduce((acc, c) => ({ ...acc, [c.id]: c }), {});
-    }
+    const clients = await base44.asServiceRole.entities.Client.list('-created_date', 1000);
+    const clientsMap = clients.reduce((acc, c) => ({ ...acc, [c.id]: c }), {});
 
     const now = new Date();
-    // Check if today is Friday (5) or Saturday (6) in Israel timezone - skip sending
+    // Skip Friday (5) and Saturday (6)
     const israelDay = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' })).getDay();
     if (israelDay === 5 || israelDay === 6) {
       console.log(`[VendorReminders] Skipping - today is ${israelDay === 5 ? 'Friday' : 'Saturday'}`);
@@ -117,15 +110,25 @@ Deno.serve(async (req) => {
 
     let totalSent = 0;
     let totalFailed = 0;
+    const adminMessages = [];
 
-    // ═══════ ACTION: daily_7day_check ═══════
-    // Send reminder for each repair that has been at importer for 7+ days
-    if (action === 'daily_7day_check') {
+    // ═══════ ACTION: daily_reminders ═══════
+    if (action === 'daily_reminders') {
       for (const repair of atImporterRepairs) {
         const createdDate = new Date(repair.created_date);
         const daysAtImporter = Math.floor((now - createdDate) / (1000 * 60 * 60 * 24));
 
-        if (daysAtImporter < 7) continue;
+        // Determine if we should send and what type
+        let reminderType = null;
+        if (daysAtImporter === 7) {
+          reminderType = 'first';       // First reminder at 7 days
+        } else if (daysAtImporter === 10) {
+          reminderType = 'second';      // Second reminder at 10 days
+        } else if (daysAtImporter >= 11) {
+          reminderType = 'daily';       // Daily from day 11+
+        }
+
+        if (!reminderType) continue;
 
         const vendor = vendorsMap[repair.vendor_id];
         if (!vendor || !vendor.mobile) continue;
@@ -135,32 +138,52 @@ Deno.serve(async (req) => {
         const shortId = getShortRepairId(repair.repair_id);
         const model = device?.model || 'מכשיר לא ידוע';
         const clientName = client?.full_name || 'לקוח';
+        const receiveDate = formatDate(repair.created_date);
 
-        const message = `שלום ${vendor.name}, תזכורת מ-Gadget-Team: תיקון #${shortId} נמצא אצלכם כבר ${daysAtImporter} ימים. לקוח: ${clientName}, מכשיר: ${model}. נודה לעדכון סטטוס. תודה!`;
-        const fingerprint = `vendor_7day|${repair.id}|day${daysAtImporter}`;
+        let message = '';
+        if (reminderType === 'first') {
+          message = `שלום ${vendor.name}, תזכורת מ-Gadget-Team: תיקון #${shortId} ממתין אצלכם 7 ימים. לקוח: ${clientName}, דגם: ${model}, תאריך קבלה: ${receiveDate}. נודה לעדכון סטטוס. תודה!`;
+        } else if (reminderType === 'second') {
+          message = `שלום ${vendor.name}, תזכורת שנייה מ-Gadget-Team: תיקון #${shortId} ממתין אצלכם כבר 10 ימים. לקוח: ${clientName}, דגם: ${model}, תאריך קבלה: ${receiveDate}. נא לטפל בדחיפות. תודה!`;
+        } else {
+          message = `שלום ${vendor.name}, תזכורת דחופה מ-Gadget-Team: תיקון #${shortId} ממתין אצלכם ${daysAtImporter} ימים! לקוח: ${clientName}, דגם: ${model}, תאריך קבלה: ${receiveDate}. נא לעדכן מיידית. תודה!`;
+        }
 
-        // Send to main mobile + additional phones
+        const fingerprint = `vendor_reminder|${repair.id}|day${daysAtImporter}`;
         const phones = [vendor.mobile, ...(vendor.additional_phones || [])].filter(Boolean);
 
         for (const phone of phones) {
-          const result = await sendSMS(base44, phone, message, 'vendor_reminder_7day', `${fingerprint}|${phone}`);
+          const result = await sendSMS(base44, phone, message, `vendor_reminder_${reminderType}`, `${fingerprint}|${phone}`);
           if (result.success) totalSent++; else totalFailed++;
         }
+
+        // Collect for admin summary
+        adminMessages.push(`#${shortId} | ${vendor.name} | ${model} | ${clientName} | ${daysAtImporter} ימים | ${reminderType === 'first' ? 'תזכורת 1' : reminderType === 'second' ? 'תזכורת 2' : 'יומית'}`);
+      }
+
+      // Send admin summary
+      if (adminMessages.length > 0) {
+        let adminMsg = `סיכום תזכורות יבואנים - ${formatDate(now.toISOString())}:\n`;
+        for (const line of adminMessages) {
+          adminMsg += `${line}\n`;
+        }
+        adminMsg += `\nסה"כ: ${adminMessages.length} תזכורות נשלחו.`;
+
+        await sendSMS(base44, ADMIN_PHONE, adminMsg, 'admin_vendor_reminder_summary', `admin_summary|${now.toISOString().slice(0,10)}`);
       }
 
       return Response.json({
         success: true,
-        action: 'daily_7day_check',
+        action: 'daily_reminders',
         repairs_checked: atImporterRepairs.length,
-        sent: totalSent,
-        failed: totalFailed,
+        reminders_sent: adminMessages.length,
+        sms_sent: totalSent,
+        sms_failed: totalFailed,
       });
     }
 
     // ═══════ ACTION: weekly_summary ═══════
-    // Send summary of all open repairs per vendor (Tuesday 11:00)
     if (action === 'weekly_summary') {
-      // Group repairs by vendor
       const repairsByVendor = {};
       for (const repair of atImporterRepairs) {
         if (!repair.vendor_id) continue;
@@ -173,19 +196,17 @@ Deno.serve(async (req) => {
         if (!vendor || !vendor.mobile) continue;
         if (vendorRepairs.length === 0) continue;
 
-        // Build summary message
         let message = `שלום ${vendor.name}, ריכוז תיקונים פתוחים מ-Gadget-Team:\n`;
-
         for (let i = 0; i < vendorRepairs.length; i++) {
           const repair = vendorRepairs[i];
           const device = devicesMap[repair.device_id];
+          const client = clientsMap[repair.client_id];
           const shortId = getShortRepairId(repair.repair_id);
           const model = device?.model || 'מכשיר';
-          const createdDate = new Date(repair.created_date);
-          const days = Math.floor((now - createdDate) / (1000 * 60 * 60 * 24));
-          message += `${i + 1}. #${shortId} - ${model} - ${days} ימים\n`;
+          const clientName = client?.full_name || 'לקוח';
+          const days = Math.floor((now - new Date(repair.created_date)) / (1000 * 60 * 60 * 24));
+          message += `${i + 1}. #${shortId} - ${model} - ${clientName} - ${days} ימים\n`;
         }
-
         message += `סה"כ ${vendorRepairs.length} תיקונים פתוחים. נודה לעדכון. תודה!`;
 
         const fingerprint = `vendor_weekly|${vendorId}|${now.toISOString().slice(0, 10)}`;
@@ -207,7 +228,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return Response.json({ error: 'Unknown action. Use daily_7day_check or weekly_summary' }, { status: 400 });
+    return Response.json({ error: 'Unknown action. Use daily_reminders or weekly_summary' }, { status: 400 });
 
   } catch (error) {
     console.error('[VendorReminders] Error:', error);
