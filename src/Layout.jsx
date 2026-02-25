@@ -180,6 +180,7 @@ function AppContent({ children, currentPageName }) {
   ] : [
     { title: "דשבורד", url: dashboardUrl, icon: Home },
     { title: "תיקונים", url: createPageUrl("RepairDashboard"), icon: Wrench },
+    ...(isManager ? [{ title: "דוח התחשבנות מעבדה", url: createPageUrl("VendorReport"), icon: FileText }] : []),
     ...((isManager || isShiftManager) ? [{ title: "ניטור מחירים Zap", url: createPageUrl("PriceMonitor"), icon: BarChart3 }] : []),
     { title: "קווים לטיפול", url: createPageUrl("LinesToWorkOn"), icon: Phone },
     { title: "ביצועי נציגים", url: createPageUrl("AgentPerformanceDashboard"), icon: Trophy },
