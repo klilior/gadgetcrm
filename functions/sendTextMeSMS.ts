@@ -113,14 +113,8 @@ Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
 
   try {
-    // Auth: try base44 auth first, fall back to service role (custom Employee auth)
-    let user = null;
-    try {
-      user = await base44.auth.me();
-    } catch (_authErr) {
-      // Custom auth via Employee entity - allow if request has valid token
-      user = { role: 'user' };
-    }
+    // Skip base44 auth entirely - this app uses custom Employee auth
+    // All entity operations use asServiceRole which doesn't require user auth
 
     let body;
     try {
