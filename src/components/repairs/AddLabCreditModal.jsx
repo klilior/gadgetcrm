@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { base44 } from '@/api/base44Client';
 import { Loader2, PackageMinus } from 'lucide-react';
 
-export default function AddLabCreditModal({ isOpen, onClose, onSaved }) {
+export default function AddLabCreditModal({ isOpen, onClose, onSaved, currentUser }) {
   const [form, setForm] = useState({
     taken_by: '',
     product_description: '',
@@ -24,6 +24,7 @@ export default function AddLabCreditModal({ isOpen, onClose, onSaved }) {
       product_description: form.product_description,
       amount: parseFloat(form.amount),
       taken_date: new Date().toISOString(),
+      recorded_by: currentUser?.employee_name || 'לא ידוע',
       notes: form.notes || ''
     });
     setSaving(false);

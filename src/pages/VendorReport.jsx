@@ -37,7 +37,10 @@ export default function VendorReport() {
   const [showAddCredit, setShowAddCredit] = useState(false);
 
   const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
+  const isShiftManager = currentUser?.role === 'מנהל משמרת';
   const isTechnician = currentUser?.role === 'טכנאי';
+  const canAddCredit = isManager || isShiftManager;
+  const canEditAll = isManager;
 
   useEffect(() => {
     loadData();
@@ -175,13 +178,13 @@ export default function VendorReport() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">דוח התחשבנות מעבדת Gadget-Team</h1>
         <div className="flex gap-2">
-          {isManager && (
+          {canAddCredit && (
             <Button onClick={() => setShowAddCredit(true)} className="bg-orange-600 hover:bg-orange-700 gap-2">
               <Plus className="w-4 h-4" />
               רישום מוצר שנלקח
             </Button>
           )}
-          {!isManager && (
+          {!canAddCredit && (
             <Badge variant="secondary" className="text-sm px-3 py-1.5">📋 מצב צפיה בלבד</Badge>
           )}
         </div>
@@ -246,11 +249,11 @@ export default function VendorReport() {
                                 <TableHead className="text-right">רווח גולמי</TableHead>
                                 <TableHead className="text-right font-bold text-orange-700">תשלום למעבדה</TableHead>
                                 <TableHead className="text-right font-bold text-green-700">רווח נקי</TableHead>
-                                {isManager && <TableHead>פעולות</TableHead>}
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {data.repairs.map(repair => {
+                                {canEditAll && <TableHead>פעולות</TableHead>}
+                                </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                {data.repairs.map(repair => {
                                 const isEditing = editingRepairId === repair.id;
                                 const fp = isEditing ? parseFloat(editValues.final_price) || 0 : (repair.final_price || 0);
                                 const pc = isEditing ? parseFloat(editValues.part_cost) || 0 : (repair.part_cost || 0);
@@ -258,36 +261,36 @@ export default function VendorReport() {
                                 const lab = (gross / 2) + pc;
                                 const net = fp - lab;
                                 return (
-                                  <TableRow key={repair.id}>
-                                    <TableCell className="font-mono text-xs">{repair.repair_id}</TableCell>
-                                    <TableCell>{clientsMap[repair.client_id]?.full_name || "—"}</TableCell>
-                                    <TableCell>{techniciansMap[repair.technician_id]?.employee_name || "—"}</TableCell>
-                                    <TableCell className="text-right">
-                                      {isEditing ? (
-                                        <Input type="number" value={editValues.final_price} onChange={e => setEditValues({...editValues, final_price: e.target.value})} className="w-24" />
-                                      ) : `₪${fp.toLocaleString()}`}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {isEditing ? (
-                                        <Input type="number" value={editValues.part_cost} onChange={e => setEditValues({...editValues, part_cost: e.target.value})} className="w-24" />
-                                      ) : `₪${pc.toLocaleString()}`}
-                                    </TableCell>
-                                    <TableCell className="text-right">₪{gross.toLocaleString()}</TableCell>
-                                    <TableCell className="text-right font-bold text-orange-600">₪{lab.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</TableCell>
-                                    <TableCell className="text-right font-bold text-green-600">₪{net.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</TableCell>
-                                    {isManager && (
-                                      <TableCell>
-                                        {isEditing ? (
-                                          <div className="flex gap-1">
-                                            <Button size="icon" variant="ghost" onClick={() => handleSave(repair)}><Save className="w-4 h-4 text-green-600" /></Button>
-                                            <Button size="icon" variant="ghost" onClick={handleCancel}><X className="w-4 h-4 text-red-600" /></Button>
-                                          </div>
-                                        ) : (
-                                          <Button size="icon" variant="ghost" onClick={() => handleEdit(repair)}><Edit className="w-4 h-4 text-blue-600" /></Button>
-                                        )}
-                                      </TableCell>
+                                <TableRow key={repair.id}>
+                                <TableCell className="font-mono text-xs">{repair.repair_id}</TableCell>
+                                <TableCell>{clientsMap[repair.client_id]?.full_name || "—"}</TableCell>
+                                <TableCell>{techniciansMap[repair.technician_id]?.employee_name || "—"}</TableCell>
+                                <TableCell className="text-right">
+                                  {isEditing ? (
+                                    <Input type="number" value={editValues.final_price} onChange={e => setEditValues({...editValues, final_price: e.target.value})} className="w-24" />
+                                  ) : `₪${fp.toLocaleString()}`}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {isEditing ? (
+                                    <Input type="number" value={editValues.part_cost} onChange={e => setEditValues({...editValues, part_cost: e.target.value})} className="w-24" />
+                                  ) : `₪${pc.toLocaleString()}`}
+                                </TableCell>
+                                <TableCell className="text-right">₪{gross.toLocaleString()}</TableCell>
+                                <TableCell className="text-right font-bold text-orange-600">₪{lab.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</TableCell>
+                                <TableCell className="text-right font-bold text-green-600">₪{net.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</TableCell>
+                                {canEditAll && (
+                                  <TableCell>
+                                    {isEditing ? (
+                                      <div className="flex gap-1">
+                                        <Button size="icon" variant="ghost" onClick={() => handleSave(repair)}><Save className="w-4 h-4 text-green-600" /></Button>
+                                        <Button size="icon" variant="ghost" onClick={handleCancel}><X className="w-4 h-4 text-red-600" /></Button>
+                                      </div>
+                                    ) : (
+                                      <Button size="icon" variant="ghost" onClick={() => handleEdit(repair)}><Edit className="w-4 h-4 text-blue-600" /></Button>
                                     )}
-                                  </TableRow>
+                                  </TableCell>
+                                )}
+                                </TableRow>
                                 );
                               })}
                             </TableBody>
@@ -309,8 +312,9 @@ export default function VendorReport() {
                                   <TableHead>מי לקח</TableHead>
                                   <TableHead>מוצר</TableHead>
                                   <TableHead className="text-right">שווי</TableHead>
+                                  <TableHead>נרשם ע״י</TableHead>
                                   <TableHead>הערות</TableHead>
-                                  {isManager && <TableHead>פעולות</TableHead>}
+                                  {canEditAll && <TableHead>פעולות</TableHead>}
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -334,12 +338,13 @@ export default function VendorReport() {
                                           <Input type="number" value={editCreditValues.amount} onChange={e => setEditCreditValues({...editCreditValues, amount: e.target.value})} className="w-24" />
                                         ) : `-₪${(credit.amount || 0).toLocaleString()}`}
                                       </TableCell>
+                                      <TableCell className="text-xs text-gray-500">{credit.recorded_by || '—'}</TableCell>
                                       <TableCell className="text-xs text-gray-500">
                                         {isEditing ? (
                                           <Input value={editCreditValues.notes} onChange={e => setEditCreditValues({...editCreditValues, notes: e.target.value})} className="w-28" />
                                         ) : (credit.notes || '—')}
                                       </TableCell>
-                                      {isManager && (
+                                      {canEditAll && (
                                         <TableCell>
                                           {isEditing ? (
                                             <div className="flex gap-1">
@@ -371,7 +376,7 @@ export default function VendorReport() {
         </CardContent>
       </Card>
 
-      <AddLabCreditModal isOpen={showAddCredit} onClose={() => setShowAddCredit(false)} onSaved={loadData} />
+      <AddLabCreditModal isOpen={showAddCredit} onClose={() => setShowAddCredit(false)} onSaved={loadData} currentUser={currentUser} />
     </div>
   );
 }
