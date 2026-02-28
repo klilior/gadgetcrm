@@ -20,6 +20,7 @@ import { UserProvider } from "./components/UserAuth";
 import AddUserModal from "./components/AddUserModal";
 import PaymentModal from "./components/payments/PaymentModal";
 import QuickLeadButton from "./components/leads/QuickLeadButton";
+import IncomingCallPopup from "./components/calls/IncomingCallPopup";
 
 // Compact menu item component
 function MenuItem({ item, isActive, onClick }) {
@@ -505,6 +506,7 @@ function AppContent({ children, currentPageName }) {
       )}
 
       {!isTechnicianRole && <QuickLeadButton />}
+      <IncomingCallPopup />
     </div>
   );
 }

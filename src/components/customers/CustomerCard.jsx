@@ -8,7 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     X, User, Phone, Mail, MapPin, Calendar, DollarSign,
     TrendingUp, Package, Wrench, MessageCircle, FileText,
-    Star, Edit, ShoppingCart, Phone as PhoneIcon, Send, ExternalLink, PlusCircle
+    Star, Edit, ShoppingCart, Phone as PhoneIcon, Send, ExternalLink, PlusCircle,
+    PhoneIncoming, PhoneOutgoing
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -327,12 +328,13 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                             </div>
                         ) : (
                             <Tabs defaultValue="overview" className="w-full">
-                                <TabsList className="grid w-full grid-cols-6 mb-6">
+                                <TabsList className="grid w-full grid-cols-7 mb-6">
                                     <TabsTrigger value="overview">סקירה</TabsTrigger>
                                     <TabsTrigger value="devices">מכשירים ({devices.length})</TabsTrigger>
                                     <TabsTrigger value="orders">הזמנות ({stats.totalOrders})</TabsTrigger>
                                     <TabsTrigger value="tickets">פניות ({stats.totalTickets})</TabsTrigger>
                                     <TabsTrigger value="repairs">תיקונים ({stats.totalRepairs})</TabsTrigger>
+                                    <TabsTrigger value="recordings">הקלטות</TabsTrigger>
                                     <TabsTrigger value="timeline">ציר זמן</TabsTrigger>
                                 </TabsList>
 
@@ -605,6 +607,44 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                                     </CardContent>
                                                 </Card>
                                             ))
+                                        )}
+                                    </div>
+                                </TabsContent>
+
+                                {/* Recordings Tab */}
+                                <TabsContent value="recordings">
+                                    <div className="space-y-4">
+                                        {activities.filter(a => a.recording_url && (a.activity_type === 'שיחה נכנסת' || a.activity_type === 'שיחה יוצאת')).length === 0 ? (
+                                            <div className="text-center py-10 text-gray-500">
+                                                <Phone className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                                                <p>אין הקלטות שיחות</p>
+                                            </div>
+                                        ) : (
+                                            activities
+                                                .filter(a => a.recording_url && (a.activity_type === 'שיחה נכנסת' || a.activity_type === 'שיחה יוצאת'))
+                                                .map(call => (
+                                                    <Card key={call.id} className="hover:shadow-lg transition-shadow">
+                                                        <CardContent className="p-4 space-y-2">
+                                                            <div className="flex justify-between items-center">
+                                                                <div className="flex items-center gap-2">
+                                                                    {call.activity_type === 'שיחה נכנסת' ? (
+                                                                        <PhoneIncoming className="w-4 h-4 text-green-500" />
+                                                                    ) : (
+                                                                        <PhoneOutgoing className="w-4 h-4 text-blue-500" />
+                                                                    )}
+                                                                    <span className="font-medium text-sm">{call.activity_type}</span>
+                                                                </div>
+                                                                <span className="text-xs text-gray-500">
+                                                                    {call.created_date ? format(new Date(call.created_date), 'dd/MM/yyyy HH:mm', { locale: he }) : ''}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-xs text-gray-600">{call.content?.substring(0, 120)}</p>
+                                                            <audio controls className="w-full h-8" preload="none">
+                                                                <source src={call.recording_url} />
+                                                            </audio>
+                                                        </CardContent>
+                                                    </Card>
+                                                ))
                                         )}
                                     </div>
                                 </TabsContent>
