@@ -2,11 +2,21 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 function normalizePhone(phone) {
     if (!phone) return null;
-    let cleaned = phone.replace(/[\s\-\(\)\.+]/g, '');
-    if (cleaned.startsWith('972')) cleaned = '0' + cleaned.slice(3);
-    if (cleaned.startsWith('+972')) cleaned = '0' + cleaned.slice(4);
-    if (cleaned.length < 9 || cleaned.length > 11) return null;
-    return cleaned;
+    let digits = phone.replace(/[^\d]/g, '');
+    if (digits.length === 13 && digits.startsWith('9720')) {
+        digits = digits.slice(3);
+    } else if (digits.length === 12 && digits.startsWith('972')) {
+        digits = '0' + digits.slice(3);
+    } else if (digits.startsWith('0972') && digits.length > 12) {
+        digits = '0' + digits.slice(4);
+    }
+    if (digits.length === 10 && digits.startsWith('0')) return digits;
+    if (digits.length === 9 && !digits.startsWith('0')) return '0' + digits;
+    if (digits.length >= 9 && digits.length <= 11) {
+        if (!digits.startsWith('0')) digits = '0' + digits;
+        return digits.slice(0, 10);
+    }
+    return null;
 }
 
 async function findOrCreateClient(sr, billing, shipping, customerId) {

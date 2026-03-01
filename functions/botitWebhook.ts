@@ -34,19 +34,24 @@ Deno.serve(async (req) => {
             return Response.json({ success: false, error: 'No sender phone' });
         }
 
-        // Normalize phone number logic - Robust version
+        // Universal Israeli phone normalization
         const normalizePhone = (phone) => {
             if (!phone) return '';
-            let clean = phone.toString().replace(/\D/g, '');
-            // Remove 972 prefix if exists at start
-            if (clean.startsWith('972')) {
-                clean = '0' + clean.substring(3);
+            let digits = phone.toString().replace(/[^\d]/g, '');
+            if (digits.length === 13 && digits.startsWith('9720')) {
+                digits = digits.slice(3);
+            } else if (digits.length === 12 && digits.startsWith('972')) {
+                digits = '0' + digits.slice(3);
+            } else if (digits.startsWith('0972') && digits.length > 12) {
+                digits = '0' + digits.slice(4);
             }
-            // Ensure starts with 0 if length is 9 and starts with 5
-            if (clean.length === 9 && clean.startsWith('5')) {
-                clean = '0' + clean;
+            if (digits.length === 10 && digits.startsWith('0')) return digits;
+            if (digits.length === 9 && !digits.startsWith('0')) return '0' + digits;
+            if (digits.length >= 9 && digits.length <= 11) {
+                if (!digits.startsWith('0')) digits = '0' + digits;
+                return digits.slice(0, 10);
             }
-            return clean;
+            return digits;
         };
 
         const cleanPhone = normalizePhone(senderPhone);

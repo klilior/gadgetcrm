@@ -28,7 +28,13 @@ class GreenApiAdapter {
     normalizePhone(chatId) {
         if (!chatId) return '';
         const phone = chatId.replace(/@c\.us$/, '');
-        return phone;
+        // Normalize to 05XXXXXXXX format
+        let digits = phone.replace(/[^\d]/g, '');
+        if (digits.length === 13 && digits.startsWith('9720')) digits = digits.slice(3);
+        else if (digits.length === 12 && digits.startsWith('972')) digits = '0' + digits.slice(3);
+        if (digits.length === 9 && !digits.startsWith('0')) digits = '0' + digits;
+        if (digits.length === 10 && digits.startsWith('0')) return digits;
+        return digits || phone;
     }
 }
 
@@ -54,11 +60,16 @@ class BotitAdapter {
 
     normalizePhone(phone) {
         if (!phone) return "";
-        let s = phone.replace(/\s|-/g, "").replace(/^\+/, "");
-        if (/^0\d{9}$/.test(s)) {
-            s = "972" + s.slice(1);
+        let digits = phone.replace(/[^\d]/g, '');
+        if (digits.length === 13 && digits.startsWith('9720')) digits = digits.slice(3);
+        else if (digits.length === 12 && digits.startsWith('972')) digits = '0' + digits.slice(3);
+        if (digits.length === 9 && !digits.startsWith('0')) digits = '0' + digits;
+        if (digits.length === 10 && digits.startsWith('0')) return digits;
+        if (digits.length >= 9 && digits.length <= 11) {
+            if (!digits.startsWith('0')) digits = '0' + digits;
+            return digits.slice(0, 10);
         }
-        return s;
+        return digits;
     }
 }
 

@@ -1,15 +1,22 @@
-
 import { createClientFromRequest } from 'npm:@base44/sdk@0.5.0';
 
 function normalizePhone(phone) {
-    if (!phone) return "";
-    let s = phone.replace(/\s|-/g, "").replace(/^\+/, "");
-    // Check for Israeli mobile numbers starting with '05' or landlines starting with '0', exactly 10 digits
-    // And convert them to international format if they are.
-    if (/^0\d{9}$/.test(s)) { // Matches 05X-XXXXXXX or 0X-XXXXXXX (10 digits total)
-        s = "972" + s.slice(1);
+    if (!phone) return null;
+    let digits = phone.replace(/[^\d]/g, '');
+    if (digits.length === 13 && digits.startsWith('9720')) {
+        digits = digits.slice(3);
+    } else if (digits.length === 12 && digits.startsWith('972')) {
+        digits = '0' + digits.slice(3);
+    } else if (digits.startsWith('0972') && digits.length > 12) {
+        digits = '0' + digits.slice(4);
     }
-    return s;
+    if (digits.length === 10 && digits.startsWith('0')) return digits;
+    if (digits.length === 9 && !digits.startsWith('0')) return '0' + digits;
+    if (digits.length >= 9 && digits.length <= 11) {
+        if (!digits.startsWith('0')) digits = '0' + digits;
+        return digits.slice(0, 10);
+    }
+    return null;
 }
 
 Deno.serve(async (req) => {

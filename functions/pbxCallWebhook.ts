@@ -2,27 +2,33 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 function normalizePhone(phone) {
     if (!phone) return null;
-    let cleaned = phone.replace(/[\s\-\(\)\.+]/g, '');
-    if (cleaned.startsWith('972')) cleaned = '0' + cleaned.slice(3);
-    if (cleaned.startsWith('+972')) cleaned = '0' + cleaned.slice(4);
-    if (cleaned.length < 9 || cleaned.length > 11) return null;
-    return cleaned;
+    let digits = phone.replace(/[^\d]/g, '');
+    if (digits.length === 13 && digits.startsWith('9720')) {
+        digits = digits.slice(3);
+    } else if (digits.length === 12 && digits.startsWith('972')) {
+        digits = '0' + digits.slice(3);
+    } else if (digits.startsWith('0972') && digits.length > 12) {
+        digits = '0' + digits.slice(4);
+    }
+    if (digits.length === 10 && digits.startsWith('0')) return digits;
+    if (digits.length === 9 && !digits.startsWith('0')) return '0' + digits;
+    if (digits.length >= 9 && digits.length <= 11) {
+        if (!digits.startsWith('0')) digits = '0' + digits;
+        return digits.slice(0, 10);
+    }
+    return null;
 }
 
-function normalizePhoneForSearch(phone) {
-    if (!phone) return [];
-    let cleaned = phone.replace(/[\s\-\(\)\.+]/g, '');
+function phoneSearchVariants(phone) {
+    const normalized = normalizePhone(phone);
+    if (!normalized) return [];
     const variants = new Set();
-    variants.add(cleaned);
-    if (cleaned.startsWith('972')) {
-        variants.add('0' + cleaned.slice(3));
-        variants.add('+' + cleaned);
-    }
-    if (cleaned.startsWith('0')) {
-        variants.add('972' + cleaned.slice(1));
-        variants.add('+972' + cleaned.slice(1));
-    }
-    return [...variants].filter(v => v && v.length >= 9);
+    variants.add(normalized);
+    variants.add('972' + normalized.slice(1));
+    variants.add('+972' + normalized.slice(1));
+    variants.add('9720' + normalized.slice(1));
+    variants.add('+9720' + normalized.slice(1));
+    return [...variants];
 }
 
 Deno.serve(async (req) => {
@@ -97,7 +103,7 @@ Deno.serve(async (req) => {
         }
 
         // Search for customer by phone
-        const phoneVariants = normalizePhoneForSearch(externalNumber);
+        const phoneVariants = phoneSearchVariants(externalNumber);
         let customer = null;
 
         for (const variant of phoneVariants) {
