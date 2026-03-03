@@ -84,9 +84,6 @@ Deno.serve(async (req) => {
         const extension = callData.extension_number || callData.ext || callData.extension || '';
         const direction = callData.call_direction || callData.direction || callData.type || 'incoming';
         const callStatus = callData.call_status || callData.status || callData.event || 'ringing';
-        const duration = callData.duration || callData.billsec || '0';
-        const recordingUrl = callData.recording_url || callData.recordingUrl || callData.recording || '';
-
         const duration = callData.call_duration || callData.duration || callData.billsec || '0';
         const recordingUrl = callData.recording_url || callData.recordingUrl || callData.recording || '';
         const isIncoming = direction === 'incoming' || direction === 'inbound' || direction === 'in';
