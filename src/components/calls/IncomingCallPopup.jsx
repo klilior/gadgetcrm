@@ -25,7 +25,7 @@ export default function IncomingCallPopup() {
                     const call = recentCalls[0];
                     setLastSeenId(call.id);
 
-                    const phoneMatch = call.content?.match(/\d{9,11}/);
+                    const phoneMatch = call.content?.match(/(?:מ-[^\s]+ \()?(\d{9,11})/) || call.content?.match(/(\d{9,11})/);
                     let customerInfo = null;
 
                     if (phoneMatch) {
