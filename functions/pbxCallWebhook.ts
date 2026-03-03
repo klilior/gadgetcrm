@@ -78,15 +78,17 @@ Deno.serve(async (req) => {
 
         console.log('📞 [PBX Webhook] Received call data:', JSON.stringify(callData));
 
-        const callerNumber = callData.caller || callData.from || callData.phone_number || callData.callerNumber || callData.src || '';
+        const callerNumber = callData.caller_number || callData.caller || callData.from || callData.phone_number || callData.callerNumber || callData.src || '';
         const calleeNumber = callData.callee || callData.to || callData.dst || callData.called || '';
-        const callId = callData.callid || callData.call_id || callData.uniqueid || '';
-        const extension = callData.ext || callData.extension || callData.extension_number || '';
-        const direction = callData.direction || callData.type || 'incoming';
-        const callStatus = callData.status || callData.event || 'ringing';
+        const callId = callData.uuid || callData.callid || callData.call_id || callData.uniqueid || '';
+        const extension = callData.extension_number || callData.ext || callData.extension || '';
+        const direction = callData.call_direction || callData.direction || callData.type || 'incoming';
+        const callStatus = callData.call_status || callData.status || callData.event || 'ringing';
         const duration = callData.duration || callData.billsec || '0';
         const recordingUrl = callData.recording_url || callData.recordingUrl || callData.recording || '';
 
+        const duration = callData.call_duration || callData.duration || callData.billsec || '0';
+        const recordingUrl = callData.recording_url || callData.recordingUrl || callData.recording || '';
         const isIncoming = direction === 'incoming' || direction === 'inbound' || direction === 'in';
         const externalNumber = isIncoming ? callerNumber : calleeNumber;
         const normalizedPhone = normalizePhone(externalNumber);
