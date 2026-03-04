@@ -10,12 +10,21 @@ const DEDUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 
 function extractPhone(content) {
     if (!content) return null;
-    // Try parentheses first, then after dash, then standalone 10 digits, then 9 digits
-    const match = content.match(/\((\d{10})\)/) || content.match(/- (\d{10})\b/) || content.match(/\b(\d{10})\b/);
-    if (match) return match[1];
+    // Try parentheses first (most reliable)
+    const parenMatch = content.match(/\((\d{9,10})\)/);
+    if (parenMatch) return parenMatch[1].length === 9 ? '0' + parenMatch[1] : parenMatch[1];
+    // Try "מספר: XXXX" pattern
+    const numberFieldMatch = content.match(/מספר:\s*(\d{9,10})/);
+    if (numberFieldMatch) return numberFieldMatch[1].length === 9 ? '0' + numberFieldMatch[1] : numberFieldMatch[1];
+    // Try after dash pattern
+    const dashMatch = content.match(/- (\d{10})\b/);
+    if (dashMatch) return dashMatch[1];
     // Try international format 972...
     const intlMatch = content.match(/\+?972(\d{9})/) || content.match(/\b972(\d{9})\b/);
     if (intlMatch) return '0' + intlMatch[1];
+    // Standalone 10-digit
+    const standaloneMatch = content.match(/\b(0\d{9})\b/);
+    if (standaloneMatch) return standaloneMatch[1];
     return null;
 }
 
@@ -29,43 +38,66 @@ function normalizePhone(phone) {
     return digits;
 }
 
-/** Deduplicate calls: same phone + same type within 2 min window = keep best one */
+/** Deduplicate calls: same phone + same type within window = keep best one. Also group by thread_id. */
 function deduplicateCalls(calls) {
     const sorted = [...calls].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
     const result = [];
-    const seen = []; // {phone, type, time, index}
+    const seen = []; // {phone, type, time, resultIdx, threadId}
+    const threadMap = {}; // thread_id -> resultIdx
 
     for (const call of sorted) {
         const phone = extractPhone(call.content);
+        const normalizedPh = normalizePhone(phone);
         const content = call.content || '';
         const isMissed = content.includes('לא נענתה') || (call.summary || '').includes('לא נענתה');
         const callType = isMissed ? 'missed' : call.activity_type;
         const callTime = new Date(call.created_date).getTime();
+        const threadId = call.thread_id;
 
-        // Check if there's already a call with same phone+type within the dedup window
-        const dupIdx = seen.findIndex(s => 
-            s.phone === phone && s.type === callType && Math.abs(s.time - callTime) < DEDUP_WINDOW_MS
-        );
-
-        if (dupIdx !== -1) {
-            // Keep the one with more info (longer content, has duration, or has recording)
-            const existing = result[seen[dupIdx].resultIdx];
+        // First check: same thread_id = same call session, always merge
+        if (threadId && threadMap[threadId] !== undefined) {
+            const existingIdx = threadMap[threadId];
+            const existing = result[existingIdx];
             const existingContent = existing.content || '';
             const hasBetterInfo = content.length > existingContent.length || 
                 (content.includes('משך:') && !existingContent.includes('משך:')) ||
                 (call.recording_url && !existing.recording_url);
             if (hasBetterInfo) {
-                result[seen[dupIdx].resultIdx] = call;
+                result[existingIdx] = { ...call, _dupCount: (result[existingIdx]._dupCount || 1) + 1 };
+            } else {
+                if (!result[existingIdx]._dupCount) result[existingIdx]._dupCount = 1;
+                result[existingIdx]._dupCount++;
             }
-            // Also merge duplicate count for display
-            if (!result[seen[dupIdx].resultIdx]._dupCount) result[seen[dupIdx].resultIdx]._dupCount = 1;
-            result[seen[dupIdx].resultIdx]._dupCount++;
+            continue;
+        }
+
+        // Second check: same phone + same type within dedup window
+        const lookupPhone = normalizedPh || phone;
+        const dupIdx = lookupPhone ? seen.findIndex(s => 
+            s.phone === lookupPhone && s.type === callType && Math.abs(s.time - callTime) < DEDUP_WINDOW_MS
+        ) : -1;
+
+        if (dupIdx !== -1) {
+            const existingIdx = seen[dupIdx].resultIdx;
+            const existing = result[existingIdx];
+            const existingContent = existing.content || '';
+            const hasBetterInfo = content.length > existingContent.length || 
+                (content.includes('משך:') && !existingContent.includes('משך:')) ||
+                (call.recording_url && !existing.recording_url);
+            if (hasBetterInfo) {
+                result[existingIdx] = { ...call, _dupCount: (result[existingIdx]._dupCount || 1) + 1 };
+            } else {
+                if (!result[existingIdx]._dupCount) result[existingIdx]._dupCount = 1;
+                result[existingIdx]._dupCount++;
+            }
+            if (threadId) threadMap[threadId] = existingIdx;
             continue;
         }
 
         const resultIdx = result.length;
         result.push(call);
-        if (phone) seen.push({ phone, type: callType, time: callTime, resultIdx });
+        if (lookupPhone) seen.push({ phone: lookupPhone, type: callType, time: callTime, resultIdx });
+        if (threadId) threadMap[threadId] = resultIdx;
     }
     return result;
 }

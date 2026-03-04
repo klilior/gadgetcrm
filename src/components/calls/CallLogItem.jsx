@@ -11,9 +11,19 @@ export default function CallLogItem({ call, client, aiTip, dupCount }) {
     const isIncoming = call.activity_type === 'שיחה נכנסת';
     const isMissed = content.includes('לא נענתה') || summary.includes('לא נענתה');
     
-    // Extract phone
-    const phoneMatch = content.match(/\((\d{10})\)/) || content.match(/- (\d{10})/) || content.match(/(\d{10})/);
-    const phone = phoneMatch ? phoneMatch[1] : 'לא ידוע';
+    // Extract phone - try multiple patterns
+    const parenMatch = content.match(/\((\d{9,10})\)/);
+    const numberFieldMatch = content.match(/מספר:\s*(\d{9,10})/);
+    const dashMatch = content.match(/- (\d{10})\b/);
+    const intlMatch = content.match(/\+?972(\d{9})/);
+    const standaloneMatch = content.match(/\b(0\d{9})\b/);
+    
+    let phone = 'לא ידוע';
+    if (parenMatch) phone = parenMatch[1].length === 9 ? '0' + parenMatch[1] : parenMatch[1];
+    else if (numberFieldMatch) phone = numberFieldMatch[1].length === 9 ? '0' + numberFieldMatch[1] : numberFieldMatch[1];
+    else if (dashMatch) phone = dashMatch[1];
+    else if (intlMatch) phone = '0' + intlMatch[1];
+    else if (standaloneMatch) phone = standaloneMatch[1];
     
     // Extract extension
     const extMatch = content.match(/שלוחה: (\d+)/);
