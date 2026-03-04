@@ -204,10 +204,9 @@ Deno.serve(async (req) => {
                         await sr.OrderProduct.bulkCreate(productItems);
                     }
                 } else {
-                    // Only create order if it has a client (paid) or we want to track pending too
-                    if (!clientId) {
-                        // For unpaid orders, still track them but without client
-                        orderData.client_id = null;
+                    // For unpaid orders without a client, remove client_id from data
+                    if (!resolvedClientId) {
+                        delete orderData.client_id;
                     }
                     const createdOrder = await sr.Order.create(orderData);
                     
