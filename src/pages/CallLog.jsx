@@ -217,7 +217,8 @@ export default function CallLog() {
             const content = call.content || '';
             const summary = call.summary || '';
             const phone = extractPhone(content);
-            const client = phone ? clients[phone] : null;
+            const normalized = normalizePhone(phone);
+            const client = (phone && clients[phone]) || (normalized && clients[normalized]) || null;
             const clientName = client?.full_name || '';
 
             const isMissed = content.includes('לא נענתה') || summary.includes('לא נענתה');
