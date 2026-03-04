@@ -134,7 +134,15 @@ Deno.serve(async (req) => {
         const wooOrders = await response.json();
         let createdCount = 0, updatedCount = 0, failedCount = 0, clientsCreated = 0;
 
-        for (const wooOrder of wooOrders) {
+        // Helper: delay to avoid rate limits
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        for (let idx = 0; idx < wooOrders.length; idx++) {
+            const wooOrder = wooOrders[idx];
+            // Throttle: pause every 5 orders to avoid rate limits
+            if (idx > 0 && idx % 5 === 0) {
+                await delay(2000);
+            }
             try {
                 // Only create/update client for PAID orders (processing, completed, on-hold)
                 const isPaid = ['processing', 'completed', 'on-hold'].includes(wooOrder.status);
