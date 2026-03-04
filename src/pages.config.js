@@ -55,6 +55,7 @@ import AttendanceManagerReport from './pages/AttendanceManagerReport';
 import AttendanceReport from './pages/AttendanceReport';
 import AttendanceSettings from './pages/AttendanceSettings';
 import BuildSchedule from './pages/BuildSchedule';
+import CallLog from './pages/CallLog';
 import CarrierManagement from './pages/CarrierManagement';
 import CommissionCalculation from './pages/CommissionCalculation';
 import CommissionGroupMappings from './pages/CommissionGroupMappings';
@@ -103,7 +104,6 @@ import VendorReport from './pages/VendorReport';
 import WeeklySchedule from './pages/WeeklySchedule';
 import WhatsAppDebug from './pages/WhatsAppDebug';
 import WhatsAppProviders from './pages/WhatsAppProviders';
-import CallLog from './pages/CallLog';
 import __Layout from './Layout.jsx';
 
 
@@ -116,6 +116,7 @@ export const PAGES = {
     "AttendanceReport": AttendanceReport,
     "AttendanceSettings": AttendanceSettings,
     "BuildSchedule": BuildSchedule,
+    "CallLog": CallLog,
     "CarrierManagement": CarrierManagement,
     "CommissionCalculation": CommissionCalculation,
     "CommissionGroupMappings": CommissionGroupMappings,
@@ -164,7 +165,6 @@ export const PAGES = {
     "WeeklySchedule": WeeklySchedule,
     "WhatsAppDebug": WhatsAppDebug,
     "WhatsAppProviders": WhatsAppProviders,
-    "CallLog": CallLog,
 }
 
 export const pagesConfig = {

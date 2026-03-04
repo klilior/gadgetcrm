@@ -1,27 +1,74 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, RefreshCw, User, Clock, ExternalLink, Filter } from 'lucide-react';
+import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, RefreshCw, Filter } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Link } from 'react-router-dom';
-import { createPageUrl } from '@/utils';
 import CallLogItem from '../components/calls/CallLogItem';
+
+const DEDUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
+
+function extractPhone(content) {
+    if (!content) return null;
+    const match = content.match(/\((\d{10})\)/) || content.match(/- (\d{10})/) || content.match(/(\d{10})/);
+    return match ? match[1] : null;
+}
+
+/** Deduplicate calls: same phone + same type within 2 min window = keep best one */
+function deduplicateCalls(calls) {
+    const sorted = [...calls].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    const result = [];
+    const seen = []; // {phone, type, time, index}
+
+    for (const call of sorted) {
+        const phone = extractPhone(call.content);
+        const content = call.content || '';
+        const isMissed = content.includes('לא נענתה') || (call.summary || '').includes('לא נענתה');
+        const callType = isMissed ? 'missed' : call.activity_type;
+        const callTime = new Date(call.created_date).getTime();
+
+        // Check if there's already a call with same phone+type within the dedup window
+        const dupIdx = seen.findIndex(s => 
+            s.phone === phone && s.type === callType && Math.abs(s.time - callTime) < DEDUP_WINDOW_MS
+        );
+
+        if (dupIdx !== -1) {
+            // Keep the one with more info (longer content, has duration, or has recording)
+            const existing = result[seen[dupIdx].resultIdx];
+            const existingContent = existing.content || '';
+            const hasBetterInfo = content.length > existingContent.length || 
+                (content.includes('משך:') && !existingContent.includes('משך:')) ||
+                (call.recording_url && !existing.recording_url);
+            if (hasBetterInfo) {
+                result[seen[dupIdx].resultIdx] = call;
+            }
+            // Also merge duplicate count for display
+            if (!result[seen[dupIdx].resultIdx]._dupCount) result[seen[dupIdx].resultIdx]._dupCount = 1;
+            result[seen[dupIdx].resultIdx]._dupCount++;
+            continue;
+        }
+
+        const resultIdx = result.length;
+        result.push(call);
+        if (phone) seen.push({ phone, type: callType, time: callTime, resultIdx });
+    }
+    return result;
+}
 
 export default function CallLog() {
     const [activities, setActivities] = useState([]);
     const [clients, setClients] = useState({});
+    const [clientTips, setClientTips] = useState({});
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [filter, setFilter] = useState('all'); // all, incoming, outgoing, missed
+    const [filter, setFilter] = useState('all');
 
     const loadData = async () => {
         setLoading(true);
         try {
             const [incoming, outgoing] = await Promise.all([
-                base44.entities.Activity.filter({ activity_type: 'שיחה נכנסת' }, '-created_date', 100),
-                base44.entities.Activity.filter({ activity_type: 'שיחה יוצאת' }, '-created_date', 100),
+                base44.entities.Activity.filter({ activity_type: 'שיחה נכנסת' }, '-created_date', 150),
+                base44.entities.Activity.filter({ activity_type: 'שיחה יוצאת' }, '-created_date', 150),
             ]);
 
             const allCalls = [...incoming, ...outgoing].sort((a, b) => 
@@ -37,31 +84,110 @@ export default function CallLog() {
             });
 
             const clientMap = {};
-            for (const phone of phones) {
-                try {
-                    const results = await base44.entities.Client.filter({ phone }, null, 1);
-                    if (results.length > 0) clientMap[phone] = results[0];
-                } catch (_e) { /* skip */ }
+            const phonesArr = [...phones];
+            // Batch lookups in parallel (max 10 at a time)
+            for (let i = 0; i < phonesArr.length; i += 10) {
+                const batch = phonesArr.slice(i, i + 10);
+                const results = await Promise.all(
+                    batch.map(phone => base44.entities.Client.filter({ phone }, null, 1).catch(() => []))
+                );
+                results.forEach((res, idx) => {
+                    if (res.length > 0) clientMap[batch[idx]] = res[0];
+                });
             }
             setClients(clientMap);
+
+            // Generate AI tips for identified clients
+            generateTips(clientMap);
         } catch (e) {
             console.error('Error loading calls:', e);
         }
         setLoading(false);
     };
 
+    const generateTips = async (clientMap) => {
+        const uniqueClients = {};
+        Object.values(clientMap).forEach(c => { uniqueClients[c.id] = c; });
+        
+        const clientIds = Object.keys(uniqueClients);
+        if (clientIds.length === 0) return;
+
+        // Fetch recent activities for all identified clients (limit work)
+        const tipsMap = {};
+        
+        // Process in batches of 5 clients
+        for (let i = 0; i < Math.min(clientIds.length, 20); i += 5) {
+            const batch = clientIds.slice(i, i + 5);
+            const batchPromises = batch.map(async (clientId) => {
+                const client = uniqueClients[clientId];
+                try {
+                    const [tickets, repairs, orders, recentActivities] = await Promise.all([
+                        base44.entities.Ticket.filter({ customer_id: clientId }, '-created_date', 3).catch(() => []),
+                        base44.entities.Repair.filter({ client_id: clientId }, '-created_date', 3).catch(() => []),
+                        base44.entities.Order.filter({ client_id: clientId }, '-order_date', 3).catch(() => []),
+                        base44.entities.Activity.filter({ ticket_id: clientId }, '-created_date', 5).catch(() => []),
+                    ]);
+
+                    const openTickets = tickets.filter(t => !['סגור', 'בוטל'].includes(t.status));
+                    const openRepairs = repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון', 'נמסר', 'הושלם', 'בוטל'].includes(r.status));
+
+                    // Build context for AI
+                    const parts = [];
+                    parts.push(`לקוח: ${client.full_name}`);
+                    if (client.customer_tier) parts.push(`דרגה: ${client.customer_tier}`);
+                    if (openTickets.length > 0) {
+                        parts.push(`טיקטים פתוחים: ${openTickets.map(t => `${t.subject || t.title || 'ללא נושא'} (${t.status})`).join(', ')}`);
+                    }
+                    if (openRepairs.length > 0) {
+                        parts.push(`תיקונים פעילים: ${openRepairs.map(r => `${r.model || r.description || 'מכשיר'} - ${r.status}${r.vendor_name ? ` אצל ${r.vendor_name}` : ''}`).join(', ')}`);
+                    }
+                    if (orders.length > 0) {
+                        const recentOrder = orders[0];
+                        const orderDate = recentOrder.order_date ? new Date(recentOrder.order_date).toLocaleDateString('he-IL') : '';
+                        parts.push(`הזמנה אחרונה: ${recentOrder.status} בתאריך ${orderDate} סכום ${recentOrder.total || ''}`);
+                    }
+                    if (client.total_orders) parts.push(`סה"כ הזמנות: ${client.total_orders}`);
+                    if (client.total_repairs) parts.push(`סה"כ תיקונים: ${client.total_repairs}`);
+
+                    if (parts.length <= 2) {
+                        tipsMap[clientId] = 'אין פעילות ידועה';
+                        return;
+                    }
+
+                    const res = await base44.integrations.Core.InvokeLLM({
+                        prompt: `אתה מערכת CRM חכמה. בהינתן המידע הבא על לקוח שמתקשר עכשיו, כתוב טיפ קצר מאוד (עד 15 מילים) בעברית שיעזור לנציג להבין מה הלקוח כנראה צריך. התמקד בדבר הכי רלוונטי ודחוף. אל תכתוב "הלקוח". תתחיל ישר עם התוכן.\n\nמידע:\n${parts.join('\n')}`,
+                        response_json_schema: {
+                            type: "object",
+                            properties: {
+                                tip: { type: "string", description: "טיפ קצר לנציג" }
+                            }
+                        }
+                    });
+                    tipsMap[clientId] = res?.tip || 'אין מידע';
+                } catch (_e) {
+                    tipsMap[clientId] = null;
+                }
+            });
+            await Promise.all(batchPromises);
+        }
+        
+        setClientTips(prev => ({ ...prev, ...tipsMap }));
+    };
+
     useEffect(() => { loadData(); }, []);
 
+    // Deduplicate then filter
+    const dedupedCalls = useMemo(() => deduplicateCalls(activities), [activities]);
+
     const filteredCalls = useMemo(() => {
-        return activities.filter(call => {
+        return dedupedCalls.filter(call => {
             const content = call.content || '';
             const summary = call.summary || '';
             const phone = extractPhone(content);
             const client = phone ? clients[phone] : null;
             const clientName = client?.full_name || '';
 
-            // Filter by type
-            const isMissed = content.includes('לא נענתה');
+            const isMissed = content.includes('לא נענתה') || summary.includes('לא נענתה');
             const isIncoming = call.activity_type === 'שיחה נכנסת';
             const isOutgoing = call.activity_type === 'שיחה יוצאת';
 
@@ -69,7 +195,6 @@ export default function CallLog() {
             if (filter === 'outgoing' && !isOutgoing) return false;
             if (filter === 'missed' && !isMissed) return false;
 
-            // Search
             if (search) {
                 const q = search.toLowerCase();
                 return (phone && phone.includes(q)) || 
@@ -79,24 +204,18 @@ export default function CallLog() {
             }
             return true;
         });
-    }, [activities, clients, filter, search]);
+    }, [dedupedCalls, clients, filter, search]);
 
-    // Stats
     const stats = useMemo(() => {
-        const total = activities.length;
-        const incoming = activities.filter(a => a.activity_type === 'שיחה נכנסת' && !(a.content || '').includes('לא נענתה')).length;
-        const outgoing = activities.filter(a => a.activity_type === 'שיחה יוצאת').length;
-        const missed = activities.filter(a => (a.content || '').includes('לא נענתה')).length;
-        const identified = activities.filter(a => {
-            const phone = extractPhone(a.content);
-            return phone && clients[phone];
-        }).length;
-        return { total, incoming, outgoing, missed, identified };
-    }, [activities, clients]);
+        const total = dedupedCalls.length;
+        const incoming = dedupedCalls.filter(a => a.activity_type === 'שיחה נכנסת' && !(a.content || '').includes('לא נענתה') && !(a.summary || '').includes('לא נענתה')).length;
+        const outgoing = dedupedCalls.filter(a => a.activity_type === 'שיחה יוצאת').length;
+        const missed = dedupedCalls.filter(a => (a.content || '').includes('לא נענתה') || (a.summary || '').includes('לא נענתה')).length;
+        return { total, incoming, outgoing, missed };
+    }, [dedupedCalls]);
 
     return (
         <div dir="rtl" className="space-y-4">
-            {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -111,7 +230,6 @@ export default function CallLog() {
                 </Button>
             </div>
 
-            {/* Stats Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <StatCard label="סה״כ שיחות" value={stats.total} icon={Phone} color="purple" />
                 <StatCard label="נכנסות" value={stats.incoming} icon={PhoneIncoming} color="green" />
@@ -119,7 +237,6 @@ export default function CallLog() {
                 <StatCard label="לא נענו" value={stats.missed} icon={PhoneMissed} color="red" />
             </div>
 
-            {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1">
                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -144,7 +261,6 @@ export default function CallLog() {
                 </Select>
             </div>
 
-            {/* Call List */}
             {loading ? (
                 <div className="text-center py-12 text-gray-500">טוען שיחות...</div>
             ) : filteredCalls.length === 0 ? (
@@ -154,13 +270,20 @@ export default function CallLog() {
                 </div>
             ) : (
                 <div className="bg-white rounded-xl border shadow-sm divide-y">
-                    {filteredCalls.map(call => (
-                        <CallLogItem
-                            key={call.id}
-                            call={call}
-                            client={clients[extractPhone(call.content)]}
-                        />
-                    ))}
+                    {filteredCalls.map(call => {
+                        const phone = extractPhone(call.content);
+                        const client = phone ? clients[phone] : null;
+                        const tip = client ? clientTips[client.id] : null;
+                        return (
+                            <CallLogItem
+                                key={call.id}
+                                call={call}
+                                client={client}
+                                aiTip={tip}
+                                dupCount={call._dupCount || 0}
+                            />
+                        );
+                    })}
                 </div>
             )}
         </div>
@@ -185,8 +308,4 @@ function StatCard({ label, value, icon: Icon, color }) {
     );
 }
 
-export function extractPhone(content) {
-    if (!content) return null;
-    const match = content.match(/\((\d{10})\)/) || content.match(/- (\d{10})/) || content.match(/(\d{10})/);
-    return match ? match[1] : null;
-}
+export { extractPhone };
