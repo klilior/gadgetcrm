@@ -351,34 +351,36 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                             </CardHeader>
                                             <CardContent className="space-y-4">
                                                 {customer?.phone && (
-                                                    <div className="flex items-center gap-3">
-                                                        <Phone className="w-5 h-5 text-green-600" />
-                                                        <div className="flex-1">
-                                                            <p className="text-sm text-gray-500">טלפון</p>
-                                                            <a href={`tel:${customer.phone}`} className="text-lg font-semibold text-blue-600 hover:underline">
+                                                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                                                        <Phone className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 flex-shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs sm:text-sm text-gray-500">טלפון</p>
+                                                            <a href={`tel:${customer.phone}`} className="text-sm sm:text-lg font-semibold text-blue-600 hover:underline break-all">
                                                                 {customer.phone}
                                                             </a>
                                                         </div>
-                                                        <Button size="sm" variant="outline" onClick={() => setShowSmsModal(true)} className="gap-1 text-teal-700 border-teal-300 hover:bg-teal-50">
-                                                            <MessageCircle className="w-4 h-4" />
-                                                            SMS
-                                                        </Button>
-                                                        <Button size="sm" variant="outline" asChild>
-                                                            <a href={`tel:${customer.phone}`}><PhoneIcon className="w-4 h-4" /></a>
-                                                        </Button>
+                                                        <div className="flex gap-1">
+                                                            <Button size="sm" variant="outline" onClick={() => setShowSmsModal(true)} className="gap-1 text-teal-700 border-teal-300 hover:bg-teal-50 h-8 text-xs">
+                                                                <MessageCircle className="w-3.5 h-3.5" />
+                                                                <span className="hidden sm:inline">SMS</span>
+                                                            </Button>
+                                                            <Button size="sm" variant="outline" asChild className="h-8">
+                                                                <a href={`tel:${customer.phone}`}><PhoneIcon className="w-3.5 h-3.5" /></a>
+                                                            </Button>
+                                                        </div>
                                                     </div>
                                                 )}
                                                 {customer?.email && (
-                                                    <div className="flex items-center gap-3">
-                                                        <Mail className="w-5 h-5 text-purple-600" />
-                                                        <div className="flex-1">
-                                                            <p className="text-sm text-gray-500">אימייל</p>
-                                                            <a href={`mailto:${customer.email}`} className="text-lg font-semibold text-blue-600 hover:underline">
+                                                    <div className="flex items-center gap-2 sm:gap-3">
+                                                        <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600 flex-shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs sm:text-sm text-gray-500">אימייל</p>
+                                                            <a href={`mailto:${customer.email}`} className="text-sm sm:text-lg font-semibold text-blue-600 hover:underline break-all">
                                                                 {customer.email}
                                                             </a>
                                                         </div>
-                                                        <Button size="sm" variant="outline">
-                                                            <Send className="w-4 h-4" />
+                                                        <Button size="sm" variant="outline" className="h-8">
+                                                            <Send className="w-3.5 h-3.5" />
                                                         </Button>
                                                     </div>
                                                 )}
