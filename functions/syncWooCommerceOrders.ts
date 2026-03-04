@@ -268,16 +268,35 @@ Deno.serve(async (req) => {
         const wooOrders = await fetchAllOrders(wooCommerceUrl, authString, afterDate);
         console.log(`📦 Total orders from WooCommerce: ${wooOrders.length}`);
 
-        let created = 0, updated = 0, failed = 0, clientsLinked = 0;
+        // Pre-fetch existing orders to skip unchanged ones (fast batch check)
+        const existingOrderMap = {};
+        const existingOrders = await sr.Order.filter({}, '-created_date', 200);
+        for (const o of existingOrders) {
+            existingOrderMap[o.external_order_number] = o;
+        }
 
-        for (let i = 0; i < wooOrders.length; i++) {
+        // Filter to only orders that need processing (new or status changed)
+        const ordersToProcess = wooOrders.filter(wo => {
+            const existing = existingOrderMap[wo.id.toString()];
+            if (!existing) return true; // new order
+            if (existing.status !== wo.status) return true; // status changed
+            const isPaid = ['processing', 'completed', 'on-hold'].includes(wo.status);
+            if (isPaid && !existing.client_id) return true; // paid but no client linked
+            return false;
+        });
+
+        console.log(`🔍 ${ordersToProcess.length} orders need processing (${wooOrders.length - ordersToProcess.length} unchanged, skipped)`);
+
+        let created = 0, updated = 0, failed = 0, clientsLinked = 0, skipped = wooOrders.length - ordersToProcess.length;
+
+        for (let i = 0; i < ordersToProcess.length; i++) {
             // Throttle every order to avoid rate limits
             if (i > 0) {
-                await delay(1500);
+                await delay(1000);
             }
 
             try {
-                const result = await withRetry(() => processOrder(sr, wooOrders[i]));
+                const result = await withRetry(() => processOrder(sr, ordersToProcess[i]));
 
                 if (result.action === 'created') created++;
                 else updated++;
@@ -289,13 +308,13 @@ Deno.serve(async (req) => {
                 }
             } catch (err) {
                 failed++;
-                console.error(`❌ Order #${wooOrders[i].id}: ${err.message}`);
+                console.error(`❌ Order #${ordersToProcess[i].id}: ${err.message}`);
             }
         }
 
-        const msg = `סנכרון WooCommerce הושלם: ${created} נוצרו, ${updated} עודכנו, ${clientsLinked} לקוחות שויכו, ${failed} נכשלו (מתוך ${wooOrders.length}).`;
+        const msg = `סנכרון WooCommerce הושלם: ${created} נוצרו, ${updated} עודכנו, ${clientsLinked} לקוחות שויכו, ${skipped} ללא שינוי, ${failed} נכשלו (מתוך ${wooOrders.length}).`;
         console.log(`✅ ${msg}`);
-        return Response.json({ success: true, message: msg, created, updated, clients_linked: clientsLinked, failed, total: wooOrders.length });
+        return Response.json({ success: true, message: msg, created, updated, clients_linked: clientsLinked, skipped, failed, total: wooOrders.length });
 
     } catch (error) {
         console.error("❌ WooSync Error:", error);
