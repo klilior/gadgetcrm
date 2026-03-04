@@ -255,9 +255,9 @@ Deno.serve(async (req) => {
         let created = 0, updated = 0, failed = 0, clientsLinked = 0;
 
         for (let i = 0; i < wooOrders.length; i++) {
-            // Throttle: pause every 3 orders to avoid rate limits
-            if (i > 0 && i % 3 === 0) {
-                await delay(1500);
+            // Throttle: pause every 2 orders to avoid rate limits
+            if (i > 0 && i % 2 === 0) {
+                await delay(2500);
             }
 
             try {
