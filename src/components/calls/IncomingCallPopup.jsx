@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PhoneIncoming, X, User, Ticket, Wrench, Star, ExternalLink } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
@@ -10,53 +9,76 @@ export default function IncomingCallPopup() {
     const [callData, setCallData] = useState(null);
     const [isVisible, setIsVisible] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
-    const [lastSeenId, setLastSeenId] = useState(null);
+    const lastSeenRef = useRef(null);
+    const processedIdsRef = useRef(new Set());
 
     useEffect(() => {
-        const interval = setInterval(async () => {
+        // Poll for recent incoming call activities
+        const checkCalls = async () => {
             try {
-                const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
-                const recentCalls = await base44.entities.Activity.filter({
-                    activity_type: 'שיחה נכנסת',
-                    created_date: { $gte: tenSecondsAgo }
-                }, '-created_date', 1);
+                const recentCalls = await base44.entities.Activity.filter(
+                    { activity_type: 'שיחה נכנסת' },
+                    '-created_date',
+                    3
+                );
 
-                if (recentCalls.length > 0 && recentCalls[0].id !== lastSeenId) {
-                    const call = recentCalls[0];
-                    setLastSeenId(call.id);
+                if (recentCalls.length === 0) return;
+                
+                const latestCall = recentCalls[0];
+                const callAge = Date.now() - new Date(latestCall.created_date).getTime();
+                
+                // Only show popup for calls less than 15 seconds old and not already shown
+                if (callAge > 15000 || processedIdsRef.current.has(latestCall.id)) return;
 
-                    const phoneMatch = call.content?.match(/(?:מ-[^\s]+ \()?(\d{9,11})/) || call.content?.match(/(\d{9,11})/);
-                    let customerInfo = null;
-
-                    if (phoneMatch) {
-                        try {
-                            const clients = await base44.entities.Client.filter({ phone: phoneMatch[0] }, null, 1);
-                            if (clients.length > 0) {
-                                customerInfo = clients[0];
-                                const [tickets, repairs] = await Promise.all([
-                                    base44.entities.Ticket.filter({ customer_id: customerInfo.id }, '-created_date', 3).catch(() => []),
-                                    base44.entities.Repair.filter({ client_id: customerInfo.id }, '-created_date', 3).catch(() => []),
-                                ]);
-                                customerInfo.openTickets = tickets.filter(t => !['סגור', 'בוטל'].includes(t.status));
-                                customerInfo.openRepairs = repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון', 'נמסר', 'הושלם', 'בוטל'].includes(r.status));
-                            }
-                        } catch (_e) { /* silent */ }
-                    }
-
-                    setCallData({
-                        activityId: call.id,
-                        phone: phoneMatch ? phoneMatch[0] : 'לא ידוע',
-                        customer: customerInfo,
-                    });
-                    setIsVisible(true);
-                    setIsMinimized(false);
-                    setTimeout(() => setIsMinimized(true), 30000);
+                processedIdsRef.current.add(latestCall.id);
+                // Keep set small
+                if (processedIdsRef.current.size > 50) {
+                    const arr = [...processedIdsRef.current];
+                    processedIdsRef.current = new Set(arr.slice(-25));
                 }
-            } catch (_e) { /* silent polling */ }
-        }, 5000);
 
+                // Extract phone from content
+                const content = latestCall.content || '';
+                const phoneMatch = content.match(/\((\d{10})\)/) || content.match(/- (\d{10})/) || content.match(/(\d{10})/);
+                const phone = phoneMatch ? phoneMatch[1] : null;
+                
+                // Check if it says "לא נענתה" - skip those
+                if (content.includes('לא נענתה')) return;
+
+                let customerInfo = null;
+                if (phone) {
+                    try {
+                        const clients = await base44.entities.Client.filter({ phone }, null, 1);
+                        if (clients.length > 0) {
+                            customerInfo = clients[0];
+                            const [tickets, repairs] = await Promise.all([
+                                base44.entities.Ticket.filter({ customer_id: customerInfo.id }, '-created_date', 3).catch(() => []),
+                                base44.entities.Repair.filter({ client_id: customerInfo.id }, '-created_date', 3).catch(() => []),
+                            ]);
+                            customerInfo.openTickets = tickets.filter(t => !['סגור', 'בוטל'].includes(t.status));
+                            customerInfo.openRepairs = repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון', 'נמסר', 'הושלם', 'בוטל'].includes(r.status));
+                        }
+                    } catch (_e) { /* silent */ }
+                }
+
+                setCallData({
+                    activityId: latestCall.id,
+                    phone: phone || 'לא ידוע',
+                    customer: customerInfo,
+                    summary: latestCall.summary,
+                });
+                setIsVisible(true);
+                setIsMinimized(false);
+
+                // Auto-minimize after 30 seconds
+                setTimeout(() => setIsMinimized(true), 30000);
+            } catch (_e) { /* silent polling */ }
+        };
+
+        checkCalls();
+        const interval = setInterval(checkCalls, 4000);
         return () => clearInterval(interval);
-    }, [lastSeenId]);
+    }, []);
 
     if (!isVisible || !callData) return null;
 
@@ -75,7 +97,6 @@ export default function IncomingCallPopup() {
 
     return (
         <div dir="rtl" className="fixed bottom-4 left-4 z-[9999] w-80 bg-white rounded-2xl shadow-2xl border-2 border-green-400 overflow-hidden">
-            {/* Header */}
             <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-3 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                     <PhoneIncoming className="w-5 h-5 animate-pulse" />
