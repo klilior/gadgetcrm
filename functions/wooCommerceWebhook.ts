@@ -124,9 +124,10 @@ Deno.serve(async (req) => {
             m.key === 'billing_note' || m.key === '_billing_note'
         );
 
+        const resolvedClientId = clientId || existingOrders[0]?.client_id || '';
         const orderData = {
             external_order_number: wooOrder.id.toString(),
-            client_id: clientId || (existingOrders[0]?.client_id || null),
+            client_id: resolvedClientId || undefined,
             order_date: wooOrder.date_created,
             status: wooOrder.status,
             total: wooOrder.total,
