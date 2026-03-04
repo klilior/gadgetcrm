@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
-  Phone, PhoneCall, Ticket, Users, Package, BarChart3, Wrench,
+  Phone, Ticket, Users, Package, BarChart3, Wrench,
   Settings, MessageCircle, LogOut, UserPlus,
   ChevronDown, Clock, FileText, Briefcase,
   CreditCard, Trophy, Home, CalendarDays, Receipt, X, Menu
@@ -185,7 +185,7 @@ function AppContent({ children, currentPageName }) {
     ...((isManager || isShiftManager) ? [{ title: "ניטור מחירים Zap", url: createPageUrl("PriceMonitor"), icon: BarChart3 }] : []),
     { title: "קווים לטיפול", url: createPageUrl("LinesToWorkOn"), icon: Phone },
     { title: "ביצועי נציגים", url: createPageUrl("AgentPerformanceDashboard"), icon: Trophy },
-    { title: "יומן שיחות", url: createPageUrl("CallLog"), icon: PhoneCall },
+    { title: "יומן שיחות", url: createPageUrl("CallLog"), icon: Phone },
   ];
 
   const workItems = !isTechnicianRole ? [
