@@ -34,6 +34,22 @@ function phoneVariants(phone) {
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// ─── Retry helper for rate limits ───
+async function withRetry(fn, retries = 2) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            return await fn();
+        } catch (err) {
+            if (err.message?.includes('Rate limit') && attempt < retries) {
+                console.warn(`⏳ Rate limit, retrying in ${3 + attempt * 2}s...`);
+                await delay(3000 + attempt * 2000);
+                continue;
+            }
+            throw err;
+        }
+    }
+}
+
 // ─── Find or create client ───
 async function findOrCreateClient(sr, wooOrder) {
     const billing = wooOrder.billing || {};
