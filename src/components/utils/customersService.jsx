@@ -1,16 +1,26 @@
 import { base44 } from "@/api/base44Client";
 
 export const customersService = {
-  async list(limit = 500) {
-    return await base44.entities.Client.filter({}, '-created_date', limit);
+  async list() {
+    // Load ALL clients with no limit - paginate in batches of 500
+    let allClients = [];
+    let skip = 0;
+    const batchSize = 500;
+    while (true) {
+      const batch = await base44.entities.Client.list('-created_date', batchSize, skip);
+      allClients = allClients.concat(batch);
+      if (batch.length < batchSize) break;
+      skip += batchSize;
+    }
+    return allClients;
   },
   toMap(list) {
     const map = {};
     (list || []).forEach((c) => { map[c.id] = c; });
     return map;
   },
-  async getMap(limit = 500) {
-    const list = await this.list(limit);
+  async getMap() {
+    const list = await this.list();
     return this.toMap(list);
   },
   async getByIds(ids = []) {
@@ -18,7 +28,7 @@ export const customersService = {
     return await base44.entities.Client.filter({ id: { $in: ids } });
   },
   async search({ query, phone, email }, limit = 50) {
-    const list = await this.list(1000);
+    const list = await this.list();
     const q = (query || '').toLowerCase();
     return list
       .filter((c) => {
