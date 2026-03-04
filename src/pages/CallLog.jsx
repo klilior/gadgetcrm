@@ -10,8 +10,23 @@ const DEDUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 
 function extractPhone(content) {
     if (!content) return null;
-    const match = content.match(/\((\d{10})\)/) || content.match(/- (\d{10})/) || content.match(/(\d{10})/);
-    return match ? match[1] : null;
+    // Try parentheses first, then after dash, then standalone 10 digits, then 9 digits
+    const match = content.match(/\((\d{10})\)/) || content.match(/- (\d{10})\b/) || content.match(/\b(\d{10})\b/);
+    if (match) return match[1];
+    // Try international format 972...
+    const intlMatch = content.match(/\+?972(\d{9})/) || content.match(/\b972(\d{9})\b/);
+    if (intlMatch) return '0' + intlMatch[1];
+    return null;
+}
+
+function normalizePhone(phone) {
+    if (!phone) return null;
+    let digits = phone.replace(/[^\d]/g, '');
+    if (digits.length === 12 && digits.startsWith('972')) return '0' + digits.slice(3);
+    if (digits.length === 13 && digits.startsWith('9720')) return '0' + digits.slice(4);
+    if (digits.length === 9 && !digits.startsWith('0')) return '0' + digits;
+    if (digits.length === 10 && digits.startsWith('0')) return digits;
+    return digits;
 }
 
 /** Deduplicate calls: same phone + same type within 2 min window = keep best one */
@@ -89,10 +104,28 @@ export default function CallLog() {
             for (let i = 0; i < phonesArr.length; i += 10) {
                 const batch = phonesArr.slice(i, i + 10);
                 const results = await Promise.all(
-                    batch.map(phone => base44.entities.Client.filter({ phone }, null, 1).catch(() => []))
+                    batch.map(async (phone) => {
+                        const normalized = normalizePhone(phone);
+                        // Try exact match first
+                        let res = await base44.entities.Client.filter({ phone: normalized }, null, 1).catch(() => []);
+                        if (res.length > 0) return res;
+                        // Try with 972 prefix
+                        if (normalized?.startsWith('0')) {
+                            res = await base44.entities.Client.filter({ phone: '972' + normalized.slice(1) }, null, 1).catch(() => []);
+                            if (res.length > 0) return res;
+                            res = await base44.entities.Client.filter({ phone: '+972' + normalized.slice(1) }, null, 1).catch(() => []);
+                            if (res.length > 0) return res;
+                        }
+                        return [];
+                    })
                 );
                 results.forEach((res, idx) => {
-                    if (res.length > 0) clientMap[batch[idx]] = res[0];
+                    if (res.length > 0) {
+                        clientMap[batch[idx]] = res[0];
+                        // Also map the normalized version
+                        const norm = normalizePhone(batch[idx]);
+                        if (norm) clientMap[norm] = res[0];
+                    }
                 });
             }
             setClients(clientMap);
@@ -272,7 +305,8 @@ export default function CallLog() {
                 <div className="bg-white rounded-xl border shadow-sm divide-y">
                     {filteredCalls.map(call => {
                         const phone = extractPhone(call.content);
-                        const client = phone ? clients[phone] : null;
+                        const normalized = normalizePhone(phone);
+                        const client = (phone && clients[phone]) || (normalized && clients[normalized]) || null;
                         const tip = client ? clientTips[client.id] : null;
                         return (
                             <CallLogItem
