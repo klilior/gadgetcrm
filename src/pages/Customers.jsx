@@ -37,6 +37,13 @@ export default function CustomersPage() {
 
     useEffect(() => {
         loadClients();
+        // Handle openCard URL param (from call log link)
+        const params = new URLSearchParams(window.location.search);
+        const openCardId = params.get('openCard');
+        if (openCardId) {
+            setSelectedCustomerForCard(openCardId);
+            setShowCustomerCard(true);
+        }
     }, []);
 
     useEffect(() => {
