@@ -56,23 +56,42 @@ Deno.serve(async (req) => {
 
         // Extract fields from PBX payload
         const callerNumber = callData.caller_number || callData.caller || callData.from || callData.phone_number || callData.src || '';
-        const calleeNumber = callData.callee || callData.to || callData.dst || callData.called || '';
+        const calleeNumber = callData.callee_number || callData.callee || callData.called_number || callData.to || callData.dst || callData.called || callData.destination || '';
         const callId = callData.uuid || callData.callid || callData.call_id || callData.uniqueid || '';
         const uniqueToken = callData.unique_token || '';
         const extension = callData.extension_number || callData.ext || callData.extension || '';
         const direction = callData.call_direction || callData.direction || callData.type || 'incoming';
         const callStatus = (callData.call_status || callData.status || callData.event || 'Ring').toLowerCase();
+
+        console.log(`📞 [PBX] caller=${callerNumber} callee=${calleeNumber} dir=${direction} status=${callStatus}`);
         const duration = callData.call_duration || callData.duration || callData.billsec || '0';
         const recordingUrl = callData.recording_url || callData.recordingUrl || callData.recording || '';
         const hangupReason = callData.reason || '';
         const answerTime = callData.call_answer_time || '';
 
         const isIncoming = direction === 'incoming' || direction === 'inbound' || direction === 'in';
-        const externalNumber = isIncoming ? callerNumber : calleeNumber;
+        // For outgoing calls: the external number is calleeNumber. For incoming: callerNumber.
+        // If calleeNumber looks like an internal extension (3-4 digits), try callerNumber instead.
+        let externalNumber;
+        if (isIncoming) {
+            externalNumber = callerNumber;
+        } else {
+            // For outgoing, prefer callee but fall back to caller if callee is empty or looks internal
+            const calleeClean = calleeNumber.replace(/[^\d]/g, '');
+            if (calleeClean && calleeClean.length >= 7) {
+                externalNumber = calleeNumber;
+            } else if (callerNumber.replace(/[^\d]/g, '').length >= 7) {
+                // Sometimes for outgoing the "caller" field has the dialed number
+                externalNumber = callerNumber;
+            } else {
+                externalNumber = calleeNumber || callerNumber;
+            }
+        }
         const normalizedPhone = normalizePhone(externalNumber);
+        console.log(`📞 [PBX] External number resolved: ${externalNumber} -> ${normalizedPhone}`);
 
         // Determine the call event type
-        const isRing = callStatus === 'ring' || callStatus === 'ringing';
+        const isRing = callStatus === 'ring' || callStatus === 'ringing' || callStatus === 'dial';
         const isAnswer = callStatus === 'answer' || callStatus === 'answered';
         const isHangup = callStatus === 'hangup' || callStatus === 'hangup_complete';
         const isMissed = isHangup && (hangupReason === 'NO_ANSWER' || hangupReason === 'ORIGINATOR_CANCEL' || answerTime === '0000-00-00 00:00:00');
