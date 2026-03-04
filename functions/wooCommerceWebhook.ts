@@ -127,7 +127,6 @@ Deno.serve(async (req) => {
         const resolvedClientId = clientId || existingOrders[0]?.client_id || '';
         const orderData = {
             external_order_number: wooOrder.id.toString(),
-            client_id: resolvedClientId || undefined,
             order_date: wooOrder.date_created,
             status: wooOrder.status,
             total: wooOrder.total,
@@ -137,6 +136,10 @@ Deno.serve(async (req) => {
             customer_note: wooOrder.customer_note || billingNoteMeta?.value || '',
             raw_data_billing: JSON.stringify(wooOrder.billing),
         };
+        // Only set client_id if valid (avoid null → validation error)
+        if (resolvedClientId) {
+            orderData.client_id = resolvedClientId;
+        }
 
         if (existingOrders.length > 0) {
             await sr.Order.update(existingOrders[0].id, orderData);
