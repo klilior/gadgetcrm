@@ -1,59 +1,83 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
+// ─── Phone normalization (unified across all webhooks) ───
 function normalizePhone(phone) {
     if (!phone) return null;
-    let cleaned = phone.replace(/[\s\-\(\)\.+]/g, '');
-    if (cleaned.startsWith('972')) cleaned = '0' + cleaned.slice(3);
-    if (cleaned.startsWith('+972')) cleaned = '0' + cleaned.slice(4);
-    if (cleaned.length < 9 || cleaned.length > 11) return null;
-    return cleaned;
+    let digits = phone.replace(/[^\d]/g, '');
+    if (digits.length === 13 && digits.startsWith('9720')) {
+        digits = digits.slice(3); // 9720... → 0...
+    } else if (digits.length === 12 && digits.startsWith('972')) {
+        digits = '0' + digits.slice(3);
+    } else if (digits.startsWith('0972') && digits.length > 12) {
+        digits = '0' + digits.slice(4);
+    }
+    if (digits.length === 10 && digits.startsWith('0')) return digits;
+    if (digits.length === 9 && !digits.startsWith('0')) return '0' + digits;
+    if (digits.length >= 9 && digits.length <= 11) {
+        if (!digits.startsWith('0')) digits = '0' + digits;
+        return digits.slice(0, 10);
+    }
+    return null;
 }
 
+function phoneVariants(phone) {
+    if (!phone) return [];
+    const variants = [phone];
+    if (phone.startsWith('0') && phone.length === 10) {
+        variants.push('972' + phone.slice(1));
+        variants.push('+972' + phone.slice(1));
+        variants.push('9720' + phone.slice(1));
+        variants.push('+9720' + phone.slice(1));
+    }
+    return variants;
+}
+
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// ─── Find or create client ───
 async function findOrCreateClient(sr, wooOrder) {
     const billing = wooOrder.billing || {};
     const shipping = wooOrder.shipping || {};
     const customerId = wooOrder.customer_id;
     const phone = normalizePhone(billing.phone) || normalizePhone(shipping.phone);
-    const email = billing.email || '';
+    const email = (billing.email || '').toLowerCase().trim();
     const fullName = `${billing.first_name || ''} ${billing.last_name || ''}`.trim() || 'לקוח מהאתר';
     const city = billing.city || shipping.city || '';
     const address = billing.address_1 ? `${billing.address_1}${billing.address_2 ? ' ' + billing.address_2 : ''}, ${city}` : '';
 
-    // 1. Try by WooCommerce customer ID
+    // 1. By WooCommerce customer ID
     if (customerId && customerId > 0) {
         const byWoo = await sr.Client.filter({ woo_customer_id: customerId }, null, 1);
         if (byWoo.length > 0) {
-            // Enrich with any missing data
             const updates = {};
             if (phone && !byWoo[0].phone) updates.phone = phone;
             if (email && !byWoo[0].email) updates.email = email;
             if (city && !byWoo[0].city) updates.city = city;
             if (address && !byWoo[0].full_address) updates.full_address = address;
             if (!byWoo[0].full_name || byWoo[0].full_name === 'לקוח חדש') updates.full_name = fullName;
-            if (Object.keys(updates).length > 0) {
-                await sr.Client.update(byWoo[0].id, updates);
-            }
+            if (Object.keys(updates).length > 0) await sr.Client.update(byWoo[0].id, updates);
             return byWoo[0].id;
         }
     }
 
-    // 2. Try by phone
+    // 2. By phone (all variants)
     if (phone) {
-        const byPhone = await sr.Client.filter({ phone }, null, 1);
-        if (byPhone.length > 0) {
-            const updates = {};
-            if (customerId > 0 && !byPhone[0].woo_customer_id) updates.woo_customer_id = customerId;
-            if (email && !byPhone[0].email) updates.email = email;
-            if (city && !byPhone[0].city) updates.city = city;
-            if (address && !byPhone[0].full_address) updates.full_address = address;
-            if (Object.keys(updates).length > 0) {
-                await sr.Client.update(byPhone[0].id, updates);
+        for (const variant of phoneVariants(phone)) {
+            const byPhone = await sr.Client.filter({ phone: variant }, null, 1);
+            if (byPhone.length > 0) {
+                const updates = {};
+                if (customerId > 0 && !byPhone[0].woo_customer_id) updates.woo_customer_id = customerId;
+                if (email && !byPhone[0].email) updates.email = email;
+                if (byPhone[0].phone !== phone) updates.phone = phone; // normalize stored phone
+                if (city && !byPhone[0].city) updates.city = city;
+                if (address && !byPhone[0].full_address) updates.full_address = address;
+                if (Object.keys(updates).length > 0) await sr.Client.update(byPhone[0].id, updates);
+                return byPhone[0].id;
             }
-            return byPhone[0].id;
         }
     }
 
-    // 3. Try by email
+    // 3. By email
     if (email) {
         const byEmail = await sr.Client.filter({ email }, null, 1);
         if (byEmail.length > 0) {
@@ -62,9 +86,7 @@ async function findOrCreateClient(sr, wooOrder) {
             if (phone && !byEmail[0].phone) updates.phone = phone;
             if (city && !byEmail[0].city) updates.city = city;
             if (address && !byEmail[0].full_address) updates.full_address = address;
-            if (Object.keys(updates).length > 0) {
-                await sr.Client.update(byEmail[0].id, updates);
-            }
+            if (Object.keys(updates).length > 0) await sr.Client.update(byEmail[0].id, updates);
             return byEmail[0].id;
         }
     }
@@ -80,25 +102,131 @@ async function findOrCreateClient(sr, wooOrder) {
         source: 'WooCommerce',
         preferred_channel: 'website',
     });
-    console.log(`🆕 New client created: ${fullName} (${phone || email})`);
+    console.log(`🆕 Client: ${fullName} (${phone || email})`);
     return newClient.id;
 }
 
-// WooCommerce statuses:
-// pending = ממתין לתשלום
-// processing = בטיפול (שולם!)
-// on-hold = בהמתנה
-// completed = הושלם
-// cancelled = בוטל
-// refunded = הוחזר
-// failed = נכשל
+// ─── Process a single order ───
+async function processOrder(sr, wooOrder) {
+    const isPaid = ['processing', 'completed', 'on-hold'].includes(wooOrder.status);
+    let clientId = null;
 
+    if (isPaid) {
+        clientId = await findOrCreateClient(sr, wooOrder);
+    }
+
+    const existingOrders = await sr.Order.filter({ external_order_number: wooOrder.id.toString() }, null, 1);
+
+    const billingNoteMeta = (wooOrder.meta_data || []).find(m =>
+        m.key === 'billing_note' || m.key === '_billing_note'
+    );
+
+    const resolvedClientId = clientId || existingOrders[0]?.client_id || '';
+    const orderData = {
+        external_order_number: wooOrder.id.toString(),
+        order_date: wooOrder.date_created,
+        status: wooOrder.status,
+        total: wooOrder.total,
+        shipping_total: wooOrder.shipping_total,
+        shipping_method: wooOrder.shipping_lines?.[0]?.method_title || null,
+        payment_method_title: wooOrder.payment_method_title,
+        customer_note: wooOrder.customer_note || billingNoteMeta?.value || '',
+        raw_data_billing: JSON.stringify(wooOrder.billing),
+    };
+
+    // Only set client_id if we have a valid one (avoid null → validation error)
+    if (resolvedClientId) {
+        orderData.client_id = resolvedClientId;
+    }
+
+    const lineItems = Array.isArray(wooOrder.line_items) ? wooOrder.line_items : [];
+
+    if (existingOrders.length > 0) {
+        await sr.Order.update(existingOrders[0].id, orderData);
+
+        // Refresh products
+        const existingProducts = await sr.OrderProduct.filter({ order_id: existingOrders[0].id });
+        if (existingProducts.length > 0) {
+            for (const p of existingProducts) await sr.OrderProduct.delete(p.id);
+        }
+        if (lineItems.length > 0) {
+            await sr.OrderProduct.bulkCreate(lineItems.map(item => ({
+                order_id: existingOrders[0].id,
+                external_order_id: wooOrder.id,
+                product_id: item.product_id,
+                name: item.name,
+                quantity: item.quantity,
+                total: item.total
+            })));
+        }
+        return { action: 'updated', clientId };
+    } else {
+        const createdOrder = await sr.Order.create(orderData);
+        if (lineItems.length > 0) {
+            await sr.OrderProduct.bulkCreate(lineItems.map(item => ({
+                order_id: createdOrder.id,
+                external_order_id: wooOrder.id,
+                product_id: item.product_id,
+                name: item.name,
+                quantity: item.quantity,
+                total: item.total
+            })));
+        }
+        return { action: 'created', clientId };
+    }
+}
+
+// ─── Update client stats ───
+async function updateClientStats(sr, clientId) {
+    const clientOrders = await sr.Order.filter({ client_id: clientId });
+    const totalSpent = clientOrders.reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
+    await sr.Client.update(clientId, {
+        total_spent: Math.round(totalSpent),
+        total_orders: clientOrders.length,
+        last_interaction_date: new Date().toISOString(),
+    });
+}
+
+// ─── Fetch all orders with pagination ───
+async function fetchAllOrders(baseUrl, authString, afterDate) {
+    let allOrders = [];
+    let page = 1;
+    const perPage = 50; // lower per-page to be safe with WC API
+
+    while (true) {
+        const url = `${baseUrl}/wp-json/wc/v3/orders?per_page=${perPage}&page=${page}&after=${afterDate}&orderby=date&order=desc`;
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Basic ${authString}` }
+        });
+
+        if (!response.ok) {
+            throw new Error(`WooCommerce API error: ${response.status} - ${response.statusText}`);
+        }
+
+        const orders = await response.json();
+        if (!orders || orders.length === 0) break;
+
+        allOrders = allOrders.concat(orders);
+        console.log(`📄 Page ${page}: ${orders.length} orders (total so far: ${allOrders.length})`);
+
+        // If we got less than perPage, we've reached the last page
+        if (orders.length < perPage) break;
+        page++;
+
+        // Small delay between pages
+        await delay(500);
+    }
+
+    return allOrders;
+}
+
+// ─── Main handler ───
 Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const sr = base44.asServiceRole.entities;
-    
+
     try {
-        console.log("🚀 [Sync] Starting WooCommerce Sync...");
+        console.log("🚀 [WooSync] Starting...");
 
         const [urlSetting, keySetting, secretSetting] = await Promise.all([
             sr.Settings.filter({ setting_name: "WOOCOMMERCE_SITE_URL" }),
@@ -115,144 +243,46 @@ Deno.serve(async (req) => {
         }
 
         const authString = btoa(`${consumerKey}:${consumerSecret}`);
-        
-        // Fetch recent orders (last 7 days)
+
+        // Fetch last 7 days
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const afterDate = sevenDaysAgo.toISOString();
-        
-        const fetchUrl = `${wooCommerceUrl}/wp-json/wc/v3/orders?per_page=100&after=${afterDate}&orderby=date&order=desc`;
-        
-        const response = await fetch(fetchUrl, {
-            headers: { 'Authorization': `Basic ${authString}` }
-        });
 
-        if (!response.ok) {
-            throw new Error(`WooCommerce API error: ${response.status} - ${response.statusText}`);
-        }
+        const wooOrders = await fetchAllOrders(wooCommerceUrl, authString, afterDate);
+        console.log(`📦 Total orders from WooCommerce: ${wooOrders.length}`);
 
-        const wooOrders = await response.json();
-        let createdCount = 0, updatedCount = 0, failedCount = 0, clientsCreated = 0;
+        let created = 0, updated = 0, failed = 0, clientsLinked = 0;
 
-        // Helper: delay to avoid rate limits
-        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-        for (let idx = 0; idx < wooOrders.length; idx++) {
-            const wooOrder = wooOrders[idx];
-            // Throttle: pause every 5 orders to avoid rate limits
-            if (idx > 0 && idx % 5 === 0) {
-                await delay(2000);
+        for (let i = 0; i < wooOrders.length; i++) {
+            // Throttle: pause every 3 orders to avoid rate limits
+            if (i > 0 && i % 3 === 0) {
+                await delay(1500);
             }
+
             try {
-                // Only create/update client for PAID orders (processing, completed, on-hold)
-                const isPaid = ['processing', 'completed', 'on-hold'].includes(wooOrder.status);
-                
-                let clientId = null;
-                
-                if (isPaid) {
-                    // Find or create client with full details
-                    clientId = await findOrCreateClient(sr, wooOrder);
+                const result = await processOrder(sr, wooOrders[i]);
+
+                if (result.action === 'created') created++;
+                else updated++;
+
+                // Update client stats
+                if (result.clientId) {
+                    clientsLinked++;
+                    await updateClientStats(sr, result.clientId);
                 }
-
-                // Check existing order
-                const existingOrders = await sr.Order.filter({ external_order_number: wooOrder.id.toString() }, null, 1);
-                
-                // If order exists but didn't have client (was pending before), now link it
-                if (existingOrders.length > 0 && clientId && !existingOrders[0].client_id) {
-                    clientsCreated++;
-                }
-                
-                // Extract billing note
-                const billingNoteMeta = (wooOrder.meta_data || []).find(m => 
-                    m.key === 'billing_note' || m.key === '_billing_note'
-                );
-                const customerNote = wooOrder.customer_note || billingNoteMeta?.value || '';
-
-                const resolvedClientId = clientId || existingOrders[0]?.client_id || '';
-                const orderData = {
-                    external_order_number: wooOrder.id.toString(),
-                    client_id: resolvedClientId || undefined,
-                    order_date: wooOrder.date_created,
-                    status: wooOrder.status,
-                    total: wooOrder.total,
-                    shipping_total: wooOrder.shipping_total,
-                    shipping_method: wooOrder.shipping_lines?.[0]?.method_title || null,
-                    payment_method_title: wooOrder.payment_method_title,
-                    customer_note: customerNote,
-                    raw_data_billing: JSON.stringify(wooOrder.billing),
-                };
-
-                if (existingOrders.length > 0) {
-                    await sr.Order.update(existingOrders[0].id, orderData);
-                    updatedCount++;
-
-                    // Update products
-                    const existingProducts = await sr.OrderProduct.filter({ order_id: existingOrders[0].id });
-                    for (const product of existingProducts) {
-                        await sr.OrderProduct.delete(product.id);
-                    }
-                    
-                    if (Array.isArray(wooOrder.line_items) && wooOrder.line_items.length > 0) {
-                        const productItems = wooOrder.line_items.map(item => ({
-                            order_id: existingOrders[0].id,
-                            external_order_id: wooOrder.id,
-                            product_id: item.product_id,
-                            name: item.name,
-                            quantity: item.quantity,
-                            total: item.total
-                        }));
-                        await sr.OrderProduct.bulkCreate(productItems);
-                    }
-                } else {
-                    // For unpaid orders without a client, remove client_id from data
-                    if (!resolvedClientId) {
-                        delete orderData.client_id;
-                    }
-                    const createdOrder = await sr.Order.create(orderData);
-                    
-                    if (Array.isArray(wooOrder.line_items) && wooOrder.line_items.length > 0) {
-                        const productItems = wooOrder.line_items.map(item => ({
-                            order_id: createdOrder.id,
-                            external_order_id: wooOrder.id,
-                            product_id: item.product_id,
-                            name: item.name,
-                            quantity: item.quantity,
-                            total: item.total
-                        }));
-                        await sr.OrderProduct.bulkCreate(productItems);
-                    }
-                    
-                    createdCount++;
-                }
-
-                // Update client stats for paid orders
-                if (clientId && isPaid) {
-                    try {
-                        const clientOrders = await sr.Order.filter({ client_id: clientId });
-                        const totalSpent = clientOrders.reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
-                        const totalOrders = clientOrders.length;
-                        await sr.Client.update(clientId, {
-                            total_spent: Math.round(totalSpent),
-                            total_orders: totalOrders,
-                            last_interaction_date: new Date().toISOString(),
-                        });
-                    } catch (statsErr) {
-                        console.warn(`⚠️ Failed to update client stats: ${statsErr.message}`);
-                    }
-                }
-
-            } catch (orderError) {
-                failedCount++;
-                console.error(`❌ Processing FAILED for order #${wooOrder.id}. Error: ${orderError.message}`);
+            } catch (err) {
+                failed++;
+                console.error(`❌ Order #${wooOrders[i].id}: ${err.message}`);
             }
         }
 
-        const message = `סנכרון הושלם: ${createdCount} הזמנות נוצרו, ${updatedCount} עודכנו, ${clientsCreated} לקוחות חדשים, ${failedCount} נכשלו.`;
-        console.log(`✅ ${message}`);
-        return Response.json({ success: true, message, created: createdCount, updated: updatedCount, clients_created: clientsCreated, failed: failedCount });
+        const msg = `סנכרון WooCommerce הושלם: ${created} נוצרו, ${updated} עודכנו, ${clientsLinked} לקוחות שויכו, ${failed} נכשלו (מתוך ${wooOrders.length}).`;
+        console.log(`✅ ${msg}`);
+        return Response.json({ success: true, message: msg, created, updated, clients_linked: clientsLinked, failed, total: wooOrders.length });
 
     } catch (error) {
-        console.error("❌ Sync Error:", error);
+        console.error("❌ WooSync Error:", error);
         return Response.json({ success: false, error: error.message }, { status: 500 });
     }
 });
