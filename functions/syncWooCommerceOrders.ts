@@ -277,7 +277,7 @@ Deno.serve(async (req) => {
             }
 
             try {
-                const result = await processOrder(sr, wooOrders[i]);
+                const result = await withRetry(() => processOrder(sr, wooOrders[i]));
 
                 if (result.action === 'created') created++;
                 else updated++;
@@ -285,7 +285,7 @@ Deno.serve(async (req) => {
                 // Update client stats
                 if (result.clientId) {
                     clientsLinked++;
-                    await updateClientStats(sr, result.clientId);
+                    await withRetry(() => updateClientStats(sr, result.clientId));
                 }
             } catch (err) {
                 failed++;
