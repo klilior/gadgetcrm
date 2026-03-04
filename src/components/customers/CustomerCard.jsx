@@ -239,30 +239,30 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
 
     return (
         <>
-            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" dir="rtl">
-                <div className="bg-white rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" dir="rtl">
+                <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-6xl h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
                     {/* Header */}
-                    <div className="bg-gradient-to-l from-purple-600 to-blue-600 p-6 text-white">
-                        <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-4">
-                                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
-                                    <User className="w-10 h-10" />
+                    <div className="bg-gradient-to-l from-purple-600 to-blue-600 p-4 sm:p-6 text-white flex-shrink-0">
+                        <div className="flex justify-between items-start gap-2">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-full bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
+                                    <User className="w-6 h-6 sm:w-10 sm:h-10" />
                                 </div>
-                                <div>
-                                    <h2 className="text-3xl font-bold mb-2">{customer?.full_name || 'טוען...'}</h2>
-                                    <div className="flex gap-2 items-center flex-wrap">
+                                <div className="min-w-0">
+                                    <h2 className="text-xl sm:text-3xl font-bold mb-1 truncate">{customer?.full_name || 'טוען...'}</h2>
+                                    <div className="flex gap-1.5 items-center flex-wrap">
                                         <CustomerScoreBadge 
                                             score={customer?.customer_score || 0} 
                                             tier={customer?.customer_tier || 'חדש'} 
                                             size="sm" 
                                         />
-                                        <Badge variant="outline" className="bg-white/20 border-white/40 text-white">
-                                            לקוח מ-{customer?.created_date ? format(new Date(customer.created_date), 'MM/yyyy', { locale: he }) : '...'}
+                                        <Badge variant="outline" className="bg-white/20 border-white/40 text-white text-[10px] sm:text-xs">
+                                            מ-{customer?.created_date ? format(new Date(customer.created_date), 'MM/yyyy', { locale: he }) : '...'}
                                         </Badge>
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-1 flex-shrink-0">
                                 <Button 
                                     variant="ghost" 
                                     size="sm" 
@@ -272,53 +272,53 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                     <PlusCircle className="w-4 h-4" />
                                     צור טיקט
                                 </Button>
-                                <Button variant="ghost" size="icon" onClick={handleCreateTicket} className="text-white hover:bg-white/20 sm:hidden">
-                                    <PlusCircle className="w-5 h-5" />
+                                <Button variant="ghost" size="icon" onClick={handleCreateTicket} className="text-white hover:bg-white/20 sm:hidden h-8 w-8">
+                                    <PlusCircle className="w-4 h-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" onClick={() => onEdit(customer)} className="text-white hover:bg-white/20">
-                                    <Edit className="w-5 h-5" />
+                                <Button variant="ghost" size="icon" onClick={() => onEdit(customer)} className="text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10">
+                                    <Edit className="w-4 h-4 sm:w-5 sm:h-5" />
                                 </Button>
-                                <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/20">
-                                    <X className="w-5 h-5" />
+                                <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10">
+                                    <X className="w-4 h-4 sm:w-5 sm:h-5" />
                                 </Button>
                             </div>
                         </div>
 
                         {/* Quick Stats */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                            <div className="bg-white/10 backdrop-blur rounded-lg p-4">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <DollarSign className="w-5 h-5" />
-                                    <span className="text-sm opacity-90">סה"כ רכישות</span>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mt-4 sm:mt-6">
+                            <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <DollarSign className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                                    <span className="text-[10px] sm:text-sm opacity-90">סה"כ רכישות</span>
                                 </div>
-                                <p className="text-2xl font-bold">₪{stats.totalSpent.toLocaleString()}</p>
+                                <p className="text-lg sm:text-2xl font-bold">₪{stats.totalSpent.toLocaleString()}</p>
                             </div>
-                            <div className="bg-white/10 backdrop-blur rounded-lg p-4">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Package className="w-5 h-5" />
-                                    <span className="text-sm opacity-90">הזמנות</span>
+                            <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <Package className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                                    <span className="text-[10px] sm:text-sm opacity-90">הזמנות</span>
                                 </div>
-                                <p className="text-2xl font-bold">{stats.totalOrders}</p>
+                                <p className="text-lg sm:text-2xl font-bold">{stats.totalOrders}</p>
                             </div>
-                            <div className="bg-white/10 backdrop-blur rounded-lg p-4">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <MessageCircle className="w-5 h-5" />
-                                    <span className="text-sm opacity-90">פניות</span>
+                            <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <MessageCircle className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                                    <span className="text-[10px] sm:text-sm opacity-90">פניות</span>
                                 </div>
-                                <p className="text-2xl font-bold">{stats.totalTickets}</p>
+                                <p className="text-lg sm:text-2xl font-bold">{stats.totalTickets}</p>
                             </div>
-                            <div className="bg-white/10 backdrop-blur rounded-lg p-4">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Wrench className="w-5 h-5" />
-                                    <span className="text-sm opacity-90">תיקונים</span>
+                            <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <Wrench className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                                    <span className="text-[10px] sm:text-sm opacity-90">תיקונים</span>
                                 </div>
-                                <p className="text-2xl font-bold">{stats.totalRepairs}</p>
+                                <p className="text-lg sm:text-2xl font-bold">{stats.totalRepairs}</p>
                             </div>
                         </div>
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 overflow-y-auto p-6">
+                    <div className="flex-1 overflow-y-auto p-3 sm:p-6">
                         {isLoading ? (
                             <div className="flex items-center justify-center py-20">
                                 <div className="text-center">
@@ -328,19 +328,19 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                             </div>
                         ) : (
                             <Tabs defaultValue="overview" className="w-full">
-                                <TabsList className="grid w-full grid-cols-7 mb-6">
-                                    <TabsTrigger value="overview">סקירה</TabsTrigger>
-                                    <TabsTrigger value="devices">מכשירים ({devices.length})</TabsTrigger>
-                                    <TabsTrigger value="orders">הזמנות ({stats.totalOrders})</TabsTrigger>
-                                    <TabsTrigger value="tickets">פניות ({stats.totalTickets})</TabsTrigger>
-                                    <TabsTrigger value="repairs">תיקונים ({stats.totalRepairs})</TabsTrigger>
-                                    <TabsTrigger value="recordings">הקלטות</TabsTrigger>
-                                    <TabsTrigger value="timeline">ציר זמן</TabsTrigger>
+                                <TabsList className="flex w-full overflow-x-auto mb-4 sm:mb-6 sm:grid sm:grid-cols-7 gap-0">
+                                    <TabsTrigger value="overview" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">סקירה</TabsTrigger>
+                                    <TabsTrigger value="devices" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">מכשירים ({devices.length})</TabsTrigger>
+                                    <TabsTrigger value="orders" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">הזמנות ({stats.totalOrders})</TabsTrigger>
+                                    <TabsTrigger value="tickets" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">פניות ({stats.totalTickets})</TabsTrigger>
+                                    <TabsTrigger value="repairs" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">תיקונים ({stats.totalRepairs})</TabsTrigger>
+                                    <TabsTrigger value="recordings" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">הקלטות</TabsTrigger>
+                                    <TabsTrigger value="timeline" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">ציר זמן</TabsTrigger>
                                 </TabsList>
 
                                 {/* Overview Tab */}
-                                <TabsContent value="overview" className="space-y-6">
-                                    <div className="grid md:grid-cols-2 gap-6">
+                                <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                                         {/* Contact Info */}
                                         <Card>
                                             <CardHeader>
