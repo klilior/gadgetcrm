@@ -189,7 +189,21 @@ Deno.serve(async (req) => {
         const extension = recordData.ext || recordData.extension || '';
 
         const isIncoming = direction === 'incoming' || direction === 'inbound' || direction === 'in';
-        const externalNumber = isIncoming ? callerNumber : calleeNumber;
+        
+        // Smart extraction: for outgoing, try callee first, fall back to caller
+        let externalNumber;
+        if (isIncoming) {
+            externalNumber = callerNumber;
+        } else {
+            const calleeClean = calleeNumber.replace(/[^\d]/g, '');
+            if (calleeClean && calleeClean.length >= 7) {
+                externalNumber = calleeNumber;
+            } else if (callerNumber.replace(/[^\d]/g, '').length >= 7) {
+                externalNumber = callerNumber;
+            } else {
+                externalNumber = calleeNumber || callerNumber;
+            }
+        }
         const normalizedPhone = normalizePhone(externalNumber);
 
         // Find customer by trying all phone variants
@@ -254,17 +268,25 @@ Deno.serve(async (req) => {
 
         // ═══════ Match / create Activity ═══════
         let matchedActivity = null;
-        const recentActivities = await sr.Activity.filter({
-            activity_type: isIncoming ? 'שיחה נכנסת' : 'שיחה יוצאת',
-        }, '-created_date', 50);
+        
+        // Search BOTH incoming and outgoing activities for matching
+        const [recentIncoming, recentOutgoing] = await Promise.all([
+            sr.Activity.filter({ activity_type: 'שיחה נכנסת' }, '-created_date', 50),
+            sr.Activity.filter({ activity_type: 'שיחה יוצאת' }, '-created_date', 50),
+        ]);
+        const recentActivities = [...recentIncoming, ...recentOutgoing];
 
         if (callId) {
             matchedActivity = recentActivities.find(a => a.content?.includes(callId));
         }
         if (!matchedActivity && normalizedPhone) {
-            matchedActivity = recentActivities.find(a =>
-                a.content?.includes(normalizedPhone) && !a.recording_url
-            );
+            // Try to match by phone number, prioritizing the expected direction
+            const preferred = recentActivities.filter(a => a.activity_type === (isIncoming ? 'שיחה נכנסת' : 'שיחה יוצאת'));
+            matchedActivity = preferred.find(a => a.content?.includes(normalizedPhone) && !a.recording_url);
+            // If not found in preferred direction, search all
+            if (!matchedActivity) {
+                matchedActivity = recentActivities.find(a => a.content?.includes(normalizedPhone) && !a.recording_url);
+            }
         }
 
         if (matchedActivity) {

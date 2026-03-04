@@ -40,15 +40,26 @@ async function findOrCreateClient(sr, billing, shipping, customerId) {
         }
     }
 
-    // 2. By phone
+    // 2. By phone (try all variants: 05X, 972, +972, etc.)
     if (phone) {
-        const byPhone = await sr.Client.filter({ phone }, null, 1);
-        if (byPhone.length > 0) {
-            const updates = {};
-            if (customerId > 0 && !byPhone[0].woo_customer_id) updates.woo_customer_id = customerId;
-            if (email && !byPhone[0].email) updates.email = email;
-            if (Object.keys(updates).length > 0) await sr.Client.update(byPhone[0].id, updates);
-            return byPhone[0].id;
+        const phoneVariants = [phone];
+        if (phone.startsWith('0') && phone.length === 10) {
+            phoneVariants.push('972' + phone.slice(1));
+            phoneVariants.push('+972' + phone.slice(1));
+            phoneVariants.push('9720' + phone.slice(1));
+            phoneVariants.push('+9720' + phone.slice(1));
+        }
+        for (const variant of phoneVariants) {
+            const byPhone = await sr.Client.filter({ phone: variant }, null, 1);
+            if (byPhone.length > 0) {
+                const updates = {};
+                if (customerId > 0 && !byPhone[0].woo_customer_id) updates.woo_customer_id = customerId;
+                if (email && !byPhone[0].email) updates.email = email;
+                // Normalize the phone on the client record
+                if (byPhone[0].phone !== phone) updates.phone = phone;
+                if (Object.keys(updates).length > 0) await sr.Client.update(byPhone[0].id, updates);
+                return byPhone[0].id;
+            }
         }
     }
 
