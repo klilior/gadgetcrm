@@ -113,21 +113,63 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
             setCustomer(customerData);
 
             const { RepairDevice, NotificationLog } = await import('@/entities/all');
-            const [ordersData, ticketsData, repairsData, devicesData, activitiesData, smsData] = await Promise.all([
+            
+            // Fetch orders, tickets, repairs, devices in parallel
+            const [ordersData, ticketsData, repairsData, devicesData, smsData] = await Promise.all([
                 Order.filter({ client_id: customerId }, '-order_date'),
                 Ticket.filter({ customer_id: customerId }, '-created_date'),
                 Repair.filter({ client_id: customerId }, '-created_date'),
                 RepairDevice.filter({ client_id: customerId }, '-created_date'),
-                Activity.filter({ 
-                    $or: [
-                        { order_id: customerId },
-                        { ticket_id: { $in: (await Ticket.filter({ customer_id: customerId })).map(t => t.id) } }
-                    ]
-                }, '-created_date'),
                 customerData?.phone 
                     ? NotificationLog.filter({ to_phone: customerData.phone }, '-sent_at', 20)
                     : Promise.resolve([])
             ]);
+            
+            // Fetch activities: by ticket IDs + by phone number in content
+            const ticketIds = ticketsData.map(t => t.id);
+            const phone = customerData?.phone;
+            
+            // Normalize phone for search
+            const phoneVariants = [];
+            if (phone) {
+                const digits = phone.replace(/[^\d]/g, '');
+                phoneVariants.push(phone);
+                if (digits.startsWith('0') && digits.length === 10) {
+                    phoneVariants.push(digits);
+                    phoneVariants.push('972' + digits.slice(1));
+                    phoneVariants.push('+972' + digits.slice(1));
+                }
+            }
+            
+            // Fetch call activities by phone (incoming + outgoing)
+            let callActivities = [];
+            if (phoneVariants.length > 0) {
+                const [incoming, outgoing] = await Promise.all([
+                    Activity.filter({ activity_type: 'שיחה נכנסת' }, '-created_date', 200),
+                    Activity.filter({ activity_type: 'שיחה יוצאת' }, '-created_date', 200),
+                ]);
+                const allCalls = [...incoming, ...outgoing];
+                callActivities = allCalls.filter(a => {
+                    const content = a.content || '';
+                    return phoneVariants.some(v => content.includes(v));
+                });
+            }
+            
+            // Fetch ticket-linked activities
+            let ticketActivities = [];
+            if (ticketIds.length > 0) {
+                const allActs = await Activity.filter({}, '-created_date', 200);
+                ticketActivities = allActs.filter(a => 
+                    ticketIds.includes(a.ticket_id) || ticketIds.includes(a.order_id)
+                );
+            }
+            
+            // Merge and deduplicate activities
+            const activityMap = {};
+            [...callActivities, ...ticketActivities].forEach(a => { activityMap[a.id] = a; });
+            const activitiesData = Object.values(activityMap).sort((a, b) => 
+                new Date(b.created_date) - new Date(a.created_date)
+            );
 
             setOrders(ordersData);
             setTickets(ticketsData);
