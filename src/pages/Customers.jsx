@@ -102,60 +102,27 @@ export default function CustomersPage() {
                     <p className="text-gray-600 mt-1">ניהול מאגר הלקוחות</p>
                 </div>
                 {isManager && (
-                    <div className="flex gap-2 flex-wrap">
-                        <Button
-                            onClick={() => handleCleanupDuplicates('delete_no_phone')}
-                            disabled={isCleaningDuplicates}
-                            variant="outline"
-                            size="sm"
-                            className="bg-orange-50 hover:bg-orange-100 border-orange-300"
-                        >
-                            {isCleaningDuplicates ? (
-                                <><Loader2 className="w-4 h-4 ml-1 animate-spin" />מנקה...</>
-                            ) : (
-                                <><Trash2 className="w-4 h-4 ml-1" />מחק ללא טלפון</>
-                            )}
-                        </Button>
-                        <Button
-                            onClick={() => handleCleanupDuplicates('merge_duplicates')}
-                            disabled={isCleaningDuplicates}
-                            variant="outline"
-                            size="sm"
-                            className="bg-blue-50 hover:bg-blue-100 border-blue-300"
-                        >
-                            <RefreshCw className="w-4 h-4 ml-1" />מזג טלפון
-                        </Button>
-                        <Button
-                            onClick={() => handleCleanupDuplicates('merge_email_duplicates')}
-                            disabled={isCleaningDuplicates}
-                            variant="outline"
-                            size="sm"
-                            className="bg-cyan-50 hover:bg-cyan-100 border-cyan-300"
-                        >
-                            <RefreshCw className="w-4 h-4 ml-1" />מזג אימייל
-                        </Button>
-                        <Button
-                            onClick={async () => {
-                                setIsScoring(true);
-                                try {
-                                    await calculateCustomerScore({ batch_size: 50, offset: 0 });
-                                    alert('✅ ציונים חושבו! רענן את הדף.');
-                                    await loadClients();
-                                } catch (e) { alert('שגיאה: ' + e.message); }
-                                setIsScoring(false);
-                            }}
-                            disabled={isScoring}
-                            variant="outline"
-                            size="sm"
-                            className="bg-purple-50 hover:bg-purple-100 border-purple-300"
-                        >
-                            {isScoring ? (
-                                <><Loader2 className="w-4 h-4 ml-1 animate-spin" />מחשב...</>
-                            ) : (
-                                <><BarChart3 className="w-4 h-4 ml-1" />חשב ציונים</>
-                            )}
-                        </Button>
-                    </div>
+                    <Button
+                        onClick={async () => {
+                            setIsScoring(true);
+                            try {
+                                await calculateCustomerScore({ batch_size: 50, offset: 0 });
+                                alert('✅ ציונים חושבו! רענן את הדף.');
+                                await loadClients();
+                            } catch (e) { alert('שגיאה: ' + e.message); }
+                            setIsScoring(false);
+                        }}
+                        disabled={isScoring}
+                        variant="outline"
+                        size="sm"
+                        className="bg-purple-50 hover:bg-purple-100 border-purple-300"
+                    >
+                        {isScoring ? (
+                            <><Loader2 className="w-4 h-4 ml-1 animate-spin" />מחשב...</>
+                        ) : (
+                            <><BarChart3 className="w-4 h-4 ml-1" />חשב ציונים</>
+                        )}
+                    </Button>
                 )}
             </div>
 
