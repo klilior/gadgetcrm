@@ -26,8 +26,7 @@ export default function CustomersPage() {
     const [showEditModal, setShowEditModal] = useState(false);
     const [showMessageModal, setShowMessageModal] = useState(false);
     const [clientForMessage, setClientForMessage] = useState(null);
-    const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
-    const [cleanupResult, setCleanupResult] = useState(null);
+
     const [showCustomerCard, setShowCustomerCard] = useState(false);
     const [selectedCustomerForCard, setSelectedCustomerForCard] = useState(null);
     const [isScoring, setIsScoring] = useState(false);
