@@ -205,9 +205,8 @@ export default function CustomersPage() {
                                 <h3 className="font-bold text-green-900 mb-2">✅ באצ' הושלם!</h3>
                                 <div className="text-sm text-green-800 space-y-1">
                                     <p>• נמחקו: {cleanupResult.deleted || 0}</p>
-                                    <p>• דולגו (יש רשומות): {cleanupResult.skipped || 0}</p>
+                                    <p>• דולגו (יש רשומות מקושרות): {cleanupResult.skipped || 0}</p>
                                     <p>• מוזגו: {cleanupResult.merged || 0}</p>
-                                    {cleanupResult.has_more && <p className="text-orange-700 font-medium">⚠️ יש עוד באצ'ים - לחץ שוב על "ניקוי כפילויות"</p>}
                                 </div>
                                 <Button variant="ghost" size="sm" onClick={() => setCleanupResult(null)} className="mt-2">סגור</Button>
                             </div>
