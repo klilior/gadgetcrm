@@ -91,42 +91,6 @@ export default function CustomersPage() {
         setShowMessageModal(true);
     };
 
-    const handleCleanupDuplicates = async (phase = 'delete_no_phone') => {
-        const phaseLabels = {
-            'delete_no_phone': 'מחיקת לקוחות ללא טלפון',
-            'merge_duplicates': 'מיזוג כפילויות לפי טלפון',
-            'merge_email_duplicates': 'מיזוג כפילויות לפי אימייל'
-        };
-        if (!confirm(`האם להריץ: ${phaseLabels[phase]}?`)) return;
-
-        setIsCleaningDuplicates(true);
-        setCleanupResult(null);
-
-        try {
-            let offset = 0;
-            let totalDeleted = 0, totalSkipped = 0, totalMerged = 0;
-            let hasMore = true;
-
-            while (hasMore) {
-                const response = await base44.functions.invoke('cleanupClientsNoPhone', { phase, batch_size: 50, offset });
-                const d = response.data;
-                totalDeleted += d.deleted || 0;
-                totalSkipped += d.skipped || 0;
-                totalMerged += d.merged || 0;
-                hasMore = d.has_more;
-                offset = d.next_offset;
-            }
-            
-            setCleanupResult({ deleted: totalDeleted, skipped: totalSkipped, merged: totalMerged, phase });
-            await loadClients();
-        } catch (error) {
-            console.error("Error cleaning up:", error);
-            alert("❌ שגיאה: " + error.message);
-        } finally {
-            setIsCleaningDuplicates(false);
-        }
-    };
-
     return (
         <div className="p-4 sm:p-6 space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
