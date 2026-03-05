@@ -190,7 +190,20 @@ async function findOrCreateClientFromLinetDoc(sr, doc) {
     }
   }
 
-  // 3. By name (only exact match)
+  // 3. By email
+  if (email) {
+    const byEmail = await sr.Client.filter({ email: email.toLowerCase().trim() }, null, 1);
+    if (byEmail.length > 0) {
+      const updates = { last_interaction_date: new Date().toISOString() };
+      if (accountId && !byEmail[0].linet_account_id) updates.linet_account_id = accountId;
+      if (phone && !byEmail[0].phone) updates.phone = phone;
+      if (!byEmail[0].full_name || byEmail[0].full_name === 'לקוח חדש') updates.full_name = name;
+      await sr.Client.update(byEmail[0].id, updates);
+      return byEmail[0].id;
+    }
+  }
+
+  // 4. By name (only exact match)
   const byName = await sr.Client.filter({ full_name: name }, null, 1);
   if (byName.length > 0) {
     const updates = { last_interaction_date: new Date().toISOString() };
