@@ -154,6 +154,24 @@ export default function CustomersPage() {
                             )}
                         </Button>
                         <Button
+                            onClick={() => handleCleanupDuplicates('merge_duplicates')}
+                            disabled={isCleaningDuplicates}
+                            variant="outline"
+                            size="sm"
+                            className="bg-blue-50 hover:bg-blue-100 border-blue-300"
+                        >
+                            <RefreshCw className="w-4 h-4 ml-1" />מזג טלפון
+                        </Button>
+                        <Button
+                            onClick={() => handleCleanupDuplicates('merge_email_duplicates')}
+                            disabled={isCleaningDuplicates}
+                            variant="outline"
+                            size="sm"
+                            className="bg-cyan-50 hover:bg-cyan-100 border-cyan-300"
+                        >
+                            <RefreshCw className="w-4 h-4 ml-1" />מזג אימייל
+                        </Button>
+                        <Button
                             onClick={async () => {
                                 setIsScoring(true);
                                 try {
