@@ -141,7 +141,7 @@ export default function CustomersPage() {
                 {isManager && (
                     <div className="flex gap-2 flex-wrap">
                         <Button
-                            onClick={handleCleanupDuplicates}
+                            onClick={() => handleCleanupDuplicates('delete_no_phone')}
                             disabled={isCleaningDuplicates}
                             variant="outline"
                             size="sm"
@@ -150,7 +150,7 @@ export default function CustomersPage() {
                             {isCleaningDuplicates ? (
                                 <><Loader2 className="w-4 h-4 ml-1 animate-spin" />מנקה...</>
                             ) : (
-                                <><Trash2 className="w-4 h-4 ml-1" />ניקוי כפילויות</>
+                                <><Trash2 className="w-4 h-4 ml-1" />מחק ללא טלפון</>
                             )}
                         </Button>
                         <Button
