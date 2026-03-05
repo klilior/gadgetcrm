@@ -117,6 +117,16 @@ Deno.serve(async (req) => {
             clients = await base44.asServiceRole.entities.Client.filter({ linet_account_id }, null, 1);
           }
 
+          // If not found, try by customer name (exact match)
+          if (clients.length === 0 && customer_name) {
+            clients = await base44.asServiceRole.entities.Client.filter({ full_name: customer_name }, null, 5);
+            // If multiple matches, prefer one with matching phone
+            if (clients.length > 1 && phoneNormalized) {
+              const withPhone = clients.filter(c => c.phone === phoneNormalized);
+              if (withPhone.length > 0) clients = withPhone;
+            }
+          }
+
           if (clients.length > 0) {
             clientId = clients[0].id;
             stats.customers_matched++;
@@ -124,6 +134,7 @@ Deno.serve(async (req) => {
             // Update missing fields
             const updates = {};
             if (!clients[0].linet_account_id && linet_account_id) updates.linet_account_id = linet_account_id;
+            if (!clients[0].phone && phoneNormalized) updates.phone = phoneNormalized;
             if (!clients[0].phone_original && phoneOriginal) updates.phone_original = phoneOriginal;
             if (!clients[0].source) updates.source = 'Linet Invoice';
             if (Object.keys(updates).length > 0) {
