@@ -20,6 +20,8 @@ import SendSmsModal from '../sms/SendSmsModal';
 import CustomerDevicesList from './CustomerDevicesList';
 import CustomerScoreBadge from './CustomerScoreBadge';
 import CustomerAISummary from './CustomerAISummary';
+import CustomerCallsTab from './CustomerCallsTab';
+import CustomerInvoicesTab from './CustomerInvoicesTab';
 
 export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [customer, setCustomer] = useState(null);
@@ -37,6 +39,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [activities, setActivities] = useState([]);
     const [timeline, setTimeline] = useState([]);
     const [devices, setDevices] = useState([]);
+    const [invoices, setInvoices] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -112,16 +115,19 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
             const customerData = await customersService.get(customerId);
             setCustomer(customerData);
 
-            const { RepairDevice, NotificationLog } = await import('@/entities/all');
+            const { RepairDevice, NotificationLog, SalesTransaction } = await import('@/entities/all');
             
-            // Fetch orders, tickets, repairs, devices in parallel
-            const [ordersData, ticketsData, repairsData, devicesData, smsData] = await Promise.all([
+            // Fetch orders, tickets, repairs, devices, invoices in parallel
+            const [ordersData, ticketsData, repairsData, devicesData, smsData, invoicesData] = await Promise.all([
                 Order.filter({ client_id: customerId }, '-order_date'),
                 Ticket.filter({ customer_id: customerId }, '-created_date'),
                 Repair.filter({ client_id: customerId }, '-created_date'),
                 RepairDevice.filter({ client_id: customerId }, '-created_date'),
                 customerData?.phone 
                     ? NotificationLog.filter({ to_phone: customerData.phone }, '-sent_at', 20)
+                    : Promise.resolve([]),
+                customerData?.linet_account_id
+                    ? SalesTransaction.filter({ linet_account_id: customerData.linet_account_id }, '-issue_date', 100)
                     : Promise.resolve([])
             ]);
             
@@ -176,6 +182,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
             setRepairs(repairsData);
             setActivities(activitiesData);
             setDevices(devicesData || []);
+            setInvoices(invoicesData || []);
 
             const totalSpent = ordersData.reduce((sum, order) => sum + parseFloat(order.total || 0), 0);
             const lastOrder = ordersData.length > 0 ? ordersData[0].order_date : null;
@@ -370,10 +377,12 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                             </div>
                         ) : (
                             <Tabs defaultValue="overview" className="w-full">
-                                <TabsList className="flex w-full overflow-x-auto mb-4 sm:mb-6 sm:grid sm:grid-cols-7 gap-0">
+                                <TabsList className="flex w-full overflow-x-auto mb-4 sm:mb-6 gap-0">
                                     <TabsTrigger value="overview" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">סקירה</TabsTrigger>
                                     <TabsTrigger value="devices" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">מכשירים ({devices.length})</TabsTrigger>
                                     <TabsTrigger value="orders" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">הזמנות ({stats.totalOrders})</TabsTrigger>
+                                    <TabsTrigger value="invoices" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">חשבוניות ({invoices.length})</TabsTrigger>
+                                    <TabsTrigger value="calls" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">שיחות ({activities.filter(a => a.activity_type === 'שיחה נכנסת' || a.activity_type === 'שיחה יוצאת').length})</TabsTrigger>
                                     <TabsTrigger value="tickets" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">פניות ({stats.totalTickets})</TabsTrigger>
                                     <TabsTrigger value="repairs" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">תיקונים ({stats.totalRepairs})</TabsTrigger>
                                     <TabsTrigger value="recordings" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">הקלטות</TabsTrigger>
@@ -557,6 +566,16 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                             ))
                                         )}
                                     </div>
+                                </TabsContent>
+
+                                {/* Invoices Tab */}
+                                <TabsContent value="invoices">
+                                    <CustomerInvoicesTab invoices={invoices} />
+                                </TabsContent>
+
+                                {/* Calls Tab */}
+                                <TabsContent value="calls">
+                                    <CustomerCallsTab activities={activities} />
                                 </TabsContent>
 
                                 {/* Tickets Tab */}
