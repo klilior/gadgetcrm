@@ -92,27 +92,37 @@ export default function CustomersPage() {
         setShowMessageModal(true);
     };
 
-    const handleCleanupDuplicates = async () => {
-        if (!confirm("האם אתה בטוח שברצונך לנקות כפילויות לקוחות? פעולה זו תמזג לקוחות כפולים ותעדכן את כל הרשומות המקושרות.")) {
-            return;
-        }
+    const handleCleanupDuplicates = async (phase = 'delete_no_phone') => {
+        const phaseLabels = {
+            'delete_no_phone': 'מחיקת לקוחות ללא טלפון',
+            'merge_duplicates': 'מיזוג כפילויות לפי טלפון',
+            'merge_email_duplicates': 'מיזוג כפילויות לפי אימייל'
+        };
+        if (!confirm(`האם להריץ: ${phaseLabels[phase]}?`)) return;
 
         setIsCleaningDuplicates(true);
         setCleanupResult(null);
 
         try {
-            const response = await base44.functions.invoke('cleanupClientsNoPhone', { phase: 'delete_no_phone', batch_size: 20 });
-            
-            if (response.error) {
-                throw new Error(response.error);
+            let offset = 0;
+            let totalDeleted = 0, totalSkipped = 0, totalMerged = 0;
+            let hasMore = true;
+
+            while (hasMore) {
+                const response = await base44.functions.invoke('cleanupClientsNoPhone', { phase, batch_size: 50, offset });
+                const d = response.data;
+                totalDeleted += d.deleted || 0;
+                totalSkipped += d.skipped || 0;
+                totalMerged += d.merged || 0;
+                hasMore = d.has_more;
+                offset = d.next_offset;
             }
             
-            setCleanupResult(response.data);
-            alert(`✅ באצ' הושלם!\n\nנמחקו: ${response.data.deleted}\nדולגו (יש רשומות): ${response.data.skipped}\nעוד באצ'ים: ${response.data.has_more ? 'כן' : 'לא'}`);
+            setCleanupResult({ deleted: totalDeleted, skipped: totalSkipped, merged: totalMerged, phase });
             await loadClients();
         } catch (error) {
-            console.error("Error cleaning up duplicates:", error);
-            alert("❌ שגיאה בניקוי כפילויות: " + error.message);
+            console.error("Error cleaning up:", error);
+            alert("❌ שגיאה: " + error.message);
         } finally {
             setIsCleaningDuplicates(false);
         }
