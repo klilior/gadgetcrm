@@ -145,9 +145,22 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                 customerData?.phone 
                     ? NotificationLog.filter({ to_phone: customerData.phone }, '-sent_at', 20)
                     : Promise.resolve([]),
-                customerData?.linet_account_id
-                    ? SalesTransaction.filter({ linet_account_id: customerData.linet_account_id }, '-issue_date', 100)
-                    : Promise.resolve([])
+                (async () => {
+                    let results = [];
+                    // Fetch by client_id first
+                    if (customerId) {
+                        const byClient = await SalesTransaction.filter({ client_id: customerId }, '-issue_date', 100);
+                        results = byClient;
+                    }
+                    // Also fetch by linet_account_id if available
+                    if (customerData?.linet_account_id) {
+                        const byLinet = await SalesTransaction.filter({ linet_account_id: customerData.linet_account_id }, '-issue_date', 100);
+                        // Merge and deduplicate
+                        const existingIds = new Set(results.map(r => r.id));
+                        byLinet.forEach(inv => { if (!existingIds.has(inv.id)) results.push(inv); });
+                    }
+                    return results;
+                })()
             ]);
             
             // Fetch activities: by ticket IDs + by phone number in content
