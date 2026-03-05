@@ -91,11 +91,11 @@ Deno.serve(async (req) => {
         }
 
         // --- Step 2: Find or create customer ---
-        if (!phoneNormalized) {
+        if (!phoneNormalized && !customer_name) {
           stats.devices_skipped_no_phone += smartphoneItems.length;
           stats.errors.push({
             doc_number,
-            error: 'Missing phone number',
+            error: 'Missing phone and customer name',
             customer_name
           });
           continue;
