@@ -126,25 +126,6 @@ export default function CustomersPage() {
                 )}
             </div>
 
-            {cleanupResult && (
-                <Card className="glass-card border-green-300 bg-green-50">
-                    <CardContent className="p-4">
-                        <div className="flex items-start gap-3">
-                            <AlertTriangle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                            <div className="flex-1">
-                                <h3 className="font-bold text-green-900 mb-2">✅ באצ' הושלם!</h3>
-                                <div className="text-sm text-green-800 space-y-1">
-                                    <p>• נמחקו: {cleanupResult.deleted || 0}</p>
-                                    <p>• דולגו (יש רשומות מקושרות): {cleanupResult.skipped || 0}</p>
-                                    <p>• מוזגו: {cleanupResult.merged || 0}</p>
-                                </div>
-                                <Button variant="ghost" size="sm" onClick={() => setCleanupResult(null)} className="mt-2">סגור</Button>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
             <Card className="glass-card border-0">
                 <CardHeader>
                     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
