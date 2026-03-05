@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, User, Phone, Mail, MessageCircle, MapPin, Plus, Trash2, AlertTriangle, Loader2, PlusCircle, Trophy, Star, Medal, Award, Sparkles, BarChart3, RefreshCw } from "lucide-react";
+import { Search, User, Phone, Mail, MessageCircle, MapPin, Plus, Loader2, PlusCircle, Trophy, Star, Medal, Award, Sparkles, BarChart3 } from "lucide-react";
 import EditCustomerModal from "../components/customers/EditCustomerModal";
 import SendMessageModal from "../components/customers/SendMessageModal";
 import CustomerCard from "../components/customers/CustomerCard";
