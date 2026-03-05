@@ -53,7 +53,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
         navigate(url);
     };
 
-    const buildTimeline = useCallback((ordersData, ticketsData, repairsData, activitiesData, smsData) => {
+    const buildTimeline = useCallback((ordersData, ticketsData, repairsData, activitiesData, smsData, invoicesData) => {
         const events = [];
 
         ordersData.forEach(order => {
@@ -100,6 +100,25 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                 title: `SMS ${sms.event_type || ''}`,
                 description: sms.message?.substring(0, 100),
                 icon: Send, color: 'text-teal-600 bg-teal-50'
+            });
+        });
+
+        // Group invoices by doc_number for timeline
+        const invoiceGroups = {};
+        (invoicesData || []).forEach(inv => {
+            const key = inv.doc_number;
+            if (!invoiceGroups[key]) {
+                invoiceGroups[key] = { ...inv, total: 0, count: 0 };
+            }
+            invoiceGroups[key].total += inv.total_row_amount || 0;
+            invoiceGroups[key].count++;
+        });
+        Object.values(invoiceGroups).forEach(inv => {
+            events.push({
+                type: 'invoice', date: inv.issue_date,
+                title: `חשבונית #${inv.doc_number}`,
+                description: `${inv.doc_type} • ₪${Math.round(inv.total).toLocaleString()} • ${inv.count} פריטים`,
+                icon: FileText, color: 'text-indigo-600 bg-indigo-50'
             });
         });
 
@@ -198,7 +217,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                 smsCount: smsData?.length || 0
             });
 
-            buildTimeline(ordersData, ticketsData, repairsData, activitiesData, smsData);
+            buildTimeline(ordersData, ticketsData, repairsData, activitiesData, smsData, invoicesData);
 
         } catch (error) {
             console.error('Error loading customer data:', error);
