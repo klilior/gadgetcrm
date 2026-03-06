@@ -25,7 +25,7 @@ const retryApiCall = async (fn, retries = 3, delay = 1000) => {
   }
 };
 
-const SESSION_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+const SESSION_TIMEOUT_MS = 90 * 60 * 1000; // 90 minutes in milliseconds
 
 export function UserProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
@@ -58,7 +58,7 @@ export function UserProvider({ children }) {
     const initializeSystem = async () => {
       // Check if session expired due to inactivity
       if (isSessionExpired()) {
-        console.log('⏰ Session expired due to 3 hours inactivity');
+        console.log('⏰ Session expired due to 90 minutes inactivity');
         clearExpiredSession();
         setIsLoading(false);
         return;
