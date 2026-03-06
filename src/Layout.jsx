@@ -507,7 +507,7 @@ function AppContent({ children, currentPageName }) {
       )}
 
       {!isTechnicianRole && <QuickLeadButton />}
-      <IncomingCallPopup />
+      {!isTechnicianRole && <IncomingCallPopup />}
     </div>
   );
 }
