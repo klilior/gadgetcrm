@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Ticket, Order, Repair, Activity } from '@/entities/all';
 import { customersService } from '../utils/customersService';
+import { loadAllCustomerData } from './CustomerDataLoader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,240 +8,74 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     X, User, Phone, Mail, MapPin, Calendar, DollarSign,
     TrendingUp, Package, Wrench, MessageCircle, FileText,
-    Star, Edit, ShoppingCart, Phone as PhoneIcon, Send, ExternalLink, PlusCircle,
-    PhoneIncoming, PhoneOutgoing
+    Edit, Phone as PhoneIcon, Send, PlusCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
-import OrderDetailsModal from '../orders/OrderDetailsModal';
 import SendSmsModal from '../sms/SendSmsModal';
 import CustomerDevicesList from './CustomerDevicesList';
 import CustomerScoreBadge from './CustomerScoreBadge';
 import CustomerAISummary from './CustomerAISummary';
 import CustomerCallsTab from './CustomerCallsTab';
 import CustomerInvoicesTab from './CustomerInvoicesTab';
+import CustomerRepairsTab from './CustomerRepairsTab';
+import CustomerTicketsTab from './CustomerTicketsTab';
+import CustomerOrdersTab from './CustomerOrdersTab';
+import CustomerRecordingsTab from './CustomerRecordingsTab';
+import CustomerTimelineTab from './CustomerTimelineTab';
 
 export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [customer, setCustomer] = useState(null);
-    const [stats, setStats] = useState({
-        totalOrders: 0,
-        totalSpent: 0,
-        totalTickets: 0,
-        totalRepairs: 0,
-        lastOrderDate: null,
-        lastContactDate: null
-    });
+    const [stats, setStats] = useState({ totalOrders: 0, totalSpent: 0, totalTickets: 0, totalRepairs: 0, lastOrderDate: null, lastContactDate: null, smsCount: 0 });
     const [orders, setOrders] = useState([]);
     const [tickets, setTickets] = useState([]);
     const [repairs, setRepairs] = useState([]);
     const [activities, setActivities] = useState([]);
-    const [timeline, setTimeline] = useState([]);
     const [devices, setDevices] = useState([]);
     const [invoices, setInvoices] = useState([]);
+    const [smsLogs, setSmsLogs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [selectedOrder, setSelectedOrder] = useState(null);
-    const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+    const [loadError, setLoadError] = useState(null);
     const [showSmsModal, setShowSmsModal] = useState(false);
     const navigate = useNavigate();
 
     const handleCreateTicket = () => {
-        // Navigate to MessageCenter with createTicketFor param
-        // Using createPageUrl to ensure correct path, adding query param
         const url = createPageUrl('MessageCenter') + `?createTicketFor=${customerId}`;
         navigate(url);
     };
 
-    const buildTimeline = useCallback((ordersData, ticketsData, repairsData, activitiesData, smsData, invoicesData) => {
-        const events = [];
-
-        ordersData.forEach(order => {
-            events.push({
-                type: 'order', date: order.order_date,
-                title: `הזמנה #${order.external_order_number}`,
-                description: `סכום: ₪${order.total}`,
-                icon: ShoppingCart, color: 'text-green-600 bg-green-50'
-            });
-        });
-
-        ticketsData.forEach(ticket => {
-            events.push({
-                type: 'ticket', date: ticket.created_date,
-                title: `פנייה #${ticket.ticket_number}`,
-                description: ticket.subject,
-                icon: FileText, color: 'text-blue-600 bg-blue-50'
-            });
-        });
-
-        repairsData.forEach(repair => {
-            events.push({
-                type: 'repair', date: repair.created_date,
-                title: `תיקון #${repair.repair_id}`,
-                description: `${repair.issue_category} - ${repair.status}`,
-                icon: Wrench, color: 'text-orange-600 bg-orange-50'
-            });
-        });
-
-        activitiesData.forEach(activity => {
-            const isWhatsapp = activity.activity_type?.includes('וואטסאפ');
-            events.push({
-                type: 'activity', date: activity.created_date,
-                title: activity.activity_type,
-                description: activity.content?.substring(0, 100) || activity.summary,
-                icon: MessageCircle,
-                color: isWhatsapp ? 'text-green-600 bg-green-50' : 'text-purple-600 bg-purple-50'
-            });
-        });
-
-        (smsData || []).forEach(sms => {
-            events.push({
-                type: 'sms', date: sms.sent_at || sms.created_date,
-                title: `SMS ${sms.event_type || ''}`,
-                description: sms.message?.substring(0, 100),
-                icon: Send, color: 'text-teal-600 bg-teal-50'
-            });
-        });
-
-        // Group invoices by doc_number for timeline
-        const invoiceGroups = {};
-        (invoicesData || []).forEach(inv => {
-            const key = inv.doc_number;
-            if (!invoiceGroups[key]) {
-                invoiceGroups[key] = { ...inv, total: 0, count: 0 };
-            }
-            invoiceGroups[key].total += inv.total_row_amount || 0;
-            invoiceGroups[key].count++;
-        });
-        Object.values(invoiceGroups).forEach(inv => {
-            events.push({
-                type: 'invoice', date: inv.issue_date,
-                title: `חשבונית #${inv.doc_number}`,
-                description: `${inv.doc_type} • ₪${Math.round(inv.total).toLocaleString()} • ${inv.count} פריטים`,
-                icon: FileText, color: 'text-indigo-600 bg-indigo-50'
-            });
-        });
-
-        events.sort((a, b) => new Date(b.date) - new Date(a.date));
-        setTimeline(events);
-    }, []);
-
     const loadCustomerData = useCallback(async () => {
         if (!customerId) return;
-
         setIsLoading(true);
+        setLoadError(null);
+
         try {
             const customerData = await customersService.get(customerId);
             setCustomer(customerData);
 
-            const { RepairDevice, NotificationLog, SalesTransaction } = await import('@/entities/all');
-            
-            // Fetch orders, tickets, repairs, devices, invoices in parallel
-            const [ordersData, ticketsData, repairsData, devicesData, smsData, invoicesData] = await Promise.all([
-                Order.filter({ client_id: customerId }, '-order_date').catch(e => { console.error('Error loading orders:', e); return []; }),
-                Ticket.filter({ customer_id: customerId }, '-created_date').catch(e => { console.error('Error loading tickets:', e); return []; }),
-                Repair.filter({ client_id: customerId }, '-created_date').catch(e => { console.error('Error loading repairs:', e); return []; }),
-                RepairDevice.filter({ client_id: customerId }, '-created_date').catch(e => { console.error('Error loading devices:', e); return []; }),
-                customerData?.phone 
-                    ? NotificationLog.filter({ to_phone: customerData.phone }, '-sent_at', 20).catch(() => [])
-                    : Promise.resolve([]),
-                (async () => {
-                    let results = [];
-                    // Fetch by client_id first
-                    if (customerId) {
-                        const byClient = await SalesTransaction.filter({ client_id: customerId }, '-issue_date', 100);
-                        results = byClient;
-                    }
-                    // Also fetch by linet_account_id if available
-                    if (customerData?.linet_account_id) {
-                        const byLinet = await SalesTransaction.filter({ linet_account_id: customerData.linet_account_id }, '-issue_date', 100);
-                        // Merge and deduplicate
-                        const existingIds = new Set(results.map(r => r.id));
-                        byLinet.forEach(inv => { if (!existingIds.has(inv.id)) results.push(inv); });
-                    }
-                    return results;
-                })()
-            ]);
-            
-            // Fetch activities: by ticket IDs + by phone number in content
-            const ticketIds = ticketsData.map(t => t.id);
-            const phone = customerData?.phone;
-            
-            // Normalize phone for search
-            const phoneVariants = [];
-            if (phone) {
-                const digits = phone.replace(/[^\d]/g, '');
-                phoneVariants.push(phone);
-                if (digits.startsWith('0') && digits.length === 10) {
-                    phoneVariants.push(digits);
-                    phoneVariants.push('972' + digits.slice(1));
-                    phoneVariants.push('+972' + digits.slice(1));
-                }
+            const data = await loadAllCustomerData(customerId, customerData);
+            if (!data) {
+                setLoadError('לא ניתן לטעון נתוני לקוח');
+                return;
             }
-            
-            // Fetch call activities by phone (incoming + outgoing)
-            let callActivities = [];
-            if (phoneVariants.length > 0) {
-                const [incoming, outgoing] = await Promise.all([
-                    Activity.filter({ activity_type: 'שיחה נכנסת' }, '-created_date', 200),
-                    Activity.filter({ activity_type: 'שיחה יוצאת' }, '-created_date', 200),
-                ]);
-                const allCalls = [...incoming, ...outgoing];
-                callActivities = allCalls.filter(a => {
-                    const content = a.content || '';
-                    return phoneVariants.some(v => content.includes(v));
-                });
-            }
-            
-            // Fetch ticket-linked activities
-            let ticketActivities = [];
-            if (ticketIds.length > 0) {
-                const allActs = await Activity.filter({}, '-created_date', 200);
-                ticketActivities = allActs.filter(a => 
-                    ticketIds.includes(a.ticket_id) || ticketIds.includes(a.order_id)
-                );
-            }
-            
-            // Merge and deduplicate activities
-            const activityMap = {};
-            [...callActivities, ...ticketActivities].forEach(a => { activityMap[a.id] = a; });
-            const activitiesData = Object.values(activityMap).sort((a, b) => 
-                new Date(b.created_date) - new Date(a.created_date)
-            );
 
-            console.log(`[CustomerCard] Loaded for ${customerId}: orders=${ordersData.length}, tickets=${ticketsData.length}, repairs=${repairsData.length}, devices=${(devicesData||[]).length}, invoices=${(invoicesData||[]).length}`);
-            if (repairsData.length === 0) {
-                console.warn(`[CustomerCard] No repairs found for client_id=${customerId}. Trying direct Repair.list() check...`);
-            }
-            setOrders(ordersData);
-            setTickets(ticketsData);
-            setRepairs(repairsData);
-            setActivities(activitiesData);
-            setDevices(devicesData || []);
-            setInvoices(invoicesData || []);
-
-            const totalSpent = ordersData.reduce((sum, order) => sum + parseFloat(order.total || 0), 0);
-            const lastOrder = ordersData.length > 0 ? ordersData[0].order_date : null;
-            const lastContact = ticketsData.length > 0 ? ticketsData[0].created_date : null;
-
-            setStats({
-                totalOrders: ordersData.length,
-                totalSpent: totalSpent,
-                totalTickets: ticketsData.length,
-                totalRepairs: repairsData.length,
-                lastOrderDate: lastOrder,
-                lastContactDate: lastContact,
-                smsCount: smsData?.length || 0
-            });
-
-            buildTimeline(ordersData, ticketsData, repairsData, activitiesData, smsData, invoicesData);
-
+            setOrders(data.orders);
+            setTickets(data.tickets);
+            setRepairs(data.repairs);
+            setActivities(data.activities);
+            setDevices(data.devices);
+            setInvoices(data.invoices);
+            setSmsLogs(data.smsLogs);
+            setStats(data.stats);
         } catch (error) {
-            console.error('Error loading customer data:', error);
+            console.error('[CustomerCard] Critical error:', error);
+            setLoadError('שגיאה בטעינת נתוני לקוח: ' + (error?.message || ''));
         } finally {
             setIsLoading(false);
         }
-    }, [customerId, buildTimeline]);
+    }, [customerId]);
 
     useEffect(() => {
         if (isOpen && customerId) {
@@ -249,78 +83,15 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
         }
     }, [isOpen, customerId, loadCustomerData]);
 
-    const getCustomerLevel = () => {
-        if (stats.totalSpent > 5000) return { label: 'VIP', color: 'bg-purple-500 text-white' };
-        if (stats.totalSpent > 2000) return { label: 'זהב', color: 'bg-yellow-500 text-white' };
-        if (stats.totalSpent > 500) return { label: 'כסף', color: 'bg-gray-400 text-white' };
-        return { label: 'רגיל', color: 'bg-blue-500 text-white' };
-    };
-
     const formatDate = (dateString) => {
         if (!dateString) return 'אין מידע';
-        try {
-            return format(new Date(dateString), 'dd/MM/yyyy HH:mm', { locale: he });
-        } catch {
-            return 'תאריך לא תקין';
-        }
-    };
-
-    const handleOrderClick = async (order) => {
-        try {
-            // Parse billing data if it exists
-            let billingData = {};
-            if (order.raw_data_billing) {
-                try {
-                    billingData = JSON.parse(order.raw_data_billing);
-                } catch (e) {
-                    console.log("Failed to parse billing data");
-                }
-            }
-
-            // Fetch line items for this order
-            const { OrderProduct } = await import('@/entities/all');
-            const lineItems = await OrderProduct.filter({ order_id: order.id });
-
-            const enrichedOrder = {
-                ...order,
-                billing: billingData,
-                line_items: lineItems,
-                client_name: customer?.full_name || 'לא ידוע'
-            };
-
-            setSelectedOrder(enrichedOrder);
-            setIsOrderModalOpen(true);
-        } catch (error) {
-            console.error("Error loading order details:", error);
-        }
-    };
-
-    const getStatusColor = (status) => {
-        const statusColors = {
-            'processing': 'bg-blue-100 text-blue-800',
-            'completed': 'bg-green-100 text-green-800',
-            'pending': 'bg-yellow-100 text-yellow-800',
-            'on-hold': 'bg-orange-100 text-orange-800',
-            'cancelled': 'bg-red-100 text-red-800',
-            'refunded': 'bg-purple-100 text-purple-800',
-            'failed': 'bg-red-100 text-red-800'
-        };
-        return statusColors[status] || 'bg-gray-100 text-gray-800';
-    };
-
-    const STATUS_MAPPING = {
-        'processing': 'בטיפול',
-        'completed': 'הושלם',
-        'pending': 'ממתין לתשלום',
-        'on-hold': 'בהמתנה',
-        'cancelled': 'בוטל',
-        'refunded': 'הוחזר',
-        'failed': 'נכשל'
+        try { return format(new Date(dateString), 'dd/MM/yyyy HH:mm', { locale: he }); }
+        catch { return 'תאריך לא תקין'; }
     };
 
     if (!isOpen) return null;
 
-    const customerLevel = getCustomerLevel();
+    const callCount = activities.filter(a => a.activity_type === 'שיחה נכנסת' || a.activity_type === 'שיחה יוצאת').length;
 
     return (
         <>
@@ -348,12 +119,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                 </div>
                             </div>
                             <div className="flex gap-1 flex-shrink-0">
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    onClick={handleCreateTicket} 
-                                    className="text-white hover:bg-white/20 gap-2 hidden sm:flex"
-                                >
+                                <Button variant="ghost" size="sm" onClick={handleCreateTicket} className="text-white hover:bg-white/20 gap-2 hidden sm:flex">
                                     <PlusCircle className="w-4 h-4" />
                                     צור טיקט
                                 </Button>
@@ -387,17 +153,17 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                             </div>
                             <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
                                 <div className="flex items-center gap-1.5 mb-1">
-                                    <MessageCircle className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
-                                    <span className="text-[10px] sm:text-sm opacity-90">פניות</span>
-                                </div>
-                                <p className="text-lg sm:text-2xl font-bold">{stats.totalTickets}</p>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
-                                <div className="flex items-center gap-1.5 mb-1">
                                     <Wrench className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                                     <span className="text-[10px] sm:text-sm opacity-90">תיקונים</span>
                                 </div>
                                 <p className="text-lg sm:text-2xl font-bold">{stats.totalRepairs}</p>
+                            </div>
+                            <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <MessageCircle className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                                    <span className="text-[10px] sm:text-sm opacity-90">פניות / שיחות</span>
+                                </div>
+                                <p className="text-lg sm:text-2xl font-bold">{stats.totalTickets} / {callCount}</p>
                             </div>
                         </div>
                     </div>
@@ -411,6 +177,12 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                     <p className="text-gray-600">טוען מידע...</p>
                                 </div>
                             </div>
+                        ) : loadError ? (
+                            <div className="text-center py-20 text-red-600">
+                                <p className="text-lg font-semibold">שגיאה</p>
+                                <p className="text-sm mt-2">{loadError}</p>
+                                <Button onClick={loadCustomerData} className="mt-4">נסה שוב</Button>
+                            </div>
                         ) : (
                             <Tabs defaultValue="overview" className="w-full">
                                 <TabsList className="flex w-full overflow-x-auto mb-4 sm:mb-6 gap-0">
@@ -418,7 +190,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                     <TabsTrigger value="devices" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">מכשירים ({devices.length})</TabsTrigger>
                                     <TabsTrigger value="orders" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">הזמנות ({stats.totalOrders})</TabsTrigger>
                                     <TabsTrigger value="invoices" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">חשבוניות ({invoices.length})</TabsTrigger>
-                                    <TabsTrigger value="calls" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">שיחות ({activities.filter(a => a.activity_type === 'שיחה נכנסת' || a.activity_type === 'שיחה יוצאת').length})</TabsTrigger>
+                                    <TabsTrigger value="calls" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">שיחות ({callCount})</TabsTrigger>
                                     <TabsTrigger value="tickets" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">פניות ({stats.totalTickets})</TabsTrigger>
                                     <TabsTrigger value="repairs" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">תיקונים ({stats.totalRepairs})</TabsTrigger>
                                     <TabsTrigger value="recordings" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">הקלטות</TabsTrigger>
@@ -476,9 +248,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                                         <MapPin className="w-5 h-5 text-red-600" />
                                                         <div>
                                                             <p className="text-sm text-gray-500">כתובת</p>
-                                                            <p className="text-lg font-semibold">
-                                                                {customer.full_address || customer.city}
-                                                            </p>
+                                                            <p className="text-lg font-semibold">{customer.full_address || customer.city}</p>
                                                         </div>
                                                     </div>
                                                 )}
@@ -487,9 +257,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                                         <MessageCircle className="w-5 h-5 text-blue-600" />
                                                         <div>
                                                             <p className="text-sm text-gray-500">ערוץ מועדף</p>
-                                                            <p className="text-lg font-semibold capitalize">
-                                                                {customer.preferred_channel}
-                                                            </p>
+                                                            <p className="text-lg font-semibold capitalize">{customer.preferred_channel}</p>
                                                         </div>
                                                     </div>
                                                 )}
@@ -529,11 +297,18 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                                         {repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון'].includes(r.status)).length}
                                                     </span>
                                                 </div>
+                                                <div className="flex justify-between items-center p-3 bg-teal-50 rounded-lg">
+                                                    <span className="text-sm text-gray-700">שיחות</span>
+                                                    <span className="font-semibold text-gray-900">{callCount}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center p-3 bg-indigo-50 rounded-lg">
+                                                    <span className="text-sm text-gray-700">הודעות SMS</span>
+                                                    <span className="font-semibold text-gray-900">{stats.smsCount}</span>
+                                                </div>
                                             </CardContent>
                                         </Card>
                                     </div>
 
-                                        {/* AI Summary */}
                                     <CustomerAISummary 
                                         customer={customer} 
                                         orders={orders} 
@@ -542,7 +317,6 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                         devices={devices} 
                                     />
 
-                                    {/* Notes */}
                                     {customer?.notes && (
                                         <Card>
                                             <CardHeader>
@@ -558,231 +332,43 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                     )}
                                 </TabsContent>
 
-                                {/* Devices Tab */}
                                 <TabsContent value="devices">
                                     <CustomerDevicesList customerId={customerId} />
                                 </TabsContent>
 
-                                {/* Orders Tab */}
                                 <TabsContent value="orders">
-                                    <div className="space-y-4">
-                                        {orders.length === 0 ? (
-                                            <div className="text-center py-10 text-gray-500">
-                                                <Package className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                                                <p>אין הזמנות ללקוח זה</p>
-                                            </div>
-                                        ) : (
-                                            orders.map(order => (
-                                                <Card
-                                                    key={order.id}
-                                                    className="hover:shadow-lg transition-shadow cursor-pointer"
-                                                    onClick={() => handleOrderClick(order)}
-                                                >
-                                                    <CardContent className="p-4">
-                                                        <div className="flex justify-between items-start">
-                                                            <div className="flex-1">
-                                                                <div className="flex items-center gap-2">
-                                                                    <p className="font-semibold text-lg">הזמנה #{order.external_order_number}</p>
-                                                                    <ExternalLink className="w-4 h-4 text-gray-400" />
-                                                                </div>
-                                                                <p className="text-sm text-gray-500 mt-1">{formatDate(order.order_date)}</p>
-                                                                {order.shipping_method && (
-                                                                    <p className="text-xs text-gray-500 mt-1">משלוח: {order.shipping_method}</p>
-                                                                )}
-                                                            </div>
-                                                            <div className="text-left">
-                                                                <p className="text-2xl font-bold text-green-600">₪{order.total}</p>
-                                                                <Badge variant="outline" className={`mt-1 ${getStatusColor(order.status)}`}>
-                                                                    {STATUS_MAPPING[order.status] || order.status}
-                                                                </Badge>
-                                                            </div>
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            ))
-                                        )}
-                                    </div>
+                                    <CustomerOrdersTab orders={orders} customerName={customer?.full_name} />
                                 </TabsContent>
 
-                                {/* Invoices Tab */}
                                 <TabsContent value="invoices">
                                     <CustomerInvoicesTab invoices={invoices} />
                                 </TabsContent>
 
-                                {/* Calls Tab */}
                                 <TabsContent value="calls">
                                     <CustomerCallsTab activities={activities} />
                                 </TabsContent>
 
-                                {/* Tickets Tab */}
                                 <TabsContent value="tickets">
-                                    <div className="space-y-4">
-                                        {tickets.length === 0 ? (
-                                            <div className="text-center py-10 text-gray-500">
-                                                <FileText className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                                                <p>אין פניות ללקוח זה</p>
-                                            </div>
-                                        ) : (
-                                            tickets.map(ticket => (
-                                                <Card key={ticket.id} className="hover:shadow-lg transition-shadow">
-                                                    <CardContent className="p-4">
-                                                        <div className="space-y-3">
-                                                            <div className="flex justify-between items-start">
-                                                                <div className="flex-1">
-                                                                    <div className="flex items-center gap-2 mb-2">
-                                                                        <p className="font-semibold text-lg">טיקט #{ticket.ticket_number}</p>
-                                                                        <Badge className={
-                                                                            ticket.status === 'נסגר' ? 'bg-gray-200 text-gray-700' :
-                                                                                ticket.status === 'חדש' ? 'bg-teal-100 text-teal-800' :
-                                                                                    'bg-blue-100 text-blue-800'
-                                                                        }>
-                                                                            {ticket.status}
-                                                                        </Badge>
-                                                                    </div>
-                                                                    <p className="text-gray-900 font-medium">{ticket.subject}</p>
-                                                                    {ticket.description && (
-                                                                        <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">
-                                                                            {ticket.description.length > 200
-                                                                                ? ticket.description.substring(0, 200) + '...'
-                                                                                : ticket.description
-                                                                            }
-                                                                        </p>
-                                                                    )}
-                                                                    <div className="flex gap-4 mt-3 text-xs text-gray-500 flex-wrap">
-                                                                        {ticket.inquiry_type && (
-                                                                            <Badge variant="secondary" className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700">
-                                                                                סוג פנייה: {ticket.inquiry_type}
-                                                                            </Badge>
-                                                                        )}
-                                                                        {ticket.contact_channel && (
-                                                                            <Badge variant="secondary" className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700">
-                                                                                ערוץ: {ticket.contact_channel}
-                                                                            </Badge>
-                                                                        )}
-                                                                        {ticket.priority && (
-                                                                            <Badge variant="outline" className={`text-xs ${ticket.priority === 'גבוהה' ? 'bg-red-100 text-red-800' : ''}`}>
-                                                                                {ticket.priority}
-                                                                            </Badge>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-xs text-gray-500 pt-2 border-t mt-3">
-                                                                נוצר ב-{formatDate(ticket.created_date)}
-                                                            </div>
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            ))
-                                        )}
-                                    </div>
+                                    <CustomerTicketsTab tickets={tickets} />
                                 </TabsContent>
 
-                                {/* Repairs Tab */}
                                 <TabsContent value="repairs">
-                                    <div className="space-y-4">
-                                        {repairs.length === 0 ? (
-                                            <div className="text-center py-10 text-gray-500">
-                                                <Wrench className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                                                <p>אין תיקונים ללקוח זה</p>
-                                            </div>
-                                        ) : (
-                                            repairs.map(repair => (
-                                                <Card key={repair.id} className="hover:shadow-lg transition-shadow">
-                                                    <CardContent className="p-4">
-                                                        <div className="flex justify-between items-start">
-                                                            <div className="flex-1">
-                                                                <p className="font-semibold text-lg">תיקון #{repair.repair_id}</p>
-                                                                <p className="text-gray-700 mt-1">{repair.issue_category} - {repair.issue_description}</p>
-                                                                <p className="text-sm text-gray-500 mt-2">{formatDate(repair.created_date)}</p>
-                                                            </div>
-                                                            <div className="text-left">
-                                                                <Badge variant="outline">{repair.status}</Badge>
-                                                                {repair.final_price > 0 && (
-                                                                    <p className="text-lg font-bold text-green-600 mt-2">₪{repair.final_price}</p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            ))
-                                        )}
-                                    </div>
+                                    <CustomerRepairsTab repairs={repairs} />
                                 </TabsContent>
 
-                                {/* Recordings Tab */}
                                 <TabsContent value="recordings">
-                                    <div className="space-y-4">
-                                        {activities.filter(a => a.recording_url && (a.activity_type === 'שיחה נכנסת' || a.activity_type === 'שיחה יוצאת')).length === 0 ? (
-                                            <div className="text-center py-10 text-gray-500">
-                                                <Phone className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                                                <p>אין הקלטות שיחות</p>
-                                            </div>
-                                        ) : (
-                                            activities
-                                                .filter(a => a.recording_url && (a.activity_type === 'שיחה נכנסת' || a.activity_type === 'שיחה יוצאת'))
-                                                .map(call => (
-                                                    <Card key={call.id} className="hover:shadow-lg transition-shadow">
-                                                        <CardContent className="p-4 space-y-2">
-                                                            <div className="flex justify-between items-center">
-                                                                <div className="flex items-center gap-2">
-                                                                    {call.activity_type === 'שיחה נכנסת' ? (
-                                                                        <PhoneIncoming className="w-4 h-4 text-green-500" />
-                                                                    ) : (
-                                                                        <PhoneOutgoing className="w-4 h-4 text-blue-500" />
-                                                                    )}
-                                                                    <span className="font-medium text-sm">{call.activity_type}</span>
-                                                                </div>
-                                                                <span className="text-xs text-gray-500">
-                                                                    {call.created_date ? format(new Date(call.created_date), 'dd/MM/yyyy HH:mm', { locale: he }) : ''}
-                                                                </span>
-                                                            </div>
-                                                            <p className="text-xs text-gray-600">{call.content?.substring(0, 120)}</p>
-                                                            <audio controls className="w-full h-8" preload="none">
-                                                                <source src={call.recording_url} />
-                                                            </audio>
-                                                        </CardContent>
-                                                    </Card>
-                                                ))
-                                        )}
-                                    </div>
+                                    <CustomerRecordingsTab activities={activities} />
                                 </TabsContent>
 
-                                {/* Timeline Tab */}
                                 <TabsContent value="timeline">
-                                    <div className="space-y-4">
-                                        {timeline.length === 0 ? (
-                                            <div className="text-center py-10 text-gray-500">
-                                                <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                                                <p>אין פעילות ללקוח זה</p>
-                                            </div>
-                                        ) : (
-                                            <div className="relative">
-                                                <div className="absolute right-6 top-0 bottom-0 w-0.5 bg-gray-200"></div>
-                                                {timeline.map((event, index) => {
-                                                    const Icon = event.icon;
-                                                    return (
-                                                        <div key={index} className="relative pr-12 pb-8">
-                                                            <div className={`absolute right-4 w-5 h-5 rounded-full flex items-center justify-center ${event.color}`}>
-                                                                <Icon className="w-3 h-3" />
-                                                            </div>
-                                                            <Card>
-                                                                <CardContent className="p-4">
-                                                                    <div className="flex justify-between items-start">
-                                                                        <div>
-                                                                            <p className="font-semibold">{event.title}</p>
-                                                                            <p className="text-sm text-gray-600 mt-1">{event.description}</p>
-                                                                        </div>
-                                                                        <span className="text-xs text-gray-500">{formatDate(event.date)}</span>
-                                                                    </div>
-                                                                </CardContent>
-                                                            </Card>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
+                                    <CustomerTimelineTab 
+                                        orders={orders} 
+                                        tickets={tickets} 
+                                        repairs={repairs} 
+                                        activities={activities} 
+                                        smsLogs={smsLogs} 
+                                        invoices={invoices} 
+                                    />
                                 </TabsContent>
                             </Tabs>
                         )}
@@ -790,27 +376,12 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                 </div>
             </div>
 
-            {/* SMS Modal */}
             <SendSmsModal
                 isOpen={showSmsModal}
                 onClose={() => setShowSmsModal(false)}
                 phone={customer?.phone}
                 customerName={customer?.full_name}
             />
-
-            {/* Order Details Modal */}
-            {selectedOrder && (
-                <OrderDetailsModal
-                    order={selectedOrder}
-                    open={isOrderModalOpen}
-                    onClose={() => {
-                        setIsOrderModalOpen(false);
-                        setSelectedOrder(null);
-                    }}
-                    getStatusColor={getStatusColor}
-                    STATUS_MAPPING={STATUS_MAPPING}
-                />
-            )}
         </>
     );
 }
