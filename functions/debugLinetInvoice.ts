@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     // Search by doc ID directly using the docs endpoint
     const payload = {
       ...credentials,
-      limit: 500,
+      limit: 50,
       offset: 0,
       query: {
         issue_date: "2026-03-06 to 2026-03-06",
