@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Database, Tag, Users, Trash2, AlertTriangle } from "lucide-react";
+import { RefreshCw, Database, Tag, Users, Trash2, AlertTriangle, Target } from "lucide-react";
 import { format } from "date-fns";
 import EmployeeSyncPanel from "@/components/admin/EmployeeSyncPanel";
 import EmployeeTargetsAudit from "@/components/admin/EmployeeTargetsAudit";
