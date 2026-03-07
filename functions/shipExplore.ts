@@ -44,21 +44,19 @@ Deno.serve(async (req) => {
 
   // Try various endpoints to discover the API structure
   const endpoints = endpoint ? [endpoint] : [
-    '/api/v1/shipments',
-    '/api/v1/pickup',
-    '/api/v1/account',
-    '/api/v1/labels',
-    '/api/v1/tracking',
-    '/v1/shipments',
-    '/v1/pickup',
-    '/shipment/getshipments',
-    '/shipment/getpickups',
-    '/Home/GetShipments',
-    '/Home/GetPickups',
-    '/odata/Shipments',
-    '/odata/Pickups',
-    '/b2c/getshipments',
-    '/b2c/CreateShipment',
+    // Try to get something that reveals the API structure
+    '/api/Shipment/GetShipments',
+    '/api/Pickup/GetPickups',
+    '/api/B2C/GetShipments',
+    '/api/B2C/CreateShipment',
+    '/api/Customer/GetDetails',
+    '/api/Dashboard/GetDashboard',
+    '/api/Shipment/GetLabels',
+    '/api/Common/GetCities',
+    '/api/Common/GetStreets',
+    '/api/Address/GetCities',
+    '/api/Domestic/CreatePickup',
+    '/api/International/CreateShipment',
   ];
 
   const results = {};
