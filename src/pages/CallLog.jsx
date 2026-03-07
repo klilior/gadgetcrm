@@ -186,12 +186,15 @@ export default function CallLog() {
             const batchPromises = batch.map(async (clientId) => {
                 const client = uniqueClients[clientId];
                 try {
-                    const [tickets, repairs, orders, recentActivities] = await Promise.all([
+                    const [tickets, repairs, orders, vendors] = await Promise.all([
                         base44.entities.Ticket.filter({ customer_id: clientId }, '-created_date', 3).catch(() => []),
-                        base44.entities.Repair.filter({ client_id: clientId }, '-created_date', 3).catch(() => []),
+                        base44.entities.Repair.filter({ client_id: clientId }, '-created_date', 5).catch(() => []),
                         base44.entities.Order.filter({ client_id: clientId }, '-order_date', 3).catch(() => []),
-                        base44.entities.Activity.filter({ ticket_id: clientId }, '-created_date', 5).catch(() => []),
+                        base44.entities.RepairVendor.filter({ active: true }).catch(() => []),
                     ]);
+
+                    const vendorMap = {};
+                    vendors.forEach(v => { vendorMap[v.id] = v.name; });
 
                     const openTickets = tickets.filter(t => !['סגור', 'בוטל'].includes(t.status));
                     const openRepairs = repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון', 'נמסר', 'הושלם', 'בוטל'].includes(r.status));
@@ -204,7 +207,7 @@ export default function CallLog() {
                         parts.push(`טיקטים פתוחים: ${openTickets.map(t => `${t.subject || t.title || 'ללא נושא'} (${t.status})`).join(', ')}`);
                     }
                     if (openRepairs.length > 0) {
-                        parts.push(`תיקונים פעילים: ${openRepairs.map(r => `${r.model || r.description || 'מכשיר'} - ${r.status}${r.vendor_name ? ` אצל ${r.vendor_name}` : ''}`).join(', ')}`);
+                        parts.push(`תיקונים פעילים: ${openRepairs.map(r => `${r.issue_category || 'מכשיר'} - ${r.status}${r.vendor_id && vendorMap[r.vendor_id] ? ` אצל ${vendorMap[r.vendor_id]}` : ''} (${r.repair_type || ''})`).join(', ')}`);
                     }
                     if (orders.length > 0) {
                         const recentOrder = orders[0];
@@ -214,7 +217,7 @@ export default function CallLog() {
                     if (client.total_orders) parts.push(`סה"כ הזמנות: ${client.total_orders}`);
                     if (client.total_repairs) parts.push(`סה"כ תיקונים: ${client.total_repairs}`);
 
-                    if (parts.length <= 2) {
+                    if (parts.length <= 1) {
                         tipsMap[clientId] = 'אין פעילות ידועה';
                         return;
                     }

@@ -55,8 +55,8 @@ export default function CallLogItem({ call, client, aiTip, dupCount }) {
         statusBg = 'bg-blue-100 text-blue-700';
     }
 
-    const timeStr = moment(call.created_date).format('DD/MM HH:mm');
-    const timeAgo = moment(call.created_date).fromNow();
+    const timeStr = moment.utc(call.created_date).local().format('DD/MM HH:mm');
+    const timeAgo = moment.utc(call.created_date).local().fromNow();
 
     return (
         <div className="px-4 py-3 hover:bg-gray-50 transition-colors">
