@@ -18,6 +18,7 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
     const [error, setError] = useState(null);
     const [newStatus, setNewStatus] = useState(order?.status || '');
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+    const [showUpsShipment, setShowUpsShipment] = useState(false);
     
     if (!order) return null;
     
