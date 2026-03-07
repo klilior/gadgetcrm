@@ -50,17 +50,20 @@ Deno.serve(async (req) => {
   for (const ep of endpoints) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+      const timeout = setTimeout(() => controller.abort(), 5000);
       const opts = { headers, method, signal: controller.signal };
       if (method === 'POST') opts.body = JSON.stringify({});
+      console.log(`Trying: ${method} ${API_BASE}${ep}`);
       const res = await fetch(`${API_BASE}${ep}`, opts);
       clearTimeout(timeout);
       const text = await res.text();
       let parsed;
       try { parsed = JSON.parse(text); } catch { parsed = text.substring(0, 300); }
       results[ep] = { status: res.status, data: parsed };
+      console.log(`Result: ${ep} -> ${res.status}`);
     } catch (e) {
       results[ep] = { error: e.message };
+      console.log(`Error: ${ep} -> ${e.message}`);
     }
   }
 
