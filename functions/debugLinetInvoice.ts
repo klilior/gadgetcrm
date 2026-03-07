@@ -35,19 +35,18 @@ Deno.serve(async (req) => {
 
     const credentials = await getLinetCredentials(base44);
 
-    // Try multiple search strategies
-    // Strategy 1: search by id
+    // Search by date of the invoice and filter by docnum
     const payload = {
       ...credentials,
-      limit: 10,
+      limit: 200,
       offset: 0,
       query: {
         doctype: ["9", "3", "4"],
-        id: String(docNumber),
+        issue_date: "2026-03-01 to 2026-03-07",
       },
     };
 
-    console.log('🔍 Searching for doc by id:', docNumber);
+    console.log('🔍 Fetching recent docs to find docnum:', docNumber);
 
     const response = await fetch(`${BASE_URL}/newsearch/docs`, {
       method: 'POST',
