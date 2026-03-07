@@ -137,6 +137,13 @@ async function processOrder(sr, wooOrder) {
         m.key === 'billing_note' || m.key === '_billing_note'
     );
 
+    // Extract pickup point data from WooCommerce meta
+    const pickupPointMeta = (wooOrder.meta_data || []).find(m => m.key === 'pkps_json');
+    let pickupPointData = null;
+    if (pickupPointMeta?.value) {
+        pickupPointData = typeof pickupPointMeta.value === 'string' ? pickupPointMeta.value : JSON.stringify(pickupPointMeta.value);
+    }
+
     const resolvedClientId = clientId || existingOrders[0]?.client_id || '';
     const orderData = {
         external_order_number: wooOrder.id.toString(),
@@ -148,6 +155,7 @@ async function processOrder(sr, wooOrder) {
         payment_method_title: wooOrder.payment_method_title,
         customer_note: wooOrder.customer_note || billingNoteMeta?.value || '',
         raw_data_billing: JSON.stringify(wooOrder.billing),
+        pickup_point_data: pickupPointData,
     };
 
     // Only set client_id if we have a valid one (avoid null → validation error)
