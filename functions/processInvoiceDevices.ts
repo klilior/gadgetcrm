@@ -50,7 +50,8 @@ function isDeviceLine(line, enrichedCategories) {
   if (isSmartphoneCategory(category)) return true;
   if (isDeviceByName(line.name)) return true;
   // If line has a serial number, it's likely a device
-  if (line.serial && String(line.serial).trim().length >= 10) return true;
+  const serial = Array.isArray(line.serial) ? line.serial[0] : line.serial;
+  if (serial && String(serial).trim().length >= 10) return true;
   return false;
 }
 
