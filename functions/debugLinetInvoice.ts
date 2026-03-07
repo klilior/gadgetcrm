@@ -35,18 +35,19 @@ Deno.serve(async (req) => {
 
     const credentials = await getLinetCredentials(base44);
 
-    // Search for the document by docnum
+    // Try multiple search strategies
+    // Strategy 1: search by id
     const payload = {
       ...credentials,
-      limit: 5,
+      limit: 10,
       offset: 0,
       query: {
-        docnum: String(docNumber),
         doctype: ["9", "3", "4"],
+        id: String(docNumber),
       },
     };
 
-    console.log('🔍 Searching for doc:', docNumber);
+    console.log('🔍 Searching for doc by id:', docNumber);
 
     const response = await fetch(`${BASE_URL}/newsearch/docs`, {
       method: 'POST',
