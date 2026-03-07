@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { endpoint, method, body } = await req.json();
+    const { endpoint, method, body, base } = await req.json();
     
     // Step 1: Get token
     const tokenData = await getToken();
@@ -39,7 +39,8 @@ Deno.serve(async (req) => {
     }
 
     // Step 2: Make single API call
-    const url = `${API_BASE}${endpoint}`;
+    const apiBase = base || API_BASE;
+    const url = `${apiBase}${endpoint}`;
     const httpMethod = (method || 'GET').toUpperCase();
     
     const opts = {
