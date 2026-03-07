@@ -2,7 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 const DEFAULT_API_BASE = 'https://api.ship.co.il';
 
-async function getToken() {
+async function getToken(apiBase) {
   const body = new URLSearchParams({
     username: Deno.env.get('SHIP_USERNAME'),
     password: Deno.env.get('SHIP_PASSWORD'),
@@ -10,7 +10,7 @@ async function getToken() {
     grant_type: 'password'
   });
 
-  const res = await fetch(`${API_BASE}/token`, {
+  const res = await fetch(`${apiBase}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString()
@@ -18,7 +18,7 @@ async function getToken() {
 
   const data = await res.json();
   console.log('Token response:', JSON.stringify(data));
-  return data.access_token;
+  return data;
 }
 
 Deno.serve(async (req) => {
@@ -32,9 +32,10 @@ Deno.serve(async (req) => {
   const API_BASE = base || DEFAULT_API_BASE;
 
   // Step 1: Get token
-  const token = await getToken();
+  const tokenData = await getToken(API_BASE);
+  const token = tokenData.access_token;
   if (!token) {
-    return Response.json({ error: 'Failed to get token' });
+    return Response.json({ error: 'Failed to get token', tokenData });
   }
 
   // Step 2: Explore different endpoints
