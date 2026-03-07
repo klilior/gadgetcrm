@@ -28,12 +28,30 @@ function detectManufacturer(productName) {
   return 'אחר';
 }
 
-// Check if category is a smartphone
-const PHONE_CATEGORIES = ['טלפונים סלולרים', 'טלפונים סלולריים', 'סלולר', 'smartphones', 'phones', 'סמארטפונים'];
+// Check if category is a smartphone/device
+const PHONE_CATEGORIES = ['טלפונים סלולרים', 'טלפונים סלולריים', 'סלולר', 'smartphones', 'phones', 'סמארטפונים', 'סמארטפונים כשרים', 'טאבלטים', 'מכשירים'];
 function isSmartphoneCategory(category) {
   if (!category) return false;
   const lower = category.toLowerCase();
   return PHONE_CATEGORIES.some(cat => lower.includes(cat.toLowerCase()));
+}
+
+// Keywords in product name that indicate a device
+const DEVICE_NAME_KEYWORDS = ['iphone', 'samsung', 'galaxy', 'xiaomi', 'redmi', 'poco', 'pixel', 'ipad', 'macbook', 'airpods', 'apple watch', 'huawei', 'oneplus', 'oppo', 'vivo', 'realme', 'nothing phone', 'motorola', 'nokia', 'honor', 'סלולרי', 'טלפון סלולרי'];
+function isDeviceByName(productName) {
+  if (!productName) return false;
+  const lower = productName.toLowerCase();
+  return DEVICE_NAME_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+// Check if a line item is a device - by category, name, or serial number
+function isDeviceLine(line, enrichedCategories) {
+  const category = line.category_name || enrichedCategories?.[line.sku] || '';
+  if (isSmartphoneCategory(category)) return true;
+  if (isDeviceByName(line.name)) return true;
+  // If line has a serial number, it's likely a device
+  if (line.serial && String(line.serial).trim().length >= 10) return true;
+  return false;
 }
 
 Deno.serve(async (req) => {
