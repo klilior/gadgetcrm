@@ -1,6 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-async function getToken() {
+async function getToken(baseUrl) {
   const body = new URLSearchParams({
     username: Deno.env.get('SHIP_USERNAME'),
     password: Deno.env.get('SHIP_PASSWORD'),
@@ -8,13 +8,20 @@ async function getToken() {
     grant_type: 'password'
   });
 
-  const res = await fetch('https://api.ship.co.il/token', {
+  const tokenUrl = `${baseUrl}/token`;
+  console.log('Getting token from:', tokenUrl);
+
+  const res = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString()
+    body: body.toString(),
+    signal: AbortSignal.timeout(5000)
   });
 
-  return await res.json();
+  const data = await res.json();
+  console.log('Token response status:', res.status);
+  console.log('Token data:', JSON.stringify(data).substring(0, 300));
+  return data;
 }
 
 Deno.serve(async (req) => {
@@ -26,20 +33,18 @@ Deno.serve(async (req) => {
     }
 
     const { endpoint, method, body, base } = await req.json();
+    const apiBase = base || 'https://plugins.ship.co.il';
     
-    console.log('Step 1: Getting token...');
-    const tokenData = await getToken();
-    console.log('Token OK:', !!tokenData.access_token);
+    const tokenData = await getToken(apiBase);
     
     if (!tokenData.access_token) {
       return Response.json({ error: 'No token', tokenData });
     }
 
-    const apiBase = base || 'https://api.ship.co.il';
     const url = `${apiBase}${endpoint}`;
     const httpMethod = (method || 'GET').toUpperCase();
     
-    console.log(`Step 2: ${httpMethod} ${url}`);
+    console.log(`${httpMethod} ${url}`);
     
     const opts = {
       method: httpMethod,
@@ -48,34 +53,29 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      signal: AbortSignal.timeout(3000)
+      signal: AbortSignal.timeout(5000)
     };
     
     if (httpMethod === 'POST' && body) {
       opts.body = JSON.stringify(body);
-      console.log('Body:', JSON.stringify(body).substring(0, 300));
+      console.log('Body:', JSON.stringify(body).substring(0, 500));
     }
     
     let res;
     try {
       res = await fetch(url, opts);
     } catch (fetchErr) {
-      console.log('Fetch error:', fetchErr.name, fetchErr.message);
-      return Response.json({ 
-        error: fetchErr.message, 
-        errorType: fetchErr.name,
-        url 
-      });
+      return Response.json({ error: fetchErr.message, errorType: fetchErr.name, url });
     }
     
     const text = await res.text();
     console.log(`Status: ${res.status}`);
-    console.log(`Body: ${text.substring(0, 500)}`);
+    console.log(`Response: ${text.substring(0, 1000)}`);
     
     let parsed;
     try { parsed = JSON.parse(text); } catch { parsed = text; }
     
-    return Response.json({ status: res.status, data: parsed });
+    return Response.json({ status: res.status, data: parsed, base: apiBase });
   } catch (e) {
     console.error('Error:', e.message);
     return Response.json({ error: e.message }, { status: 500 });
