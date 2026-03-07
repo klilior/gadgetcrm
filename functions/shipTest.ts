@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     if (body) console.log('Body:', JSON.stringify(body).substring(0, 500));
     
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 4000);
     opts.signal = controller.signal;
     
     const res = await fetch(url, opts);
