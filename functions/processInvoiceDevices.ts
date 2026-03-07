@@ -96,12 +96,10 @@ Deno.serve(async (req) => {
         const rawPhone = doc.phone || doc.mobile || doc.account_phone || null;
         const { normalized: phoneNormalized, original: phoneOriginal } = normalizePhone(rawPhone);
 
-        // Check if this document has any smartphone line items
+        // Check if this document has any device line items (by category, name, or serial)
         const lineItems = Array.isArray(doc.docDetailes) ? doc.docDetailes : [];
-        const smartphoneItems = lineItems.filter(line => {
-          const category = line.category_name || doc._enriched_categories?.[line.sku] || '';
-          return isSmartphoneCategory(category);
-        });
+        const enrichedCategories = doc._enriched_categories || {};
+        const smartphoneItems = lineItems.filter(line => isDeviceLine(line, enrichedCategories));
 
         if (smartphoneItems.length === 0) {
           stats.items_not_phone += lineItems.length;
