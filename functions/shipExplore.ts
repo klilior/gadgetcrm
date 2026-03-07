@@ -42,30 +42,23 @@ Deno.serve(async (req) => {
     'Content-Type': 'application/json'
   };
 
-  // Try various endpoints to discover the API structure
+  const method = action === 'post' ? 'POST' : 'GET';
   const endpoints = endpoint ? [endpoint] : [
-    // Try to get something that reveals the API structure
     '/api/Shipment/GetShipments',
     '/api/Pickup/GetPickups',
-    '/api/B2C/GetShipments',
-    '/api/B2C/CreateShipment',
     '/api/Customer/GetDetails',
-    '/api/Dashboard/GetDashboard',
-    '/api/Shipment/GetLabels',
     '/api/Common/GetCities',
-    '/api/Common/GetStreets',
-    '/api/Address/GetCities',
-    '/api/Domestic/CreatePickup',
-    '/api/International/CreateShipment',
   ];
 
   const results = {};
   for (const ep of endpoints) {
     try {
-      const res = await fetch(`${API_BASE}${ep}`, { headers });
+      const opts = { headers, method };
+      if (method === 'POST') opts.body = JSON.stringify({});
+      const res = await fetch(`${API_BASE}${ep}`, opts);
       const text = await res.text();
       let parsed;
-      try { parsed = JSON.parse(text); } catch { parsed = text; }
+      try { parsed = JSON.parse(text); } catch { parsed = text.substring(0, 500); }
       results[ep] = { status: res.status, data: parsed };
     } catch (e) {
       results[ep] = { error: e.message };
