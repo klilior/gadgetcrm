@@ -64,7 +64,38 @@ Deno.serve(async (req) => {
     const documents = apiResponse.body || [];
 
     if (documents.length === 0) {
-      return Response.json({ error: 'Document not found', query: payload.query });
+      // Strategy 2: Try recent docs and filter by docnum
+      console.log('🔍 Strategy 1 failed, trying date range search...');
+      const payload2 = {
+        ...credentials,
+        limit: 200,
+        offset: 0,
+        query: {
+          doctype: ["9", "3", "4"],
+          issue_date: "2025-01-01 to 2026-03-07",
+        },
+      };
+      const response2 = await fetch(`${BASE_URL}/newsearch/docs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload2),
+      });
+      const apiResponse2 = await response2.json();
+      const allDocs = apiResponse2.body || [];
+      console.log(`Found ${allDocs.length} docs, searching for docnum ${docNumber}...`);
+      
+      const matched = allDocs.find(d => String(d.docnum) === String(docNumber) || String(d.id) === String(docNumber));
+      if (!matched) {
+        // Return a sample doc so we can see fields
+        const sample = allDocs.length > 0 ? allDocs[0] : null;
+        return Response.json({ 
+          error: `Document ${docNumber} not found in ${allDocs.length} docs`, 
+          sample_docnums: allDocs.slice(0, 10).map(d => ({ id: d.id, docnum: d.docnum, company: d.company_name })),
+          sample_doc_fields: sample ? Object.keys(sample) : [],
+          sample_line_fields: sample?.docDetailes?.[0] ? Object.keys(sample.docDetailes[0]) : []
+        });
+      }
+      documents.push(matched);
     }
 
     // Return the FULL raw document with all fields
