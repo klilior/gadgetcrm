@@ -209,6 +209,10 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                 new Date(b.created_date) - new Date(a.created_date)
             );
 
+            console.log(`[CustomerCard] Loaded for ${customerId}: orders=${ordersData.length}, tickets=${ticketsData.length}, repairs=${repairsData.length}, devices=${(devicesData||[]).length}, invoices=${(invoicesData||[]).length}`);
+            if (repairsData.length === 0) {
+                console.warn(`[CustomerCard] No repairs found for client_id=${customerId}. Trying direct Repair.list() check...`);
+            }
             setOrders(ordersData);
             setTickets(ticketsData);
             setRepairs(repairsData);
