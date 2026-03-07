@@ -138,12 +138,12 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
             
             // Fetch orders, tickets, repairs, devices, invoices in parallel
             const [ordersData, ticketsData, repairsData, devicesData, smsData, invoicesData] = await Promise.all([
-                Order.filter({ client_id: customerId }, '-order_date'),
-                Ticket.filter({ customer_id: customerId }, '-created_date'),
-                Repair.filter({ client_id: customerId }, '-created_date'),
-                RepairDevice.filter({ client_id: customerId }, '-created_date'),
+                Order.filter({ client_id: customerId }, '-order_date').catch(e => { console.error('Error loading orders:', e); return []; }),
+                Ticket.filter({ customer_id: customerId }, '-created_date').catch(e => { console.error('Error loading tickets:', e); return []; }),
+                Repair.filter({ client_id: customerId }, '-created_date').catch(e => { console.error('Error loading repairs:', e); return []; }),
+                RepairDevice.filter({ client_id: customerId }, '-created_date').catch(e => { console.error('Error loading devices:', e); return []; }),
                 customerData?.phone 
-                    ? NotificationLog.filter({ to_phone: customerData.phone }, '-sent_at', 20)
+                    ? NotificationLog.filter({ to_phone: customerData.phone }, '-sent_at', 20).catch(() => [])
                     : Promise.resolve([]),
                 (async () => {
                     let results = [];
