@@ -1,6 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-let API_BASE = 'https://api.ship.co.il';
+const DEFAULT_API_BASE = 'https://api.ship.co.il';
 
 async function getToken() {
   const body = new URLSearchParams({
@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   }
 
   const { action, endpoint, base } = await req.json();
-  if (base) API_BASE = base;
+  const API_BASE = base || DEFAULT_API_BASE;
 
   // Step 1: Get token
   const token = await getToken();
