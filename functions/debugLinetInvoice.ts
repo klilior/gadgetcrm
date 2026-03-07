@@ -79,7 +79,6 @@ Deno.serve(async (req) => {
     const doc = matched;
 
     // Return the FULL raw document with all fields
-    const doc = documents[0];
     
     // Extract line item fields for easy viewing
     const lineItemFields = {};
