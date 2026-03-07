@@ -175,9 +175,14 @@ Deno.serve(async (req) => {
           try {
             const productName = line.name || '';
             const sku = line.sku || '';
-            // Linet sends serial in the 'serial' field
+            // Linet sends serial as an array (e.g. ["353541961235476"]) or string
             const rawSerial = line.serial || line.serial_number || line.imei || '';
-            const serialNumber = String(rawSerial).trim();
+            let serialNumber = '';
+            if (Array.isArray(rawSerial)) {
+              serialNumber = rawSerial[0] ? String(rawSerial[0]).trim() : '';
+            } else {
+              serialNumber = String(rawSerial).trim();
+            }
             const quantity = Math.abs(parseFloat(line.qty) || 1);
             
             console.log(`  📱 Device line: ${productName} | SKU: ${sku} | Serial: ${serialNumber || 'NONE'} | Qty: ${quantity}`);
