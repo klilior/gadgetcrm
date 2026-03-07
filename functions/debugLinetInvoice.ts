@@ -22,31 +22,28 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
-    if (!user || user.role !== 'admin') {
+    if (user?.role !== 'admin') {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await req.json();
-    const docNumber = body.doc_number;
-
-    if (!docNumber) {
-      return Response.json({ error: 'doc_number is required' }, { status: 400 });
-    }
+    const targetDocNum = body.doc_number || '39708';
 
     const credentials = await getLinetCredentials(base44);
-
-    // Search by date of the invoice and filter by docnum
+    
+    // Search by doc ID directly using the docs endpoint
     const payload = {
       ...credentials,
-      limit: 200,
+      limit: 500,
       offset: 0,
       query: {
-        doctype: ["9", "3", "4"],
-        issue_date: "2026-02-01 to 2026-03-08",
+        issue_date: "2025-01-01 to 2026-12-31",
+        doctype: ["9", "3"],
+        refstatus: null,
       },
     };
 
-    console.log('🔍 Fetching recent docs to find docnum:', docNumber);
+    console.log(`🔍 Fetching docs to find docnum: ${targetDocNum}`);
 
     const response = await fetch(`${BASE_URL}/newsearch/docs`, {
       method: 'POST',
@@ -54,55 +51,49 @@ Deno.serve(async (req) => {
       body: JSON.stringify(payload),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return Response.json({ error: `Linet API Error ${response.status}: ${errorText}` }, { status: 500 });
-    }
-
     const apiResponse = await response.json();
-    const documents = apiResponse.body || [];
-
-    // Filter by docnum
-    const allDocs = documents;
-    const matched = allDocs.find(d => String(d.docnum) === String(docNumber) || String(d.id) === String(docNumber));
+    const allDocs = apiResponse.body || [];
     
-    if (!matched) {
-      return Response.json({ 
-        error: `Document ${docNumber} not found in ${allDocs.length} docs`,
-        sample_docnums: allDocs.slice(0, 20).map(d => ({ id: d.id, docnum: d.docnum, company: d.company_name })),
-        sample_doc_all_fields: allDocs[0] ? Object.keys(allDocs[0]) : [],
-        sample_line_all_fields: allDocs[0]?.docDetailes?.[0] ? Object.keys(allDocs[0].docDetailes[0]) : []
+    // Find target doc
+    const targetDoc = allDocs.find(d => String(d.docnum) === String(targetDocNum));
+    
+    if (!targetDoc) {
+      return Response.json({
+        error: `Document ${targetDocNum} not found in ${allDocs.length} docs`,
+        sample_docnums: allDocs.slice(0, 20).map(d => ({ id: d.id, docnum: d.docnum, date: d.issue_date })),
       });
     }
-    
-    // Use the matched document
-    const doc = matched;
 
-    // Return the FULL raw document with all fields
-    
-    // Extract line item fields for easy viewing
-    const lineItemFields = {};
-    if (Array.isArray(doc.docDetailes) && doc.docDetailes.length > 0) {
-      lineItemFields.all_fields_in_first_line = Object.keys(doc.docDetailes[0]);
-      lineItemFields.line_items = doc.docDetailes.map((line, idx) => ({
-        index: idx,
-        ...line
-      }));
-    }
-
-    // Extract top-level fields
-    const topLevelFields = Object.keys(doc).filter(k => k !== 'docDetailes');
+    // Return full doc with all line details
+    const lineDetails = (targetDoc.docDetailes || []).map(line => ({
+      sku: line.sku,
+      name: line.name,
+      serial: line.serial,
+      qty: line.qty,
+      price: line.iItemWithVat || line.price,
+      total: line.iTotalVat,
+      all_fields: line,
+    }));
 
     return Response.json({
       success: true,
-      top_level_fields: topLevelFields,
-      document_header: Object.fromEntries(topLevelFields.map(k => [k, doc[k]])),
-      line_item_analysis: lineItemFields,
-      raw_full_document: doc
+      doc_id: targetDoc.id,
+      docnum: targetDoc.docnum,
+      doctype: targetDoc.doctype,
+      issue_date: targetDoc.issue_date,
+      customer: targetDoc.company || targetDoc.company_name,
+      phone: targetDoc.phone,
+      mobile: targetDoc.mobile,
+      email: targetDoc.email,
+      account_id: targetDoc.account_id,
+      city: targetDoc.city,
+      address: targetDoc.address,
+      total: targetDoc.total,
+      line_items: lineDetails,
+      line_count: lineDetails.length,
     });
 
   } catch (error) {
-    console.error('Error:', error);
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 });
