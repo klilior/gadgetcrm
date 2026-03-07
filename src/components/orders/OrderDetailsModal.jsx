@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { base44 } from "@/api/base44Client";
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import CreateShipmentModal from '../shipping/CreateShipmentModal';
 
 export default function OrderDetailsModal({ order, open, onClose, getStatusColor, STATUS_MAPPING, onStatusChange }) {
     const [isCheckingShipping, setIsCheckingShipping] = useState(false);
