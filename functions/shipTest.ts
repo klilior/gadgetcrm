@@ -1,7 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-const API_BASE = 'https://api.ship.co.il';
-
 async function getToken() {
   const body = new URLSearchParams({
     username: Deno.env.get('SHIP_USERNAME'),
@@ -10,14 +8,13 @@ async function getToken() {
     grant_type: 'password'
   });
 
-  const res = await fetch(`${API_BASE}/token`, {
+  const res = await fetch('https://api.ship.co.il/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString()
   });
 
-  const data = await res.json();
-  return data;
+  return await res.json();
 }
 
 Deno.serve(async (req) => {
@@ -30,54 +27,55 @@ Deno.serve(async (req) => {
 
     const { endpoint, method, body, base } = await req.json();
     
-    // Step 1: Get token
+    console.log('Step 1: Getting token...');
     const tokenData = await getToken();
-    console.log('Token OK:', !!tokenData.access_token, 'Customer:', tokenData.customerNumber);
+    console.log('Token OK:', !!tokenData.access_token);
     
     if (!tokenData.access_token) {
       return Response.json({ error: 'No token', tokenData });
     }
 
-    // Step 2: Make single API call
-    const apiBase = base || API_BASE;
+    const apiBase = base || 'https://api.ship.co.il';
     const url = `${apiBase}${endpoint}`;
     const httpMethod = (method || 'GET').toUpperCase();
+    
+    console.log(`Step 2: ${httpMethod} ${url}`);
     
     const opts = {
       method: httpMethod,
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`,
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      signal: AbortSignal.timeout(3000)
     };
     
     if (httpMethod === 'POST' && body) {
       opts.body = JSON.stringify(body);
+      console.log('Body:', JSON.stringify(body).substring(0, 300));
     }
     
-    console.log(`${httpMethod} ${url}`);
-    if (body) console.log('Body:', JSON.stringify(body).substring(0, 500));
-    
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-    opts.signal = controller.signal;
-    
-    const res = await fetch(url, opts);
-    clearTimeout(timeout);
+    let res;
+    try {
+      res = await fetch(url, opts);
+    } catch (fetchErr) {
+      console.log('Fetch error:', fetchErr.name, fetchErr.message);
+      return Response.json({ 
+        error: fetchErr.message, 
+        errorType: fetchErr.name,
+        url 
+      });
+    }
     
     const text = await res.text();
-    console.log(`Response status: ${res.status}`);
-    console.log(`Response headers:`, JSON.stringify(Object.fromEntries(res.headers.entries())));
-    console.log(`Response body (first 1000):`, text.substring(0, 1000));
+    console.log(`Status: ${res.status}`);
+    console.log(`Body: ${text.substring(0, 500)}`);
     
     let parsed;
     try { parsed = JSON.parse(text); } catch { parsed = text; }
     
-    return Response.json({
-      status: res.status,
-      headers: Object.fromEntries(res.headers.entries()),
-      data: parsed
-    });
+    return Response.json({ status: res.status, data: parsed });
   } catch (e) {
     console.error('Error:', e.message);
     return Response.json({ error: e.message }, { status: 500 });
