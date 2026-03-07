@@ -37,8 +37,8 @@ Deno.serve(async (req) => {
       limit: 500,
       offset: 0,
       query: {
-        issue_date: "2026-03-05 to 2026-03-08",
-        doctype: ["9", "3"],
+        issue_date: "2026-03-06 to 2026-03-06",
+        doctype: ["9"],
         refstatus: null,
       },
     };
