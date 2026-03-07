@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { action, endpoint, base } = await req.json();
+  const { action, endpoint, base, body: postBody } = await req.json();
   const API_BASE = base || DEFAULT_API_BASE;
 
   // Step 1: Get token
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
       const opts = { headers, method, signal: controller.signal };
-      if (method === 'POST') opts.body = JSON.stringify({});
+      if (method === 'POST') opts.body = JSON.stringify(postBody || {});
       console.log(`Trying: ${method} ${API_BASE}${ep}`);
       const res = await fetch(`${API_BASE}${ep}`, opts);
       clearTimeout(timeout);
