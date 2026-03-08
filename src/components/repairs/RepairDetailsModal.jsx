@@ -166,24 +166,22 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                 }
 
                 if (message) {
-                    // Send via SMS (TextMe)
-                    sendTextMeSMS({
-                        action: "send",
-                        to_phone: client.phone,
-                        message,
-                        event_type: `repair_status_${formData.status}`,
-                        fingerprint: `repair|${repair.id}|${formData.status}`,
-                    }).then(res => {
+                    try {
+                        const res = await sendTextMeSMS({
+                            action: "send",
+                            to_phone: client.phone,
+                            message,
+                            event_type: `repair_status_${formData.status}`,
+                            fingerprint: `repair|${repair.id}|${formData.status}`,
+                        });
                         const data = res.data || res;
-                        if (data.success) {
-                            console.log(`✅ SMS sent for status "${formData.status}"`);
-                        } else {
-                            console.log(`ℹ️ SMS failed:`, data.error);
-                        }
-                    }).catch(err => {
-                        console.log(`ℹ️ SMS error (ignored):`, err.message);
-                    });
+                        console.log(data.success ? `✅ SMS sent for status "${formData.status}"` : `⚠️ SMS not sent: ${data.error}`);
+                    } catch (err) {
+                        console.error(`❌ SMS error for repair ${repair.repair_id}:`, err.message);
+                    }
                 }
+            } else {
+                console.warn(`⚠️ No client data for SMS - repair ${repair.repair_id}`);
             }
             
             onUpdate();
