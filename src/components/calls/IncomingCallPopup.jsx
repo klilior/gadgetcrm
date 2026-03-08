@@ -31,6 +31,7 @@ function showBrowserNotification(title, body, onClick) {
 }
 
 export default function IncomingCallPopup() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [callData, setCallData] = useState(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -40,10 +41,17 @@ export default function IncomingCallPopup() {
   const processedIdsRef = useRef(new Set());
   const minimizeTimerRef = useRef(null);
 
-  // Request notification permission
+  // Track screen size
   useEffect(() => {
-    requestNotificationPermission();
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Request notification permission (desktop only)
+  useEffect(() => {
+    if (!isMobile) requestNotificationPermission();
+  }, [isMobile]);
 
   const handleNewCall = useCallback(async (activity) => {
     // Only handle incoming calls
@@ -169,6 +177,9 @@ export default function IncomingCallPopup() {
       setPermissionState(result);
     }
   };
+
+  // Don't render anything on mobile
+  if (isMobile) return null;
 
   if (!isVisible || !callData) {
     // Show a small permission prompt if not granted
