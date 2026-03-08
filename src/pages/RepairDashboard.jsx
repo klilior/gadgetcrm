@@ -283,13 +283,31 @@ export default function RepairDashboard() {
                 updateData.part_ordered_date = new Date().toISOString();
             }
             await Repair.update(repair.id, updateData);
+            
+            // Create RepairLog
+            await RepairLog.create({
+                repair_id: repair.id,
+                actor_user_id: currentUser?.id || 'unknown',
+                action: `עדכון סטטוס ל-${newStatus}`,
+                details: `סטטוס עודכן ל-${newStatus} על ידי ${currentUser?.employee_name || 'לא ידוע'} (מהדשבורד)`
+            });
+
             // Update local state
             setRepairs(prev => prev.map(r => 
                 r.id === repair.id ? { ...r, status: newStatus } : r
             ));
 
-            // Send SMS notification if client data is available
-            const clientData = repair.customer;
+            // Send SMS notification
+            // If customer data not enriched yet, fetch it
+            let clientData = repair.customer;
+            if (!clientData && repair.client_id) {
+                try {
+                    clientData = await Client.get(repair.client_id);
+                } catch (e) {
+                    console.warn('Could not fetch client for SMS:', e.message);
+                }
+            }
+
             if (clientData?.full_name && clientData?.phone) {
                 const shortId = getShortRepairId(repair.repair_id);
                 let message = null;
@@ -313,17 +331,22 @@ export default function RepairDashboard() {
                         break;
                 }
                 if (message) {
-                    sendTextMeSMS({
-                        action: "send",
-                        to_phone: clientData.phone,
-                        message,
-                        event_type: `repair_status_${newStatus}`,
-                        fingerprint: `repair|${repair.id}|${newStatus}`,
-                    }).then(res => {
+                    try {
+                        const res = await sendTextMeSMS({
+                            action: "send",
+                            to_phone: clientData.phone,
+                            message,
+                            event_type: `repair_status_${newStatus}`,
+                            fingerprint: `repair|${repair.id}|${newStatus}`,
+                        });
                         const data = res.data || res;
-                        console.log(data.success ? `✅ SMS sent for status "${newStatus}"` : `ℹ️ SMS failed: ${data.error}`);
-                    }).catch(err => console.log(`ℹ️ SMS error (ignored):`, err.message));
+                        console.log(data.success ? `✅ SMS sent for status "${newStatus}"` : `⚠️ SMS not sent: ${data.error}`);
+                    } catch (err) {
+                        console.error(`❌ SMS error for repair ${repair.repair_id}:`, err.message);
+                    }
                 }
+            } else {
+                console.warn(`⚠️ No client data for SMS - repair ${repair.repair_id}, client_id: ${repair.client_id}`);
             }
         } catch (error) {
             console.error("Error updating status:", error);
