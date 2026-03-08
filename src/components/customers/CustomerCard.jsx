@@ -25,6 +25,7 @@ import CustomerTicketsTab from './CustomerTicketsTab';
 import CustomerOrdersTab from './CustomerOrdersTab';
 import CustomerRecordingsTab from './CustomerRecordingsTab';
 import CustomerTimelineTab from './CustomerTimelineTab';
+import CustomerSmsTab from './CustomerSmsTab';
 
 export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [customer, setCustomer] = useState(null);
@@ -193,6 +194,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                     <TabsTrigger value="calls" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">שיחות ({callCount})</TabsTrigger>
                                     <TabsTrigger value="tickets" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">פניות ({stats.totalTickets})</TabsTrigger>
                                     <TabsTrigger value="repairs" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">תיקונים ({stats.totalRepairs})</TabsTrigger>
+                                    <TabsTrigger value="sms" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">SMS ({smsLogs.length})</TabsTrigger>
                                     <TabsTrigger value="recordings" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">הקלטות</TabsTrigger>
                                     <TabsTrigger value="timeline" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">ציר זמן</TabsTrigger>
                                 </TabsList>
@@ -354,6 +356,10 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
 
                                 <TabsContent value="repairs">
                                     <CustomerRepairsTab repairs={repairs} />
+                                </TabsContent>
+
+                                <TabsContent value="sms">
+                                    <CustomerSmsTab smsLogs={smsLogs} />
                                 </TabsContent>
 
                                 <TabsContent value="recordings">
