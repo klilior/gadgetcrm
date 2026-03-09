@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import useSuppliers from "../components/hooks/useSuppliers";
-import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut } from "lucide-react";
+import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut, Download, ChevronUp, ChevronDown, Eye } from "lucide-react";
 
 export default function InvoicesToReview() {
   const [rows, setRows] = useState([]);
@@ -331,9 +331,11 @@ export default function InvoicesToReview() {
           </DialogHeader>
           
           {selected && (
+            <MobileDocToggle intakeFile={intakeFile} imageZoom={imageZoom} setImageZoom={setImageZoom}>
+              {(showDocOnMobile, setShowDocOnMobile) => (
             <div className="flex flex-col md:flex-row h-[calc(85vh-64px)] md:h-[calc(90vh-80px)]">
-              {/* Left side - Document viewer */}
-              <div className="flex-1 border-l flex flex-col bg-gray-100">
+              {/* Left side - Document viewer (hidden on mobile unless toggled) */}
+              <div className={`${showDocOnMobile ? 'flex' : 'hidden'} md:flex flex-1 border-l flex-col bg-gray-100`}>
                 <div className="p-2 border-b bg-white flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-600">תצוגת מסמך מקור</span>
                   <div className="flex items-center gap-2">
@@ -345,19 +347,42 @@ export default function InvoicesToReview() {
                       <ZoomIn className="w-4 h-4" />
                     </Button>
                     {intakeFile && (
-                      <a href={intakeFile} target="_blank" rel="noopener noreferrer">
-                        <Button variant="ghost" size="sm" title="פתח בחלון חדש">
-                          <ExternalLink className="w-4 h-4" />
-                        </Button>
-                      </a>
+                      <>
+                        <a href={intakeFile} download className="inline-flex">
+                          <Button variant="ghost" size="sm" title="הורד קובץ">
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </a>
+                        <a href={intakeFile} target="_blank" rel="noopener noreferrer">
+                          <Button variant="ghost" size="sm" title="פתח בחלון חדש">
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                        </a>
+                      </>
                     )}
+                    {/* Close doc on mobile */}
+                    <Button variant="ghost" size="sm" className="md:hidden" onClick={() => setShowDocOnMobile(false)}>
+                      <ChevronUp className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
-                <div className="flex-1 overflow-auto p-4 flex items-start justify-center">
+                <div className="flex-1 overflow-auto p-4 flex items-start justify-center" style={{ maxHeight: showDocOnMobile ? '50vh' : undefined }}>
                   {intakeFile ? (
                     (() => {
                       const lowerFile = intakeFile.toLowerCase();
-                      const isPdf = lowerFile.includes('.pdf') || lowerFile.includes('pdf') || lowerFile.includes('application/pdf');
+                      const isImage = lowerFile.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)/i) || lowerFile.includes('image/');
+                      const isPdf = lowerFile.includes('.pdf') || lowerFile.includes('application/pdf');
+                      
+                      if (isImage) {
+                        return (
+                          <img 
+                            src={intakeFile} 
+                            alt="Invoice document" 
+                            style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
+                            className="object-contain shadow-lg bg-white"
+                          />
+                        );
+                      }
                       
                       if (isPdf) {
                         return (
@@ -370,14 +395,24 @@ export default function InvoicesToReview() {
                         );
                       }
                       
-                      // For images - display inline without triggering download
+                      // For other file types - use Google Docs viewer as inline preview
                       return (
-                        <img 
-                          src={intakeFile} 
-                          alt="Invoice document" 
-                          style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
-                          className="object-contain shadow-lg bg-white"
-                        />
+                        <div className="w-full h-full flex flex-col">
+                          <iframe
+                            src={`https://docs.google.com/gview?url=${encodeURIComponent(intakeFile)}&embedded=true`}
+                            className="w-full flex-1 border-0 bg-white rounded shadow-lg"
+                            title="Document preview"
+                            style={{ minHeight: '600px' }}
+                          />
+                          <div className="mt-2 flex justify-center">
+                            <a href={intakeFile} download>
+                              <Button variant="outline" size="sm" className="gap-2">
+                                <Download className="w-4 h-4" />
+                                הורד קובץ מקור
+                              </Button>
+                            </a>
+                          </div>
+                        </div>
                       );
                     })()
                   ) : (
@@ -392,6 +427,17 @@ export default function InvoicesToReview() {
 
               {/* Right side - Form */}
               <div className="w-full md:w-[450px] flex flex-col bg-white">
+                {/* Mobile: Toggle document view button */}
+                {intakeFile && (
+                  <button
+                    onClick={() => setShowDocOnMobile(!showDocOnMobile)}
+                    className="md:hidden flex items-center justify-center gap-2 p-2.5 bg-blue-50 border-b border-blue-200 text-blue-700 text-sm font-medium"
+                  >
+                    <Eye className="w-4 h-4" />
+                    {showDocOnMobile ? 'הסתר מסמך' : 'הצג מסמך מקור'}
+                    {showDocOnMobile ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                )}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {/* Supplier Info Section */}
                   <div className="bg-blue-50 rounded-lg p-3 space-y-2">
