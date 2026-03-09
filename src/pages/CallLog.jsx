@@ -186,48 +186,80 @@ export default function CallLog() {
             const batchPromises = batch.map(async (clientId) => {
                 const client = uniqueClients[clientId];
                 try {
-                    const [tickets, repairs, orders, vendors] = await Promise.all([
-                        base44.entities.Ticket.filter({ customer_id: clientId }, '-created_date', 3).catch(() => []),
+                    const [tickets, repairs, orders, allActivities] = await Promise.all([
+                        base44.entities.Ticket.filter({ customer_id: clientId }, '-created_date', 5).catch(() => []),
                         base44.entities.Repair.filter({ client_id: clientId }, '-created_date', 5).catch(() => []),
-                        base44.entities.Order.filter({ client_id: clientId }, '-order_date', 3).catch(() => []),
-                        base44.entities.RepairVendor.filter({ active: true }).catch(() => []),
+                        base44.entities.Order.filter({ client_id: clientId }, '-order_date', 5).catch(() => []),
+                        base44.entities.Activity.filter({ ticket_id: clientId }, '-created_date', 10).catch(() => []),
                     ]);
 
-                    const vendorMap = {};
-                    vendors.forEach(v => { vendorMap[v.id] = v.name; });
-
-                    const openTickets = tickets.filter(t => !['סגור', 'בוטל'].includes(t.status));
+                    const openTickets = tickets.filter(t => !['סגור', 'נסגר', 'נסגר ללא מענה', 'בוטל'].includes(t.status));
                     const openRepairs = repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון', 'נמסר', 'הושלם', 'בוטל'].includes(r.status));
+                    const closedRepairs = repairs.filter(r => ['תיקון נסגר', 'נמסר', 'הושלם'].includes(r.status));
+                    const pendingOrders = orders.filter(o => o.status === 'pending');
+                    const now = new Date();
+                    const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+                    const recentCompletedOrders = orders.filter(o => ['processing', 'completed'].includes(o.status) && new Date(o.order_date) >= threeDaysAgo);
 
-                    // Build context for AI
-                    const parts = [];
-                    parts.push(`לקוח: ${client.full_name}`);
-                    if (client.customer_tier) parts.push(`דרגה: ${client.customer_tier}`);
+                    // Count recent contacts (calls/tickets in last 7 days) for "multiple contacts" detection
+                    const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                    const recentTickets = tickets.filter(t => new Date(t.created_date) >= sevenDaysAgo);
+
+                    // Build structured context
+                    const facts = [];
+                    facts.push(`לקוח: ${client.full_name}, דרגה: ${client.customer_tier || 'חדש'}, סה"כ הזמנות: ${client.total_orders || 0}, סה"כ רכישות: ₪${client.total_spent || 0}`);
+                    
+                    if (pendingOrders.length > 0) {
+                        facts.push(`⚠️ חשוב! יש ${pendingOrders.length} הזמנות בסטטוס "ממתין לתשלום" - סכום: ₪${pendingOrders.reduce((s,o) => s + (parseFloat(o.total)||0), 0)} - תאריכים: ${pendingOrders.map(o => new Date(o.order_date).toLocaleDateString('he-IL')).join(', ')}`);
+                    }
+                    if (recentCompletedOrders.length > 0) {
+                        facts.push(`📦 הזמנה שהושלמה ב-3 ימים אחרונים: ₪${recentCompletedOrders[0].total} בתאריך ${new Date(recentCompletedOrders[0].order_date).toLocaleDateString('he-IL')}`);
+                    }
                     if (openTickets.length > 0) {
-                        parts.push(`טיקטים פתוחים: ${openTickets.map(t => `${t.subject || t.title || 'ללא נושא'} (${t.status})`).join(', ')}`);
+                        facts.push(`פניות שירות פתוחות: ${openTickets.map(t => `"${t.subject}" (${t.status}${t.priority === 'דחוף' ? ' - דחוף!' : ''})`).join(', ')}`);
+                    }
+                    if (recentTickets.length >= 3) {
+                        facts.push(`⚠️ ריבוי פניות! ${recentTickets.length} פניות ב-7 ימים אחרונים - ייתכן שהלקוח לא מטופל כראוי`);
                     }
                     if (openRepairs.length > 0) {
-                        parts.push(`תיקונים פעילים: ${openRepairs.map(r => `${r.issue_category || 'מכשיר'} - ${r.status}${r.vendor_id && vendorMap[r.vendor_id] ? ` אצל ${vendorMap[r.vendor_id]}` : ''} (${r.repair_type || ''})`).join(', ')}`);
+                        facts.push(`תיקונים פעילים: ${openRepairs.map(r => `${r.issue_category || 'מכשיר'} - ${r.status} (${r.repair_type || ''})`).join(', ')}`);
                     }
-                    if (orders.length > 0) {
-                        const recentOrder = orders[0];
-                        const orderDate = recentOrder.order_date ? new Date(recentOrder.order_date).toLocaleDateString('he-IL') : '';
-                        parts.push(`הזמנה אחרונה: ${recentOrder.status} בתאריך ${orderDate} סכום ${recentOrder.total || ''}`);
+                    if (closedRepairs.length > 0) {
+                        const lastClosed = closedRepairs[0];
+                        const closedDate = new Date(lastClosed.updated_date);
+                        const daysSinceClosed = Math.floor((now - closedDate) / (1000*60*60*24));
+                        if (daysSinceClosed <= 7) facts.push(`תיקון נסגר לפני ${daysSinceClosed} ימים - ייתכן בירור/תלונה`);
                     }
-                    if (client.total_orders) parts.push(`סה"כ הזמנות: ${client.total_orders}`);
-                    if (client.total_repairs) parts.push(`סה"כ תיקונים: ${client.total_repairs}`);
+                    if (orders.length > 0 && !pendingOrders.length && !recentCompletedOrders.length) {
+                        const lastOrder = orders[0];
+                        facts.push(`הזמנה אחרונה: ${lastOrder.status} ₪${lastOrder.total} בתאריך ${new Date(lastOrder.order_date).toLocaleDateString('he-IL')}`);
+                    }
 
-                    if (parts.length <= 1) {
+                    if (facts.length <= 1) {
                         tipsMap[clientId] = 'אין פעילות ידועה';
                         return;
                     }
 
                     const res = await base44.integrations.Core.InvokeLLM({
-                        prompt: `אתה מערכת CRM חכמה. בהינתן המידע הבא על לקוח שמתקשר עכשיו, כתוב טיפ קצר מאוד (עד 15 מילים) בעברית שיעזור לנציג להבין מה הלקוח כנראה צריך. התמקד בדבר הכי רלוונטי ודחוף. אל תכתוב "הלקוח". תתחיל ישר עם התוכן.\n\nמידע:\n${parts.join('\n')}`,
+                        prompt: `אתה יועץ מכירות חכם במערכת CRM. לקוח מתקשר עכשיו. על סמך המידע הבא, כתוב התראה ממוקדת (עד 20 מילים) שתעזור לנציג לסגור עסקה או לטפל בבעיה.
+
+כללי חשיבה:
+- הזמנה בסטטוס "ממתין לתשלום" = הלקוח רוצה לשלם! זו הזדמנות מכירה חמה. ציין את הסכום.
+- הזמנה שהושלמה ב-3 ימים אחרונים = כנראה בירור על משלוח/מעקב
+- ריבוי פניות = לקוח מתוסכל, צריך טיפול מיוחד
+- תיקון פעיל = כנראה רוצה עדכון סטטוס
+- תיקון שנסגר לאחרונה = ייתכן תלונה או בירור
+- פניות שירות פתוחות = בדוק מה הסטטוס ועדכן
+- אם אין בעיות = הזדמנות למכירה, ציין רקע
+
+אל תכתוב "הלקוח". התחל ישר עם התוכן. השתמש באימוג'י אחד מתאים בתחילת המשפט.
+
+מידע:
+${facts.join('\n')}`,
                         response_json_schema: {
                             type: "object",
                             properties: {
-                                tip: { type: "string", description: "טיפ קצר לנציג" }
+                                tip: { type: "string", description: "התראה ממוקדת לנציג" }
                             }
                         }
                     });
