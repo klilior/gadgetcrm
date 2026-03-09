@@ -13,6 +13,12 @@ import { toast } from "sonner";
 import useSuppliers from "../components/hooks/useSuppliers";
 import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut, Download, ChevronUp, ChevronDown, Eye } from "lucide-react";
 
+// Helper render-prop component for mobile doc toggle state
+function MobileDocToggle({ children }) {
+  const [showDocOnMobile, setShowDocOnMobile] = useState(false);
+  return children(showDocOnMobile, setShowDocOnMobile);
+}
+
 export default function InvoicesToReview() {
   const [rows, setRows] = useState([]);
   const { suppliersMap, suppliersList } = useSuppliers();
