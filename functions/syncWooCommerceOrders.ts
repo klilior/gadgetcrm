@@ -124,10 +124,10 @@ async function findOrCreateClient(sr, wooOrder) {
 
 // ─── Process a single order ───
 async function processOrder(sr, wooOrder) {
-    const isPaid = ['processing', 'completed', 'on-hold'].includes(wooOrder.status);
+    const isPaidOrPending = ['processing', 'completed', 'on-hold', 'pending'].includes(wooOrder.status);
     let clientId = null;
 
-    if (isPaid) {
+    if (isPaidOrPending) {
         clientId = await findOrCreateClient(sr, wooOrder);
     }
 
@@ -288,8 +288,8 @@ Deno.serve(async (req) => {
             const existing = existingOrderMap[wo.id.toString()];
             if (!existing) return true; // new order
             if (existing.status !== wo.status) return true; // status changed
-            const isPaid = ['processing', 'completed', 'on-hold'].includes(wo.status);
-            if (isPaid && !existing.client_id) return true; // paid but no client linked
+            const shouldHaveClient = ['processing', 'completed', 'on-hold', 'pending'].includes(wo.status);
+            if (shouldHaveClient && !existing.client_id) return true; // needs client linked
             return false;
         });
 
