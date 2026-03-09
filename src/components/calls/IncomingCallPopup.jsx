@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { PhoneIncoming, X, User, Ticket, Wrench, Star, ExternalLink, Bell } from 'lucide-react';
+import { PhoneIncoming, X, User, Ticket, Wrench, Star, ExternalLink, Bell, ShoppingCart, CreditCard } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
@@ -82,12 +82,20 @@ export default function IncomingCallPopup() {
         const clients = await base44.entities.Client.filter({ phone }, null, 1);
         if (clients.length > 0) {
           customerInfo = clients[0];
-          const [tickets, repairs] = await Promise.all([
+          const [tickets, repairs, orders] = await Promise.all([
             base44.entities.Ticket.filter({ customer_id: customerInfo.id }, '-created_date', 3).catch(() => []),
             base44.entities.Repair.filter({ client_id: customerInfo.id }, '-created_date', 3).catch(() => []),
+            base44.entities.Order.filter({ client_id: customerInfo.id }, '-order_date', 5).catch(() => []),
           ]);
           customerInfo.openTickets = tickets.filter(t => !['סגור', 'בוטל'].includes(t.status));
           customerInfo.openRepairs = repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון', 'נמסר', 'הושלם', 'בוטל'].includes(r.status));
+          customerInfo.pendingOrders = orders.filter(o => o.status === 'pending');
+          customerInfo.recentCompletedOrders = orders.filter(o => {
+            if (!['processing', 'completed'].includes(o.status)) return false;
+            const orderDate = new Date(o.order_date);
+            const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+            return orderDate >= threeDaysAgo;
+          });
         }
       } catch (_e) { /* silent */ }
     }
@@ -115,6 +123,8 @@ export default function IncomingCallPopup() {
     const notifBody = customerInfo
       ? [
           phone,
+          customerInfo.pendingOrders?.length > 0 ? `💳 ${customerInfo.pendingOrders.length} הזמנות ממתינות לתשלום!` : null,
+          customerInfo.recentCompletedOrders?.length > 0 ? `📦 הזמנה ב-3 ימים אחרונים` : null,
           customerInfo.openTickets?.length > 0 ? `${customerInfo.openTickets.length} טיקטים פתוחים` : null,
           customerInfo.openRepairs?.length > 0 ? `${customerInfo.openRepairs.length} תיקונים` : null,
           customerInfo.customer_score >= 80 ? '⭐ VIP' : null,
@@ -245,6 +255,20 @@ export default function IncomingCallPopup() {
             </div>
 
             <div className="space-y-2">
+              {customer.pendingOrders?.length > 0 && (
+                <div className="flex items-center gap-2 bg-yellow-50 p-2 rounded-lg text-sm border border-yellow-300 animate-pulse">
+                  <CreditCard className="w-4 h-4 text-yellow-600 flex-shrink-0" />
+                  <span className="text-yellow-800 font-semibold">
+                    💳 {customer.pendingOrders.length} הזמנות ממתינות לתשלום! (₪{customer.pendingOrders.reduce((s,o) => s + (parseFloat(o.total)||0), 0).toLocaleString()})
+                  </span>
+                </div>
+              )}
+              {customer.recentCompletedOrders?.length > 0 && !customer.pendingOrders?.length && (
+                <div className="flex items-center gap-2 bg-blue-50 p-2 rounded-lg text-sm">
+                  <ShoppingCart className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <span className="text-blue-700">📦 הזמנה ב-3 ימים אחרונים - כנראה בירור משלוח</span>
+                </div>
+              )}
               {customer.openTickets?.length > 0 && (
                 <div className="flex items-center gap-2 bg-red-50 p-2 rounded-lg text-sm">
                   <Ticket className="w-4 h-4 text-red-500 flex-shrink-0" />
