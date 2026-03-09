@@ -698,7 +698,7 @@ export default function InvoicesToReview() {
                 </div>
 
                 {/* Action buttons - fixed at bottom */}
-                <div className="p-4 border-t bg-gray-50 space-y-2">
+                <div className="p-4 border-t bg-gray-50 space-y-2 shrink-0">
                   {/* Explanation of buttons */}
                   <div className="text-[10px] text-gray-500 mb-1">
                     💾 <b>שמור</b> = שמור שינויים ללא אישור סופי | ✓ <b>אשר</b> = שמור + סמן כ"אושר" + למד את הספק
