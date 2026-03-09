@@ -13,12 +13,6 @@ import { toast } from "sonner";
 import useSuppliers from "../components/hooks/useSuppliers";
 import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut, Download, ChevronUp, ChevronDown, Eye } from "lucide-react";
 
-// Helper render-prop component for mobile doc toggle state
-function MobileDocToggle({ children }) {
-  const [showDocOnMobile, setShowDocOnMobile] = useState(false);
-  return children(showDocOnMobile, setShowDocOnMobile);
-}
-
 export default function InvoicesToReview() {
   const [rows, setRows] = useState([]);
   const { suppliersMap, suppliersList } = useSuppliers();
@@ -27,6 +21,7 @@ export default function InvoicesToReview() {
   const [saving, setSaving] = useState(false);
   const [intakeFile, setIntakeFile] = useState(null);
   const [imageZoom, setImageZoom] = useState(100);
+  const [showDocOnMobile, setShowDocOnMobile] = useState(false);
   const { currentUser } = useUser();
   const canApprove = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
