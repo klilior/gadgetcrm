@@ -419,26 +419,52 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, skipped: true, reason: 'OTHER', extraction });
     }
 
-    // Step 3: Validation
-    const validationPrompt = `${VALIDATE_PROMPT}\n\nHere is the extracted JSON (use as input):\n\n${JSON.stringify(extraction)}`;
-    let validation;
-    try {
-      validation = await base44.integrations.Core.InvokeLLM({
-        prompt: validationPrompt,
-        add_context_from_internet: false,
-        response_json_schema: VALIDATE_SCHEMA,
+    // Step 3: Deterministic validation (no LLM - avoids math miscalculations)
+    const validation = (() => {
+      const sub = extraction.subtotal_before_vat;
+      const vat = extraction.vat_amount;
+      const total = extraction.total_with_vat;
+      
+      // Math consistency: subtotal + vat ≈ total (tolerance 5 NIS for rounding)
+      let isMathConsistent = true;
+      let mathDelta = null;
+      
+      if (typeof sub === 'number' && typeof vat === 'number' && typeof total === 'number') {
+        mathDelta = Math.abs((sub + vat) - total);
+        mathDelta = Math.round(mathDelta * 100) / 100;
+        isMathConsistent = mathDelta <= 5.0;
+      } else if (typeof total === 'number') {
+        // If only total exists, consider it consistent (we just don't have the breakdown)
+        isMathConsistent = true;
+        mathDelta = 0;
+      }
+      
+      // Critical fields check
+      const criticalFields = ['supplier_name', 'doc_type_he', 'doc_number', 'doc_date', 'total_with_vat'];
+      const missing = criticalFields.filter(f => {
+        const val = extraction[f];
+        return val === null || val === undefined || val === '' || val === 'null';
       });
-    } catch (valErr) {
-      const errMsg = `שגיאת AI בולידציה: ${valErr?.message || String(valErr)}`;
-      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_error_he: errMsg });
-      throw valErr;
-    }
-
-    if (!validation || typeof validation !== 'object') {
-      const errMsg = 'תגובת ולידציה לא תקינה או ריקה';
-      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_error_he: errMsg });
-      throw new Error('Invalid validation response');
-    }
+      
+      // Determine status
+      const allGood = missing.length === 0 && isMathConsistent;
+      const reviewReasons = [];
+      if (!isMathConsistent) reviewReasons.push(`סכום כולל אינו תואם לסכום לפני מע"מ וסכום המע"מ (הפרש: ${mathDelta} ש"ח).`);
+      if (missing.length > 0) reviewReasons.push(`שדות חסרים: ${missing.join(', ')}`);
+      
+      const displayValidation = allGood ? 'חשבונית תקנית' : `חשבונית לא תקנית: ${reviewReasons.join('; ')}`;
+      
+      return {
+        is_math_consistent: isMathConsistent,
+        math_delta: mathDelta,
+        missing_critical_fields: missing,
+        recommended_extraction_status_he: allGood ? 'נקרא בהצלחה' : 'ממתין לאימות',
+        review_reasons_he: reviewReasons,
+        display_validation_he: displayValidation
+      };
+    })();
+    
+    console.log('Deterministic validation result:', JSON.stringify(validation));
 
     // DEBUG: Save raw validation JSON
     const validationJson = JSON.stringify(validation);
