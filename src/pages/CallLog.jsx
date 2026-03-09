@@ -154,12 +154,30 @@ export default function CallLog() {
                 results.forEach((res, idx) => {
                     if (res.length > 0) {
                         clientMap[batch[idx]] = res[0];
-                        // Also map the normalized version
                         const norm = normalizePhone(batch[idx]);
                         if (norm) clientMap[norm] = res[0];
                     }
                 });
             }
+
+            // Enrich clients with pending orders
+            const uniqueClientIds = [...new Set(Object.values(clientMap).map(c => c.id))];
+            for (let i = 0; i < uniqueClientIds.length; i += 10) {
+                const cBatch = uniqueClientIds.slice(i, i + 10);
+                await Promise.all(cBatch.map(async (cid) => {
+                    const clientOrders = await base44.entities.Order.filter({ client_id: cid }, '-order_date', 5).catch(() => []);
+                    const pending = clientOrders.filter(o => o.status === 'pending');
+                    const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+                    const recentCompleted = clientOrders.filter(o => ['processing', 'completed'].includes(o.status) && new Date(o.order_date) >= threeDaysAgo);
+                    // Attach to all matching client entries
+                    Object.keys(clientMap).forEach(key => {
+                        if (clientMap[key].id === cid) {
+                            clientMap[key] = { ...clientMap[key], pendingOrders: pending, recentCompletedOrders: recentCompleted };
+                        }
+                    });
+                }));
+            }
+
             setClients(clientMap);
 
             // Generate AI tips for identified clients
