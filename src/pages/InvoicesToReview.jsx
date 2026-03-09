@@ -79,6 +79,7 @@ export default function InvoicesToReview() {
     setSelected({ ...row });
     setIntakeFile(null);
     setImageZoom(100);
+    setShowDocOnMobile(false);
     
     if (row.source_intake) {
       try {
