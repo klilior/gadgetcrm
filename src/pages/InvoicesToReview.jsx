@@ -332,8 +332,6 @@ export default function InvoicesToReview() {
           </DialogHeader>
           
           {selected && (
-            <MobileDocToggle intakeFile={intakeFile} imageZoom={imageZoom} setImageZoom={setImageZoom}>
-              {(showDocOnMobile, setShowDocOnMobile) => (
             <div className="flex flex-col md:flex-row h-[calc(85vh-64px)] md:h-[calc(90vh-80px)]">
               {/* Left side - Document viewer (hidden on mobile unless toggled) */}
               <div className={`${showDocOnMobile ? 'flex' : 'hidden'} md:flex flex-1 border-l flex-col bg-gray-100`}>
@@ -728,8 +726,6 @@ export default function InvoicesToReview() {
                 </div>
               </div>
             </div>
-              )}
-            </MobileDocToggle>
           )}
         </DialogContent>
       </Dialog>
