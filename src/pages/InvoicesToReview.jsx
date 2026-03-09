@@ -333,10 +333,10 @@ export default function InvoicesToReview() {
           </DialogHeader>
           
           {selected && (
-            <div className="flex flex-col md:flex-row h-[calc(85vh-64px)] md:h-[calc(90vh-80px)]">
+            <div className="flex flex-col md:flex-row h-[calc(85vh-64px)] md:h-[calc(90vh-80px)] min-h-0">
               {/* Left side - Document viewer (hidden on mobile unless toggled) */}
-              <div className={`${showDocOnMobile ? 'flex' : 'hidden'} md:flex flex-1 border-l flex-col bg-gray-100`}>
-                <div className="p-2 border-b bg-white flex items-center justify-between">
+              <div className={`${showDocOnMobile ? 'flex' : 'hidden'} md:flex border-l flex-col bg-gray-100 ${showDocOnMobile ? 'max-h-[40vh] shrink-0' : ''} md:flex-1 md:max-h-none`}>
+                <div className="p-2 border-b bg-white flex items-center justify-between shrink-0">
                   <span className="text-sm font-medium text-gray-600">תצוגת מסמך מקור</span>
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="sm" onClick={() => setImageZoom(Math.max(25, imageZoom - 25))}>
@@ -366,7 +366,7 @@ export default function InvoicesToReview() {
                     </Button>
                   </div>
                 </div>
-                <div className="flex-1 overflow-auto p-4 flex items-start justify-center" style={{ maxHeight: showDocOnMobile ? '50vh' : undefined }}>
+                <div className="flex-1 overflow-auto p-4 flex items-start justify-center min-h-0">
                   {intakeFile ? (
                     (() => {
                       const lowerFile = intakeFile.toLowerCase();
@@ -390,7 +390,7 @@ export default function InvoicesToReview() {
                             src={intakeFile + '#toolbar=0&navpanes=0&view=FitH'}
                             className="w-full h-full border-0 bg-white rounded shadow-lg"
                             title="Document preview"
-                            style={{ minHeight: '600px' }}
+                            style={{ minHeight: '400px' }}
                           />
                         );
                       }
@@ -402,7 +402,7 @@ export default function InvoicesToReview() {
                             src={`https://docs.google.com/gview?url=${encodeURIComponent(intakeFile)}&embedded=true`}
                             className="w-full flex-1 border-0 bg-white rounded shadow-lg"
                             title="Document preview"
-                            style={{ minHeight: '600px' }}
+                            style={{ minHeight: '400px' }}
                           />
                           <div className="mt-2 flex justify-center">
                             <a href={intakeFile} download>
@@ -426,19 +426,19 @@ export default function InvoicesToReview() {
               </div>
 
               {/* Right side - Form */}
-              <div className="w-full md:w-[450px] flex flex-col bg-white">
+              <div className="w-full md:w-[450px] flex flex-col bg-white min-h-0 flex-1 md:flex-none">
                 {/* Mobile: Toggle document view button */}
                 {intakeFile && (
                   <button
                     onClick={() => setShowDocOnMobile(!showDocOnMobile)}
-                    className="md:hidden flex items-center justify-center gap-2 p-2.5 bg-blue-50 border-b border-blue-200 text-blue-700 text-sm font-medium"
+                    className="md:hidden flex items-center justify-center gap-2 p-2.5 bg-blue-50 border-b border-blue-200 text-blue-700 text-sm font-medium shrink-0"
                   >
                     <Eye className="w-4 h-4" />
                     {showDocOnMobile ? 'הסתר מסמך' : 'הצג מסמך מקור'}
                     {showDocOnMobile ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
                 )}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
                   {/* Supplier Info Section */}
                   <div className="bg-blue-50 rounded-lg p-3 space-y-2">
                     <div className="font-medium text-blue-800 text-sm">פרטי ספק</div>
