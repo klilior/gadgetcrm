@@ -727,6 +727,8 @@ export default function InvoicesToReview() {
                 </div>
               </div>
             </div>
+              )}
+            </MobileDocToggle>
           )}
         </DialogContent>
       </Dialog>
