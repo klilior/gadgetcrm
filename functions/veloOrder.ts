@@ -70,6 +70,16 @@ Deno.serve(async (req) => {
         let billing = {};
         try { billing = JSON.parse(order.raw_data_billing || '{}'); } catch (e) {}
         
+        console.log('📋 [VeloOrder] Billing data:', JSON.stringify(billing));
+        console.log('📋 [VeloOrder] Customer data:', JSON.stringify({ full_name: customer.full_name, city: customer.city, phone: customer.phone, full_address: customer.full_address }));
+        
+        // Resolve first_name and last_name - MUST NOT be empty for Velo API
+        const nameParts = (customer.full_name || '').trim().split(/\s+/);
+        let firstName = (billing.first_name || '').trim() || nameParts[0] || 'לקוח';
+        let lastName = (billing.last_name || '').trim() || nameParts.slice(1).join(' ') || '-';
+        
+        console.log('👤 [VeloOrder] Name resolved:', { firstName, lastName });
+        
         // Parse address: street and number
         let street = billing.address_1 || customer.full_address || '';
         let number = billing.address_2 || '';
