@@ -92,7 +92,13 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                     console.warn('⚠️ Warning:', data.warning);
                 }
                 setShipmentCreated(true);
-                setCreatedShipmentData({ ...data.shipment, warning: data.warning });
+                const shipmentInfo = { ...data.shipment, warning: data.warning };
+                setCreatedShipmentData(shipmentInfo);
+                
+                // Auto-open label for printing if available
+                if (shipmentInfo.label_url) {
+                    window.open(shipmentInfo.label_url, '_blank');
+                }
             } else {
                 const errorMsg = data.error || 'שגיאה ביצירת משלוח';
                 console.error('❌ Shipment error:', errorMsg, data.details);
