@@ -1,21 +1,18 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
-async function veloHmac({ jwt, apiKey, apiSecret }) {
-    const payload = `${jwt}${apiKey}`;
+// Velo JSON API HMAC: sha256(email + apiKey, secret=apiSecret)
+// Per official docs: "a string made of your email and API key"
+async function veloHmac(email, apiKey, apiSecret) {
+    const payload = `${email}${apiKey}`;
     const encoder = new TextEncoder();
-    const keyData = encoder.encode(apiSecret);
-    const messageData = encoder.encode(payload);
-    
     const key = await crypto.subtle.importKey(
         'raw',
-        keyData,
+        encoder.encode(apiSecret),
         { name: 'HMAC', hash: 'SHA-256' },
         false,
         ['sign']
     );
-    
-    const signature = await crypto.subtle.sign('HMAC', key, messageData);
-    
+    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
     return Array.from(new Uint8Array(signature))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
