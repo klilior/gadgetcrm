@@ -1,9 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-// Velo JSON API HMAC: sha256(email + apiKey, secret=apiSecret)
-// Per official docs: "a string made of your email and API key"
-async function veloHmac(email, apiKey, apiSecret) {
-    const payload = `${email}${apiKey}`;
+// Enterprise HMAC: sha256(jwt + apiKey, secret=apiSecret)
+async function veloHmac(jwt, apiKey, apiSecret) {
+    const payload = `${jwt}${apiKey}`;
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
         'raw',
@@ -16,6 +15,73 @@ async function veloHmac(email, apiKey, apiSecret) {
     return Array.from(new Uint8Array(signature))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
+}
+
+async function getVeloJwt(base44, config) {
+    const { apiKey, apiSecret, email, password, baseUrl } = config;
+    
+    const sessions = await base44.asServiceRole.entities.VeloSession.list('-issued_at', 1);
+    
+    if (sessions.length > 0) {
+        const session = sessions[0];
+        const issuedAt = new Date(session.issued_at).getTime() / 1000;
+        const now = Date.now() / 1000;
+        const timeLeft = (issuedAt + session.expiry) - now;
+        
+        if (timeLeft > 120) {
+            console.log('✅ [VeloCheck] Using cached JWT');
+            return session.jwt;
+        }
+        
+        console.log('🔄 [VeloCheck] Refreshing JWT...');
+        const hmac = await veloHmac(session.jwt, apiKey, apiSecret);
+        const refreshRes = await fetch(`${baseUrl}/refresh`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Velo-Api-Key': apiKey,
+                'X-Velo-Hmac': hmac,
+                'Authorization': `Bearer ${session.jwt}`
+            },
+            body: JSON.stringify({})
+        });
+        
+        if (refreshRes.ok) {
+            const data = await refreshRes.json();
+            await base44.asServiceRole.entities.VeloSession.update(session.id, {
+                jwt: data.jwt, expiry: data.expiry, issued_at: new Date().toISOString()
+            });
+            console.log('✅ [VeloCheck] JWT refreshed');
+            return data.jwt;
+        }
+        console.log('⚠️ [VeloCheck] Refresh failed, logging in...');
+    }
+    
+    console.log('🔑 [VeloCheck] Performing login...');
+    const loginRes = await fetch(`${baseUrl}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Velo-Api-Key': apiKey },
+        body: JSON.stringify({ email, password })
+    });
+    
+    if (!loginRes.ok) throw new Error(`Velo login failed: ${await loginRes.text()}`);
+    
+    const loginData = await loginRes.json();
+    console.log('✅ [VeloCheck] Login successful');
+    
+    if (sessions.length > 0) {
+        await base44.asServiceRole.entities.VeloSession.update(sessions[0].id, {
+            jwt: loginData.jwt, expiry: loginData.expiry,
+            issued_at: new Date().toISOString(), user_email: email
+        });
+    } else {
+        await base44.asServiceRole.entities.VeloSession.create({
+            jwt: loginData.jwt, expiry: loginData.expiry,
+            issued_at: new Date().toISOString(), user_email: email
+        });
+    }
+    
+    return loginData.jwt;
 }
 
 Deno.serve(async (req) => {
@@ -33,47 +99,44 @@ Deno.serve(async (req) => {
         
         // Get Velo provider config
         const providers = await base44.asServiceRole.entities.ShippingProvider.filter({
-            provider_type: 'velo',
-            is_active: true
+            provider_type: 'velo', is_active: true
         });
-        
-        if (!providers || providers.length === 0) {
-            return Response.json({ success: false, error: 'לא נמצא ספק Velo פעיל במערכת' }, { status: 200 });
+        if (!providers?.length) {
+            return Response.json({ success: false, error: 'לא נמצא ספק Velo פעיל' }, { status: 200 });
         }
         
         const config = providers[0].config || {};
-        const { apiKey, apiSecret, email } = config;
+        const { apiKey, apiSecret, email, baseUrl } = config;
         
         if (!apiKey || !apiSecret || !email) {
             return Response.json({ success: false, error: 'חסרים פרטי התחברות ל-Velo' }, { status: 200 });
         }
 
-        // Build HMAC per official Velo JSON API docs
-        const hmac = await veloHmac(email, apiKey, apiSecret);
+        // Get JWT via Enterprise login
+        const jwt = await getVeloJwt(base44, config);
+        const hmac = await veloHmac(jwt, apiKey, apiSecret);
         const headers = {
             'Content-Type': 'application/json',
             'X-Velo-Api-Key': apiKey,
-            'X-Velo-Hmac': hmac
+            'X-Velo-Hmac': hmac,
+            'Authorization': `Bearer ${jwt}`
         };
         
-        console.log('🔑 [VeloCheck] HMAC generated (email+apiKey method)');
+        console.log('🔑 [VeloCheck] Auth ready (JWT + HMAC + Bearer)');
         
         // Get order and customer data
-        console.log('📥 [VeloCheck] Getting order data...');
         const order = await base44.asServiceRole.entities.Order.get(orderId);
         if (!order) return Response.json({ success: false, error: 'הזמנה לא נמצאה' }, { status: 200 });
         
-        const customer = await base44.asServiceRole.entities.Client.get(order.client_id);
-        if (!customer) return Response.json({ success: false, error: 'לקוח לא נמצא' }, { status: 200 });
+        const customer = order.client_id 
+            ? await base44.asServiceRole.entities.Client.get(order.client_id) 
+            : null;
         
-        // Parse billing
         let billing = {};
-        try {
-            if (order.raw_data_billing) billing = JSON.parse(order.raw_data_billing);
-        } catch (e) {}
+        try { if (order.raw_data_billing) billing = JSON.parse(order.raw_data_billing); } catch (e) {}
         
-        // Parse address: street and number
-        let street = billing.address_1 || customer.full_address || 'רחוב';
+        // Parse address
+        let street = billing.address_1 || customer?.full_address || 'רחוב';
         let number = billing.address_2 || '';
         
         if (!number && street) {
@@ -85,25 +148,50 @@ Deno.serve(async (req) => {
         }
         if (!number) number = '1';
         
-        console.log('📍 [VeloCheck] Address:', { street, number, city: billing.city || customer.city });
+        const phone = (billing.phone || customer?.phone || '').replace(/\D/g, '');
+        const firstName = (billing.first_name || '').trim() || (customer?.full_name || '').split(/\s+/)[0] || 'לקוח';
+        const lastName = (billing.last_name || '').trim() || (customer?.full_name || '').split(/\s+/).slice(1).join(' ') || '-';
         
-        // Build check payload per Velo JSON API docs
+        console.log('📍 [VeloCheck] Address:', { street, number, city: billing.city || customer?.city });
+        
+        // Build check payload matching working format
         const checkPayload = {
-            weight: body.weight || 0,
-            dimensions: body.dimensions || { width: 0, height: 0, depth: 0 },
+            weight: body.weight || 1,
+            dimensions: body.dimensions || { width: 20, height: 10, depth: 15 },
             customerAddress: {
+                first_name: firstName,
+                last_name: lastName,
                 street: street,
                 number: number,
-                city: billing.city || customer.city || '',
-                zip: billing.postcode || '',
+                line2: '',
+                city: billing.city || customer?.city || '',
+                zipcode: billing.postcode || '',
+                state: '',
                 country: 'Israel',
-                phone: (billing.phone || customer.phone || '').replace(/\D/g, '')
+                phone: phone,
+                longitude: '',
+                latitude: ''
+            },
+            storeAddress: {
+                first_name: 'Gadget',
+                last_name: 'Team',
+                street: 'סביונים',
+                number: '1',
+                line2: '',
+                city: 'יהוד',
+                zipcode: '',
+                state: '',
+                country: 'Israel',
+                phone: phone,
+                longitude: '',
+                latitude: ''
             }
         };
         
         console.log('📦 [VeloCheck] Payload:', JSON.stringify(checkPayload, null, 2));
         
-        const checkRes = await fetch('https://api.veloapp.io/api/json/v1/check', {
+        // Use enterprise endpoint
+        const checkRes = await fetch(`${baseUrl || 'https://api.veloapp.io/api/enterprise'}/check`, {
             method: 'POST',
             headers,
             body: JSON.stringify(checkPayload)
@@ -111,12 +199,10 @@ Deno.serve(async (req) => {
         
         const responseText = await checkRes.text();
         console.log('📡 [VeloCheck] Response status:', checkRes.status);
-        console.log('📡 [VeloCheck] Response body:', responseText);
+        console.log('📡 [VeloCheck] Response:', responseText);
         
         let checkData;
-        try {
-            checkData = JSON.parse(responseText);
-        } catch (e) {
+        try { checkData = JSON.parse(responseText); } catch (e) {
             return Response.json({ success: false, error: 'תגובה לא תקינה מ-Velo', debug: responseText }, { status: 200 });
         }
         
@@ -137,8 +223,7 @@ Deno.serve(async (req) => {
     } catch (error) {
         console.error('❌ [VeloCheck] Error:', error);
         return Response.json({ 
-            success: false, 
-            error: error.message || 'שגיאה בבדיקת משלוח',
+            success: false, error: error.message || 'שגיאה בבדיקת משלוח',
             details: error.stack
         }, { status: 200 });
     }
