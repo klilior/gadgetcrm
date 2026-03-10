@@ -14,12 +14,16 @@ Deno.serve(async (req) => {
   const sr = base44.asServiceRole.entities;
 
   // Get the order to find external_order_number
-  const orders = await sr.Order.filter({ id: order_id }, null, 1);
-  if (orders.length === 0) {
-    return Response.json({ error: 'הזמנה לא נמצאה' }, { status: 404 });
+  let order;
+  try {
+    order = await sr.Order.get(order_id);
+  } catch (e) {
+    return Response.json({ error: 'הזמנה לא נמצאה: ' + e.message }, { status: 404 });
   }
 
-  const order = orders[0];
+  if (!order) {
+    return Response.json({ error: 'הזמנה לא נמצאה' }, { status: 404 });
+  }
   const externalOrderNumber = order.external_order_number;
 
   if (!externalOrderNumber) {
