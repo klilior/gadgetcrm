@@ -337,63 +337,86 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                     )}
                     
                     {shipmentCreated && (
-                        <div className="space-y-4">
-                            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                                <div className="flex items-center gap-3 mb-3">
-                                        <CheckCircle className={`w-6 h-6 ${createdShipmentData?.warning ? 'text-yellow-600' : 'text-green-600'}`} />
-                                        <div>
-                                            <p className={`font-bold text-lg ${createdShipmentData?.warning ? 'text-yellow-900' : 'text-green-900'}`}>
-                                                {createdShipmentData?.warning ? 'משלוח נוצר בטיוטה' : 'משלוח נוצר בהצלחה!'}
-                                            </p>
-                                            <p className="text-sm text-green-700">קוד משלוח: {createdShipmentData?.shipping_code || createdShipmentData?.id || 'ממתין לאישור'}</p>
-                                            {createdShipmentData?.status && (
-                                                <p className="text-xs text-green-600 mt-1">סטטוס: {createdShipmentData.status}</p>
-                                            )}
-                                            {createdShipmentData?.warning && (
-                                                <p className="text-xs text-yellow-700 mt-1 bg-yellow-100 px-2 py-1 rounded">⚠️ {createdShipmentData.warning}</p>
-                                            )}
-                                            {createdShipmentData?.tracking_url && (
-                                                <a href={createdShipmentData.tracking_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 block">
-                                                    🔗 מעקב משלוח
-                                                </a>
-                                            )}
-                                        </div>
+                        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <div className="flex items-center gap-3 mb-3">
+                                    <CheckCircle className={`w-6 h-6 ${createdShipmentData?.warning ? 'text-yellow-600' : 'text-green-600'}`} />
+                                    <div>
+                                        <p className={`font-bold text-lg ${createdShipmentData?.warning ? 'text-yellow-900' : 'text-green-900'}`}>
+                                            {createdShipmentData?.warning ? 'משלוח נוצר בטיוטה' : 'משלוח נוצר בהצלחה!'}
+                                        </p>
+                                        <p className="text-sm text-green-700">קוד משלוח: {createdShipmentData?.shipping_code || createdShipmentData?.id || 'ממתין לאישור'}</p>
+                                        {createdShipmentData?.status && (
+                                            <p className="text-xs text-green-600 mt-1">סטטוס: {createdShipmentData.status}</p>
+                                        )}
+                                        {createdShipmentData?.warning && (
+                                            <p className="text-xs text-yellow-700 mt-1 bg-yellow-100 px-2 py-1 rounded">⚠️ {createdShipmentData.warning}</p>
+                                        )}
+                                        {createdShipmentData?.tracking_url && (
+                                            <a href={createdShipmentData.tracking_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 block">
+                                                🔗 מעקב משלוח
+                                            </a>
+                                        )}
                                     </div>
-                                {(createdShipmentData?.label_url || createdShipmentData?.shipping_code) && (
-                                    <Button onClick={handlePrintLabel} className="w-full bg-blue-600 hover:bg-blue-700">
-                                        <Printer className="w-4 h-4 ml-2" />
-                                        הדפס שטר משלוח
-                                    </Button>
-                                )}
-                            </div>
-
-                            {/* Status Change Section */}
-                            <div className="p-4 bg-gray-50 border rounded-lg">
-                                <h4 className="font-semibold mb-3">עדכן סטטוס הזמנה</h4>
-                                <div className="flex gap-2">
-                                    <Select value={newStatus} onValueChange={setNewStatus}>
-                                        <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder="בחר סטטוס" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="processing">בטיפול</SelectItem>
-                                            <SelectItem value="completed">הושלם</SelectItem>
-                                            <SelectItem value="shipped">נשלח</SelectItem>
-                                            <SelectItem value="on-hold">בהמתנה</SelectItem>
-                                            <SelectItem value="cancelled">בוטל</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <Button 
-                                        onClick={handleUpdateStatus} 
-                                        disabled={isUpdatingStatus || !newStatus || newStatus === order.status}
-                                        className="bg-purple-600 hover:bg-purple-700"
-                                    >
-                                        {isUpdatingStatus ? 'מעדכן...' : 'עדכן סטטוס'}
-                                    </Button>
                                 </div>
+                            {(createdShipmentData?.label_url || createdShipmentData?.shipping_code) && (
+                                <Button onClick={handlePrintLabel} className="w-full bg-blue-600 hover:bg-blue-700">
+                                    <Printer className="w-4 h-4 ml-2" />
+                                    הדפס שטר משלוח
+                                </Button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Pickup Point Info Banner */}
+                    {hasPickupPointData && !shipmentCreated && (
+                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                            <div className="flex items-center gap-3">
+                                <MapPin className="w-6 h-6 text-amber-600 flex-shrink-0" />
+                                <div className="flex-1">
+                                    <p className="font-semibold text-amber-900">הלקוח בחר נקודת איסוף UPS</p>
+                                    <p className="text-sm text-amber-700 mt-1">לחץ על "שטר מטען UPS" כדי ליצור שטר מטען עם נקודת האיסוף שנבחרה</p>
+                                </div>
+                                <Button 
+                                    onClick={() => setShowUpsShipment(true)}
+                                    className="bg-amber-600 hover:bg-amber-700 text-white flex-shrink-0"
+                                >
+                                    <Truck className="w-4 h-4 ml-2"/>
+                                    צור שטר מטען
+                                </Button>
                             </div>
                         </div>
                     )}
+
+                    {/* Status Change Section - Always visible */}
+                    <div className="p-4 bg-gray-50 border rounded-lg">
+                        <h4 className="font-semibold mb-3 flex items-center gap-2">
+                            <Tag className="w-4 h-4" />
+                            עדכון סטטוס הזמנה (גם באתר WooCommerce)
+                        </h4>
+                        <div className="flex gap-2">
+                            <Select value={newStatus} onValueChange={setNewStatus}>
+                                <SelectTrigger className="flex-1">
+                                    <SelectValue placeholder="בחר סטטוס" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="processing">בטיפול</SelectItem>
+                                    <SelectItem value="completed">הושלם</SelectItem>
+                                    <SelectItem value="on-hold">בהמתנה</SelectItem>
+                                    <SelectItem value="cancelled">בוטל</SelectItem>
+                                    <SelectItem value="refunded">הוחזר</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Button 
+                                onClick={handleUpdateStatus} 
+                                disabled={isUpdatingStatus || !newStatus || newStatus === order.status}
+                                className="bg-purple-600 hover:bg-purple-700"
+                            >
+                                {isUpdatingStatus ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : null}
+                                {isUpdatingStatus ? 'מעדכן...' : 'עדכן סטטוס'}
+                            </Button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">העדכון ישנה את הסטטוס גם כאן וגם באתר WooCommerce</p>
+                    </div>
                 </div>
                 
                 <DialogFooter className="p-6 border-t flex justify-between items-center">
