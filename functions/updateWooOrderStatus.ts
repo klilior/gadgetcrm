@@ -2,18 +2,6 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
-  
-  // Verify user is authenticated (but don't fail hard - session might be custom)
-  let user = null;
-  try {
-    user = await base44.auth.me();
-  } catch (e) {
-    // If auth fails, check if request has valid token at all
-    const isAuthenticated = await base44.auth.isAuthenticated();
-    if (!isAuthenticated) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
 
   const { order_id, new_status } = await req.json();
 
