@@ -113,6 +113,7 @@ Deno.serve(async (req) => {
             customerAddress: {
                 first_name: firstName,
                 last_name: lastName,
+                name: `${firstName} ${lastName}`.trim(),
                 street: street,
                 number: number,
                 city: city,
