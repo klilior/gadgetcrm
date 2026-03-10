@@ -197,34 +197,28 @@ Deno.serve(async (req) => {
         const hmac = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
         
         const checkPayload = {
-            weight: body.weight || 0,
-            dimensions: body.dimensions || { width: 0, height: 0, depth: 0 },
+            weight: body.weight || 1.0,
+            dimensions: body.dimensions || { width: 20, height: 10, depth: 15 },
             customerAddress: {
                 first_name: billing.first_name || customer.full_name?.split(' ')[0] || 'לקוח',
                 last_name: billing.last_name || customer.full_name?.split(' ').slice(1).join(' ') || '',
-                line1: streetName + (streetNumber ? ' ' + streetNumber : ''),
+                street: streetName,
+                number: streetNumber,
                 line2: '',
                 city: billing.city || customer.city || 'תל אביב',
                 zipcode: billing.postcode || '',
                 state: billing.state || '',
                 country: 'Israel',
                 phone: (billing.phone || customer.phone || '0500000000').replace(/\D/g, ''),
-            },
-            storeAddress: config.storeAddress || {
-                line1: '',
-                line2: '',
-                city: '',
-                state: '',
-                zipcode: '',
-                phone: '',
-                country: 'Israel'
+                longitude: '',
+                latitude: ''
             }
         };
         
         console.log('📦 [VeloCheck] Payload:', JSON.stringify(checkPayload, null, 2));
         
-        // Use WooCommerce API endpoint (same as official Velo plugin)
-        const checkRes = await fetch('https://api.veloapp.io/api/woocommerce/check', {
+        // Use JSON API for check (WooCommerce API requires storeAddress)
+        const checkRes = await fetch('https://api.veloapp.io/api/json/v1/check', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
