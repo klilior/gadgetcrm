@@ -170,6 +170,12 @@ export default function OrdersPage() {
         });
     }
 
+    const handleStatusChange = (orderId, newStatus) => {
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+        // Re-open with updated status
+        setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
+    };
+
     // פונקציה לבדיקה אם משלוח דחוף
     const isUrgentShipping = (order) => {
         const shippingMethod = order.shipping_method?.toLowerCase() || '';
@@ -370,6 +376,7 @@ export default function OrdersPage() {
                     order={selectedOrder}
                     STATUS_MAPPING={STATUS_MAPPING}
                     getStatusColor={getStatusColor}
+                    onStatusChange={handleStatusChange}
                 />
             )}
 
