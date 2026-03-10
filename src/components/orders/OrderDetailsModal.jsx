@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
-import { X, User, Mail, Phone, MapPin, Truck, Hash, Calendar, Tag, ShoppingCart, Send, Package, CheckCircle, Printer, Check } from 'lucide-react';
+import { X, User, Mail, Phone, MapPin, Truck, Hash, Calendar, Tag, ShoppingCart, Send, Package, CheckCircle, Printer, Check, Loader2 } from 'lucide-react';
 import { format } from "date-fns";
 import { base44 } from "@/api/base44Client";
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CreateShipmentModal from '../shipping/CreateShipmentModal';
+import { updateWooOrderStatus } from "@/functions/updateWooOrderStatus";
 
 export default function OrderDetailsModal({ order, open, onClose, getStatusColor, STATUS_MAPPING, onStatusChange }) {
     const [isCheckingShipping, setIsCheckingShipping] = useState(false);
@@ -111,11 +112,21 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
         
         setIsUpdatingStatus(true);
         try {
-            await base44.entities.Order.update(order.id, { status: newStatus });
-            if (onStatusChange) {
-                onStatusChange(order.id, newStatus);
+            const { data } = await updateWooOrderStatus({ 
+                order_id: order.id, 
+                new_status: newStatus 
+            });
+            
+            if (data.success) {
+                if (onStatusChange) {
+                    onStatusChange(order.id, newStatus);
+                }
+                const wooMsg = data.updated_woo ? ' + WooCommerce' : ' (מקומי בלבד)';
+                alert(`✅ סטטוס עודכן בהצלחה${wooMsg}`);
+                if (data.warning) console.warn('⚠️', data.warning);
+            } else {
+                alert('❌ שגיאה: ' + (data.error || 'לא ידוע'));
             }
-            alert('✅ סטטוס עודכן בהצלחה');
         } catch (error) {
             console.error('Error updating status:', error);
             alert('❌ שגיאה בעדכון סטטוס');
@@ -123,6 +134,20 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             setIsUpdatingStatus(false);
         }
     };
+
+    // Check if this is a UPS pickup order
+    const isUpsPickupOrder = (() => {
+        const method = (order.shipping_method || '').toLowerCase();
+        return method.includes('pickup') || method.includes('נקודת איסוף') || method.includes('ups') && method.includes('איסוף');
+    })();
+
+    const hasPickupPointData = (() => {
+        if (!order.pickup_point_data) return false;
+        try {
+            const raw = typeof order.pickup_point_data === 'string' ? order.pickup_point_data : JSON.stringify(order.pickup_point_data);
+            return raw && raw.length > 5;
+        } catch { return false; }
+    })();
 
     const handlePrintLabel = () => {
         if (!createdShipmentData) return;
