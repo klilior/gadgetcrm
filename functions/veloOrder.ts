@@ -182,8 +182,6 @@ Deno.serve(async (req) => {
             dimensions: dimensions || { width: 20, height: 10, depth: 15 },
             note: order.customer_note || `הזמנה #${order.external_order_number}`,
             packagesCount: 1,
-            first_name: firstName,
-            last_name: lastName,
             customerAddress: {
                 first_name: firstName,
                 last_name: lastName,
