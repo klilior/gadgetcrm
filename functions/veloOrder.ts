@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 // Velo JSON API HMAC: sha256(email + apiKey, secret=apiSecret)
 // Per official docs: "a string made of your email and API key"
