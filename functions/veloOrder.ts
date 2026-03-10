@@ -105,8 +105,8 @@ Deno.serve(async (req) => {
             note: order.customer_note || `הזמנה #${order.external_order_number}`,
             packagesCount: 1,
             customerAddress: {
-                first_name: billing.first_name || customer.full_name?.split(' ')[0] || 'לקוח',
-                last_name: billing.last_name || customer.full_name?.split(' ').slice(1).join(' ') || '',
+                first_name: firstName,
+                last_name: lastName,
                 street: street,
                 number: number,
                 city: billing.city || customer.city || '',
