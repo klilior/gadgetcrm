@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
         const orderPayload = {
             polygonId: polygonId,
             externalServiceId: externalServiceId || null,
-            externalId: `Order${order.external_order_number || order.id}_${Date.now()}`,
+            externalId: `Order${order.external_order_number || order.id}`,
             weight: weight || 1,
             dimensions: dimensions || { width: 20, height: 10, depth: 15 },
             note: order.customer_note || `הזמנה #${order.external_order_number}`,
