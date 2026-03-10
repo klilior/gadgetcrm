@@ -26,8 +26,6 @@ async function getToken() {
 
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
-  const user = await base44.auth.me();
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const {
     shipment_type,  // 'pickup_point' | 'standard' | 'pickup_drop'
