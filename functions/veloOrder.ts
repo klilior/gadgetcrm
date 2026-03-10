@@ -1,113 +1,21 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
-// HMAC for Velo API: jwt + apiKey (same as veloCheck)
-async function veloHmac({ jwt, apiKey, apiSecret }) {
-    const payload = `${jwt}${apiKey}`;
+// Velo JSON API HMAC: sha256(email + apiKey, secret=apiSecret)
+// Per official docs: "a string made of your email and API key"
+async function veloHmac(email, apiKey, apiSecret) {
+    const payload = `${email}${apiKey}`;
     const encoder = new TextEncoder();
-    const keyData = encoder.encode(apiSecret);
-    const messageData = encoder.encode(payload);
-    
     const key = await crypto.subtle.importKey(
         'raw',
-        keyData,
+        encoder.encode(apiSecret),
         { name: 'HMAC', hash: 'SHA-256' },
         false,
         ['sign']
     );
-    
-    const signature = await crypto.subtle.sign('HMAC', key, messageData);
-    
+    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
     return Array.from(new Uint8Array(signature))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
-}
-
-async function getVeloJwt(base44, config) {
-    const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL, password: VELO_PASSWORD, baseUrl } = config;
-    const VELO_API_BASE = baseUrl || 'https://api.veloapp.io/api/enterprise';
-
-    // Check for existing session
-    const sessions = await base44.asServiceRole.entities.VeloSession.list('-issued_at', 1);
-
-    if (sessions.length > 0) {
-        const session = sessions[0];
-        const issuedAt = new Date(session.issued_at).getTime() / 1000;
-        const now = Date.now() / 1000;
-        const expiry = Number(session.expiry) || 0;
-        const timeLeft = (issuedAt + expiry) - now;
-
-        if (timeLeft > 120) {
-            console.log('✅ Using cached JWT');
-            return session.jwt;
-        }
-
-        // Try refresh
-        try {
-            console.log('🔄 Attempting JWT refresh...');
-            const hmac = await veloHmac({ jwt: session.jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
-            const refreshRes = await fetch(`${VELO_API_BASE}/refresh`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Velo-Api-Key': VELO_API_KEY,
-                    'X-Velo-Hmac': hmac,
-                    'Authorization': `Bearer ${session.jwt}`
-                },
-                body: JSON.stringify({})
-            });
-
-            if (refreshRes.ok) {
-                const refreshData = await refreshRes.json();
-                await base44.asServiceRole.entities.VeloSession.update(session.id, {
-                    jwt: refreshData.jwt,
-                    expiry: refreshData.expiry,
-                    issued_at: new Date().toISOString()
-                });
-                console.log('✅ JWT refreshed successfully');
-                return refreshData.jwt;
-            }
-        } catch (e) {
-            console.warn('⚠️ JWT Refresh failed:', e.message);
-        }
-    }
-
-    // Login
-    console.log('🔐 Performing fresh login...');
-    const loginRes = await fetch(`${VELO_API_BASE}/login`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Velo-Api-Key': VELO_API_KEY
-        },
-        body: JSON.stringify({ email: VELO_EMAIL, password: VELO_PASSWORD })
-    });
-
-    if (!loginRes.ok) {
-        const err = await loginRes.text();
-        throw new Error(`Velo Login Failed: ${err}`);
-    }
-
-    const loginData = await loginRes.json();
-    
-    // Save session
-    if (sessions.length > 0) {
-        await base44.asServiceRole.entities.VeloSession.update(sessions[0].id, {
-            jwt: loginData.jwt,
-            expiry: loginData.expiry,
-            issued_at: new Date().toISOString(),
-            user_email: VELO_EMAIL
-        });
-    } else {
-        await base44.asServiceRole.entities.VeloSession.create({
-            jwt: loginData.jwt,
-            expiry: loginData.expiry,
-            issued_at: new Date().toISOString(),
-            user_email: VELO_EMAIL
-        });
-    }
-
-    console.log('✅ Fresh login successful');
-    return loginData.jwt;
 }
 
 Deno.serve(async (req) => {
@@ -123,7 +31,7 @@ Deno.serve(async (req) => {
             return Response.json({ success: false, error: 'חסרים שדות נדרשים' }, { status: 200 });
         }
         
-        // Get Provider
+        // Get Provider config
         const providers = await base44.asServiceRole.entities.ShippingProvider.filter({
             provider_type: 'velo',
             is_active: true
@@ -133,252 +41,240 @@ Deno.serve(async (req) => {
             return Response.json({ success: false, error: 'לא נמצא ספק Velo פעיל' }, { status: 200 });
         }
 
-        const provider = providers[0];
-        const config = provider.config || {};
-        const { apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET, email: VELO_EMAIL, password: VELO_PASSWORD } = config;
+        const config = providers[0].config || {};
+        const { apiKey, apiSecret, email } = config;
         
-        if (!VELO_API_KEY || !VELO_API_SECRET || !VELO_EMAIL || !VELO_PASSWORD) {
-            return Response.json({ success: false, error: 'חסרים פרטי התחברות ל-Velo (apiKey, apiSecret, email, password)' }, { status: 200 });
+        if (!apiKey || !apiSecret || !email) {
+            return Response.json({ success: false, error: 'חסרים פרטי התחברות ל-Velo' }, { status: 200 });
         }
         
-        // Get JWT (same as veloCheck)
-        console.log('🔑 [VeloOrder] Getting JWT...');
-        const jwt = await getVeloJwt(base44, config);
-        console.log('🔑 [VeloOrder] Got JWT');
+        // Build HMAC per official Velo JSON API docs: sha256(email + apiKey, apiSecret)
+        const hmac = await veloHmac(email, apiKey, apiSecret);
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-Velo-Api-Key': apiKey,
+            'X-Velo-Hmac': hmac
+        };
         
-        // Generate HMAC (jwt + apiKey - same as veloCheck)
-        const hmac = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
-        console.log('🔑 [VeloOrder] Generated HMAC');
+        console.log('🔑 [VeloOrder] HMAC generated (email+apiKey method)');
         
+        // Get order and customer data
         const order = await base44.asServiceRole.entities.Order.get(orderId);
-        if (!order) return Response.json({ success: false, error: 'Order not found' }, { status: 200 });
+        if (!order) return Response.json({ success: false, error: 'הזמנה לא נמצאה' }, { status: 200 });
         
         const customer = await base44.asServiceRole.entities.Client.get(order.client_id);
-        if (!customer) return Response.json({ success: false, error: 'Client not found' }, { status: 200 });
+        if (!customer) return Response.json({ success: false, error: 'לקוח לא נמצא' }, { status: 200 });
         
         const products = await base44.asServiceRole.entities.OrderProduct.filter({ order_id: orderId });
         
-        let billingAddress = {};
-        try { 
-            billingAddress = JSON.parse(order.raw_data_billing || '{}'); 
-        } catch (e) {
-            console.warn('Failed to parse billing', e);
-        }
+        let billing = {};
+        try { billing = JSON.parse(order.raw_data_billing || '{}'); } catch (e) {}
         
-        // Extract street and number from address_1 (e.g., "הפרחים 35" -> street: "הפרחים", number: "35")
-        let streetName = billingAddress.address_1 || customer.full_address || '';
-        let streetNumber = billingAddress.address_2 || '';
+        // Parse address: street and number
+        let street = billing.address_1 || customer.full_address || '';
+        let number = billing.address_2 || '';
         
-        // If no address_2, try to extract number from end of address_1
-        if (!streetNumber && streetName) {
-            const match = streetName.match(/^(.+?)\s+(\d+[א-ת]?)$/);
+        if (!number && street) {
+            const match = street.match(/^(.+?)\s+(\d+[א-ת]?)$/);
             if (match) {
-                streetName = match[1].trim();
-                streetNumber = match[2];
+                street = match[1].trim();
+                number = match[2];
             }
         }
+        if (!number) number = '1';
         
-        // Fallback to '1' if still no number
-        if (!streetNumber) streetNumber = '1';
+        console.log('📍 [VeloOrder] Address:', { street, number, city: billing.city || customer.city });
         
-        console.log('📍 [VeloOrder] Address parsed:', { street: streetName, number: streetNumber, city: billingAddress.city || customer.city });
-        
-        // Build order payload using Velo WooCommerce API (same format as official plugin)
-        const customerAddress = {
-            first_name: billingAddress.first_name || customer.full_name?.split(' ')[0] || 'לקוח',
-            last_name: billingAddress.last_name || customer.full_name?.split(' ').slice(1).join(' ') || '',
-            phone: (billingAddress.phone || customer.phone || '').replace(/\D/g, ''),
-            email: billingAddress.email || customer.email || null,
-            line1: streetName + (streetNumber ? ' ' + streetNumber : ''),
-            line2: '',
-            city: billingAddress.city || customer.city || '',
-            zipcode: billingAddress.postcode || '',
-            state: billingAddress.state || '',
-            country: 'Israel',
-        };
-
+        // ===== STEP 1: Create Order via /api/json/v1/order =====
         const orderPayload = {
-            external_id: order.external_order_number || order.id,
+            polygonId: polygonId,
+            externalServiceId: externalServiceId || null,
+            externalId: `Order${order.external_order_number || order.id}`,
             weight: weight || 0,
             dimensions: dimensions || { width: 0, height: 0, depth: 0 },
             note: order.customer_note || `הזמנה #${order.external_order_number}`,
-            storeAddress: config.storeAddress || {
-                line1: '',
-                line2: '',
-                city: '',
-                state: '',
-                zipcode: '',
-                phone: '',
-                country: 'Israel'
+            packagesCount: 1,
+            customerAddress: {
+                first_name: billing.first_name || customer.full_name?.split(' ')[0] || 'לקוח',
+                last_name: billing.last_name || customer.full_name?.split(' ').slice(1).join(' ') || '',
+                street: street,
+                number: number,
+                city: billing.city || customer.city || '',
+                zip: billing.postcode || '',
+                country: 'Israel',
+                phone: (billing.phone || customer.phone || '').replace(/\D/g, '')
             },
-            customerAddress: customerAddress,
             products: products.map(p => ({
                 name: p.name || 'מוצר',
                 code: p.sku || p.product_id?.toString() || 'UNKNOWN',
-                variation: null,
+                variation: '',
                 price: parseFloat(p.total) || 0,
-                quantity: p.quantity || 1,
-                weight: 0
+                quantity: p.quantity || 1
             }))
         };
-
-        // Add polygonId and externalServiceId if selected from check
-        if (polygonId) orderPayload.polygonId = polygonId;
-        if (externalServiceId) orderPayload.externalServiceId = externalServiceId;
         
-        console.log('📦 [VeloOrder] Order payload:', JSON.stringify(orderPayload, null, 2));
+        console.log('📦 [VeloOrder] Step 1 - Creating order...');
+        console.log('📦 [VeloOrder] Payload:', JSON.stringify(orderPayload, null, 2));
         
-        // Use WooCommerce API endpoint (same as official Velo WooCommerce plugin)
-        // This creates the order as "exported" directly, no separate accept step needed
-        console.log('📦 [VeloOrder] Creating order via WooCommerce API...');
-        const orderResponse = await fetch('https://api.veloapp.io/api/woocommerce/order', {
+        const orderRes = await fetch('https://api.veloapp.io/api/json/v1/order', {
             method: 'POST',
-            timeout: 60000,
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Velo-Api-Key': VELO_API_KEY,
-                'X-Velo-Hmac': hmac,
-                'Authorization': `Bearer ${jwt}`
-            },
+            headers,
             body: JSON.stringify(orderPayload)
         });
         
-        const responseText = await orderResponse.text();
-        console.log('📦 [VeloOrder] Raw response status:', orderResponse.status);
-        console.log('📦 [VeloOrder] Raw response:', responseText);
+        const orderText = await orderRes.text();
+        console.log('📦 [VeloOrder] Order response status:', orderRes.status);
+        console.log('📦 [VeloOrder] Order response:', orderText);
         
         let orderData;
-        try {
-            orderData = JSON.parse(responseText);
-        } catch (e) {
-            return Response.json({ success: false, error: 'תגובה לא תקינה מ-Velo', details: responseText }, { status: 200 });
+        try { orderData = JSON.parse(orderText); } catch (e) {
+            return Response.json({ success: false, error: 'תגובה לא תקינה מ-Velo', details: orderText }, { status: 200 });
         }
         
-        console.log('📦 [VeloOrder] Parsed response:', JSON.stringify(orderData, null, 2));
-        
-        // Check for errors
-        if (!orderResponse.ok || orderData.fail === true) {
-            let errorMsg = orderData.message || orderData.error || 'שגיאה ביצירת משלוח';
+        if (orderData.fail === true) {
+            let errorMsg = orderData.message || 'שגיאה ביצירת הזמנה';
             if (orderData.errors) {
-                const errorDetails = Object.entries(orderData.errors)
-                    .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
-                    .join('; ');
-                errorMsg = `${errorMsg} - ${errorDetails}`;
+                const details = typeof orderData.errors === 'object' 
+                    ? Object.entries(orderData.errors).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join('; ')
+                    : JSON.stringify(orderData.errors);
+                errorMsg += ` - ${details}`;
             }
             return Response.json({ success: false, error: errorMsg, details: orderData }, { status: 200 });
         }
         
-        console.log('✅ [VeloOrder] Order created successfully');
+        const veloOrderId = orderData.data?.name;
+        if (!veloOrderId) {
+            return Response.json({ success: false, error: 'לא התקבל מזהה הזמנה מ-Velo', details: orderData }, { status: 200 });
+        }
         
-        // Extract order name/ID from response
-        const veloOrderName = orderData.data?.name || orderData.data?.id || orderData.name || orderData.id;
-        console.log('📦 [VeloOrder] Velo Order Name:', veloOrderName);
+        console.log('✅ [VeloOrder] Order created:', veloOrderId, 'status:', orderData.data?.status);
         
-        // Wait briefly then get label info
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // ===== STEP 2: Accept/Confirm Delivery via /api/json/v1/accept =====
+        // This transmits to the delivery company and returns a barcode
+        console.log('📦 [VeloOrder] Step 2 - Confirming delivery (accept)...');
         
-        // Get label/tracking info via label endpoint
-        const labelHmac = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
+        // Small delay to let Velo process
+        await new Promise(r => setTimeout(r, 1500));
         
+        const acceptRes = await fetch('https://api.veloapp.io/api/json/v1/accept', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ order_id: veloOrderId })
+        });
+        
+        const acceptText = await acceptRes.text();
+        console.log('📦 [VeloOrder] Accept response status:', acceptRes.status);
+        console.log('📦 [VeloOrder] Accept response:', acceptText);
+        
+        let acceptData;
+        try { acceptData = JSON.parse(acceptText); } catch (e) {
+            acceptData = { fail: true, message: 'Invalid accept response' };
+        }
+        
+        if (acceptData.fail === true) {
+            console.warn('⚠️ [VeloOrder] Accept failed:', acceptData.message);
+            // Still save the order but mark as pending
+        }
+        
+        const barcode = acceptData.data?.barcode || null;
+        const acceptStatus = acceptData.data?.status || orderData.data?.status || 'placed';
+        const isConfirmed = !acceptData.fail && barcode;
+        
+        console.log('📦 [VeloOrder] Accept result:', { barcode, status: acceptStatus, confirmed: isConfirmed });
+        
+        // ===== STEP 3: Generate Label via /api/json/v1/label =====
         let labelUrl = null;
-        let trackingUrl = null;
-        let shippingCode = null;
-        let orderStatus = 'exported';
         
-        if (veloOrderName) {
-            // Try to get label
-            console.log('📦 [VeloOrder] Fetching label for:', veloOrderName);
-            const labelResponse = await fetch(`https://api.veloapp.io/api/woocommerce/label/${veloOrderName}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Velo-Api-Key': VELO_API_KEY,
-                    'X-Velo-Hmac': labelHmac,
-                    'Authorization': `Bearer ${jwt}`
-                }
+        if (isConfirmed) {
+            console.log('📦 [VeloOrder] Step 3 - Generating label...');
+            
+            const labelRes = await fetch('https://api.veloapp.io/api/json/v1/label', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ order_id: veloOrderId })
             });
             
-            const labelText = await labelResponse.text();
-            console.log('📦 [VeloOrder] Label response status:', labelResponse.status);
+            const labelText = await labelRes.text();
+            console.log('📦 [VeloOrder] Label response status:', labelRes.status);
             console.log('📦 [VeloOrder] Label response:', labelText.substring(0, 500));
             
-            // Check if the response is a PDF (binary) or JSON
-            const contentType = labelResponse.headers.get('content-type') || '';
-            if (contentType.includes('application/pdf') || labelText.startsWith('%PDF')) {
-                // The label endpoint returned a PDF directly - we need to save it
-                // For now, construct the label URL
-                labelUrl = `https://api.veloapp.io/api/woocommerce/label/${veloOrderName}`;
-                console.log('📄 [VeloOrder] Label is a PDF, URL:', labelUrl);
-            } else {
-                try {
-                    const labelData = JSON.parse(labelText);
-                    labelUrl = labelData.data?.label_pdf || labelData.data?.label || labelData.label_url || null;
-                    trackingUrl = labelData.data?.tracking_url || labelData.data?.external_tracking_url || null;
-                    shippingCode = labelData.data?.shipping_code || labelData.data?.barcode || null;
-                    orderStatus = labelData.data?.status || 'exported';
-                } catch (e) {
-                    console.warn('⚠️ Could not parse label response as JSON');
-                }
-            }
-            
-            // Also try tracking endpoint
-            const trackHmac = await veloHmac({ jwt, apiKey: VELO_API_KEY, apiSecret: VELO_API_SECRET });
-            const trackResponse = await fetch(`https://api.veloapp.io/api/woocommerce/track/${veloOrderName}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Velo-Api-Key': VELO_API_KEY,
-                    'X-Velo-Hmac': trackHmac,
-                    'Authorization': `Bearer ${jwt}`
-                }
-            });
-            
-            const trackText = await trackResponse.text();
-            console.log('📦 [VeloOrder] Track response:', trackText.substring(0, 500));
-            
             try {
-                const trackData = JSON.parse(trackText);
-                if (!trackingUrl) trackingUrl = trackData.data?.tracking_url || trackData.data?.external_tracking_url || null;
-                if (!shippingCode) shippingCode = trackData.data?.shipping_code || trackData.data?.barcode || trackData.data?.tracking_number || null;
-                if (trackData.data?.status) orderStatus = trackData.data.status;
+                const labelData = JSON.parse(labelText);
+                if (!labelData.fail) {
+                    labelUrl = labelData.data?.label_pdf || labelData.data?.label || null;
+                }
+                console.log('📄 [VeloOrder] Label URL:', labelUrl);
             } catch (e) {
-                console.warn('⚠️ Could not parse track response');
+                console.warn('⚠️ [VeloOrder] Could not parse label response');
             }
         }
         
-        // Use veloOrderName as fallback for shippingCode
-        if (!shippingCode) shippingCode = veloOrderName;
+        // ===== STEP 4: Get full order info via /api/json/v1/info/{order} =====
+        console.log('📦 [VeloOrder] Step 4 - Getting order info...');
         
-        console.log('📋 [VeloOrder] Final data:', { shippingCode, labelUrl, trackingUrl, orderStatus });
+        const infoRes = await fetch(`https://api.veloapp.io/api/json/v1/info/${veloOrderId}`, {
+            method: 'GET',
+            headers
+        });
         
+        const infoText = await infoRes.text();
+        console.log('📦 [VeloOrder] Info response:', infoText.substring(0, 1000));
+        
+        let infoData = {};
+        try { infoData = JSON.parse(infoText); } catch (e) {}
+        
+        // Collect all tracking data from info response
+        const trackingUrl = infoData.data?.external_tracking_url || infoData.data?.tracking_link || null;
+        const finalBarcode = barcode || infoData.data?.barcode || infoData.data?.shipping_code || null;
+        const finalLabelUrl = labelUrl || infoData.data?.label_pdf || null;
+        const finalStatus = infoData.data?.status || acceptStatus;
+        
+        console.log('📋 [VeloOrder] Final:', { barcode: finalBarcode, label: finalLabelUrl, tracking: trackingUrl, status: finalStatus });
+        
+        // Save shipment record
         const shipment = await base44.asServiceRole.entities.Shipment.create({
             shipment_type: 'standard',
             order_id: orderId,
             external_order_number: order.external_order_number || null,
             client_id: order.client_id || null,
-            consignee_name: customerAddress.first_name + ' ' + customerAddress.last_name,
-            consignee_phone: customerAddress.phone,
-            consignee_city: customerAddress.city,
-            consignee_street: streetName || null,
-            consignee_house: streetNumber || null,
-            consignee_zip: customerAddress.zipcode || null,
-            status: 'created',
-            tracking_number: shippingCode || null,
+            consignee_name: (orderPayload.customerAddress.first_name + ' ' + orderPayload.customerAddress.last_name).trim(),
+            consignee_phone: orderPayload.customerAddress.phone,
+            consignee_city: orderPayload.customerAddress.city,
+            consignee_street: street || null,
+            consignee_house: number || null,
+            consignee_zip: orderPayload.customerAddress.zip || null,
+            status: isConfirmed ? 'created' : 'pending',
+            tracking_number: finalBarcode || null,
             weight: orderPayload.weight || 1,
             num_packages: 1,
-            reference: `Velo:${veloOrderName || 'unknown'}`,
-            notes: `Velo Order: ${veloOrderName || 'unknown'}`,
-            api_response: orderData
+            reference: `Velo:${veloOrderId}`,
+            notes: `Velo Order: ${veloOrderId}`,
+            api_response: { order: orderData, accept: acceptData, info: infoData }
         });
+        
+        if (!isConfirmed) {
+            return Response.json({
+                success: true,
+                warning: `המשלוח נוצר אך לא אושר (${acceptData.message || 'unknown'}). יש לאשר במערכת Velo.`,
+                shipment: {
+                    id: veloOrderId,
+                    shipping_code: finalBarcode,
+                    label_url: finalLabelUrl,
+                    tracking_url: trackingUrl,
+                    status: finalStatus
+                },
+                shipment_id: shipment.id
+            });
+        }
         
         return Response.json({
             success: true,
             shipment: {
-                id: veloOrderName,
-                shipping_code: shippingCode,
-                label_url: labelUrl,
+                id: veloOrderId,
+                shipping_code: finalBarcode,
+                label_url: finalLabelUrl,
                 tracking_url: trackingUrl,
-                status: orderStatus
+                status: finalStatus
             },
             shipment_id: shipment.id
         });
