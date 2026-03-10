@@ -268,17 +268,17 @@ Deno.serve(async (req) => {
 
         const authString = btoa(`${consumerKey}:${consumerSecret}`);
 
-        // Fetch last 7 days
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const afterDate = sevenDaysAgo.toISOString();
+        // Fetch last 30 days to catch status changes on older orders
+        const daysBack = new Date();
+        daysBack.setDate(daysBack.getDate() - 30);
+        const afterDate = daysBack.toISOString();
 
         const wooOrders = await fetchAllOrders(wooCommerceUrl, authString, afterDate);
         console.log(`📦 Total orders from WooCommerce: ${wooOrders.length}`);
 
         // Pre-fetch existing orders to skip unchanged ones (fast batch check)
         const existingOrderMap = {};
-        const existingOrders = await sr.Order.filter({}, '-created_date', 200);
+        const existingOrders = await sr.Order.filter({}, '-created_date', 500);
         for (const o of existingOrders) {
             existingOrderMap[o.external_order_number] = o;
         }
