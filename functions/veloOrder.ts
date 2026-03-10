@@ -340,22 +340,24 @@ Deno.serve(async (req) => {
         // Determine if the order was successfully confirmed (not draft)
         const isConfirmed = orderStatus !== 'draft' && orderStatus !== 'placed' && (shippingCode || acceptData.success !== false);
         
-        const currentUser = await base44.auth.me().catch(() => null);
-        
         const shipment = await base44.asServiceRole.entities.Shipment.create({
+            shipment_type: 'standard',
             order_id: orderId,
-            external_order_number: order.external_order_number,
-            client_id: order.client_id,
-            provider_id: 'velo',
-            status: isConfirmed ? 'confirmed' : 'draft',
+            external_order_number: order.external_order_number || null,
+            client_id: order.client_id || null,
+            consignee_name: orderPayload.customerAddress.first_name + ' ' + orderPayload.customerAddress.last_name,
+            consignee_phone: orderPayload.customerAddress.phone,
+            consignee_city: orderPayload.customerAddress.city,
+            consignee_street: orderPayload.customerAddress.street || null,
+            consignee_house: orderPayload.customerAddress.number || null,
+            consignee_zip: orderPayload.customerAddress.zipcode || null,
+            status: isConfirmed ? 'created' : 'pending',
             tracking_number: shippingCode || null,
-            shipment_id: veloOrderId?.toString() || null,
-            shipping_address: orderPayload.customerAddress,
-            pickup_address: null,
-            package_details: { weight: orderPayload.weight, dimensions: orderPayload.dimensions },
-            created_by: currentUser?.id || null,
-            raw_request: orderPayload,
-            raw_response: { order: orderData, accept: acceptData, info: infoData }
+            weight: orderPayload.weight || 1,
+            num_packages: orderPayload.packagesCount || 1,
+            reference: `Velo:${veloOrderId}`,
+            notes: `Velo Order ID: ${veloOrderId}`,
+            api_response: { order: orderData, accept: acceptData, info: infoData }
         });
         
         // If still draft, return warning
