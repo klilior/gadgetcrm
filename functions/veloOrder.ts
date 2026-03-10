@@ -96,6 +96,10 @@ Deno.serve(async (req) => {
         console.log('📍 [VeloOrder] Address:', { street, number, city: billing.city || customer.city });
         
         // ===== STEP 1: Create Order via /api/json/v1/order =====
+        const phone = (billing.phone || customer.phone || '').replace(/\D/g, '');
+        const city = billing.city || customer.city || '';
+        const zip = billing.postcode || '';
+        
         const orderPayload = {
             polygonId: polygonId,
             externalServiceId: externalServiceId || null,
@@ -104,15 +108,17 @@ Deno.serve(async (req) => {
             dimensions: dimensions || { width: 0, height: 0, depth: 0 },
             note: order.customer_note || `הזמנה #${order.external_order_number}`,
             packagesCount: 1,
+            first_name: firstName,
+            last_name: lastName,
             customerAddress: {
                 first_name: firstName,
                 last_name: lastName,
                 street: street,
                 number: number,
-                city: billing.city || customer.city || '',
-                zip: billing.postcode || '',
+                city: city,
+                zip: zip,
                 country: 'Israel',
-                phone: (billing.phone || customer.phone || '').replace(/\D/g, '')
+                phone: phone
             },
             products: products.map(p => ({
                 name: p.name || 'מוצר',
