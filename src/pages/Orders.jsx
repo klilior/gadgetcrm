@@ -345,6 +345,9 @@ export default function OrdersPage() {
                                                     <div className={`text-sm ${isUrgent ? 'text-red-700 font-bold text-base' : 'text-gray-600'}`}>
                                                         {order.shipping_method || '-'}
                                                         {isUrgent && ' 🔥'}
+                                                        {order.pickup_point_data && (
+                                                            <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px] mr-1">📍 נק׳ איסוף</Badge>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="max-w-[200px]">
