@@ -61,59 +61,7 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
         }
     };
 
-    const handleCreateShipment = async () => {
-        if (!selectedOption) {
-            alert('נא לבחור אפשרות משלוח');
-            return;
-        }
 
-        setIsCreatingShipment(true);
-        setError(null);
-
-        try {
-            console.log('🚀 Creating shipment with:', {
-                orderId: order.id,
-                polygonId: selectedOption.polygon_id,
-                externalServiceId: selectedOption.external_service_id
-            });
-
-            const response = await base44.functions.invoke('veloOrder', {
-                orderId: order.id,
-                polygonId: selectedOption.polygon_id,
-                externalServiceId: selectedOption.external_service_id
-            });
-
-            console.log('📦 Velo response:', response);
-
-            // Response from invoke is the full axios response
-            const data = response.data || response;
-
-            if (data.success) {
-                console.log('✅ Shipment created:', data.shipment);
-                if (data.warning) {
-                    console.warn('⚠️ Warning:', data.warning);
-                }
-                setShipmentCreated(true);
-                const shipmentInfo = { ...data.shipment, warning: data.warning };
-                setCreatedShipmentData(shipmentInfo);
-                
-                // Auto-open label for printing if available
-                if (shipmentInfo.label_url) {
-                    window.open(shipmentInfo.label_url, '_blank');
-                }
-            } else {
-                const errorMsg = data.error || 'שגיאה ביצירת משלוח';
-                console.error('❌ Shipment error:', errorMsg, data.details);
-                setError(errorMsg + (data.details ? ` (${JSON.stringify(data.details)})` : ''));
-            }
-        } catch (error) {
-            console.error('❌ Error creating shipment:', error);
-            const errorMsg = error.response?.data?.error || error.message || 'שגיאה ביצירת משלוח';
-            setError(errorMsg);
-        } finally {
-            setIsCreatingShipment(false);
-        }
-    };
 
     const handleUpdateStatus = async () => {
         if (!newStatus || newStatus === order.status) return;
