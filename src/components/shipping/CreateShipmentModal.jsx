@@ -192,29 +192,8 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
         toast.success(`שטר מטען נוצר: ${trackingNum}`);
         onSuccess?.({ tracking_number: trackingNum });
         
-        // Try to fetch and open the label PDF
-        try {
-          const labelRes = await getUpsLabel({ tracking_number: trackingNum });
-          const labelData = labelRes.data;
-          
-          if (labelData.success && labelData.label_base64) {
-            // Open base64 PDF in new tab
-            const pdfBlob = new Blob(
-              [Uint8Array.from(atob(labelData.label_base64), c => c.charCodeAt(0))],
-              { type: 'application/pdf' }
-            );
-            const pdfUrl = URL.createObjectURL(pdfBlob);
-            window.open(pdfUrl, '_blank');
-          } else if (labelData.success && labelData.label_url) {
-            window.open(labelData.label_url, '_blank');
-          } else {
-            // Fallback: printable label with tracking
-            openPrintableLabel(trackingNum);
-          }
-        } catch (labelErr) {
-          console.log('Could not fetch label, using fallback:', labelErr);
-          openPrintableLabel(trackingNum);
-        }
+        // Auto-open printable label in new tab
+        openPrintableLabel(trackingNum);
       } else {
         toast.error(data.error || "שגיאה ביצירת המשלוח");
       }
