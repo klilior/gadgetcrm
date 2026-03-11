@@ -66,21 +66,44 @@ Deno.serve(async (req) => {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiToken}`,
-        'Accept': 'application/json'
+        'Accept': '*/*'
       },
       signal: AbortSignal.timeout(15000)
     });
 
-    const responseText = await res.text();
-    console.log(`Response status: ${res.status}, length: ${responseText.length}`);
-    console.log(`Response preview: ${responseText.substring(0, 300)}`);
+    console.log(`Response status: ${res.status}, content-type: ${res.headers.get('content-type')}`);
 
+    // Read as arrayBuffer to handle binary PDF properly
+    const arrayBuf = await res.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuf);
+    console.log(`Response bytes: ${bytes.length}`);
+
+    // Check if response starts with %PDF (PDF magic bytes)
+    const isPdf = bytes.length > 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+    
+    if (isPdf) {
+      // Convert to base64
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+      console.log(`✅ Got PDF label! Size: ${bytes.length} bytes, base64: ${base64.length} chars`);
+      return Response.json({
+        success: true,
+        pdf_base64: base64,
+        source: 'api_server'
+      });
+    }
+
+    // Not a PDF - try to parse as JSON for error info
+    const responseText = new TextDecoder().decode(bytes);
     let response;
-    try { response = JSON.parse(responseText); } catch { response = { raw: responseText }; }
+    try { response = JSON.parse(responseText); } catch { response = { raw: responseText.substring(0, 500) }; }
 
-    // Check if we got a PDF (FileByteArray)
+    // Check if JSON has FileByteArray
     if (response.FileByteArray) {
-      console.log(`✅ Got PDF label, base64 length: ${response.FileByteArray.length}`);
+      console.log(`✅ Got PDF label via FileByteArray`);
       return Response.json({
         success: true,
         pdf_base64: response.FileByteArray,
@@ -88,21 +111,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Maybe the response itself is binary PDF
-    if (res.headers.get('content-type')?.includes('pdf')) {
-      const base64 = btoa(responseText);
-      console.log(`✅ Got direct PDF, length: ${base64.length}`);
-      return Response.json({
-        success: true,
-        pdf_base64: base64,
-        source: 'api_server_direct'
-      });
-    }
-
-    // Log what we got for debugging
-    console.log(`⚠️ API server response (no FileByteArray):`, JSON.stringify(response).substring(0, 500));
-    
-    // Return whatever we got for debugging
+    console.log(`⚠️ Unexpected response:`, responseText.substring(0, 300));
     return Response.json({
       success: false,
       error: response.Message || response.ErrorMessage || 'לא התקבל PDF מהשרת',
