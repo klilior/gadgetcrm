@@ -29,26 +29,22 @@ Deno.serve(async (req) => {
     'Accept': '*/*'
   };
 
-  // Try different endpoint patterns - batch 2
+  // Try the OPSI get-label endpoint (used by WooCommerce plugin)
   const endpoints = [
-    // Maybe the label is returned with a different parameter in the create call
-    { url: `${PLUGINS_BASE}/api/v1/shipment/insert-domestic-wb-by-customer`, method: 'POST', body: { TrackingNumber: tracking_number, PrintLabel: true } },
-    // Try with different base paths
-    { url: `${PLUGINS_BASE}/api/v1/label/print/${tracking_number}`, method: 'GET' },
-    { url: `${PLUGINS_BASE}/api/v1/label/get/${tracking_number}`, method: 'GET' },
-    { url: `${PLUGINS_BASE}/api/v1/print-label/${tracking_number}`, method: 'GET' },
-    { url: `${PLUGINS_BASE}/api/v1/waybill/print/${tracking_number}`, method: 'GET' },
-    { url: `${PLUGINS_BASE}/api/v1/waybill/${tracking_number}`, method: 'GET' },
-    { url: `${PLUGINS_BASE}/api/v1/domestic/label/${tracking_number}`, method: 'GET' },
-    { url: `${PLUGINS_BASE}/api/v1/domestic/waybill/${tracking_number}`, method: 'GET' },
-    // Try the main ship.co.il domain
-    { url: `https://ship.co.il/api/v1/label/${tracking_number}`, method: 'GET' },
-    { url: `https://www.ship.co.il/api/label/${tracking_number}`, method: 'GET' },
-    // POST body variants with different casing
-    { url: `${PLUGINS_BASE}/api/v1/shipment/label`, method: 'POST', body: { trackingNumber: tracking_number } },
-    { url: `${PLUGINS_BASE}/api/v1/shipment/label`, method: 'POST', body: { tracking_number: tracking_number } },
-    { url: `${PLUGINS_BASE}/api/v1/shipment/print-domestic-label`, method: 'POST', body: { TrackingNumber: tracking_number } },
-    { url: `${PLUGINS_BASE}/api/v1/shipment/domestic-label`, method: 'POST', body: { TrackingNumber: tracking_number } },
+    // OPSI plugin endpoints
+    { url: `${PLUGINS_BASE}/api/v1/shipment/get-domestic-wb-label-by-customer`, method: 'POST', body: { TrackingNumber: tracking_number } },
+    { url: `${PLUGINS_BASE}/api/v1/shipment/get-label-by-customer`, method: 'POST', body: { TrackingNumber: tracking_number } },
+    { url: `${PLUGINS_BASE}/api/v1/shipment/get-label-by-customer/${tracking_number}`, method: 'GET' },
+    { url: `${PLUGINS_BASE}/api/v1/shipment/get-domestic-wb-label-by-customer/${tracking_number}`, method: 'GET' },
+    // Try with LabelFormat parameter
+    { url: `${PLUGINS_BASE}/api/v1/shipment/get-domestic-label-by-customer`, method: 'POST', body: { TrackingNumber: tracking_number, LabelFormat: "PDF" } },
+    // Try shipment info endpoints
+    { url: `${PLUGINS_BASE}/api/v1/shipment/get-domestic-wb-by-tracking`, method: 'POST', body: { TrackingNumber: tracking_number } },
+    { url: `${PLUGINS_BASE}/api/v1/shipment/get-domestic-wb-by-tracking?TrackingNumber=${tracking_number}`, method: 'GET' },
+    { url: `${PLUGINS_BASE}/api/v1/shipment/tracking/${tracking_number}`, method: 'GET' },
+    { url: `${PLUGINS_BASE}/api/v1/shipment/track/${tracking_number}`, method: 'GET' },
+    { url: `${PLUGINS_BASE}/api/v1/shipment/info/${tracking_number}`, method: 'GET' },
+    { url: `${PLUGINS_BASE}/api/v1/shipment/${tracking_number}`, method: 'GET' },
   ];
 
   const results = [];
