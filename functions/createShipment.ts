@@ -154,6 +154,56 @@ Deno.serve(async (req) => {
 
   console.log(`✅ Tracking: ${tracking_number}`);
 
+  // Fetch label PDF URL
+  let label_url = null;
+  try {
+    const labelRes = await fetch(`${PLUGINS_BASE}/api/v1/shipment/get-label/${tracking_number}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      signal: AbortSignal.timeout(10000)
+    });
+    console.log(`Label response status: ${labelRes.status}`);
+    if (labelRes.ok) {
+      const contentType = labelRes.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const labelData = await labelRes.json();
+        console.log('Label data:', JSON.stringify(labelData).substring(0, 300));
+        label_url = labelData.LabelUrl || labelData.Url || labelData.url || null;
+      } else if (contentType.includes('application/pdf')) {
+        // The endpoint returned the PDF directly - build URL for direct access
+        label_url = `${PLUGINS_BASE}/api/v1/shipment/get-label/${tracking_number}`;
+      }
+    } else {
+      console.log('Label fetch failed, trying alternate endpoint...');
+      const labelRes2 = await fetch(`${PLUGINS_BASE}/api/v1/shipment/get-label-by-tracking/${tracking_number}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      console.log(`Alternate label response: ${labelRes2.status}`);
+      if (labelRes2.ok) {
+        const ct = labelRes2.headers.get('content-type') || '';
+        if (ct.includes('pdf')) {
+          label_url = `${PLUGINS_BASE}/api/v1/shipment/get-label-by-tracking/${tracking_number}`;
+        } else {
+          const d = await labelRes2.json();
+          console.log('Alternate label data:', JSON.stringify(d).substring(0, 300));
+          label_url = d.LabelUrl || d.Url || d.url || null;
+        }
+      }
+    }
+  } catch (labelErr) {
+    console.log('⚠️ Could not fetch label:', labelErr.message);
+  }
+
+  console.log('Label URL:', label_url);
+
   // Save successful shipment
   const shipment = await base44.asServiceRole.entities.Shipment.create({
     shipment_type,
