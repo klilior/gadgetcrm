@@ -191,8 +191,8 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
         toast.success(`שטר מטען נוצר: ${trackingNum}`);
         onSuccess?.({ tracking_number: trackingNum });
         
-        // Auto-open printable label in new tab
-        openPrintableLabel(trackingNum);
+        // Auto-open real PDF label in new tab
+        openPrintableLabel(trackingNum, 'thermal');
       } else {
         toast.error(data.error || "שגיאה ביצירת המשלוח");
       }
