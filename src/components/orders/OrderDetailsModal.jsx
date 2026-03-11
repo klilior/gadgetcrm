@@ -107,7 +107,9 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
         } catch { return false; }
     })();
 
-    const handlePrintLabel = () => {
+    const [printingLabel, setPrintingLabel] = useState(false);
+
+    const handlePrintLabel = async (format = 'thermal') => {
         if (!createdShipmentData) return;
         
         // Open Velo label URL if available
@@ -117,40 +119,35 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             return;
         }
         
-        // Fallback: Create printable content with barcode
-        let billingData = {};
-        try { billingData = JSON.parse(order.raw_data_billing || '{}'); } catch (e) {}
-        
-        const printContent = `
-            <html dir="rtl">
-            <head>
-                <title>שטר משלוח - ${order.external_order_number || order.id}</title>
-                <style>
-                    body { font-family: Arial, sans-serif; padding: 20px; margin: 0; }
-                    .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-                    .info { margin: 10px 0; font-size: 14px; }
-                    .label { font-weight: bold; }
-                    .barcode { text-align: center; font-size: 32px; font-weight: bold; margin: 20px 0; padding: 15px; border: 3px solid #000; letter-spacing: 3px; }
-                    .tracking { text-align: center; font-size: 12px; margin-top: 10px; color: #666; }
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <h1>שטר משלוח VELO</h1>
-                    <p>הזמנה: #${order.external_order_number || order.id}</p>
-                </div>
-                <div class="barcode">${createdShipmentData.shipping_code || 'N/A'}</div>
-                ${createdShipmentData.tracking_url ? `<div class="tracking">מעקב: ${createdShipmentData.tracking_url}</div>` : ''}
-                <div class="info"><span class="label">שם:</span> ${billingData.first_name || ''} ${billingData.last_name || ''}</div>
-                <div class="info"><span class="label">טלפון:</span> ${billingData.phone || ''}</div>
-                <div class="info"><span class="label">כתובת:</span> ${billingData.address_1 || ''}, ${billingData.city || ''}</div>
-            </body>
-            </html>
-        `;
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(printContent);
-        printWindow.document.close();
-        printWindow.print();
+        // For UPS shipments, use real PDF from Ship.co.il
+        const trackingNum = createdShipmentData.shipping_code || createdShipmentData.tracking_number;
+        if (!trackingNum) {
+            toast.error("חסר מספר מעקב");
+            return;
+        }
+
+        setPrintingLabel(true);
+        try {
+            const { data } = await printShipmentLabel({ tracking_number: trackingNum, label_format: format });
+            if (data.success && data.pdf_base64) {
+                const byteChars = atob(data.pdf_base64);
+                const byteNums = new Array(byteChars.length);
+                for (let i = 0; i < byteChars.length; i++) {
+                    byteNums[i] = byteChars.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNums);
+                const blob = new Blob([byteArray], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                toast.success("שטר מטען PDF נפתח");
+            } else {
+                toast.error(data.error || "שגיאה בהורדת שטר מטען");
+            }
+        } catch (e) {
+            toast.error("שגיאה: " + e.message);
+        } finally {
+            setPrintingLabel(false);
+        }
     };
 
     return (
