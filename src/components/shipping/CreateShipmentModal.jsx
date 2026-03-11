@@ -6,9 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, MapPin, Truck, RotateCcw, Package, CheckCircle, Copy, Search, Store, Lock } from "lucide-react";
+import { Loader2, MapPin, Truck, RotateCcw, Package, CheckCircle, Copy, Search, Store, Lock, Printer } from "lucide-react";
 import { createShipment } from "@/functions/createShipment";
 import { searchPickupPoints } from "@/functions/searchPickupPoints";
+import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { toast } from "sonner";
 
 function parsePickupPointData(order) {
