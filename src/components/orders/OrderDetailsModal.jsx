@@ -228,69 +228,7 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                         </div>
                     )}
                     
-                    {/* Shipping Options */}
-                    {shippingOptions && shippingOptions.length > 0 && !shipmentCreated && (
-                        <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <h3 className="font-semibold flex items-center gap-2 text-blue-800">
-                                <Package className="w-4 h-4" />
-                                אפשרויות משלוח זמינות ({shippingOptions.length})
-                            </h3>
-                            <div className="space-y-2">
-                                {shippingOptions.map((option, idx) => {
-                                    const price = option.shipping_code?.prices?.[0]?.price || option.rate || 0;
-                                    return (
-                                        <div 
-                                            key={idx}
-                                            onClick={() => setSelectedOption(option)}
-                                            className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                                                selectedOption === option 
-                                                    ? 'border-blue-500 bg-blue-100 shadow-md' 
-                                                    : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
-                                            }`}
-                                        >
-                                            <div className="flex justify-between items-start">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <p className="font-bold text-gray-900">{option.service_name || option.courier || 'שליח'}</p>
-                                                        {selectedOption === option && (
-                                                            <Badge className="bg-blue-600"><Check className="w-3 h-3 ml-1" />נבחר</Badge>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-sm text-gray-600 mt-1">{option.description || ''}</p>
-                                                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                                                        <span>שליח: {option.courier || '-'}</span>
-                                                        {option.pickup_max_days && <span>איסוף: עד {option.pickup_max_days} ימים</span>}
-                                                        {option.dropoff_max_days && <span>משלוח: עד {option.dropoff_max_days} ימים</span>}
-                                                    </div>
-                                                </div>
-                                                <div className="text-left mr-4">
-                                                    <p className="font-bold text-xl text-blue-600">₪{price}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            
-                            {selectedOption && (
-                                <Button 
-                                    onClick={handleCreateShipment}
-                                    disabled={isCreatingShipment}
-                                    className="w-full bg-green-600 hover:bg-green-700 mt-3"
-                                    size="lg"
-                                >
-                                    <Send className="w-4 h-4 ml-2"/>
-                                    {isCreatingShipment ? 'יוצר משלוח...' : 'צור שטר משלוח'}
-                                </Button>
-                            )}
-                        </div>
-                    )}
 
-                    {shippingOptions && shippingOptions.length === 0 && !shipmentCreated && (
-                        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                            <p className="text-yellow-800">לא נמצאו אפשרויות משלוח זמינות לכתובת זו</p>
-                        </div>
-                    )}
                     
                     {shipmentCreated && (
                         <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
