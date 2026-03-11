@@ -326,12 +326,12 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                                 </Button>
                                 <Button 
                                     variant="outline" 
-                                    onClick={handleCheckShipping}
-                                    disabled={isCheckingShipping}
+                                    onClick={handleCreateVeloShipment}
+                                    disabled={isCreatingShipment}
                                     className="bg-blue-50 border-blue-300 hover:bg-blue-100"
                                 >
                                     <Package className="w-4 h-4 ml-2"/>
-                                    {isCheckingShipping ? 'טוען אפשרויות...' : 'Velo משלוח'}
+                                    {isCreatingShipment ? 'יוצר משלוח...' : 'Velo משלוח'}
                                 </Button>
                             </>
                         )}
