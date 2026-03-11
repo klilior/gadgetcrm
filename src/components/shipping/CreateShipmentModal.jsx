@@ -124,6 +124,36 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
     }
   };
 
+  const openPrintableLabel = (trackingNum) => {
+    const printContent = `
+      <html dir="rtl">
+      <head>
+        <title>שטר מטען UPS - ${trackingNum}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; margin: 0; text-align: center; }
+          .header { border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 25px; }
+          .header h1 { font-size: 28px; margin: 0; }
+          .tracking { font-size: 36px; font-weight: bold; padding: 25px; border: 4px solid #000; letter-spacing: 4px; margin: 25px auto; display: inline-block; }
+          .info { margin: 15px 0; font-size: 16px; text-align: right; max-width: 400px; margin: 10px auto; }
+          .label-text { font-weight: bold; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header"><h1>🚛 שטר מטען UPS</h1></div>
+        <div class="tracking">${trackingNum}</div>
+        <div class="info"><span class="label-text">הזמנה:</span> #${order?.external_order_number || ''}</div>
+        <div class="info"><span class="label-text">שם:</span> ${name}</div>
+        <div class="info"><span class="label-text">טלפון:</span> ${phone}</div>
+        <div class="info"><span class="label-text">כתובת:</span> ${street} ${house}, ${city}</div>
+        <script>window.onload = function() { window.print(); }</script>
+      </body>
+      </html>
+    `;
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(printContent); w.document.close(); }
+  };
+
   const handleCreate = async () => {
     if (!name || !phone || !city) {
       toast.error("יש למלא שם, טלפון ועיר");
