@@ -229,8 +229,13 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
             </div>
             <div className="flex gap-3 justify-center flex-wrap">
               <Button onClick={onClose}>סגור</Button>
-              <Button variant="outline" onClick={() => openPrintableLabel(result.tracking)}>
-                🖨️ הדפס שטר מטען
+              <Button variant="outline" onClick={() => openPrintableLabel(result.tracking, 'thermal')} disabled={printingLabel}>
+                {printingLabel ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
+                🖨️ תווית תרמית
+              </Button>
+              <Button variant="outline" onClick={() => openPrintableLabel(result.tracking, 'a4')} disabled={printingLabel}>
+                {printingLabel ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
+                📄 A4
               </Button>
               <Button variant="outline" asChild>
                 <a href={`https://www.ups.co.il/tracking?trackingNumbers=${result.tracking}`} target="_blank" rel="noreferrer">
