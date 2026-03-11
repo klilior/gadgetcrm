@@ -124,28 +124,108 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
   };
 
   const openPrintableLabel = (trackingNum) => {
+    const activePoint = wooPickupPoint || selectedPoint;
+    const isPickup = tab === 'pickup_point' && activePoint;
+    
     const printContent = `
       <html dir="rtl">
       <head>
-        <title>שטר מטען UPS - ${trackingNum}</title>
+        <title>שטר מטען - ${trackingNum}</title>
         <style>
-          body { font-family: Arial, sans-serif; padding: 40px; margin: 0; text-align: center; }
-          .header { border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 25px; }
-          .header h1 { font-size: 28px; margin: 0; }
-          .tracking { font-size: 36px; font-weight: bold; padding: 25px; border: 4px solid #000; letter-spacing: 4px; margin: 25px auto; display: inline-block; }
-          .info { margin: 15px 0; font-size: 16px; text-align: right; max-width: 400px; margin: 10px auto; }
-          .label-text { font-weight: bold; }
-          @media print { body { padding: 20px; } }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          .label { border: 3px solid #000; width: 100%; max-width: 10cm; margin: 0 auto; padding: 0; }
+          .row { display: flex; border-bottom: 2px solid #000; }
+          .row:last-child { border-bottom: none; }
+          .cell { padding: 8px 12px; border-left: 2px solid #000; flex: 1; }
+          .cell:first-child { border-left: none; }
+          .cell-label { font-size: 9px; color: #666; margin-bottom: 2px; }
+          .cell-value { font-size: 14px; font-weight: bold; }
+          .cell-value-lg { font-size: 18px; font-weight: bold; }
+          .header-row { background: #000; color: #fff; text-align: center; padding: 10px; font-size: 20px; font-weight: bold; letter-spacing: 2px; }
+          .tracking-row { text-align: center; padding: 15px 10px; }
+          .tracking-num { font-size: 32px; font-weight: bold; letter-spacing: 6px; font-family: 'Courier New', monospace; }
+          .barcode { margin: 8px auto; display: flex; justify-content: center; align-items: end; gap: 1px; height: 50px; }
+          .barcode .bar { background: #000; }
+          .full-width { flex: none; width: 100%; }
+          .dest-section { padding: 10px 12px; }
+          .dest-title { font-size: 10px; color: #666; margin-bottom: 4px; }
+          .dest-name { font-size: 18px; font-weight: bold; }
+          .dest-addr { font-size: 13px; margin-top: 4px; }
+          .dest-phone { font-size: 13px; margin-top: 2px; }
+          .pickup-badge { background: #f0f0f0; border: 1px solid #ccc; display: inline-block; padding: 2px 8px; font-size: 10px; border-radius: 3px; margin-top: 4px; }
+          .footer { text-align: center; padding: 6px; font-size: 9px; color: #666; }
+          @media print { 
+            body { padding: 0; } 
+            .label { border-width: 3px; max-width: none; width: 10cm; }
+            .no-print { display: none; }
+          }
+          .print-btn { display: block; margin: 15px auto; padding: 10px 30px; font-size: 16px; background: #2563eb; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+          .print-btn:hover { background: #1d4ed8; }
         </style>
       </head>
       <body>
-        <div class="header"><h1>🚛 שטר מטען UPS</h1></div>
-        <div class="tracking">${trackingNum}</div>
-        <div class="info"><span class="label-text">הזמנה:</span> #${order?.external_order_number || ''}</div>
-        <div class="info"><span class="label-text">שם:</span> ${name}</div>
-        <div class="info"><span class="label-text">טלפון:</span> ${phone}</div>
-        <div class="info"><span class="label-text">כתובת:</span> ${street} ${house}, ${city}</div>
-        <script>window.onload = function() { window.print(); }</script>
+        <div class="label">
+          <div class="header-row">UPS שטר מטען</div>
+          
+          <div class="tracking-row">
+            <div class="barcode" id="barcode"></div>
+            <div class="tracking-num">${trackingNum}</div>
+          </div>
+
+          <div class="row">
+            <div class="cell full-width dest-section">
+              <div class="dest-title">נמען</div>
+              <div class="dest-name">${name}</div>
+              <div class="dest-addr">${street} ${house}${house ? ',' : ''} ${city} ${zip}</div>
+              <div class="dest-phone">טל: ${phone}</div>
+              ${isPickup ? `<div class="pickup-badge">📦 נקודת איסוף: ${activePoint.name}</div>` : ''}
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="cell">
+              <div class="cell-label">מס׳ הזמנה</div>
+              <div class="cell-value">#${order?.external_order_number || '-'}</div>
+            </div>
+            <div class="cell">
+              <div class="cell-label">חבילות</div>
+              <div class="cell-value">1</div>
+            </div>
+            <div class="cell">
+              <div class="cell-label">תאריך</div>
+              <div class="cell-value">${new Date().toLocaleDateString('he-IL')}</div>
+            </div>
+          </div>
+
+          <div class="footer">Gadget Team • יהוד מונוסון</div>
+        </div>
+        
+        <button class="print-btn no-print" onclick="window.print()">🖨️ הדפס שטר מטען</button>
+        
+        <script>
+          // Generate simple barcode visualization
+          function generateBarcode(text) {
+            const container = document.getElementById('barcode');
+            for (let i = 0; i < text.length; i++) {
+              const charCode = text.charCodeAt(i);
+              // Create bars based on character value
+              for (let j = 0; j < 4; j++) {
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+                const isThick = (charCode >> j) & 1;
+                bar.style.width = isThick ? '3px' : '1px';
+                bar.style.height = (30 + (charCode % 20)) + 'px';
+                container.appendChild(bar);
+                // Gap
+                const gap = document.createElement('div');
+                gap.style.width = '1px';
+                container.appendChild(gap);
+              }
+            }
+          }
+          generateBarcode('${trackingNum}');
+        </script>
       </body>
       </html>
     `;
