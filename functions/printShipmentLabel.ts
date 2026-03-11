@@ -73,22 +73,23 @@ Deno.serve(async (req) => {
 
     console.log(`Response status: ${res.status}, content-type: ${res.headers.get('content-type')}`);
 
-    // Read as arrayBuffer to handle binary PDF properly
-    const arrayBuf = await res.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuf);
-    console.log(`Response bytes: ${bytes.length}`);
+    const responseText = await res.text();
+    console.log(`Response length: ${responseText.length}, preview: ${responseText.substring(0, 50)}`);
 
-    // Check if response starts with %PDF (PDF magic bytes)
-    const isPdf = bytes.length > 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
-    
-    if (isPdf) {
-      // Convert to base64
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const base64 = btoa(binary);
-      console.log(`✅ Got PDF label! Size: ${bytes.length} bytes, base64: ${base64.length} chars`);
+    // Check if response is base64-encoded PDF (starts with JVBERi which is %PDF in base64)
+    if (responseText.startsWith('JVBERi')) {
+      console.log(`✅ Got base64 PDF label! Length: ${responseText.length} chars`);
+      return Response.json({
+        success: true,
+        pdf_base64: responseText,
+        source: 'api_server'
+      });
+    }
+
+    // Check if response is raw PDF
+    if (responseText.startsWith('%PDF')) {
+      const base64 = btoa(responseText);
+      console.log(`✅ Got raw PDF label! Converted to base64: ${base64.length} chars`);
       return Response.json({
         success: true,
         pdf_base64: base64,
@@ -96,14 +97,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Not a PDF - try to parse as JSON for error info
-    const responseText = new TextDecoder().decode(bytes);
+    // Try JSON parsing for structured responses or errors
     let response;
     try { response = JSON.parse(responseText); } catch { response = { raw: responseText.substring(0, 500) }; }
 
-    // Check if JSON has FileByteArray
     if (response.FileByteArray) {
-      console.log(`✅ Got PDF label via FileByteArray`);
+      console.log(`✅ Got PDF via FileByteArray`);
       return Response.json({
         success: true,
         pdf_base64: response.FileByteArray,
