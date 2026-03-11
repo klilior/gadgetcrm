@@ -157,9 +157,43 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
       const { data } = await createShipment(payload);
 
       if (data.success) {
-        setResult({ tracking: data.tracking_number, shipment_id: data.shipment_id });
+        setResult({ tracking: data.tracking_number, label_url: data.label_url, shipment_id: data.shipment_id });
         toast.success(`שטר מטען נוצר: ${data.tracking_number}`);
-        onSuccess?.();
+        onSuccess?.({ tracking_number: data.tracking_number, label_url: data.label_url });
+        
+        // Auto-open label for printing
+        if (data.label_url) {
+          window.open(data.label_url, '_blank');
+        } else {
+          // Build printable label with tracking number
+          const printContent = `
+            <html dir="rtl">
+            <head>
+              <title>שטר מטען UPS - ${data.tracking_number}</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 40px; margin: 0; text-align: center; }
+                .header { border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 25px; }
+                .header h1 { font-size: 28px; margin: 0; }
+                .tracking { font-size: 36px; font-weight: bold; padding: 25px; border: 4px solid #000; letter-spacing: 4px; margin: 25px auto; display: inline-block; }
+                .info { margin: 15px 0; font-size: 16px; text-align: right; max-width: 400px; margin: 10px auto; }
+                .label { font-weight: bold; }
+                @media print { body { padding: 20px; } }
+              </style>
+            </head>
+            <body>
+              <div class="header"><h1>🚛 שטר מטען UPS</h1></div>
+              <div class="tracking">${data.tracking_number}</div>
+              <div class="info"><span class="label">הזמנה:</span> #${order?.external_order_number || ''}</div>
+              <div class="info"><span class="label">שם:</span> ${name}</div>
+              <div class="info"><span class="label">טלפון:</span> ${phone}</div>
+              <div class="info"><span class="label">כתובת:</span> ${street} ${house}, ${city}</div>
+              <script>window.onload = function() { window.print(); }</script>
+            </body>
+            </html>
+          `;
+          const w = window.open('', '_blank');
+          if (w) { w.document.write(printContent); w.document.close(); }
+        }
       } else {
         toast.error(data.error || "שגיאה ביצירת המשלוח");
       }
