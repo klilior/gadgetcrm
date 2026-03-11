@@ -43,7 +43,7 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             if (data.success) {
                 console.log('✅ Shipment created:', data.shipment);
                 setShipmentCreated(true);
-                const shipmentInfo = { ...data.shipment, warning: data.warning };
+                const shipmentInfo = { ...data.shipment, warning: data.warning, provider: 'Velo' };
                 setCreatedShipmentData(shipmentInfo);
                 if (shipmentInfo.label_url) {
                     window.open(shipmentInfo.label_url, '_blank');
