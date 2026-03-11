@@ -9,7 +9,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, MapPin, Truck, RotateCcw, Package, CheckCircle, Copy, Search, Store, Lock } from "lucide-react";
 import { createShipment } from "@/functions/createShipment";
 import { searchPickupPoints } from "@/functions/searchPickupPoints";
-import { getUpsLabel } from "@/functions/getUpsLabel";
 import { toast } from "sonner";
 
 function parsePickupPointData(order) {
