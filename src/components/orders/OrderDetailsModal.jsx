@@ -10,9 +10,6 @@ import CreateShipmentModal from '../shipping/CreateShipmentModal';
 import { updateWooOrderStatus } from "@/functions/updateWooOrderStatus";
 
 export default function OrderDetailsModal({ order, open, onClose, getStatusColor, STATUS_MAPPING, onStatusChange }) {
-    const [isCheckingShipping, setIsCheckingShipping] = useState(false);
-    const [shippingOptions, setShippingOptions] = useState(null);
-    const [selectedOption, setSelectedOption] = useState(null);
     const [isCreatingShipment, setIsCreatingShipment] = useState(false);
     const [shipmentCreated, setShipmentCreated] = useState(false);
     const [createdShipmentData, setCreatedShipmentData] = useState(null);
