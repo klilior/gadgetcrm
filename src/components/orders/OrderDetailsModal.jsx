@@ -289,10 +289,16 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                             )}
 
                             {(createdShipmentData?.label_url || createdShipmentData?.shipping_code) && (
-                                <Button onClick={handlePrintLabel} className="w-full bg-blue-600 hover:bg-blue-700">
-                                    <Printer className="w-4 h-4 ml-2" />
-                                    הדפס שטר משלוח
-                                </Button>
+                                <div className="flex gap-2">
+                                    <Button onClick={() => handlePrintLabel('thermal')} disabled={printingLabel} className="flex-1 bg-blue-600 hover:bg-blue-700">
+                                        {printingLabel ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Printer className="w-4 h-4 ml-2" />}
+                                        🖨️ תווית תרמית
+                                    </Button>
+                                    <Button onClick={() => handlePrintLabel('a4')} disabled={printingLabel} variant="outline" className="flex-1">
+                                        {printingLabel ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Printer className="w-4 h-4 ml-2" />}
+                                        📄 A4
+                                    </Button>
+                                </div>
                             )}
                         </div>
                     )}
