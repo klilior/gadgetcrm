@@ -26,36 +26,41 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
     const statusColor = getStatusColor(order.status);
     const hebrewStatus = STATUS_MAPPING[order.status] || order.status;
 
-    const handleCheckShipping = async () => {
-        setIsCheckingShipping(true);
+    const handleCreateVeloShipment = async () => {
+        setIsCreatingShipment(true);
         setError(null);
-        setShippingOptions(null);
-        setSelectedOption(null);
-        
+
         try {
-            console.log('📦 [OrderDetails] Starting shipping check for order:', order.id);
-            
-            const response = await base44.functions.invoke('veloCheck', {
-                orderId: order.id
+            console.log('🚀 [OrderDetails] Creating Velo shipment for order:', order.id);
+
+            const response = await base44.functions.invoke('veloOrder', {
+                orderId: order.id,
+                polygonId: 68
             });
-            
-            console.log('📦 [OrderDetails] Response:', response);
-            
-            if (response.data.success) {
-                // Handle both direct array and nested data structure
-                const options = response.data.options?.data || response.data.options || [];
-                setShippingOptions(options);
+
+            console.log('📦 [OrderDetails] Velo response:', response);
+
+            const data = response.data || response;
+
+            if (data.success) {
+                console.log('✅ Shipment created:', data.shipment);
+                setShipmentCreated(true);
+                const shipmentInfo = { ...data.shipment, warning: data.warning };
+                setCreatedShipmentData(shipmentInfo);
+                if (shipmentInfo.label_url) {
+                    window.open(shipmentInfo.label_url, '_blank');
+                }
             } else {
-                const errorMsg = response.data.error || 'שגיאה לא ידועה';
-                console.error('❌ [OrderDetails] Error:', errorMsg);
+                const errorMsg = data.error || 'שגיאה ביצירת משלוח';
+                console.error('❌ Velo error:', errorMsg);
                 setError(errorMsg);
             }
         } catch (error) {
             console.error('❌ [OrderDetails] Exception:', error);
-            const errorMsg = error.response?.data?.error || error.message || 'שגיאה בבדיקת אפשרויות משלוח';
+            const errorMsg = error.response?.data?.error || error.message || 'שגיאה ביצירת משלוח Velo';
             setError(errorMsg);
         } finally {
-            setIsCheckingShipping(false);
+            setIsCreatingShipment(false);
         }
     };
 
