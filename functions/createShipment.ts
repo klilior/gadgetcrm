@@ -177,11 +177,49 @@ Deno.serve(async (req) => {
     api_response: response
   });
 
-  // If there's an order, update its status
+  // If there's an order, update its status and add WooCommerce note with tracking
   if (order_id) {
     try {
+      const order = await base44.asServiceRole.entities.Order.get(order_id);
       await base44.asServiceRole.entities.Order.update(order_id, { status: 'completed' });
       console.log(`✅ Order ${order_id} marked as completed`);
+
+      // Add tracking number as note in WooCommerce
+      if (order?.external_order_number) {
+        try {
+          const [urlSetting, keySetting, secretSetting] = await Promise.all([
+            base44.asServiceRole.entities.Settings.filter({ setting_name: "WOOCOMMERCE_SITE_URL" }),
+            base44.asServiceRole.entities.Settings.filter({ setting_name: "WOOCOMMERCE_CONSUMER_KEY" }),
+            base44.asServiceRole.entities.Settings.filter({ setting_name: "WOOCOMMERCE_CONSUMER_SECRET" })
+          ]);
+          const wooUrl = urlSetting[0]?.setting_value;
+          const consumerKey = keySetting[0]?.setting_value;
+          const consumerSecret = secretSetting[0]?.setting_value;
+
+          if (wooUrl && consumerKey && consumerSecret) {
+            const authString = btoa(`${consumerKey}:${consumerSecret}`);
+            const noteText = `שטר מטען UPS נוצר.\nמספר מעקב: ${tracking_number}\nמעקב: https://www.ups.co.il/tracking?trackingNumbers=${tracking_number}`;
+            
+            const noteRes = await fetch(`${wooUrl}/wp-json/wc/v3/orders/${order.external_order_number}/notes`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Basic ${authString}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ note: noteText, customer_note: false }),
+              signal: AbortSignal.timeout(10000)
+            });
+            
+            if (noteRes.ok) {
+              console.log(`✅ WooCommerce note added with tracking: ${tracking_number}`);
+            } else {
+              console.log(`⚠️ Could not add WooCommerce note: ${noteRes.status}`);
+            }
+          }
+        } catch (noteErr) {
+          console.log(`⚠️ Could not add WooCommerce note: ${noteErr.message}`);
+        }
+      }
     } catch (e) {
       console.log(`⚠️ Could not update order status: ${e.message}`);
     }
