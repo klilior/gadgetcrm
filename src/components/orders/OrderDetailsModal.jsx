@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CreateShipmentModal from '../shipping/CreateShipmentModal';
 import { updateWooOrderStatus } from "@/functions/updateWooOrderStatus";
+import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { toast } from "sonner";
 
 export default function OrderDetailsModal({ order, open, onClose, getStatusColor, STATUS_MAPPING, onStatusChange }) {
