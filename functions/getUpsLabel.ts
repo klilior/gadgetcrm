@@ -36,9 +36,11 @@ Deno.serve(async (req) => {
 
     // Try multiple label endpoints
     const endpoints = [
-      `${PLUGINS_BASE}/api/v1/shipment/get-label/${tracking_number}`,
-      `${PLUGINS_BASE}/api/v1/shipment/get-label-by-tracking/${tracking_number}`,
-      `${PLUGINS_BASE}/api/v1/label/${tracking_number}`,
+      `${PLUGINS_BASE}/api/v1/shipment/label/${tracking_number}`,
+      `${PLUGINS_BASE}/api/v1/shipment/print/${tracking_number}`,
+      `${PLUGINS_BASE}/api/v1/shipment/get-label-by-tracking?trackingNumber=${tracking_number}`,
+      `${PLUGINS_BASE}/api/v1/shipment/label?trackingNumber=${tracking_number}`,
+      `${PLUGINS_BASE}/api/v1/label?trackingNumber=${tracking_number}`,
     ];
 
     for (const url of endpoints) {
