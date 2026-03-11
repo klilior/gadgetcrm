@@ -348,8 +348,15 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                         onClose={() => setShowUpsShipment(false)}
                         order={order}
                         client={order.client_id ? { id: order.client_id, full_name: order.client_name } : null}
-                        onSuccess={() => {
+                        onSuccess={(shipmentInfo) => {
                             setShipmentCreated(true);
+                            if (shipmentInfo) {
+                                setCreatedShipmentData({
+                                    shipping_code: shipmentInfo.tracking_number,
+                                    label_url: shipmentInfo.label_url,
+                                    provider: 'UPS'
+                                });
+                            }
                         }}
                     />
                 )}
