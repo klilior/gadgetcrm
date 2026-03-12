@@ -134,7 +134,7 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
       newWindow.document.close();
     }
 
-    setPrintingLabel(true);
+    setPrintingLabel(format);
     try {
       const { data } = await printShipmentLabel({ tracking_number: trackingNum, label_format: format });
       if (data.success && data.pdf_base64) {
@@ -142,18 +142,17 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
         
         if (newWindow && !newWindow.closed) {
           newWindow.document.open();
-          newWindow.document.write(`<html><head><title>שטר מטען - ${trackingNum}</title><style>body{margin:0;overflow:hidden;}</style></head><body><iframe src="${dataUri}" style="border:none;position:absolute;top:0;left:0;width:100%;height:100%;"></iframe></body></html>`);
+          newWindow.document.write(`<html><head><title>שטר מטען ${format === 'a4' ? 'A4' : 'תרמי'} - ${trackingNum}</title><style>body{margin:0;overflow:hidden;}</style></head><body><iframe src="${dataUri}" style="border:none;position:absolute;top:0;left:0;width:100%;height:100%;"></iframe></body></html>`);
           newWindow.document.close();
         } else {
-          // Fallback: download the file
           const a = document.createElement('a');
           a.href = dataUri;
-          a.download = `label-${trackingNum}.pdf`;
+          a.download = `label-${format}-${trackingNum}.pdf`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
         }
-        toast.success("שטר מטען PDF נפתח");
+        toast.success(`שטר מטען ${format === 'a4' ? 'A4' : 'תרמי'} נפתח`);
       } else {
         if (newWindow && !newWindow.closed) newWindow.close();
         toast.error(data.error || "שגיאה בהורדת שטר מטען");
@@ -162,7 +161,7 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
       if (newWindow && !newWindow.closed) newWindow.close();
       toast.error("שגיאה: " + e.message);
     } finally {
-      setPrintingLabel(false);
+      setPrintingLabel(null);
     }
   };
 
