@@ -129,7 +129,8 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
         // Open window IMMEDIATELY on click to avoid popup blocker
         const newWindow = window.open('', '_blank');
         if (newWindow) {
-            newWindow.document.write('<html dir="rtl"><head><title>טוען שטר מטען...</title></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;font-size:20px;color:#555;">⏳ טוען שטר מטען PDF...</body></html>');
+            newWindow.document.write(`<html dir="rtl"><head><title>שטר מטען - ${trackingNum}</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;font-size:20px;color:#555;}</style></head><body>⏳ טוען שטר מטען PDF...</body></html>`);
+            newWindow.document.close();
         }
 
         setPrintingLabel(true);
@@ -144,21 +145,25 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                 const byteArray = new Uint8Array(byteNums);
                 const blob = new Blob([byteArray], { type: 'application/pdf' });
                 const url = URL.createObjectURL(blob);
-                if (newWindow) {
-                    newWindow.location.href = url;
+                if (newWindow && !newWindow.closed) {
+                    newWindow.document.open();
+                    newWindow.document.write(`<html><head><title>שטר מטען - ${trackingNum}</title><style>body{margin:0;overflow:hidden;}</style></head><body><embed src="${url}" type="application/pdf" width="100%" height="100%" style="position:absolute;top:0;left:0;right:0;bottom:0;" /></body></html>`);
+                    newWindow.document.close();
                 } else {
                     const a = document.createElement('a');
                     a.href = url;
                     a.download = `label-${trackingNum}.pdf`;
+                    document.body.appendChild(a);
                     a.click();
+                    document.body.removeChild(a);
                 }
                 toast.success("שטר מטען PDF נפתח");
             } else {
-                if (newWindow) newWindow.close();
+                if (newWindow && !newWindow.closed) newWindow.close();
                 toast.error(data.error || "שגיאה בהורדת שטר מטען");
             }
         } catch (e) {
-            if (newWindow) newWindow.close();
+            if (newWindow && !newWindow.closed) newWindow.close();
             toast.error("שגיאה: " + e.message);
         } finally {
             setPrintingLabel(false);
