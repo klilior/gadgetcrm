@@ -33,119 +33,154 @@ function phoneSearchVariants(phone) {
 
 // ═══════ Google Drive helpers ═══════
 
-function base64url(data) {
-    let b64;
-    if (typeof data === 'string') {
-        b64 = btoa(data);
-    } else {
-        b64 = btoa(String.fromCharCode(...new Uint8Array(data)));
-    }
-    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function pemToArrayBuffer(pem) {
-    const b64 = pem
-        .replace(/-----BEGIN PRIVATE KEY-----/, '')
-        .replace(/-----END PRIVATE KEY-----/, '')
-        .replace(/\s/g, '');
-    const binary = atob(b64);
-    const buf = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
-    return buf.buffer;
-}
-
-async function getGoogleAccessToken(serviceAccountJson) {
-    const sa = typeof serviceAccountJson === 'string' ? JSON.parse(serviceAccountJson) : serviceAccountJson;
-    const now = Math.floor(Date.now() / 1000);
+async function createJWT(serviceAccount) {
+    console.log('🔐 [GDrive] Step 3: Generating JWT token...');
     const header = { alg: 'RS256', typ: 'JWT' };
-    const payload = {
-        iss: sa.client_email,
-        scope: 'https://www.googleapis.com/auth/drive',
+    const now = Math.floor(Date.now() / 1000);
+    const claim = {
+        iss: serviceAccount.client_email,
+        scope: 'https://www.googleapis.com/auth/drive.file',
         aud: 'https://oauth2.googleapis.com/token',
-        iat: now,
         exp: now + 3600,
+        iat: now
     };
 
-    const headerB64 = base64url(JSON.stringify(header));
-    const payloadB64 = base64url(JSON.stringify(payload));
-    const signingInput = `${headerB64}.${payloadB64}`;
+    const headerB64 = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const claimB64 = btoa(JSON.stringify(claim)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const signatureInput = headerB64 + '.' + claimB64;
 
-    const keyData = pemToArrayBuffer(sa.private_key);
+    // Import the private key
+    const pemKey = serviceAccount.private_key;
+    const pemContent = pemKey.replace(/-----BEGIN PRIVATE KEY-----/g, '')
+                             .replace(/-----END PRIVATE KEY-----/g, '')
+                             .replace(/\n/g, '');
+    const binaryKey = Uint8Array.from(atob(pemContent), c => c.charCodeAt(0));
+
     const cryptoKey = await crypto.subtle.importKey(
-        'pkcs8', keyData, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']
+        'pkcs8',
+        binaryKey.buffer,
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+        false,
+        ['sign']
     );
-    const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(signingInput));
-    const jwt = `${signingInput}.${base64url(signature)}`;
 
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    const signature = await crypto.subtle.sign(
+        'RSASSA-PKCS1-v1_5',
+        cryptoKey,
+        new TextEncoder().encode(signatureInput)
+    );
+
+    const sigB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+        .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+    console.log('🔐 [GDrive] Step 3: JWT generated successfully');
+    return signatureInput + '.' + sigB64;
+}
+
+async function getGoogleAccessToken(serviceAccount) {
+    console.log('🔑 [GDrive] Step 4: Exchanging JWT for access token...');
+    const jwt = await createJWT(serviceAccount);
+    const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+        body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
     });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-        throw new Error(`Google token error: ${JSON.stringify(tokenData)}`);
+    const data = await response.json();
+    console.log('🔑 [GDrive] Step 4: Token response status:', response.status);
+    if (!response.ok) {
+        console.error('🔑 [GDrive] Step 4: Token error:', JSON.stringify(data));
+        throw new Error('Failed to get access token: ' + JSON.stringify(data));
     }
-    console.log('🔑 [GDrive] Got access token');
-    return tokenData.access_token;
+    console.log('🔑 [GDrive] Step 4: Access token obtained successfully');
+    return data.access_token;
 }
 
 async function findOrCreateFolder(accessToken, parentId, folderName) {
-    // Search for existing folder
-    const q = `'${parentId}' in parents and name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-    const searchRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+    const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    console.log(`📁 [GDrive] Step 6: Searching for folder "${folderName}" in parent ${parentId}...`);
+    const searchResponse = await fetch(
+        'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query) + '&fields=files(id,name)',
+        { headers: { 'Authorization': 'Bearer ' + accessToken } }
     );
-    const searchData = await searchRes.json();
-    if (searchData.files?.length > 0) {
-        return searchData.files[0].id;
+    const searchResult = await searchResponse.json();
+    console.log(`📁 [GDrive] Step 6: Search response status: ${searchResponse.status}, found: ${searchResult.files?.length || 0}`);
+
+    if (searchResult.files && searchResult.files.length > 0) {
+        console.log(`📁 [GDrive] Step 6: Found existing folder "${folderName}" (${searchResult.files[0].id})`);
+        return searchResult.files[0].id;
     }
 
-    // Create folder
-    const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    // Create new folder
+    console.log(`📁 [GDrive] Step 6: Creating new folder "${folderName}"...`);
+    const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        headers: {
+            'Authorization': 'Bearer ' + accessToken,
+            'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
             name: folderName,
             mimeType: 'application/vnd.google-apps.folder',
-            parents: [parentId],
-        }),
+            parents: [parentId]
+        })
     });
-    const created = await createRes.json();
-    if (!created.id) throw new Error(`Failed to create folder "${folderName}": ${JSON.stringify(created)}`);
-    console.log(`📁 [GDrive] Created folder: ${folderName} (${created.id})`);
-    return created.id;
+    const createResult = await createResponse.json();
+    console.log(`📁 [GDrive] Step 6: Create folder response status: ${createResponse.status}, result:`, JSON.stringify(createResult));
+    if (!createResult.id) throw new Error(`Failed to create folder "${folderName}": ${JSON.stringify(createResult)}`);
+    console.log(`📁 [GDrive] Step 6: Created folder "${folderName}" (${createResult.id})`);
+    return createResult.id;
 }
 
-async function uploadToGoogleDrive(accessToken, folderId, fileName, fileBytes, mimeType) {
-    const metadata = JSON.stringify({ name: fileName, parents: [folderId] });
-    const boundary = '===BOUNDARY===';
-    const body =
-        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n` +
-        `--${boundary}\r\nContent-Type: ${mimeType}\r\nContent-Transfer-Encoding: base64\r\n\r\n`;
-    const footer = `\r\n--${boundary}--`;
+async function uploadToGDrive(accessToken, folderId, fileName, fileData, mimeType) {
+    console.log(`☁️ [GDrive] Step 7: Uploading file "${fileName}" (${(fileData.byteLength / 1024).toFixed(1)} KB, ${mimeType})...`);
+    const metadata = {
+        name: fileName,
+        parents: [folderId],
+        mimeType: mimeType
+    };
 
-    // Convert file bytes to base64
-    const base64Data = btoa(String.fromCharCode(...new Uint8Array(fileBytes)));
+    const boundary = 'boundary_' + Date.now();
+    const delimiter = '\r\n--' + boundary + '\r\n';
+    const closeDelimiter = '\r\n--' + boundary + '--';
 
-    const fullBody = body + base64Data + footer;
+    // Convert file data to base64
+    const fileBytes = new Uint8Array(fileData);
+    const chunkSize = 8192;
+    let base64Data = '';
+    for (let i = 0; i < fileBytes.length; i += chunkSize) {
+        const chunk = fileBytes.subarray(i, Math.min(i + chunkSize, fileBytes.length));
+        base64Data += String.fromCharCode(...chunk);
+    }
+    base64Data = btoa(base64Data);
 
-    const uploadRes = await fetch(
-        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
-        {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': `multipart/related; boundary=${boundary}`,
-            },
-            body: fullBody,
-        }
-    );
-    const uploadData = await uploadRes.json();
-    if (!uploadData.id) throw new Error(`Upload failed: ${JSON.stringify(uploadData)}`);
-    console.log(`✅ [GDrive] Uploaded: ${fileName} → ${uploadData.webViewLink}`);
-    return uploadData;
+    const body = delimiter +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        JSON.stringify(metadata) +
+        delimiter +
+        'Content-Type: ' + mimeType + '\r\n' +
+        'Content-Transfer-Encoding: base64\r\n\r\n' +
+        base64Data +
+        closeDelimiter;
+
+    const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+        method: 'POST',
+        headers: {
+            'Authorization': 'Bearer ' + accessToken,
+            'Content-Type': 'multipart/related; boundary=' + boundary
+        },
+        body: body
+    });
+
+    const result = await response.json();
+    console.log('☁️ [GDrive] Step 7: Upload response status:', response.status, 'result:', JSON.stringify(result));
+
+    if (!response.ok || !result.id) throw new Error('Upload failed: ' + JSON.stringify(result));
+
+    console.log(`☁️ [GDrive] Step 7: Upload SUCCESS - file ID: ${result.id}, link: ${result.webViewLink}`);
+    return {
+        fileId: result.id,
+        webViewLink: result.webViewLink || 'https://drive.google.com/file/d/' + result.id + '/view'
+    };
 }
 
 // ═══════ Main handler ═══════
@@ -157,6 +192,12 @@ Deno.serve(async (req) => {
                 headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, GET, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' }
             });
         }
+
+        // ── Debug: Log full request info ──
+        console.log('🔍 [Recording Debug] Full request headers:', JSON.stringify(Object.fromEntries(req.headers.entries())));
+        console.log('🔍 [Recording Debug] Content-Type:', req.headers.get('content-type'));
+        console.log('🔍 [Recording Debug] Method:', req.method);
+        console.log('🔍 [Recording Debug] URL:', req.url);
 
         const base44 = createClientFromRequest(req);
         const sr = base44.asServiceRole.entities;
@@ -172,24 +213,55 @@ Deno.serve(async (req) => {
                 recordData[key] = value;
             }
         } else {
-            const url = new URL(req.url);
-            for (const [key, value] of url.searchParams.entries()) {
-                recordData[key] = value;
+            // Try to read body as text, attempt JSON parse, then fallback to query params
+            const bodyText = await req.text();
+            console.log('🔍 [Recording Debug] Raw body text:', bodyText?.substring(0, 2000));
+            if (bodyText) {
+                try {
+                    recordData = JSON.parse(bodyText);
+                } catch {
+                    const url = new URL(req.url);
+                    for (const [key, value] of url.searchParams.entries()) {
+                        recordData[key] = value;
+                    }
+                }
+            } else {
+                const url = new URL(req.url);
+                for (const [key, value] of url.searchParams.entries()) {
+                    recordData[key] = value;
+                }
             }
         }
 
-        console.log('🎙️ [Recording Webhook] Received:', JSON.stringify(recordData));
+        console.log('🔍 [Recording Debug] Full webhook payload:', JSON.stringify(recordData));
 
-        const callId = recordData.callid || recordData.call_id || recordData.uniqueid || '';
-        const callerNumber = recordData.caller || recordData.from || recordData.src || '';
-        const calleeNumber = recordData.callee || recordData.to || recordData.dst || '';
-        const duration = recordData.duration || recordData.billsec || '0';
-        const pbxRecordingUrl = recordData.recording_url || recordData.recordingUrl || recordData.recording || recordData.file_url || '';
-        const direction = recordData.direction || recordData.type || 'incoming';
-        const extension = recordData.ext || recordData.extension || '';
+        // ── Handle nested "data" format from PBX ──
+        // PBX may send: { "file": "https://...", "data": { "callid": "...", "caller": "...", ... } }
+        const nestedData = recordData.data && typeof recordData.data === 'object' ? recordData.data : {};
+        const flat = { ...nestedData, ...recordData }; // flat fields override nested
+        // Remove the nested 'data' key so we don't confuse it
+        delete flat.data;
+
+        console.log('🔍 [Recording Debug] Flattened payload:', JSON.stringify(flat));
+
+        const callId = flat.callid || flat.call_id || flat.uniqueid || '';
+        const callerNumber = flat.caller || flat.from || flat.src || '';
+        const calleeNumber = flat.callee || flat.to || flat.dst || '';
+        const duration = flat.duration || flat.billsec || flat.call_sec || '0';
+        const direction = flat.direction || flat.call_direction || flat.type || 'incoming';
+        const extension = flat.ext || flat.extension || '';
+        const startDate = flat.start_date || '';
+
+        // Recording URL: the "file" field is the primary one from PBX
+        const pbxRecordingUrl = flat.file || flat.recording_url || flat.recordingUrl || flat.recording || flat.file_url || '';
+
+        console.log('📞 [Recording] Parsed fields:', JSON.stringify({
+            callId, callerNumber, calleeNumber, duration, direction, extension, startDate,
+            pbxRecordingUrl: pbxRecordingUrl?.substring(0, 200)
+        }));
 
         const isIncoming = direction === 'incoming' || direction === 'inbound' || direction === 'in';
-        
+
         // Smart extraction: for outgoing, try callee first, fall back to caller
         let externalNumber;
         if (isIncoming) {
@@ -205,6 +277,7 @@ Deno.serve(async (req) => {
             }
         }
         const normalizedPhone = normalizePhone(externalNumber);
+        console.log('📞 [Recording] External number:', externalNumber, '→ normalized:', normalizedPhone);
 
         // Find customer by trying all phone variants
         let customer = null;
@@ -215,61 +288,108 @@ Deno.serve(async (req) => {
                 if (results.length > 0) { customer = results[0]; break; }
             }
         }
+        console.log('👤 [Recording] Customer match:', customer ? `${customer.full_name} (${customer.id})` : 'none');
 
         // ═══════ Upload recording to Google Drive ═══════
         let finalRecordingUrl = pbxRecordingUrl || '';
+        let gdriveUploadSuccess = false;
+        let gdriveError = null;
 
         if (pbxRecordingUrl) {
             try {
-                console.log(`📥 [GDrive] Downloading recording from PBX: ${pbxRecordingUrl}`);
-
+                // Step 1: Read credentials
+                console.log('📋 [GDrive] Step 1: Reading credentials from environment...');
                 const saKeyJson = Deno.env.get('GDRIVE_SERVICE_ACCOUNT_KEY');
                 const rootFolderId = Deno.env.get('GDRIVE_FOLDER_ID');
 
+                console.log('📋 [GDrive] Step 1: GDRIVE_SERVICE_ACCOUNT_KEY exists:', !!saKeyJson, 'length:', saKeyJson?.length || 0);
+                console.log('📋 [GDrive] Step 1: GDRIVE_FOLDER_ID:', rootFolderId || 'NOT SET');
+
                 if (!saKeyJson || !rootFolderId) {
-                    console.log('⚠️ [GDrive] Missing GDRIVE_SERVICE_ACCOUNT_KEY or GDRIVE_FOLDER_ID, using PBX URL');
+                    console.log('⚠️ [GDrive] Step 1: FAILED - Missing GDRIVE_SERVICE_ACCOUNT_KEY or GDRIVE_FOLDER_ID');
+                    gdriveError = 'Missing GDrive credentials in environment';
                 } else {
-                    // Download the WAV file from PBX
-                    const fileRes = await fetch(pbxRecordingUrl);
-                    if (!fileRes.ok) throw new Error(`Download failed: HTTP ${fileRes.status}`);
-                    const fileBytes = await fileRes.arrayBuffer();
+                    // Step 2: Parse service account JSON
+                    console.log('🔧 [GDrive] Step 2: Parsing service account JSON...');
+                    let serviceAccount;
+                    try {
+                        serviceAccount = JSON.parse(saKeyJson);
+                    } catch (parseErr) {
+                        console.error('🔧 [GDrive] Step 2: FAILED to parse JSON:', parseErr.message);
+                        console.log('🔧 [GDrive] Step 2: First 100 chars of key:', saKeyJson.substring(0, 100));
+                        throw new Error('Failed to parse service account JSON: ' + parseErr.message);
+                    }
+                    // Fix escaped newlines in private key
+                    if (serviceAccount.private_key) {
+                        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+                    }
+                    console.log('🔧 [GDrive] Step 2: Parsed successfully. client_email:', serviceAccount.client_email);
+                    console.log('🔧 [GDrive] Step 2: private_key starts with:', serviceAccount.private_key?.substring(0, 30));
+                    console.log('🔧 [GDrive] Step 2: private_key length:', serviceAccount.private_key?.length);
+
+                    // Step 3+4: Get access token (JWT + exchange)
+                    const accessToken = await getGoogleAccessToken(serviceAccount);
+
+                    // Step 5: Download recording from PBX
+                    console.log('📥 [GDrive] Step 5: Downloading recording from PBX:', pbxRecordingUrl);
+                    let audioResponse = await fetch(pbxRecordingUrl);
+                    console.log('📥 [GDrive] Step 5: Direct download status:', audioResponse.status, 'content-length:', audioResponse.headers.get('content-length'));
+
+                    if (!audioResponse.ok) {
+                        // Try with PBX token
+                        console.log('📥 [GDrive] Step 5: Direct download failed, trying with token...');
+                        const pbxToken = '7AaJmwvruPun2z2H';
+                        const separator = pbxRecordingUrl.includes('?') ? '&' : '?';
+                        audioResponse = await fetch(pbxRecordingUrl + separator + 'token_id=' + pbxToken);
+                        console.log('📥 [GDrive] Step 5: Auth download status:', audioResponse.status, 'content-length:', audioResponse.headers.get('content-length'));
+                    }
+
+                    if (!audioResponse.ok) {
+                        throw new Error(`Failed to download recording. Status: ${audioResponse.status}`);
+                    }
+
+                    const fileBytes = await audioResponse.arrayBuffer();
                     const fileSizeMB = (fileBytes.byteLength / (1024 * 1024)).toFixed(2);
-                    console.log(`📥 [GDrive] Downloaded ${fileSizeMB} MB`);
+                    console.log(`📥 [GDrive] Step 5: Downloaded ${fileSizeMB} MB (${fileBytes.byteLength} bytes)`);
 
-                    // Get Google access token
-                    const accessToken = await getGoogleAccessToken(saKeyJson);
+                    if (fileBytes.byteLength < 100) {
+                        console.warn('📥 [GDrive] Step 5: WARNING - File is suspiciously small, might not be a real recording');
+                    }
 
-                    // Build folder path: YYYY-MM / customer_name
+                    // Step 6: Create folder structure YYYY-MM / customer_name
                     const now = new Date();
                     const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
                     const customerFolderName = customer?.full_name || normalizedPhone || 'unknown';
 
+                    console.log(`📁 [GDrive] Step 6: Creating folder structure: ${yearMonth} / ${customerFolderName}`);
                     const monthFolderId = await findOrCreateFolder(accessToken, rootFolderId, yearMonth);
                     const customerFolderId = await findOrCreateFolder(accessToken, monthFolderId, customerFolderName);
 
-                    // Build file name
+                    // Step 7: Upload file
                     const dateStr = now.toISOString().replace(/[:]/g, '-').slice(0, 19);
                     const dirLabel = isIncoming ? 'in' : 'out';
                     const fileName = `${dateStr}_${dirLabel}_${normalizedPhone || 'unknown'}_${callId || 'nocallid'}.wav`;
-
-                    // Detect mime type
                     const mimeType = pbxRecordingUrl.includes('.mp3') ? 'audio/mpeg' : 'audio/wav';
 
-                    // Upload
-                    const uploaded = await uploadToGoogleDrive(accessToken, customerFolderId, fileName, fileBytes, mimeType);
-                    finalRecordingUrl = uploaded.webViewLink || `https://drive.google.com/file/d/${uploaded.id}/view`;
-                    console.log(`✅ [GDrive] Recording saved: ${finalRecordingUrl}`);
+                    const uploaded = await uploadToGDrive(accessToken, customerFolderId, fileName, fileBytes, mimeType);
+                    finalRecordingUrl = uploaded.webViewLink || `https://drive.google.com/file/d/${uploaded.fileId}/view`;
+                    gdriveUploadSuccess = true;
+                    console.log(`✅ [GDrive] Recording saved to Drive: ${finalRecordingUrl}`);
                 }
             } catch (driveError) {
-                console.error(`❌ [GDrive] Upload failed, falling back to PBX URL:`, driveError.message);
+                console.error(`❌ [GDrive] Upload failed:`, driveError.message);
+                console.error(`❌ [GDrive] Stack:`, driveError.stack);
+                gdriveError = driveError.message;
                 finalRecordingUrl = pbxRecordingUrl;
             }
+        } else {
+            console.log('⚠️ [Recording] No recording URL found in payload');
+            gdriveError = 'No recording URL in payload';
         }
 
         // ═══════ Match / create Activity ═══════
         let matchedActivity = null;
-        
-        // Search BOTH incoming and outgoing activities for matching
+
         const [recentIncoming, recentOutgoing] = await Promise.all([
             sr.Activity.filter({ activity_type: 'שיחה נכנסת' }, '-created_date', 50),
             sr.Activity.filter({ activity_type: 'שיחה יוצאת' }, '-created_date', 50),
@@ -280,10 +400,8 @@ Deno.serve(async (req) => {
             matchedActivity = recentActivities.find(a => a.content?.includes(callId));
         }
         if (!matchedActivity && normalizedPhone) {
-            // Try to match by phone number, prioritizing the expected direction
             const preferred = recentActivities.filter(a => a.activity_type === (isIncoming ? 'שיחה נכנסת' : 'שיחה יוצאת'));
             matchedActivity = preferred.find(a => a.content?.includes(normalizedPhone) && !a.recording_url);
-            // If not found in preferred direction, search all
             if (!matchedActivity) {
                 matchedActivity = recentActivities.find(a => a.content?.includes(normalizedPhone) && !a.recording_url);
             }
@@ -305,16 +423,38 @@ Deno.serve(async (req) => {
             console.log(`✅ [Recording] Created new activity ${activity.id}`);
         }
 
+        // ═══════ Save to SyncLog ═══════
+        try {
+            await sr.SyncLog.create({
+                sync_type: 'pbx_recording_webhook',
+                status: gdriveUploadSuccess ? 'success' : 'error',
+                message: `Recording ${callId || 'unknown'}: ${gdriveUploadSuccess ? 'Uploaded to Drive' : (gdriveError || 'Unknown error')}`,
+                details: JSON.stringify({
+                    callId,
+                    recordingUrl: pbxRecordingUrl?.substring(0, 500),
+                    gdriveLink: gdriveUploadSuccess ? finalRecordingUrl : null,
+                    customerName: customer?.full_name || null,
+                    normalizedPhone,
+                    error: gdriveError
+                })
+            });
+            console.log('📝 [SyncLog] Logged webhook result');
+        } catch (logErr) {
+            console.error('📝 [SyncLog] Failed to write log:', logErr.message);
+        }
+
         return Response.json({
             success: true,
             activity_updated: !!matchedActivity,
             customer_matched: !!customer,
             recording_url: finalRecordingUrl,
-            gdrive_upload: finalRecordingUrl !== pbxRecordingUrl,
+            gdrive_upload: gdriveUploadSuccess,
+            gdrive_error: gdriveError,
         }, { headers: { 'Access-Control-Allow-Origin': '*' } });
 
     } catch (error) {
-        console.error('❌ [Recording Webhook] Error:', error.message);
-        return Response.json({ success: false, error: error.message }, { status: 500 });
+        console.error('❌ [Recording Webhook] FATAL Error:', error.message);
+        console.error('❌ [Recording Webhook] Stack:', error.stack);
+        return Response.json({ success: false, error: error.message }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
 });
