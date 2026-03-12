@@ -285,13 +285,27 @@ Deno.serve(async (req) => {
             existingOrderMap[o.external_order_number] = o;
         }
 
-        // Filter to only orders that need processing (new or status changed)
+        // Pre-fetch existing order products to check for missing meta_data
+        const existingProducts = await sr.OrderProduct.filter({}, null, 5000);
+        const productsByOrderId = {};
+        for (const p of existingProducts) {
+            if (!productsByOrderId[p.order_id]) productsByOrderId[p.order_id] = [];
+            productsByOrderId[p.order_id].push(p);
+        }
+
+        // Filter to only orders that need processing (new or status changed or missing meta_data)
         const ordersToProcess = wooOrders.filter(wo => {
             const existing = existingOrderMap[wo.id.toString()];
             if (!existing) return true; // new order
             if (existing.status !== wo.status) return true; // status changed
             const shouldHaveClient = ['processing', 'completed', 'on-hold', 'pending'].includes(wo.status);
             if (shouldHaveClient && !existing.client_id) return true; // needs client linked
+            // Check if products are missing meta_data (need re-sync for extras)
+            const prods = productsByOrderId[existing.id] || [];
+            if (prods.length > 0 && prods.every(p => !p.meta_data)) {
+                const wooHasMeta = (wo.line_items || []).some(li => li.meta_data && li.meta_data.length > 0);
+                if (wooHasMeta) return true; // has meta in WC but not saved locally
+            }
             return false;
         });
 

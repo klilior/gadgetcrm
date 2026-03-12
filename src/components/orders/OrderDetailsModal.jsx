@@ -200,7 +200,7 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             <DialogContent className="sm:max-w-3xl p-0" dir="rtl">
                 <DialogHeader className="p-6 pb-4 border-b">
                     <DialogTitle className="text-xl flex justify-between items-center">
-                        <span>פרטי הזמנה #{order.id}</span>
+                        <span>פרטי הזמנה #{order.external_order_number || order.id}</span>
                         <Button variant="ghost" size="icon" onClick={onClose} className="mr-auto">
                             <X className="w-4 h-4" />
                         </Button>
