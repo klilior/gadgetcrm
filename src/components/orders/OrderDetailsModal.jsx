@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
-import { X, User, Mail, Phone, MapPin, Truck, Hash, Calendar, Tag, ShoppingCart, Package, CheckCircle, Printer, Loader2 } from 'lucide-react';
+import { X, User, Mail, Phone, MapPin, Truck, Hash, Calendar, Tag, ShoppingCart, Package, CheckCircle, Printer, Loader2, Plus } from 'lucide-react';
 import { format } from "date-fns";
 import { base44 } from "@/api/base44Client";
 import { Badge } from '@/components/ui/badge';
