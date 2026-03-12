@@ -11,6 +11,37 @@ import { updateWooOrderStatus } from "@/functions/updateWooOrderStatus";
 import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { toast } from "sonner";
 
+// Parse WooCommerce Extra Product Options from meta_data
+function parseItemExtras(metaDataRaw) {
+    if (!metaDataRaw) return [];
+    let metaArr = [];
+    try {
+        metaArr = typeof metaDataRaw === 'string' ? JSON.parse(metaDataRaw) : metaDataRaw;
+    } catch { return []; }
+    if (!Array.isArray(metaArr)) return [];
+
+    const extras = [];
+    // Filter only visible meta (Extra Product Options typically have display_key/display_value)
+    // Skip internal WC meta that starts with _ 
+    for (const meta of metaArr) {
+        const key = meta.display_key || meta.key || '';
+        const value = meta.display_value || meta.value || '';
+        // Skip internal/hidden meta
+        if (key.startsWith('_') || !key || !value) continue;
+        // Skip common WC internal meta keys
+        if (['_reduced_stock', '_restock_refunded_items'].includes(key)) continue;
+        
+        // Try to extract price from the value (e.g. "מגן מסך (+₪25.00)")
+        const priceMatch = value.match(/\(\+?₪?([\d,.]+)\)/);
+        extras.push({
+            label: key,
+            value: value.replace(/\(\+?₪?[\d,.]+\)/, '').trim() || value,
+            price: priceMatch ? `+₪${priceMatch[1]}` : null,
+        });
+    }
+    return extras;
+}
+
 export default function OrderDetailsModal({ order, open, onClose, getStatusColor, STATUS_MAPPING, onStatusChange }) {
     const [isCreatingShipment, setIsCreatingShipment] = useState(false);
     const [shipmentCreated, setShipmentCreated] = useState(false);
