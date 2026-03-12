@@ -124,7 +124,7 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
     }
   };
 
-  const [printingLabel, setPrintingLabel] = useState(false);
+  const [printingLabel, setPrintingLabel] = useState(null); // null | 'thermal' | 'a4'
 
   const openPrintableLabel = async (trackingNum, format = 'thermal') => {
     // Open window IMMEDIATELY on click (before async) to avoid popup blocker
