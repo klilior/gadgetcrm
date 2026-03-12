@@ -180,7 +180,8 @@ async function processOrder(sr, wooOrder) {
                 product_id: item.product_id,
                 name: item.name,
                 quantity: item.quantity,
-                total: item.total
+                total: item.total,
+                meta_data: item.meta_data ? JSON.stringify(item.meta_data) : null
             })));
         }
         return { action: 'updated', clientId };
@@ -193,7 +194,8 @@ async function processOrder(sr, wooOrder) {
                 product_id: item.product_id,
                 name: item.name,
                 quantity: item.quantity,
-                total: item.total
+                total: item.total,
+                meta_data: item.meta_data ? JSON.stringify(item.meta_data) : null
             })));
         }
         return { action: 'created', clientId };
