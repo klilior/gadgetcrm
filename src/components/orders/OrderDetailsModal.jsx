@@ -252,9 +252,15 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                                         const extras = parseItemExtras(item.meta_data);
                                         return (
                                             <React.Fragment key={index}>
-                                                <tr className="border-t">
+                                                <tr className={`border-t ${item.quantity > 1 ? 'bg-orange-50' : ''}`}>
                                                     <td className="p-2 font-medium">{item.name}</td>
-                                                    <td className="p-2 text-center">{item.quantity}</td>
+                                                    <td className="p-2 text-center">
+                                                        {item.quantity > 1 ? (
+                                                            <span className="inline-flex items-center gap-1 bg-orange-500 text-white font-bold px-2.5 py-0.5 rounded-full text-sm">
+                                                                ⚠️ {item.quantity} יח׳
+                                                            </span>
+                                                        ) : item.quantity}
+                                                    </td>
                                                     <td className="p-2 text-left">₪{parseFloat(item.total).toFixed(2)}</td>
                                                 </tr>
                                                 {extras.map((extra, ei) => (
