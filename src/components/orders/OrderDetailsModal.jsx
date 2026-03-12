@@ -126,6 +126,12 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             return;
         }
 
+        // Open window IMMEDIATELY on click to avoid popup blocker
+        const newWindow = window.open('', '_blank');
+        if (newWindow) {
+            newWindow.document.write('<html dir="rtl"><head><title>טוען שטר מטען...</title></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;font-size:20px;color:#555;">⏳ טוען שטר מטען PDF...</body></html>');
+        }
+
         setPrintingLabel(true);
         try {
             const { data } = await printShipmentLabel({ tracking_number: trackingNum, label_format: format });
@@ -138,12 +144,21 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                 const byteArray = new Uint8Array(byteNums);
                 const blob = new Blob([byteArray], { type: 'application/pdf' });
                 const url = URL.createObjectURL(blob);
-                window.open(url, '_blank');
+                if (newWindow) {
+                    newWindow.location.href = url;
+                } else {
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `label-${trackingNum}.pdf`;
+                    a.click();
+                }
                 toast.success("שטר מטען PDF נפתח");
             } else {
+                if (newWindow) newWindow.close();
                 toast.error(data.error || "שגיאה בהורדת שטר מטען");
             }
         } catch (e) {
+            if (newWindow) newWindow.close();
             toast.error("שגיאה: " + e.message);
         } finally {
             setPrintingLabel(false);
