@@ -107,7 +107,7 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
         } catch { return false; }
     })();
 
-    const [printingLabel, setPrintingLabel] = useState(false);
+    const [printingLabel, setPrintingLabel] = useState(null); // null | 'thermal' | 'a4'
 
     const handlePrintLabel = async (format = 'thermal') => {
         if (!createdShipmentData) return;
