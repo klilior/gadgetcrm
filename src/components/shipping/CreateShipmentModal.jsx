@@ -138,24 +138,16 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
     try {
       const { data } = await printShipmentLabel({ tracking_number: trackingNum, label_format: format });
       if (data.success && data.pdf_base64) {
-        const byteChars = atob(data.pdf_base64);
-        const byteNums = new Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) {
-          byteNums[i] = byteChars.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNums);
-        const blob = new Blob([byteArray], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
+        const dataUri = `data:application/pdf;base64,${data.pdf_base64}`;
         
         if (newWindow && !newWindow.closed) {
-          // Write an embed/iframe into the already-open window
           newWindow.document.open();
-          newWindow.document.write(`<html><head><title>שטר מטען - ${trackingNum}</title><style>body{margin:0;overflow:hidden;}</style></head><body><embed src="${url}" type="application/pdf" width="100%" height="100%" style="position:absolute;top:0;left:0;right:0;bottom:0;" /></body></html>`);
+          newWindow.document.write(`<html><head><title>שטר מטען - ${trackingNum}</title><style>body{margin:0;overflow:hidden;}</style></head><body><iframe src="${dataUri}" style="border:none;position:absolute;top:0;left:0;width:100%;height:100%;"></iframe></body></html>`);
           newWindow.document.close();
         } else {
           // Fallback: download the file
           const a = document.createElement('a');
-          a.href = url;
+          a.href = dataUri;
           a.download = `label-${trackingNum}.pdf`;
           document.body.appendChild(a);
           a.click();
