@@ -217,13 +217,37 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {order.line_items?.map((item, index) => (
-                                        <tr key={index} className="border-t">
-                                            <td className="p-2">{item.name}</td>
-                                            <td className="p-2 text-center">{item.quantity}</td>
-                                            <td className="p-2 text-left">₪{parseFloat(item.total).toFixed(2)}</td>
-                                        </tr>
-                                    ))}
+                                    {order.line_items?.map((item, index) => {
+                                        const extras = parseItemExtras(item.meta_data);
+                                        return (
+                                            <React.Fragment key={index}>
+                                                <tr className="border-t">
+                                                    <td className="p-2 font-medium">{item.name}</td>
+                                                    <td className="p-2 text-center">{item.quantity}</td>
+                                                    <td className="p-2 text-left">₪{parseFloat(item.total).toFixed(2)}</td>
+                                                </tr>
+                                                {extras.map((extra, ei) => (
+                                                    <tr key={`${index}-extra-${ei}`} className="bg-purple-50/60">
+                                                        <td className="py-1.5 px-2 pr-6" colSpan={extra.price ? 1 : 2}>
+                                                            <div className="flex items-center gap-1.5 text-xs">
+                                                                <Plus className="w-3 h-3 text-purple-500 flex-shrink-0" />
+                                                                <span className="font-semibold text-purple-800">{extra.label}:</span>
+                                                                <span className="text-purple-700">{extra.value}</span>
+                                                            </div>
+                                                        </td>
+                                                        {extra.price && (
+                                                            <>
+                                                                <td className="py-1.5 px-2 text-center text-xs text-purple-600"></td>
+                                                                <td className="py-1.5 px-2 text-left text-xs font-semibold text-purple-700">
+                                                                    {extra.price}
+                                                                </td>
+                                                            </>
+                                                        )}
+                                                    </tr>
+                                                ))}
+                                            </React.Fragment>
+                                        );
+                                    })}
                                     <tr className="border-t bg-gray-50 font-medium">
                                         <td colSpan={2} className="p-2 text-right">עלות משלוח</td>
                                         <td className="p-2 text-left">₪{order.shipping_total ? parseFloat(order.shipping_total).toFixed(2) : '0.00'}</td>
