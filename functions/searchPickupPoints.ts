@@ -1,5 +1,3 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
-
 const PICKING_BASE = 'https://api.ship.co.il';
 
 async function getPickingToken() {
@@ -26,10 +24,6 @@ async function getPickingToken() {
 
 Deno.serve(async (req) => {
   try {
-  const base44 = createClientFromRequest(req);
-  const isAuth = await base44.auth.isAuthenticated();
-  if (!isAuth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-
   const { city, street, point_types, num_points } = await req.json();
 
   if (!city) {
