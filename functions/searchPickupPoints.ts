@@ -25,9 +25,10 @@ async function getPickingToken() {
 }
 
 Deno.serve(async (req) => {
+  try {
   const base44 = createClientFromRequest(req);
-  const user = await base44.auth.me();
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const isAuth = await base44.auth.isAuthenticated();
+  if (!isAuth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { city, street, point_types, num_points } = await req.json();
 
@@ -81,4 +82,8 @@ Deno.serve(async (req) => {
   }));
 
   return Response.json({ success: true, points });
+  } catch (error) {
+    console.error('[ERROR]', error);
+    return Response.json({ error: error.message }, { status: 500 });
+  }
 });
