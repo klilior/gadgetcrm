@@ -121,12 +121,24 @@ Deno.serve(async (req) => {
         let clientId = null;
 
         if (!dry_run) {
-          // Search by normalized phone
-          let clients = await base44.asServiceRole.entities.Client.filter({ phone: phoneNormalized }, null, 1);
-          
-          // If not found, try original phone
-          if (clients.length === 0 && phoneOriginal !== phoneNormalized) {
-            clients = await base44.asServiceRole.entities.Client.filter({ phone: phoneOriginal }, null, 1);
+          // Search by normalized phone + all common variants
+          let clients = [];
+          if (phoneNormalized) {
+            clients = await base44.asServiceRole.entities.Client.filter({ phone: phoneNormalized }, null, 1);
+            
+            // Try original phone
+            if (clients.length === 0 && phoneOriginal !== phoneNormalized) {
+              clients = await base44.asServiceRole.entities.Client.filter({ phone: phoneOriginal }, null, 1);
+            }
+            
+            // Try +972 variant
+            if (clients.length === 0 && phoneNormalized.startsWith('0') && phoneNormalized.length === 10) {
+              const intl = '972' + phoneNormalized.slice(1);
+              clients = await base44.asServiceRole.entities.Client.filter({ phone: intl }, null, 1);
+              if (clients.length === 0) {
+                clients = await base44.asServiceRole.entities.Client.filter({ phone: '+972' + phoneNormalized.slice(1) }, null, 1);
+              }
+            }
           }
 
           // If not found, try by linet_account_id
