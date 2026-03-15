@@ -225,7 +225,7 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
         onSuccess?.({ tracking_number: trackingNum });
         
         // Auto-open real PDF label in new tab
-        openPrintableLabel(trackingNum, 'thermal');
+        openPrintableLabel(trackingNum, 'a4');
       } else {
         toast.error(data.error || "שגיאה ביצירת המשלוח");
       }

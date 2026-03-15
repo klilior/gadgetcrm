@@ -413,6 +413,7 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                                     <SelectItem value="processing">בטיפול</SelectItem>
                                     <SelectItem value="completed">הושלם</SelectItem>
                                     <SelectItem value="on-hold">בהמתנה</SelectItem>
+                                    <SelectItem value="wc-awaiting-serial">ממתין למספר סידורי</SelectItem>
                                     <SelectItem value="cancelled">בוטל</SelectItem>
                                     <SelectItem value="refunded">הוחזר</SelectItem>
                                 </SelectContent>
