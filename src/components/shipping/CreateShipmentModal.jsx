@@ -246,8 +246,8 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
   // Success screen
   if (result) {
     return (
-      <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-md" dir="rtl">
+      <Dialog open={true} onOpenChange={() => {}}>
+        <DialogContent className="max-w-md" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()}>
           <div className="text-center py-6 space-y-4">
             <CheckCircle className="w-16 h-16 mx-auto text-green-500" />
             <h2 className="text-xl font-bold text-green-800">שטר מטען נוצר בהצלחה!</h2>
