@@ -23,6 +23,7 @@ import CustomerInvoicesTab from './CustomerInvoicesTab';
 import CustomerRepairsTab from './CustomerRepairsTab';
 import CustomerTicketsTab from './CustomerTicketsTab';
 import CustomerOrdersTab from './CustomerOrdersTab';
+import CustomerPurchasesTab from './CustomerPurchasesTab';
 import CustomerRecordingsTab from './CustomerRecordingsTab';
 import CustomerTimelineTab from './CustomerTimelineTab';
 import CustomerSmsTab from './CustomerSmsTab';
