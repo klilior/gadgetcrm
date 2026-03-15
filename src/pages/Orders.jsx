@@ -14,7 +14,7 @@ import CustomerCard from '../components/customers/CustomerCard';
 const STATUS_MAPPING = {
     'processing': 'בטיפול', 'on-hold': 'מושהה', 'pending': 'ממתינה לתשלום',
     'completed': 'הושלמה', 'cancelled': 'בוטלה', 'refunded': 'הוחזרה',
-    'failed': 'נכשלה', 'draft': 'טיוטה'
+    'failed': 'נכשלה', 'draft': 'טיוטה', 'wc-awaiting-serial': 'ממתין למספר סידורי'
 };
 
 const getStatusColor = (status) => {
@@ -26,6 +26,7 @@ const getStatusColor = (status) => {
         case "cancelled": return "bg-red-100 text-red-800 border-red-200";
         case "refunded": return "bg-pink-100 text-pink-800 border-pink-200";
         case "failed": return "bg-red-200 text-red-900 border-red-300";
+        case "wc-awaiting-serial": return "bg-violet-100 text-violet-800 border-violet-200";
         default: return "bg-gray-200 text-gray-800 border-gray-300";
     }
 };
