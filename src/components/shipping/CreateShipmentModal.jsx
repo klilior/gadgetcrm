@@ -362,41 +362,86 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
               </Card>
             ) : (
               <>
-                <div className="flex gap-2">
-                  <Button onClick={handleSearchPoints} disabled={searchingPoints || !city} className="bg-blue-600 hover:bg-blue-700">
-                    {searchingPoints ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Search className="w-4 h-4 ml-1" />}
-                    חפש נקודות קרובות
-                  </Button>
-                </div>
-                
-                {pickupPoints.length > 0 && (
-                  <div className="space-y-2 max-h-[250px] overflow-y-auto">
-                    {pickupPoints.map(point => (
-                      <Card 
-                        key={point.id}
-                        className={`cursor-pointer transition-all hover:shadow-md ${
-                          selectedPoint?.id === point.id 
-                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' 
-                            : 'border-gray-200'
-                        }`}
-                        onClick={() => setSelectedPoint(point)}
-                      >
-                        <CardContent className="p-3">
-                          <div className="flex items-start gap-3">
-                            <div className="mt-1">
-                              {point.type === 'store' ? <Store className="w-5 h-5 text-orange-500" /> : <Lock className="w-5 h-5 text-blue-500" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm">{point.name}</div>
-                              <div className="text-xs text-gray-500">{point.street} {point.house}, {point.city}</div>
-                              <div className="text-xs text-gray-400 mt-1">{point.hours}</div>
-                            </div>
-                            <Badge variant="outline" className="text-xs flex-shrink-0">{point.distance} ק"מ</Badge>
+                {/* Selected point display */}
+                {selectedPoint && (
+                  <Card className="border-green-400 bg-green-50 ring-2 ring-green-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <CheckCircle className="w-6 h-6 text-green-600 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <div className="text-xs text-green-600 font-medium mb-1">נקודת איסוף נבחרה ✓</div>
+                          <div className="font-bold text-green-900 text-lg">{selectedPoint.name}</div>
+                          <div className="text-sm text-green-800 mt-1">
+                            {selectedPoint.street} {selectedPoint.house}, {selectedPoint.city}
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                          {selectedPoint.hours && (
+                            <div className="text-xs text-green-700 mt-1">{selectedPoint.hours}</div>
+                          )}
+                          <Badge variant="outline" className="mt-2 text-xs border-green-300 text-green-700">
+                            {selectedPoint.type === 'store' ? '🏪 חנות' : '🔒 לוקר'} • {selectedPoint.id}
+                          </Badge>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => setSelectedPoint(null)}
+                        >
+                          שנה בחירה
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Search & results - only when no point selected */}
+                {!selectedPoint && (
+                  <>
+                    <div className="flex gap-2">
+                      <Button onClick={handleSearchPoints} disabled={searchingPoints || !city} className="bg-blue-600 hover:bg-blue-700">
+                        {searchingPoints ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Search className="w-4 h-4 ml-1" />}
+                        חפש נקודות קרובות
+                      </Button>
+                    </div>
+
+                    {searchingPoints && (
+                      <div className="text-center py-4">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500 mb-2" />
+                        <p className="text-sm text-gray-500">מחפש נקודות איסוף...</p>
+                      </div>
+                    )}
+                    
+                    {!searchingPoints && pickupPoints.length > 0 && (
+                      <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                        <p className="text-xs text-gray-500 font-medium">לחץ על נקודה כדי לבחור:</p>
+                        {pickupPoints.map(point => (
+                          <Card 
+                            key={point.id}
+                            className="cursor-pointer transition-all hover:shadow-md hover:border-blue-400 border-gray-200"
+                            onClick={() => setSelectedPoint(point)}
+                          >
+                            <CardContent className="p-3">
+                              <div className="flex items-start gap-3">
+                                <div className="mt-1">
+                                  {point.type === 'store' ? <Store className="w-5 h-5 text-orange-500" /> : <Lock className="w-5 h-5 text-blue-500" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-sm">{point.name}</div>
+                                  <div className="text-xs text-gray-500">{point.street} {point.house}, {point.city}</div>
+                                  <div className="text-xs text-gray-400 mt-1">{point.hours}</div>
+                                </div>
+                                <Badge variant="outline" className="text-xs flex-shrink-0">{point.distance} ק"מ</Badge>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+
+                    {!searchingPoints && pickupPoints.length === 0 && !city && (
+                      <p className="text-sm text-gray-400 text-center py-3">יש למלא עיר כדי לחפש נקודות איסוף</p>
+                    )}
+                  </>
                 )}
               </>
             )}
