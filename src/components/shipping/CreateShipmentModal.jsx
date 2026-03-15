@@ -293,7 +293,13 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={setTab} dir="rtl">
+        <Tabs value={tab} onValueChange={(val) => {
+          setTab(val);
+          // Auto-search when switching to pickup_point tab and no points loaded yet
+          if (val === "pickup_point" && !wooPickupPoint && pickupPoints.length === 0 && city && !searchingPoints) {
+            autoSearchPickupPoints(city, street);
+          }
+        }} dir="rtl">
           <TabsList className="w-full grid grid-cols-3">
             <TabsTrigger value="pickup_point" className="text-xs sm:text-sm">
               <MapPin className="w-4 h-4 ml-1" />
