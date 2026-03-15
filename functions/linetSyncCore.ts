@@ -154,7 +154,7 @@ async function upsertTransaction(base44, txData) {
   }
 }
 
-// Build phone search variants for matching
+// Build phone search variants for better matching across formats
 function phoneSearchVariants(phone) {
   if (!phone) return [];
   const variants = [phone];
