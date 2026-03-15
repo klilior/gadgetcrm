@@ -97,6 +97,10 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
       const method = order?.shipping_method || '';
       if (method.includes('נקודת') || method.includes('pickup') || method.includes('איסוף')) {
         setTab("pickup_point");
+        // Auto-search pickup points when city is available
+        if (cityName) {
+          autoSearchPickupPoints(cityName, streetName);
+        }
       } else if (method.includes('החזרה')) {
         setTab("pickup_drop");
       } else {
@@ -104,6 +108,22 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
       }
     }
   }, [open, order, client]);
+
+  // Auto search function (called on mount for pickup orders)
+  const autoSearchPickupPoints = async (searchCity, searchStreet) => {
+    setSearchingPoints(true);
+    setSelectedPoint(null);
+    try {
+      const { data } = await searchPickupPoints({ city: searchCity, street: searchStreet, num_points: 10 });
+      if (data.success) {
+        setPickupPoints(data.points);
+      }
+    } catch (e) {
+      console.error("Auto search failed:", e);
+    } finally {
+      setSearchingPoints(false);
+    }
+  };
 
   const handleSearchPoints = async () => {
     if (!city) { toast.error("יש להזין עיר"); return; }
