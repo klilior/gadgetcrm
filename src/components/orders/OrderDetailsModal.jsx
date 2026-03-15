@@ -197,7 +197,7 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
 
     return (
         <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-3xl p-0" dir="rtl">
+            <DialogContent className="sm:max-w-3xl p-0" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()}>
                 <DialogHeader className="p-6 pb-4 border-b">
                     <DialogTitle className="text-xl flex justify-between items-center">
                         <span>פרטי הזמנה #{order.external_order_number || order.id}</span>
