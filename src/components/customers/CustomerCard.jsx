@@ -190,6 +190,7 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                 <TabsList className="flex w-full overflow-x-auto mb-4 sm:mb-6 gap-0">
                                     <TabsTrigger value="overview" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">סקירה</TabsTrigger>
                                     <TabsTrigger value="devices" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">מכשירים ({devices.length})</TabsTrigger>
+                                    <TabsTrigger value="purchases" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">🛒 רכישות</TabsTrigger>
                                     <TabsTrigger value="orders" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">הזמנות ({stats.totalOrders})</TabsTrigger>
                                     <TabsTrigger value="invoices" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">חשבוניות ({invoices.length})</TabsTrigger>
                                     <TabsTrigger value="calls" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">שיחות ({callCount})</TabsTrigger>
