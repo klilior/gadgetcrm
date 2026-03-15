@@ -154,6 +154,19 @@ async function upsertTransaction(base44, txData) {
   }
 }
 
+// Build phone search variants for matching
+function phoneSearchVariants(phone) {
+  if (!phone) return [];
+  const variants = [phone];
+  if (phone.startsWith('0') && phone.length === 10) {
+    variants.push('972' + phone.slice(1));
+    variants.push('+972' + phone.slice(1));
+    variants.push('9720' + phone.slice(1));
+    variants.push('+9720' + phone.slice(1));
+  }
+  return variants;
+}
+
 // Find or create a Client from Linet invoice data
 async function findOrCreateClientFromLinetDoc(sr, doc) {
   const phone = normalizePhoneNumber(doc.mobile || doc.phone || doc.account_phone);
@@ -178,15 +191,20 @@ async function findOrCreateClientFromLinetDoc(sr, doc) {
     }
   }
 
-  // 2. By phone
+  // 2. By phone (all normalized variants)
   if (phone) {
-    const byPhone = await sr.Client.filter({ phone }, null, 1);
-    if (byPhone.length > 0) {
-      const updates = { last_interaction_date: new Date().toISOString() };
-      if (accountId && !byPhone[0].linet_account_id) updates.linet_account_id = accountId;
-      if (email && !byPhone[0].email) updates.email = email;
-      await sr.Client.update(byPhone[0].id, updates);
-      return byPhone[0].id;
+    const variants = phoneSearchVariants(phone);
+    for (const variant of variants) {
+      const byPhone = await sr.Client.filter({ phone: variant }, null, 1);
+      if (byPhone.length > 0) {
+        const updates = { last_interaction_date: new Date().toISOString() };
+        if (accountId && !byPhone[0].linet_account_id) updates.linet_account_id = accountId;
+        if (email && !byPhone[0].email) updates.email = email;
+        // Normalize the stored phone to our standard format
+        if (byPhone[0].phone !== phone) updates.phone = phone;
+        await sr.Client.update(byPhone[0].id, updates);
+        return byPhone[0].id;
+      }
     }
   }
 
@@ -214,7 +232,7 @@ async function findOrCreateClientFromLinetDoc(sr, doc) {
     return byName[0].id;
   }
 
-  // 4. Create
+  // 5. Create new client
   const newClient = await sr.Client.create({
     full_name: name,
     phone: phone || null,
