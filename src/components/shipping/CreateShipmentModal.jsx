@@ -474,7 +474,15 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
 
         <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
           <Button variant="outline" onClick={onClose} disabled={loading}>ביטול</Button>
-          <Button onClick={handleCreate} disabled={loading} className="bg-green-600 hover:bg-green-700">
+          <Button 
+            onClick={handleCreate} 
+            disabled={loading || (tab === "pickup_point" && !wooPickupPoint && !selectedPoint)} 
+            className={`${
+              (tab === "pickup_point" && (wooPickupPoint || selectedPoint)) || tab !== "pickup_point"
+                ? 'bg-green-600 hover:bg-green-700 animate-pulse shadow-lg shadow-green-200'
+                : 'bg-green-600 hover:bg-green-700'
+            }`}
+          >
             {loading ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Package className="w-4 h-4 ml-2" />}
             {loading ? "יוצר שטר מטען..." : "צור שטר מטען"}
           </Button>
