@@ -222,7 +222,6 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
         const trackingNum = data.tracking_number;
         setResult({ tracking: trackingNum, shipment_id: data.shipment_id });
         toast.success(`שטר מטען נוצר: ${trackingNum}`);
-        onSuccess?.({ tracking_number: trackingNum });
         
         // Auto-open real PDF label in new tab
         openPrintableLabel(trackingNum, 'a4');
