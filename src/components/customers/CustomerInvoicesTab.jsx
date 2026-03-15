@@ -5,6 +5,13 @@ import { Receipt } from 'lucide-react';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 
+const SHIPPING_KEYWORDS = ['משלוח', 'דואר', 'שליח', 'shipping', 'delivery', 'הובלה', 'שילוח'];
+function isShippingItem(name) {
+    if (!name) return false;
+    const lower = name.toLowerCase();
+    return SHIPPING_KEYWORDS.some(kw => lower.includes(kw));
+}
+
 export default function CustomerInvoicesTab({ invoices }) {
     if (!invoices || invoices.length === 0) {
         return (
@@ -15,9 +22,10 @@ export default function CustomerInvoicesTab({ invoices }) {
         );
     }
 
-    // Group by doc_number
+    // Group by doc_number, filter out shipping items
     const grouped = {};
     invoices.forEach(inv => {
+        if (isShippingItem(inv.product_name)) return;
         const key = inv.doc_number;
         if (!grouped[key]) {
             grouped[key] = {
