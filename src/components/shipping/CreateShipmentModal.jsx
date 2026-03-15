@@ -260,7 +260,7 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
               </div>
             </div>
             <div className="flex gap-3 justify-center flex-wrap">
-              <Button onClick={() => { onClose(); }}>סגור</Button>
+              <Button onClick={() => { onSuccess?.({ tracking_number: result.tracking }); onClose(); }}>סגור</Button>
               <Button variant="outline" onClick={() => openPrintableLabel(result.tracking, 'thermal')} disabled={printingLabel === 'thermal'}>
                 {printingLabel === 'thermal' ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
                 🖨️ תווית תרמית
