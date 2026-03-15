@@ -340,6 +340,10 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                     <CustomerDevicesList customerId={customerId} />
                                 </TabsContent>
 
+                                <TabsContent value="purchases">
+                                    <CustomerPurchasesTab orders={orders} invoices={invoices} customerId={customerId} />
+                                </TabsContent>
+
                                 <TabsContent value="orders">
                                     <CustomerOrdersTab orders={orders} customerName={customer?.full_name} />
                                 </TabsContent>
