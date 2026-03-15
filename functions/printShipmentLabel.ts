@@ -1,5 +1,3 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
-
 const PLUGINS_BASE = 'https://plugins.ship.co.il';
 const API_BASE = 'https://api.ship.co.il';
 
