@@ -223,7 +223,7 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
         setResult({ tracking: trackingNum, shipment_id: data.shipment_id });
         toast.success(`שטר מטען נוצר: ${trackingNum}`);
         
-        // Auto-open real PDF label in new tab
+        // Auto-open real PDF label in new tab (A4 default)
         openPrintableLabel(trackingNum, 'a4');
       } else {
         toast.error(data.error || "שגיאה ביצירת המשלוח");
