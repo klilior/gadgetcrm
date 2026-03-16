@@ -49,7 +49,7 @@ export default function VendorReport() {
   const loadData = async () => {
     setIsLoading(true);
     const [closedRepairs, credits] = await Promise.all([
-      base44.entities.Repair.filter({ repair_type: "מעבדת Gadget-Team", status: "תיקון נסגר" }, "-updated_date", 500),
+      base44.entities.Repair.filter({ repair_type: "מעבדת Gadget-Team", status: { $in: ["תיקון נסגר", "מכשיר סיים תיקון וממתין לאיסוף"] } }, "-updated_date", 500),
       base44.entities.LabCredit.list('-created_date', 500)
     ]);
 
