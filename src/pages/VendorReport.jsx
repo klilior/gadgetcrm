@@ -40,7 +40,7 @@ export default function VendorReport() {
   const isShiftManager = currentUser?.role === 'מנהל משמרת';
   const isTechnician = currentUser?.role === 'טכנאי';
   const canAddCredit = isManager || isShiftManager;
-  const canEditAll = isManager;
+  const canEditAll = isManager || isShiftManager;
 
   useEffect(() => {
     loadData();
