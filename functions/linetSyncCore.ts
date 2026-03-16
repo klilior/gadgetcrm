@@ -462,15 +462,13 @@ export async function executeLinetSync(base44, body = {}) {
         const is_credit = raw_doctype === 4;
         const doc_type_name = is_credit ? 'חשבונית זיכוי' : 'חשבונית מס קבלה';
 
-        // For all non-credit invoices, find/create client and link
+        // Find/create client and link for ALL invoice types (including credits)
         let linked_client_id = null;
-        if (!is_credit) {
-          try {
-            linked_client_id = await findOrCreateClientFromLinetDoc(base44.asServiceRole.entities, doc);
-            stats.clients_created++;
-          } catch (_clientErr) {
-            // Non-blocking - continue with sales data sync
-          }
+        try {
+          linked_client_id = await findOrCreateClientFromLinetDoc(base44.asServiceRole.entities, doc);
+          stats.clients_created++;
+        } catch (_clientErr) {
+          // Non-blocking - continue with sales data sync
         }
 
         if (Array.isArray(doc.docDetailes)) {
