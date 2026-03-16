@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import CallContextInsight from './CallContextInsight';
 
 // Request browser notification permission on load
 function requestNotificationPermission() {
@@ -79,15 +80,29 @@ export default function IncomingCallPopup() {
     let customerInfo = null;
     if (phone) {
       try {
-        const clients = await base44.entities.Client.filter({ phone }, null, 1);
+        // Search with phone variants for better matching
+        let clients = await base44.entities.Client.filter({ phone }, null, 1);
+        if (clients.length === 0 && phone.startsWith('0') && phone.length === 10) {
+          clients = await base44.entities.Client.filter({ phone: '972' + phone.slice(1) }, null, 1).catch(() => []);
+          if (clients.length === 0) {
+            clients = await base44.entities.Client.filter({ phone: '+972' + phone.slice(1) }, null, 1).catch(() => []);
+          }
+        }
         if (clients.length > 0) {
           customerInfo = clients[0];
-          const [tickets, repairs, orders] = await Promise.all([
-            base44.entities.Ticket.filter({ customer_id: customerInfo.id }, '-created_date', 3).catch(() => []),
-            base44.entities.Repair.filter({ client_id: customerInfo.id }, '-created_date', 3).catch(() => []),
-            base44.entities.Order.filter({ client_id: customerInfo.id }, '-order_date', 5).catch(() => []),
+          const [tickets, repairs, orders, devices, invoices] = await Promise.all([
+            base44.entities.Ticket.filter({ customer_id: customerInfo.id }, '-created_date', 5).catch(() => []),
+            base44.entities.Repair.filter({ client_id: customerInfo.id }, '-created_date', 5).catch(() => []),
+            base44.entities.Order.filter({ client_id: customerInfo.id }, '-order_date', 10).catch(() => []),
+            base44.entities.RepairDevice.filter({ client_id: customerInfo.id }, '-created_date', 10).catch(() => []),
+            base44.entities.SalesTransaction.filter({ client_id: customerInfo.id }, '-issue_date', 20).catch(() => []),
           ]);
-          customerInfo.openTickets = tickets.filter(t => !['סגור', 'בוטל'].includes(t.status));
+          customerInfo.allTickets = tickets;
+          customerInfo.allRepairs = repairs;
+          customerInfo.allOrders = orders;
+          customerInfo.allDevices = devices;
+          customerInfo.allInvoices = invoices;
+          customerInfo.openTickets = tickets.filter(t => !['נסגר', 'נסגר ללא מענה', 'בוטל'].includes(t.status));
           customerInfo.openRepairs = repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון', 'נמסר', 'הושלם', 'בוטל'].includes(r.status));
           customerInfo.pendingOrders = orders.filter(o => o.status === 'pending');
           customerInfo.recentCompletedOrders = orders.filter(o => {
