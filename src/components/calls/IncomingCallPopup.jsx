@@ -237,7 +237,7 @@ export default function IncomingCallPopup() {
   }
 
   return (
-    <div dir="rtl" className="fixed bottom-4 left-4 z-[9999] w-80 bg-white rounded-2xl shadow-2xl border-2 border-green-400 overflow-hidden animate-in slide-in-from-bottom-5">
+    <div dir="rtl" className="fixed bottom-4 left-4 z-[9999] w-96 bg-white rounded-2xl shadow-2xl border-2 border-green-400 overflow-hidden animate-in slide-in-from-bottom-5">
       <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-3 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <PhoneIncoming className="w-5 h-5 animate-pulse" />
@@ -297,6 +297,16 @@ export default function IncomingCallPopup() {
                 </div>
               )}
             </div>
+
+            {/* AI Context Insight */}
+            <CallContextInsight
+              customer={customer}
+              orders={customer.allOrders}
+              repairs={customer.allRepairs}
+              tickets={customer.allTickets}
+              devices={customer.allDevices}
+              invoices={customer.allInvoices}
+            />
 
             <Link
               to={createPageUrl('Customers') + `?openCard=${customer.id}`}
