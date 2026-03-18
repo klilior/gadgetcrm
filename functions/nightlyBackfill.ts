@@ -94,28 +94,32 @@ async function runLinkPhase(sr, progress) {
 
     console.log(`🔗 Processing ${orphans.length} orphans (offset ${progress.link_offset})...`);
 
-    // Group by linet_account_id
-    const byAccount = {};
-    let skipped = 0;
+    // Group by linet_account_id OR by customer_name for those without account_id
+    const byAccount = {};   // accountId -> [txs]
+    const byNameOnly = {};  // customerName -> [txs] (no account_id)
     for (const tx of orphans) {
         const aid = tx.linet_account_id;
-        if (!aid) { skipped++; continue; }
-        if (!byAccount[aid]) byAccount[aid] = [];
-        byAccount[aid].push(tx);
+        if (aid) {
+            if (!byAccount[aid]) byAccount[aid] = [];
+            byAccount[aid].push(tx);
+        } else if (tx.customer_name) {
+            if (!byNameOnly[tx.customer_name]) byNameOnly[tx.customer_name] = [];
+            byNameOnly[tx.customer_name].push(tx);
+        }
+        // skip txs with no account_id AND no name
     }
 
     let linked = 0;
     let created = 0;
 
+    // Process txs that have linet_account_id
     for (const [accountId, txs] of Object.entries(byAccount)) {
         try {
-            // Find client by linet_account_id
             let clients = await retryOnRateLimit(() =>
                 sr.Client.filter({ linet_account_id: Number(accountId) }, null, 1)
             );
             let clientId = clients.length > 0 ? clients[0].id : null;
 
-            // Try by name
             if (!clientId && txs[0].customer_name) {
                 const byName = await retryOnRateLimit(() =>
                     sr.Client.filter({ full_name: txs[0].customer_name }, null, 1)
@@ -130,7 +134,6 @@ async function runLinkPhase(sr, progress) {
                 }
             }
 
-            // Create if not found
             if (!clientId) {
                 const newClient = await retryOnRateLimit(() =>
                     sr.Client.create({
@@ -143,7 +146,6 @@ async function runLinkPhase(sr, progress) {
                 created++;
             }
 
-            // Link all txs
             for (const tx of txs) {
                 await retryOnRateLimit(() =>
                     sr.SalesTransaction.update(tx.id, { client_id: clientId })
@@ -151,10 +153,41 @@ async function runLinkPhase(sr, progress) {
                 linked++;
                 await delay(400);
             }
-
             await delay(800);
         } catch (err) {
             console.error(`❌ Error account ${accountId}: ${err.message}`);
+        }
+    }
+
+    // Process txs that only have customer_name (no account_id)
+    for (const [name, txs] of Object.entries(byNameOnly)) {
+        try {
+            const byName = await retryOnRateLimit(() =>
+                sr.Client.filter({ full_name: name }, null, 1)
+            );
+            let clientId = byName.length > 0 ? byName[0].id : null;
+
+            if (!clientId) {
+                const newClient = await retryOnRateLimit(() =>
+                    sr.Client.create({
+                        full_name: name,
+                        source: 'Linet_Backfill'
+                    })
+                );
+                clientId = newClient.id;
+                created++;
+            }
+
+            for (const tx of txs) {
+                await retryOnRateLimit(() =>
+                    sr.SalesTransaction.update(tx.id, { client_id: clientId })
+                );
+                linked++;
+                await delay(400);
+            }
+            await delay(800);
+        } catch (err) {
+            console.error(`❌ Error name-only "${name}": ${err.message}`);
         }
     }
 
