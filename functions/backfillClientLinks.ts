@@ -132,9 +132,10 @@ Deno.serve(async (req) => {
                             );
                             stats.linked++;
                             processed++;
+                            await delay(500);
                         }
 
-                        await delay(200);
+                        await delay(1000);
                     } catch (err) {
                         console.error(`❌ Error for account ${accountId}:`, err.message);
                         stats.errors++;
