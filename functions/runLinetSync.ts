@@ -348,7 +348,7 @@ async function executeLinetSync(base44, body = {}) {
 
     console.log(`🚀 Starting Linet Sync: ${fromDatetime} → ${toDatetime} (${triggerType})`);
 
-    syncLog = await base44.asServiceRole.entities.SyncLog.create({
+    syncLog = await retryOnRateLimit(() => base44.asServiceRole.entities.SyncLog.create({
       sync_key: SYNC_KEY, run_started_at: runStartedAt, status: 'RUNNING',
       from_datetime: fromDatetime, to_datetime: toDatetime, trigger_type: triggerType,
       records_fetched: 0, records_created: 0, records_updated: 0, records_skipped: 0,
