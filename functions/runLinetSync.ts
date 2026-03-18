@@ -460,7 +460,7 @@ async function executeLinetSync(base44, body = {}) {
               const result = await upsertTransaction(base44, txData);
               if (result === 'created') stats.created++; else stats.updated++;
               // Throttle between line items to avoid rate limiting
-              await delay(150);
+              await delay(300);
 
               if (createLineContracts && !is_credit && quantity > 0) {
                 const carrierCode = detectCarrier(sku, product_name, carrierMappings);
