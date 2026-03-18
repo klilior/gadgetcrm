@@ -160,7 +160,11 @@ export default function SalesDataAdmin() {
                     params.manual_date_to = manualDateTo;
                 }
 
-                const res = await base44.functions.invoke('syncLinetSalesData', params);
+                const res = await base44.functions.invoke('runLinetSync', {
+                    from_datetime: params.manual_date_from ? `${params.manual_date_from}T00:00:00Z` : undefined,
+                    to_datetime: params.manual_date_to ? `${params.manual_date_to}T23:59:59Z` : undefined,
+                    trigger_type: 'MANUAL',
+                });
 
                 if (!res.data.success) {
                     throw new Error(res.data.error || "Unknown error during sync");
