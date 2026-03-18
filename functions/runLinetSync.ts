@@ -3,7 +3,7 @@ import { format, subDays, parseISO, addMonths, addDays } from 'npm:date-fns@2.30
 
 const BASE_URL = "https://app.linet.org.il/api";
 const SYNC_KEY = "linet_main_sync";
-const MAX_EXECUTION_TIME = 240000; // 4 min
+const MAX_EXECUTION_TIME = 540000; // 9 min
 const BATCH_SIZE = 50;
 
 function normalizePhoneNumber(phone) {
