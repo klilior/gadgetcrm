@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
 
         console.log(`📅 Hourly Sync: ${fromDatetime} → ${toDatetime}`);
 
-        const syncResult = await base44.asServiceRole.functions.invoke('runLinetSync', {
+        const rawResult = await base44.asServiceRole.functions.invoke('runLinetSync', {
             from_datetime: fromDatetime,
             to_datetime: toDatetime,
             trigger_type: "HOURLY",
@@ -54,11 +54,19 @@ Deno.serve(async (req) => {
             disable_customer_sync: true
         });
 
-        console.log("✅ Hourly sync completed:", JSON.stringify(syncResult?.stats || {}));
+        // Extract only serializable fields to avoid circular reference errors
+        const syncResult = {
+            success: rawResult?.success,
+            stats: rawResult?.stats || {},
+            message: rawResult?.message || '',
+            device_sync: rawResult?.device_sync || null,
+        };
+
+        console.log("✅ Hourly sync completed:", JSON.stringify(syncResult.stats));
 
         return Response.json({
             success: true,
-            syncResult: syncResult
+            syncResult
         });
 
     } catch (error) {
