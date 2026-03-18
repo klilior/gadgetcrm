@@ -1,5 +1,5 @@
 import React from 'react';
-import { PhoneIncoming, PhoneOutgoing, PhoneMissed, User, ExternalLink, Clock, Lightbulb, Copy, CreditCard, ShoppingCart } from 'lucide-react';
+import { PhoneIncoming, PhoneOutgoing, PhoneMissed, User, ExternalLink, Clock, Lightbulb, Copy, CreditCard, ShoppingCart, Mic } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -133,6 +133,15 @@ export default function CallLogItem({ call, client, aiTip, dupCount }) {
             {client && aiTip === 'אין פעילות ידועה' && (
                 <div className="mt-2 flex items-start gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 mr-[52px]">
                     <span className="text-[11px] text-gray-400">אין פעילות ידועה ללקוח</span>
+                </div>
+            )}
+            {/* Recording */}
+            {call.recording_url && (
+                <div className="mt-2 mr-[52px] flex items-center gap-2">
+                    <Mic className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+                    <audio controls preload="none" className="h-8 flex-1 max-w-sm">
+                        <source src={call.recording_url} />
+                    </audio>
                 </div>
             )}
         </div>
