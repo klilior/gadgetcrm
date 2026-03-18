@@ -339,6 +339,7 @@ async function executeLinetSync(base44, body = {}) {
     const updateLastSuccessful = body.update_last_successful !== false;
     const createLineContracts = body.create_line_contracts !== false;
     const disableCustomerSync = body.disable_customer_sync === true;
+    const skipClientMatching = body.skip_client_matching === true;
 
     if (!fromDatetime) {
       fromDatetime = subDays(new Date(), 1).toISOString();
