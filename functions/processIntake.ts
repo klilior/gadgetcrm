@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 function isValidFile(intake) {
   const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
