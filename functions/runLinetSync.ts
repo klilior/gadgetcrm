@@ -469,6 +469,8 @@ async function executeLinetSync(base44, body = {}) {
       }
 
       if (documents.length < BATCH_SIZE) { moreData = false; } else { offset += BATCH_SIZE; }
+      // Throttle between batches to avoid rate limiting
+      await delay(500);
     }
 
     const runFinishedAt = new Date().toISOString();
