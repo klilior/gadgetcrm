@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { format, subDays, parseISO, addMonths, addDays } from 'npm:date-fns@2.30.0';
 
 const BASE_URL = "https://app.linet.org.il/api";
@@ -223,46 +223,6 @@ async function findOrCreateClientFromLinetDoc(sr, doc) {
   return newClient.id;
 }
 
-async function createLineContractFromSale(base44, sale, carrierCode, carrierName, carrierPolicy) {
-  const existing = await base44.asServiceRole.entities.LineContract.filter(
-    { original_invoice_id: sale.linet_doc_id, customer_name: sale.customer_name }, null, 1,
-  );
-  if (existing.length > 0) return 'skipped';
-
-  const activationDate = new Date(sale.issue_date);
-  let safeDate = addMonths(activationDate, carrierPolicy.churn_window_months || 12);
-  safeDate = addDays(safeDate, carrierPolicy.safety_buffer_days || 30);
-  const safe_retarget_date = format(safeDate, 'yyyy-MM-dd');
-  const today = new Date();
-  const status = safeDate <= today ? 'ELIGIBLE' : 'LOCKED';
-
-  let customer_id;
-  try {
-    customer_id = await findOrCreateClientFromLinetDoc(base44.asServiceRole.entities, {
-      company_name: sale.customer_name, account_id: sale.linet_account_id,
-    });
-  } catch (_e) {
-    let customers = await base44.asServiceRole.entities.Client.filter({ full_name: sale.customer_name }, null, 1);
-    if (customers.length > 0) customer_id = customers[0].id;
-    else {
-      const newCustomer = await base44.asServiceRole.entities.Client.create({ full_name: sale.customer_name, source: 'LINET_SYNC' });
-      customer_id = newCustomer.id;
-    }
-  }
-
-  const agentMaps = await base44.asServiceRole.entities.LinetUsersMap.filter({ user_name: sale.sales_rep }, null, 1);
-  const agent_id = agentMaps.length > 0 ? agentMaps[0].user_id : sale.sales_rep;
-
-  await base44.asServiceRole.entities.LineContract.create({
-    customer_id, customer_name: sale.customer_name, linet_account_id: sale.linet_account_id,
-    carrier_code: carrierCode, carrier_name: carrierName,
-    activation_date: sale.issue_date, original_invoice_id: sale.linet_doc_id,
-    agent_id, agent_name: sale.sales_rep, account_owner_id: agent_id, account_owner_name: sale.sales_rep,
-    safe_retarget_date, status, last_action_date: new Date().toISOString(), last_action_type: 'SYNC_CREATED',
-  });
-  return 'created';
-}
-
 async function handleUndeliveredOrderTask(base44, doc, usersMap, triggerSku) {
   const linet_doc_id = String(doc.id);
   const doc_number = String(doc.docnum);
@@ -327,6 +287,46 @@ function detectCarrier(sku, productName, mappings) {
     if (nameMatch) return nameMatch.carrier_code;
   }
   return null;
+}
+
+async function createLineContractFromSale(base44, sale, carrierCode, carrierName, carrierPolicy) {
+  const existing = await base44.asServiceRole.entities.LineContract.filter(
+    { original_invoice_id: sale.linet_doc_id, customer_name: sale.customer_name }, null, 1,
+  );
+  if (existing.length > 0) return 'skipped';
+
+  const activationDate = new Date(sale.issue_date);
+  let safeDate = addMonths(activationDate, carrierPolicy.churn_window_months || 12);
+  safeDate = addDays(safeDate, carrierPolicy.safety_buffer_days || 30);
+  const safe_retarget_date = format(safeDate, 'yyyy-MM-dd');
+  const today = new Date();
+  const status = safeDate <= today ? 'ELIGIBLE' : 'LOCKED';
+
+  let customer_id;
+  try {
+    customer_id = await findOrCreateClientFromLinetDoc(base44.asServiceRole.entities, {
+      company_name: sale.customer_name, account_id: sale.linet_account_id,
+    });
+  } catch (_e) {
+    let customers = await base44.asServiceRole.entities.Client.filter({ full_name: sale.customer_name }, null, 1);
+    if (customers.length > 0) customer_id = customers[0].id;
+    else {
+      const newCustomer = await base44.asServiceRole.entities.Client.create({ full_name: sale.customer_name, source: 'LINET_SYNC' });
+      customer_id = newCustomer.id;
+    }
+  }
+
+  const agentMaps = await base44.asServiceRole.entities.LinetUsersMap.filter({ user_name: sale.sales_rep }, null, 1);
+  const agent_id = agentMaps.length > 0 ? agentMaps[0].user_id : sale.sales_rep;
+
+  await base44.asServiceRole.entities.LineContract.create({
+    customer_id, customer_name: sale.customer_name, linet_account_id: sale.linet_account_id,
+    carrier_code: carrierCode, carrier_name: carrierName,
+    activation_date: sale.issue_date, original_invoice_id: sale.linet_doc_id,
+    agent_id, agent_name: sale.sales_rep, account_owner_id: agent_id, account_owner_name: sale.sales_rep,
+    safe_retarget_date, status, last_action_date: new Date().toISOString(), last_action_type: 'SYNC_CREATED',
+  });
+  return 'created';
 }
 
 async function executeLinetSync(base44, body = {}) {
