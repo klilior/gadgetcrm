@@ -1,5 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { subHours } from 'npm:date-fns@2.30.0';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { subHours, subDays } from 'npm:date-fns@2.30.0';
 
 const SYNC_KEY = "linet_main_sync";
 
@@ -9,11 +9,11 @@ Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
 
-        // Check if we're in business hours (09:00-22:00 Israel time)
+        // Check if we're in business hours (08:00-23:00 Israel time)
         const now = new Date();
         const israelHour = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Jerusalem" })).getHours();
         
-        if (israelHour < 9 || israelHour > 22) {
+        if (israelHour < 8 || israelHour > 23) {
             console.log(`⏸️ Outside business hours (${israelHour}:00), skipping hourly sync`);
             return Response.json({ 
                 success: true, 
@@ -27,7 +27,16 @@ Deno.serve(async (req) => {
         let fromDatetime;
 
         if (metadataList.length > 0 && metadataList[0].last_successful_sync) {
-            fromDatetime = metadataList[0].last_successful_sync;
+            const lastSync = new Date(metadataList[0].last_successful_sync);
+            const hoursSinceLastSync = (now - lastSync) / (1000 * 60 * 60);
+            
+            // Safety: if last sync was more than 3 days ago, cap at 3 days to avoid timeout
+            if (hoursSinceLastSync > 72) {
+                console.log(`⚠️ Last sync was ${hoursSinceLastSync.toFixed(1)}h ago, capping at 3 days`);
+                fromDatetime = subDays(now, 3).toISOString();
+            } else {
+                fromDatetime = metadataList[0].last_successful_sync;
+            }
         } else {
             // First run - sync last 24 hours
             fromDatetime = subHours(now, 24).toISOString();
@@ -37,7 +46,6 @@ Deno.serve(async (req) => {
 
         console.log(`📅 Hourly Sync: ${fromDatetime} → ${toDatetime}`);
 
-        // Call runLinetSync via SDK invoke instead of local import
         const syncResult = await base44.asServiceRole.functions.invoke('runLinetSync', {
             from_datetime: fromDatetime,
             to_datetime: toDatetime,
@@ -46,7 +54,7 @@ Deno.serve(async (req) => {
             disable_customer_sync: true
         });
 
-        console.log("✅ Hourly sync completed:", syncResult);
+        console.log("✅ Hourly sync completed:", JSON.stringify(syncResult?.stats || {}));
 
         return Response.json({
             success: true,
