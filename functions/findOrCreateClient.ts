@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 Deno.serve(async (req) => {
     try {
@@ -40,14 +40,35 @@ Deno.serve(async (req) => {
         let existingClients = await base44.asServiceRole.entities.Client.filter({ phone: phone });
         console.log('✅ Found clients with exact phone match:', existingClients.length);
         
-        // If not found, try with normalized phone
-        if (existingClients.length === 0) {
-            const allClients = await base44.asServiceRole.entities.Client.list();
-            existingClients = allClients.filter(c => {
-                if (!c.phone) return false;
-                const clientNormalizedPhone = c.phone.replace(/\D/g, '');
-                return clientNormalizedPhone === normalizedPhone;
-            });
+        // If not found, try with normalized variants instead of loading ALL clients
+        if (existingClients.length === 0 && normalizedPhone.length >= 9) {
+            const variants = [];
+            // Try with leading 0
+            if (!normalizedPhone.startsWith('0') && normalizedPhone.length === 9) {
+                variants.push('0' + normalizedPhone);
+            }
+            // Try without leading 0
+            if (normalizedPhone.startsWith('0') && normalizedPhone.length === 10) {
+                variants.push(normalizedPhone.slice(1));
+            }
+            // Try with 972 prefix
+            if (normalizedPhone.startsWith('0')) {
+                variants.push('972' + normalizedPhone.slice(1));
+                variants.push('+972' + normalizedPhone.slice(1));
+            }
+            // Try converting from 972 prefix
+            if (normalizedPhone.startsWith('972') && normalizedPhone.length === 12) {
+                variants.push('0' + normalizedPhone.slice(3));
+            }
+            
+            for (const variant of variants) {
+                if (existingClients.length > 0) break;
+                const found = await base44.asServiceRole.entities.Client.filter({ phone: variant });
+                if (found.length > 0) {
+                    existingClients = found;
+                    console.log('✅ Found client with phone variant:', variant);
+                }
+            }
         }
 
         if (existingClients.length > 0) {
