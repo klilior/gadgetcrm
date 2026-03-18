@@ -408,10 +408,12 @@ async function executeLinetSync(base44, body = {}) {
         const is_credit = raw_doctype === 4;
 
         let linked_client_id = null;
-        try {
-          linked_client_id = await findOrCreateClientFromLinetDoc(base44.asServiceRole.entities, doc);
-          stats.clients_created++;
-        } catch (_clientErr) {}
+        if (!skipClientMatching) {
+          try {
+            linked_client_id = await retryOnRateLimit(() => findOrCreateClientFromLinetDoc(base44.asServiceRole.entities, doc));
+            stats.clients_created++;
+          } catch (_clientErr) {}
+        }
 
         if (Array.isArray(doc.docDetailes)) {
           const hasUndeliveredTrigger = doc.docDetailes?.some((line) => line.sku === UNDELIVERED_TRIGGER_SKU);
