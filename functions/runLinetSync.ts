@@ -352,7 +352,7 @@ async function executeLinetSync(base44, body = {}) {
       sync_key: SYNC_KEY, run_started_at: runStartedAt, status: 'RUNNING',
       from_datetime: fromDatetime, to_datetime: toDatetime, trigger_type: triggerType,
       records_fetched: 0, records_created: 0, records_updated: 0, records_skipped: 0,
-    });
+    }));
 
     const metadataList = await base44.asServiceRole.entities.SyncMetadata.filter({ sync_key: SYNC_KEY });
     let metadata = metadataList[0];
