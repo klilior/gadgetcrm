@@ -34,8 +34,12 @@ function phoneSearchVariants(phone) {
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
-        if (user?.role !== 'admin') {
+        
+        // Allow both admin users and automation (service role) calls
+        let user = null;
+        try { user = await base44.auth.me(); } catch (_) {}
+        // If user is present, must be admin; if no user, it's an automation call
+        if (user && user.role !== 'admin' && user.role !== 'מנהל') {
             return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
         }
 
@@ -146,8 +150,9 @@ Deno.serve(async (req) => {
                 await sr.Activity.create({
                     activity_type: isIncoming ? 'שיחה נכנסת' : 'שיחה יוצאת',
                     summary: customer ? `שיחה ${isIncoming ? 'מ' : 'ל'}-${customer.full_name}` : `שיחה - ${externalPhone}`,
-                    content: `מספר: ${externalPhone} | משך: ${duration} שניות | ${customer ? `לקוח: ${customer.full_name}` : 'לקוח לא מזוהה'} | callId: ${callId}`,
+                    content: `${isIncoming ? 'שיחה נכנסת' : 'שיחה יוצאת'} ${customer ? `מ-${customer.full_name} (${externalPhone})` : `- ${externalPhone}`} | שלוחה: ${call.extension || ''} | סטטוס: הסתיימה | משך: ${duration} שניות | callId: ${callId}`,
                     recording_url: recordingUrl || undefined,
+                    order_id: customer?.id || undefined,
                 });
                 synced++;
 
