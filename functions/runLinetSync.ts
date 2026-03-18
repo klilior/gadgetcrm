@@ -115,16 +115,18 @@ async function fetchProductCategory(credentials, sku, categoryTranslationMap) {
 }
 
 async function upsertTransaction(base44, txData) {
-  const existing = await base44.asServiceRole.entities.SalesTransaction.filter(
-    { linet_doc_id: txData.linet_doc_id, sku: txData.sku || '' }, null, 1,
-  );
-  if (existing.length > 0) {
-    await base44.asServiceRole.entities.SalesTransaction.update(existing[0].id, txData);
-    return 'updated';
-  } else {
-    await base44.asServiceRole.entities.SalesTransaction.create(txData);
-    return 'created';
-  }
+  return retryOnRateLimit(async () => {
+    const existing = await base44.asServiceRole.entities.SalesTransaction.filter(
+      { linet_doc_id: txData.linet_doc_id, sku: txData.sku || '' }, null, 1,
+    );
+    if (existing.length > 0) {
+      await base44.asServiceRole.entities.SalesTransaction.update(existing[0].id, txData);
+      return 'updated';
+    } else {
+      await base44.asServiceRole.entities.SalesTransaction.create(txData);
+      return 'created';
+    }
+  });
 }
 
 function phoneSearchVariants(phone) {
