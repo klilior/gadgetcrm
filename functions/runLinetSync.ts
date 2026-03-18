@@ -143,12 +143,12 @@ function phoneSearchVariants(phone) {
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function retryOnRateLimit(fn, retries = 5) {
+async function retryOnRateLimit(fn, retries = 8) {
   for (let i = 0; i < retries; i++) {
     try { return await fn(); }
     catch (e) {
       if (e.message && e.message.includes('429') && i < retries - 1) {
-        const waitTime = Math.min((i + 1) * 3000, 15000);
+        const waitTime = Math.min((i + 1) * 5000, 30000);
         console.log(`⏳ Rate limited, waiting ${waitTime/1000}s (attempt ${i+1}/${retries})...`);
         await delay(waitTime);
       } else throw e;
