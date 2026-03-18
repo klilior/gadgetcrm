@@ -258,6 +258,7 @@ Deno.serve(async (req) => {
             thread_id: dedupeKey || callId || undefined,
             recording_url: recordingUrl || undefined,
             ticket_id: openTickets.length > 0 ? openTickets[0].id : undefined,
+            order_id: customer?.id || undefined,
         });
 
         console.log(`✅ [PBX] Activity created: ${activity.id}`);
