@@ -166,21 +166,18 @@ export default function SalesDataAdmin() {
                     trigger_type: 'MANUAL',
                 });
 
-                if (!res.data.success) {
-                    throw new Error(res.data.error || "Unknown error during sync");
+                const data = res.data || res;
+                if (!data.success) {
+                    throw new Error(data.error || "Unknown error during sync");
                 }
 
-                if (res.data.stats) {
-                    totalDocs += res.data.stats.docs || 0;
-                    totalLines += res.data.stats.lines || 0;
-                }
-
-                if (res.data.partial) {
-                    currentOffset = res.data.nextOffset;
+                isFinished = !data.partial;
+                if (data.partial) {
+                    currentOffset = data.nextOffset || 0;
                     await new Promise(r => setTimeout(r, 1000));
                 } else {
-                    isFinished = true;
-                    alert(`✅ סנכרון הושלם בהצלחה!\nטווח: ${res.data.stats?.skipped ? '(אוטומטי)' : manualDateFrom + ' עד ' + manualDateTo}\nעובדו ${totalDocs} מסמכים.\nנשמרו ${totalLines} שורות.`);
+                    const s = data.stats || {};
+                    alert(`✅ סנכרון הושלם בהצלחה!\n${data.message || `נוצרו ${s.created || 0}, עודכנו ${s.updated || 0}, נשלפו ${s.fetched || 0} מסמכים`}`);
                     loadData();
                 }
             }
