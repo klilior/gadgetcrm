@@ -139,6 +139,20 @@ function phoneSearchVariants(phone) {
   return variants;
 }
 
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function retryOnRateLimit(fn, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try { return await fn(); }
+    catch (e) {
+      if (e.message && e.message.includes('429') && i < retries - 1) {
+        console.log(`⏳ Rate limited, waiting ${(i + 1) * 2}s...`);
+        await delay((i + 1) * 2000);
+      } else throw e;
+    }
+  }
+}
+
 async function findOrCreateClientFromLinetDoc(sr, doc) {
   const phone = normalizePhoneNumber(doc.mobile || doc.phone || doc.account_phone);
   const email = doc.email || null;
