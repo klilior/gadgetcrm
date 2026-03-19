@@ -373,12 +373,21 @@ Deno.serve(async (req) => {
 
         const statusText = isMissed ? 'לא נענתה' : (isHangup ? `הסתיימה | משך: ${duration} שניות` : 'מצלצל');
 
+        // Upload recording to Drive if available
+        let finalRecordingUrl = recordingUrl || undefined;
+        if (recordingUrl) {
+            try {
+                const driveLink = await uploadRecordingToDrive(recordingUrl, normalizedPhone, customer?.full_name, isIncoming, callId);
+                if (driveLink) { finalRecordingUrl = driveLink; console.log(`✅ [PBX→GDrive] New activity upload: ${driveLink}`); }
+            } catch (driveErr) { console.error(`⚠️ [PBX→GDrive] New activity upload failed:`, driveErr.message); }
+        }
+
         const activity = await sr.Activity.create({
             activity_type: isIncoming ? 'שיחה נכנסת' : 'שיחה יוצאת',
             summary: customer ? `שיחה ${isIncoming ? 'מ' : 'ל'}-${customer.full_name}` : `שיחה - ${normalizedPhone}`,
             content: `${isIncoming ? 'שיחה נכנסת' : 'שיחה יוצאת'} ${customer ? `מ-${customer.full_name} (${normalizedPhone})` : `- ${normalizedPhone}`} | שלוחה: ${extension} | סטטוס: ${statusText} | ${contextSummary} | callId: ${callId}`,
             thread_id: dedupeKey || callId || undefined,
-            recording_url: recordingUrl || undefined,
+            recording_url: finalRecordingUrl,
             ticket_id: openTickets.length > 0 ? openTickets[0].id : undefined,
             order_id: customer?.id || undefined,
         });
