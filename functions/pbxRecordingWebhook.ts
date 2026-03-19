@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 function normalizePhone(phone) {
     if (!phone) return null;
@@ -426,10 +426,11 @@ Deno.serve(async (req) => {
         // ═══════ Save to SyncLog ═══════
         try {
             await sr.SyncLog.create({
-                sync_type: 'pbx_recording_webhook',
-                status: gdriveUploadSuccess ? 'success' : 'error',
-                message: `Recording ${callId || 'unknown'}: ${gdriveUploadSuccess ? 'Uploaded to Drive' : (gdriveError || 'Unknown error')}`,
-                details: JSON.stringify({
+                sync_key: 'pbx_recording_webhook',
+                run_started_at: new Date().toISOString(),
+                status: gdriveUploadSuccess ? 'SUCCESS' : 'FAILED',
+                error_message: gdriveUploadSuccess ? null : (gdriveError || 'Unknown error'),
+                details_json: {
                     callId,
                     recordingUrl: pbxRecordingUrl?.substring(0, 500),
                     gdriveLink: gdriveUploadSuccess ? finalRecordingUrl : null,
