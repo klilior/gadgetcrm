@@ -319,24 +319,7 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
                 console.error('⚠️ Failed to send SMS notification:', smsError);
             }
 
-            // Send WhatsApp notification
-            try {
-                if (selectedClient.phone) {
-                    const message = `שלום ${selectedClient.full_name},\n\nקיבלנו את המכשיר שלך לתיקון! ✅\n\n📱 מכשיר: ${selectedDevice.manufacturer} ${selectedDevice.model}\n🔢 מספר תיקון: ${repairId}\n🔧 סוג תיקון: ${repairData.repair_type}\n📋 תקלות: ${repairData.issue_categories.join(', ')}\n\nנעדכן אותך על התקדמות התיקון.\n\nתודה,\nצוות Gadget`;
-                    
-                    await base44.functions.invoke('sendWhatsapp', {
-                        to: selectedClient.phone,
-                        messageObject: {
-                            type: "text",
-                            text: { body: message }
-                        }
-                    });
-                    
-                    console.log('✅ WhatsApp notification sent');
-                }
-            } catch (whatsappError) {
-                console.error('⚠️ Failed to send WhatsApp notification:', whatsappError);
-            }
+
             
             // Prepare repair for printing
             setCreatedRepair({ // Updated state name
