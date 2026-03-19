@@ -437,7 +437,7 @@ Deno.serve(async (req) => {
                     customerName: customer?.full_name || null,
                     normalizedPhone,
                     error: gdriveError
-                })
+                }
             });
             console.log('📝 [SyncLog] Logged webhook result');
         } catch (logErr) {
