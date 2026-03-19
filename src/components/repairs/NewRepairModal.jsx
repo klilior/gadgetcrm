@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Loader2, Plus, X, AlertTriangle } from 'lucide-react';
 import { useUser } from '../UserAuth';
+import { sendTextMeSMS } from "@/functions/sendTextMeSMS";
 import RepairLabel from './RepairLabel';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -299,6 +300,25 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
             
             setError("✅ תיקון נוצר! מספר: " + repairId); // Updated error state
             
+            // Send SMS notification for new repair
+            try {
+                if (selectedClient.phone) {
+                    const smsMessage = `שלום ${selectedClient.full_name}, המכשיר שלך התקבל במעבדה של Gadget-Team לתיקון (תיקון #${repairId}). מכשיר: ${selectedDevice.manufacturer} ${selectedDevice.model}. נעדכן אותך בהמשך התהליך. תודה!`;
+                    
+                    const smsRes = await sendTextMeSMS({
+                        action: "send",
+                        to_phone: selectedClient.phone,
+                        message: smsMessage,
+                        event_type: "repair_status_בטיפול/אבחון",
+                        fingerprint: `repair|${created.id}|created`,
+                    });
+                    const smsData = smsRes.data || smsRes;
+                    console.log(smsData.success ? '✅ SMS sent for new repair' : `⚠️ SMS not sent: ${smsData.error}`);
+                }
+            } catch (smsError) {
+                console.error('⚠️ Failed to send SMS notification:', smsError);
+            }
+
             // Send WhatsApp notification
             try {
                 if (selectedClient.phone) {
@@ -312,18 +332,10 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
                         }
                     });
                     
-                    // Log activity
-                    await base44.asServiceRole.entities.Activity.create({
-                        summary: `הודעת כניסה לתיקון - ${repairId}`,
-                        activity_type: 'וואטסאפ יוצא',
-                        content: message
-                    });
-                    
                     console.log('✅ WhatsApp notification sent');
                 }
             } catch (whatsappError) {
                 console.error('⚠️ Failed to send WhatsApp notification:', whatsappError);
-                // Don't fail the whole operation if WhatsApp fails
             }
             
             // Prepare repair for printing
