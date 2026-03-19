@@ -1,5 +1,112 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
+// ═══════ Google Drive helpers ═══════
+
+async function createJWT(serviceAccount) {
+    const header = { alg: 'RS256', typ: 'JWT' };
+    const now = Math.floor(Date.now() / 1000);
+    const claim = {
+        iss: serviceAccount.client_email,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        aud: 'https://oauth2.googleapis.com/token',
+        exp: now + 3600, iat: now
+    };
+    const headerB64 = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const claimB64 = btoa(JSON.stringify(claim)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const signatureInput = headerB64 + '.' + claimB64;
+    const pemContent = serviceAccount.private_key.replace(/-----BEGIN PRIVATE KEY-----/g, '').replace(/-----END PRIVATE KEY-----/g, '').replace(/\n/g, '');
+    const binaryKey = Uint8Array.from(atob(pemContent), c => c.charCodeAt(0));
+    const cryptoKey = await crypto.subtle.importKey('pkcs8', binaryKey.buffer, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+    const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(signatureInput));
+    const sigB64 = btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    return signatureInput + '.' + sigB64;
+}
+
+async function getGoogleAccessToken(serviceAccount) {
+    const jwt = await createJWT(serviceAccount);
+    const resp = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error('GDrive token error: ' + JSON.stringify(data));
+    return data.access_token;
+}
+
+async function findOrCreateFolder(accessToken, parentId, folderName) {
+    const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    const sr = await fetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query) + '&fields=files(id,name)', { headers: { 'Authorization': 'Bearer ' + accessToken } });
+    const res = await sr.json();
+    if (res.files?.length > 0) return res.files[0].id;
+    const cr = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] })
+    });
+    const created = await cr.json();
+    if (!created.id) throw new Error('Failed to create folder: ' + folderName);
+    return created.id;
+}
+
+async function uploadToGDrive(accessToken, folderId, fileName, fileData, mimeType) {
+    const boundary = 'b_' + Date.now();
+    const fileBytes = new Uint8Array(fileData);
+    let base64 = '';
+    for (let i = 0; i < fileBytes.length; i += 8192) {
+        base64 += String.fromCharCode(...fileBytes.subarray(i, Math.min(i + 8192, fileBytes.length)));
+    }
+    base64 = btoa(base64);
+    const body = '\r\n--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
+        JSON.stringify({ name: fileName, parents: [folderId], mimeType }) +
+        '\r\n--' + boundary + '\r\nContent-Type: ' + mimeType + '\r\nContent-Transfer-Encoding: base64\r\n\r\n' + base64 + '\r\n--' + boundary + '--';
+    const resp = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'multipart/related; boundary=' + boundary }, body
+    });
+    const result = await resp.json();
+    if (!resp.ok || !result.id) throw new Error('GDrive upload failed: ' + JSON.stringify(result));
+    return result.webViewLink || `https://drive.google.com/file/d/${result.id}/view`;
+}
+
+/**
+ * Downloads a recording from PBX URL, uploads to Google Drive, returns Drive link.
+ * Returns null if credentials missing or upload fails.
+ */
+async function uploadRecordingToDrive(pbxUrl, normalizedPhone, customerName, isIncoming, callId) {
+    const saKeyJson = Deno.env.get('GDRIVE_SERVICE_ACCOUNT_KEY');
+    const rootFolderId = Deno.env.get('GDRIVE_FOLDER_ID');
+    if (!saKeyJson || !rootFolderId) { console.log('⚠️ [GDrive] Missing credentials, skipping upload'); return null; }
+
+    const serviceAccount = JSON.parse(saKeyJson);
+    if (serviceAccount.private_key) serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+
+    const accessToken = await getGoogleAccessToken(serviceAccount);
+
+    // Download recording
+    let audioResp = await fetch(pbxUrl);
+    if (!audioResp.ok) {
+        const sep = pbxUrl.includes('?') ? '&' : '?';
+        audioResp = await fetch(pbxUrl + sep + 'token_id=7AaJmwvruPun2z2H');
+    }
+    if (!audioResp.ok) throw new Error(`Download failed: ${audioResp.status}`);
+    const fileBytes = await audioResp.arrayBuffer();
+    if (fileBytes.byteLength < 100) throw new Error('File too small: ' + fileBytes.byteLength);
+
+    // Folder structure: YYYY-MM / customer_name
+    const now = new Date();
+    const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const folderName = customerName || normalizedPhone || 'unknown';
+    const monthFolder = await findOrCreateFolder(accessToken, rootFolderId, yearMonth);
+    const custFolder = await findOrCreateFolder(accessToken, monthFolder, folderName);
+
+    const timeStr = now.toISOString().replace(/[:]/g, '-').slice(0, 19);
+    const dirLabel = isIncoming ? 'in' : 'out';
+    const fileName = `${timeStr}_${dirLabel}_${normalizedPhone || 'unknown'}_${callId || 'nocallid'}.wav`;
+    const mimeType = pbxUrl.includes('.mp3') ? 'audio/mpeg' : 'audio/wav';
+
+    return await uploadToGDrive(accessToken, custFolder, fileName, fileBytes, mimeType);
+}
+
+// ═══════ Phone helpers ═══════
+
 function normalizePhone(phone) {
     if (!phone) return null;
     let digits = phone.replace(/[^\d]/g, '');
