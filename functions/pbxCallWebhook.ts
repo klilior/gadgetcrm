@@ -282,7 +282,22 @@ Deno.serve(async (req) => {
             }
             
             if (recordingUrl && !existingActivity.recording_url) {
-                updates.recording_url = recordingUrl;
+                // Try to upload to Google Drive
+                let finalUrl = recordingUrl;
+                try {
+                    const custName = existingActivity.summary?.replace(/שיחה (מ|ל)-/, '') || null;
+                    const driveLink = await uploadRecordingToDrive(recordingUrl, normalizedPhone, custName, isIncoming, callId);
+                    if (driveLink) { finalUrl = driveLink; console.log(`✅ [PBX→GDrive] Uploaded: ${driveLink}`); }
+                } catch (driveErr) { console.error(`⚠️ [PBX→GDrive] Upload failed, keeping PBX URL:`, driveErr.message); }
+                updates.recording_url = finalUrl;
+            }
+            // If existing has PBX recording URL (not Drive), try to upgrade it
+            if (existingActivity.recording_url && !existingActivity.recording_url.includes('drive.google.com') && existingActivity.recording_url !== 'https://example.com/test.wav') {
+                try {
+                    const custName = existingActivity.summary?.replace(/שיחה (מ|ל)-/, '') || null;
+                    const driveLink = await uploadRecordingToDrive(existingActivity.recording_url, normalizedPhone, custName, isIncoming, callId);
+                    if (driveLink) { updates.recording_url = driveLink; console.log(`✅ [PBX→GDrive] Upgraded existing: ${driveLink}`); }
+                } catch (driveErr) { console.error(`⚠️ [PBX→GDrive] Upgrade failed:`, driveErr.message); }
             }
             
             // If existing has no phone but we now have one, update content and summary
