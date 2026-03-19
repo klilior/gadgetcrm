@@ -163,9 +163,7 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                     case 'לא ניתן לתיקון':
                         message = `שלום ${client.full_name}, לאחר בדיקה מעמיקה, לצערנו לא ניתן לתקן את המכשיר (תיקון #${repair.repair_id}). נציג ייצור עמך קשר בקרוב. Gadget-Team`;
                         break;
-                    case 'תיקון נסגר':
-                        message = `שלום ${client.full_name}, תיקון #${repair.repair_id} הושלם בהצלחה! תודה שבחרת בנו! Gadget-Team`;
-                        break;
+                    // תיקון נסגר - אין צורך בהודעה
                 }
 
                 if (message) {
