@@ -17,67 +17,67 @@ async function getPickingToken() {
 
   const data = await res.json();
   if (!data.access_token) {
-    throw new Error('Failed to get picking token');
+    throw new Error('Failed to get picking token: ' + JSON.stringify(data));
   }
   return data.access_token;
 }
 
 Deno.serve(async (req) => {
   try {
-  const { city, street, point_types, num_points } = await req.json();
+    const { city, street, point_types, num_points } = await req.json();
 
-  if (!city) {
-    return Response.json({ error: 'חסרה עיר לחיפוש' }, { status: 400 });
-  }
+    if (!city) {
+      return Response.json({ success: false, error: 'חסרה עיר לחיפוש' }, { status: 400 });
+    }
 
-  const token = await getPickingToken();
+    const token = await getPickingToken();
 
-  // pointTypes: 1=stores, 2=lockers, 3=both
-  const params = new URLSearchParams({
-    city,
-    street: street || '',
-    houseNumber: '',
-    pointTypes: String(point_types || 3),
-    points: String(num_points || 10)
-  });
+    // pointTypes: 1=stores, 2=lockers, 3=both
+    const params = new URLSearchParams({
+      city,
+      street: street || '',
+      houseNumber: '',
+      pointTypes: String(point_types || 3),
+      points: String(num_points || 10)
+    });
 
-  const url = `${PICKING_BASE}/api/v1/pickups/getclosestpoints?${params}`;
-  console.log(`GET ${url}`);
+    const url = `${PICKING_BASE}/api/v1/pickups/getclosestpoints?${params}`;
+    console.log(`GET ${url}`);
 
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    signal: AbortSignal.timeout(10000)
-  });
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      signal: AbortSignal.timeout(10000)
+    });
 
-  const data = await res.json();
-  console.log(`Status: ${res.status}, Points: ${data.Points?.length || 0}`);
+    const data = await res.json();
+    console.log(`Status: ${res.status}, Points: ${data.Points?.length || 0}`);
 
-  if (data.IsSuccessful === false) {
-    return Response.json({ success: false, error: data.ErrorMSG || 'לא נמצאו נקודות' });
-  }
+    if (data.IsSuccessful === false) {
+      return Response.json({ success: false, error: data.ErrorMSG || 'לא נמצאו נקודות' });
+    }
 
-  const points = (data.Points || []).map(p => ({
-    id: p.PointID,
-    name: p.PointName,
-    name_en: p.PointNameEn,
-    city: p.CityName,
-    street: p.StreetName,
-    house: p.HouseNumber,
-    phone: p.Phone,
-    type: p.PointType === 1 ? 'store' : 'locker',
-    distance: p.Distance,
-    hours: p.Description,
-    lat: p.Latitude,
-    lng: p.Longitude
-  }));
+    const points = (data.Points || []).map(p => ({
+      id: p.PointID,
+      name: p.PointName,
+      name_en: p.PointNameEn,
+      city: p.CityName,
+      street: p.StreetName,
+      house: p.HouseNumber,
+      phone: p.Phone,
+      type: p.PointType === 1 ? 'store' : 'locker',
+      distance: p.Distance,
+      hours: p.Description,
+      lat: p.Latitude,
+      lng: p.Longitude
+    }));
 
-  return Response.json({ success: true, points });
+    return Response.json({ success: true, points });
   } catch (error) {
     console.error('[ERROR]', error);
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 });

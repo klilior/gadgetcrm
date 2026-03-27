@@ -465,7 +465,13 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
                         open={showUpsShipment}
                         onClose={() => setShowUpsShipment(false)}
                         order={order}
-                        client={order.client_id ? { id: order.client_id, full_name: order.client_name } : null}
+                        client={order.client_id ? { 
+                            id: order.client_id, 
+                            full_name: order.client_name,
+                            phone: order.billing?.phone,
+                            city: order.billing?.city,
+                            email: order.billing?.email
+                        } : null}
                         onSuccess={(shipmentInfo) => {
                             setShipmentCreated(true);
                             if (shipmentInfo) {

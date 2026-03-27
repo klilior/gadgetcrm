@@ -72,6 +72,10 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
 
     let billing = {};
     try { billing = JSON.parse(order?.raw_data_billing || '{}'); } catch {}
+    // Also check if order.billing is already parsed (from OrderDetailsModal)
+    if ((!billing || Object.keys(billing).length === 0) && order?.billing && typeof order.billing === 'object') {
+      billing = order.billing;
+    }
 
     const fullName = client?.full_name || `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
     const phoneNum = client?.phone || billing.phone || '';
@@ -111,11 +115,14 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
 
   // Auto search function (called on mount for pickup orders)
   const autoSearchPickupPoints = async (searchCity, searchStreet) => {
+    if (!searchCity) return;
     setSearchingPoints(true);
     setSelectedPoint(null);
+    setPickupPoints([]);
     try {
-      const { data } = await searchPickupPoints({ city: searchCity, street: searchStreet, num_points: 10 });
-      if (data.success) {
+      const res = await searchPickupPoints({ city: searchCity, street: searchStreet || '', num_points: 10 });
+      const data = res?.data || res;
+      if (data?.success && Array.isArray(data.points)) {
         setPickupPoints(data.points);
       }
     } catch (e) {
@@ -129,16 +136,19 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
     if (!city) { toast.error("יש להזין עיר"); return; }
     setSearchingPoints(true);
     setSelectedPoint(null);
+    setPickupPoints([]);
     try {
-      const { data } = await searchPickupPoints({ city, street, num_points: 10 });
-      if (data.success) {
+      const res = await searchPickupPoints({ city, street: street || '', num_points: 10 });
+      const data = res?.data || res;
+      if (data?.success && Array.isArray(data.points)) {
         setPickupPoints(data.points);
         if (data.points.length === 0) toast.info("לא נמצאו נקודות איסוף");
       } else {
-        toast.error(data.error || "שגיאה בחיפוש");
+        toast.error(data?.error || "שגיאה בחיפוש נקודות איסוף");
       }
     } catch (e) {
-      toast.error("שגיאה: " + e.message);
+      console.error('Search pickup points error:', e);
+      toast.error("שגיאה בחיפוש: " + (e?.message || 'לא ידוע'));
     } finally {
       setSearchingPoints(false);
     }
@@ -403,7 +413,16 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
                 {!selectedPoint && (
                   <>
                     <div className="flex gap-2">
-                      <Button onClick={handleSearchPoints} disabled={searchingPoints || !city} className="bg-blue-600 hover:bg-blue-700">
+                      <Button 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleSearchPoints();
+                        }} 
+                        disabled={searchingPoints || !city} 
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
                         {searchingPoints ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Search className="w-4 h-4 ml-1" />}
                         חפש נקודות קרובות
                       </Button>
