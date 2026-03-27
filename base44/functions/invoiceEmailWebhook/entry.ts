@@ -118,16 +118,28 @@ Deno.serve(async (req) => {
     
     console.log(`Created intake: ${intake.id}`);
     
-    // Trigger processing pipeline
+    // Step 1: Process intake (creates invoice shell and links them)
     let linkedInvoiceId = null;
     try {
       const processingResult = await base44.asServiceRole.functions.invoke('processIntake', { 
         intake_id: intake.id 
       });
-      linkedInvoiceId = processingResult?.data?.invoice_id || null;
+      linkedInvoiceId = processingResult?.data?.invoice_id || processingResult?.data?.created_invoice_id || null;
       console.log(`Processing completed for intake: ${intake.id}, invoice: ${linkedInvoiceId}`);
     } catch (procErr) {
       console.error(`Processing error: ${procErr.message}`);
+    }
+    
+    // Step 2: Trigger AI extraction on the invoice (separate call to avoid loop detection)
+    if (linkedInvoiceId) {
+      try {
+        const extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', {
+          invoice_id: linkedInvoiceId
+        });
+        console.log(`Extraction completed for invoice: ${linkedInvoiceId}, success: ${extractionResult?.data?.success}`);
+      } catch (extractErr) {
+        console.error(`Extraction error for invoice ${linkedInvoiceId}: ${extractErr.message}`);
+      }
     }
     
     return Response.json({ 

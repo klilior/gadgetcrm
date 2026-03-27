@@ -95,39 +95,15 @@ Deno.serve(async (req) => {
     // C3 (reliable): ensure invoice shell exists exactly once when intake is created with a valid file
     let createdInvoice = null;
 
-    // If link already exists, enforce both-way link and trigger pipeline idempotently
+    // If link already exists, enforce both-way link
     if (intake.linked_invoice) {
       try { await base44.asServiceRole.entities.Invoices.update(intake.linked_invoice, { source_intake: intake.id }); } catch (_) {}
-      let extractionResult = null;
-      let extractionError = null;
-      try { 
-        // Use internal fetch to call extraction function (avoids auth issues)
-        const baseUrl = req.url.replace(/\/[^\/]*$/, '');
-        const extractResponse = await fetch(`${baseUrl}/runInvoiceExtractionByInvoice`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': req.headers.get('Authorization') || '',
-            'X-Base44-App-Id': req.headers.get('X-Base44-App-Id') || ''
-          },
-          body: JSON.stringify({ invoice_id: intake.linked_invoice })
-        });
-        extractionResult = await extractResponse.json();
-        if (!extractResponse.ok) {
-          extractionError = extractionResult?.error || `Status ${extractResponse.status}`;
-        }
-      } catch (err) {
-        extractionError = err?.message || String(err);
-        console.error('Extraction error (existing link):', extractionError);
-      }
       return Response.json({ 
         success: true, 
         updates_applied: updates, 
         invoice_id: intake.linked_invoice, 
         intake_id: intake.id,
-        extraction_triggered: true,
-        extraction_result: extractionResult?.data || null,
-        extraction_error: extractionError
+        needs_extraction: true
       });
     } else {
       // Avoid duplicates by checking existing invoice with this intake
@@ -153,37 +129,8 @@ Deno.serve(async (req) => {
         // Update intake status to show processing
         await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'עובד' });
         
-        // Trigger AI pipeline on the invoice - await to ensure it runs
-        let extractionResult = null;
-        let extractionError = null;
-        try { 
-          // Use internal fetch to call extraction function (avoids auth issues)
-          const baseUrl = req.url.replace(/\/[^\/]*$/, '');
-          const extractResponse = await fetch(`${baseUrl}/runInvoiceExtractionByInvoice`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': req.headers.get('Authorization') || '',
-              'X-Base44-App-Id': req.headers.get('X-Base44-App-Id') || ''
-            },
-            body: JSON.stringify({ invoice_id: invoiceId })
-          });
-          extractionResult = await extractResponse.json();
-          if (!extractResponse.ok) {
-            extractionError = extractionResult?.error || `Status ${extractResponse.status}`;
-          }
-          // Update intake status based on result
-          if (extractionResult?.success) {
-            await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'עובד', status_reason: 'ניתוח AI הושלם בהצלחה' });
-          }
-        } catch (extractErr) {
-          extractionError = extractErr?.message || String(extractErr);
-          console.error('Extraction pipeline error:', extractionError);
-          await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { 
-            status: 'מוכן לניתוח', 
-            status_reason: `שגיאה בניתוח אוטומטי: ${extractionError}` 
-          });
-        }
+        // Mark as ready for extraction (extraction will be triggered by the caller)
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'מוכן לניתוח' });
         return Response.json({ 
           success: true, 
           updates_applied: updates, 
