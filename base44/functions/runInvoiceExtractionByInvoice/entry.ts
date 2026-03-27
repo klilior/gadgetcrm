@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 const EXTRACT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -756,19 +756,8 @@ Deno.serve(async (req) => {
             purchase_count: (oldPriceRecord.purchase_count || 0) + 1
           });
           
-          // Create PriceAlert
+          // Log price change (PriceAlert entity is used for Zap monitoring, not invoices)
           if (Math.abs(changePercent) >= 1) {
-            await base44.asServiceRole.entities.PriceAlert.create({
-              supplier_id: supplierId,
-              sku: item.sku,
-              product_name: item.product_name,
-              invoice_id: invoice.id,
-              old_price: oldPrice,
-              new_price: newPrice,
-              change_percent: Math.round(changePercent * 100) / 100,
-              direction: direction,
-              status: 'חדש'
-            });
             priceAlerts.push({ sku: item.sku, from: oldPrice, to: newPrice, change: `${changePercent.toFixed(1)}%` });
           }
         } else if (newPrice) {
