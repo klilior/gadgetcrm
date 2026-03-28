@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, RefreshCw, ShoppingCart, Clock, Truck, CheckCircle, XCircle } from "lucide-react";
+import { Loader2, RefreshCw, ShoppingCart, Clock, Truck, CheckCircle } from "lucide-react";
 import { syncSuperPharmOrders } from "@/functions/syncSuperPharmOrders";
 import SPOrdersTable from "../components/superpharm/SPOrdersTable";
 import SPOrderDetailsModal from "../components/superpharm/SPOrderDetailsModal";
@@ -11,10 +10,12 @@ import { toast } from "sonner";
 
 const TABS = [
   { key: "WAITING_ACCEPTANCE", label: "ממתינות לאישור", icon: Clock, color: "text-orange-600" },
-  { key: "SHIPPING", label: "למשלוח", icon: Truck, color: "text-blue-600" },
+  { key: "SHIPPING", label: "ממתינות למשלוח", icon: Truck, color: "text-blue-600" },
   { key: "SHIPPED", label: "נשלחו", icon: CheckCircle, color: "text-green-600" },
   { key: "ALL", label: "הכל", icon: ShoppingCart, color: "text-gray-600" },
 ];
+
+const AUTO_REFRESH_INTERVAL = 60000; // 60 seconds
 
 export default function SuperPharmOrders() {
   const [orders, setOrders] = useState([]);
@@ -22,20 +23,32 @@ export default function SuperPharmOrders() {
   const [syncing, setSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState("WAITING_ACCEPTANCE");
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(null);
+  const intervalRef = useRef(null);
 
-  const loadOrders = async () => {
-    setLoading(true);
+  const loadOrders = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const all = await base44.entities.SuperPharmOrder.list("-created_at_mirakl", 200);
       setOrders(all);
+      setLastRefresh(new Date());
     } catch (e) {
       console.error("Error loading orders:", e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { loadOrders(); }, []);
+  // Initial load
+  useEffect(() => { loadOrders(); }, [loadOrders]);
+
+  // Auto-refresh every 60 seconds
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      loadOrders(true); // silent refresh
+    }, AUTO_REFRESH_INTERVAL);
+    return () => clearInterval(intervalRef.current);
+  }, [loadOrders]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -74,19 +87,27 @@ export default function SuperPharmOrders() {
             <ShoppingCart className="w-6 h-6 text-green-600" />
             הזמנות סופר-פארם
           </h1>
-          <p className="text-sm text-gray-500 mt-1">ניהול הזמנות מרקטפלייס Mirakl</p>
+          <p className="text-sm text-gray-500 mt-1">
+            ניהול הזמנות מרקטפלייס Mirakl
+            {lastRefresh && (
+              <span className="mr-2 text-xs text-gray-400">
+                • עודכן {lastRefresh.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+          </p>
         </div>
         <Button onClick={handleSync} disabled={syncing} className="bg-green-600 hover:bg-green-700">
           {syncing ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <RefreshCw className="w-4 h-4 ml-2" />}
-          {syncing ? "מסנכרן..." : "סנכרן הזמנות"}
+          {syncing ? "מסנכרן..." : "סנכרן מ-Mirakl"}
         </Button>
       </div>
 
-      {/* Summary Cards */}
+      {/* Tab Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {TABS.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
+          const count = counts[tab.key];
           return (
             <Card
               key={tab.key}
@@ -96,7 +117,7 @@ export default function SuperPharmOrders() {
               <CardContent className="p-3 flex items-center justify-between">
                 <div>
                   <div className="text-xs text-gray-500">{tab.label}</div>
-                  <div className="text-2xl font-bold">{counts[tab.key]}</div>
+                  <div className="text-2xl font-bold">{count}</div>
                 </div>
                 <Icon className={`w-8 h-8 ${tab.color} opacity-50`} />
               </CardContent>

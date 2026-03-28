@@ -92,16 +92,11 @@ Deno.serve(async (req) => {
         return Response.json({ error: 'חסר מספר מעקב' }, { status: 400 });
       }
 
-      const lines = JSON.parse(localOrder.order_lines_json || '[]');
-      const orderLines = lines.map(line => ({
-        id: line.id,
-      }));
-
-      await miraklRequest('PUT', `/orders/${order_id}/ship`, {
+      // Use the correct tracking endpoint per SuperPharm/Mirakl docs
+      await miraklRequest('PUT', `/orders/${order_id}/tracking`, {
         carrier_code: carrier_code || 'OTHER',
         carrier_name: carrier_name || 'UPS Israel',
         tracking_number: tracking_number,
-        order_lines: orderLines,
       });
 
       await sr.SuperPharmOrder.update(localOrder.id, {
