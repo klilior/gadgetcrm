@@ -21,7 +21,7 @@ export default function SuppliersManagement() {
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editModal, setEditModal] = useState(null); // null or supplier object
-  const [form, setForm] = useState({ name: '', vat_id: '', aliases: '', notes: '', is_active: true, is_recurring: false, recurring_type: '' });
+  const [form, setForm] = useState({ name: '', vat_id: '', aliases: '', notes: '', is_active: true, is_recurring: false, recurring_type: '', expected_invoices_per_month: 1 });
   const [saving, setSaving] = useState(false);
   const { currentUser } = useUser();
 
@@ -40,7 +40,7 @@ export default function SuppliersManagement() {
   useEffect(() => { load(); }, []);
 
   const openNew = () => {
-    setForm({ name: '', vat_id: '', aliases: '', notes: '', is_active: true, is_recurring: false, recurring_type: '' });
+    setForm({ name: '', vat_id: '', aliases: '', notes: '', is_active: true, is_recurring: false, recurring_type: '', expected_invoices_per_month: 1 });
     setEditModal({ isNew: true });
   };
 
@@ -53,6 +53,7 @@ export default function SuppliersManagement() {
       is_active: s.is_active !== false,
       is_recurring: s.is_recurring || false,
       recurring_type: s.recurring_type || '',
+      expected_invoices_per_month: s.expected_invoices_per_month || 1,
     });
     setEditModal({ isNew: false, id: s.id });
   };
@@ -226,18 +227,25 @@ export default function SuppliersManagement() {
                 <Label className="font-medium text-amber-800">הוצאה קבועה</Label>
               </div>
               {form.is_recurring && (
-                <div className="space-y-1">
-                  <Label>סוג הוצאה</Label>
-                  <Select value={form.recurring_type} onValueChange={v => setForm({ ...form, recurring_type: v })}>
-                    <SelectTrigger><SelectValue placeholder="בחר סוג" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value='שכ"ד'>שכ"ד</SelectItem>
-                      <SelectItem value="תקשורת">תקשורת</SelectItem>
-                      <SelectItem value="מנוי">מנוי</SelectItem>
-                      <SelectItem value="שירות קבוע">שירות קבוע</SelectItem>
-                      <SelectItem value="אחר">אחר</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label>סוג הוצאה</Label>
+                    <Select value={form.recurring_type} onValueChange={v => setForm({ ...form, recurring_type: v })}>
+                      <SelectTrigger><SelectValue placeholder="בחר סוג" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='שכ"ד'>שכ"ד</SelectItem>
+                        <SelectItem value="תקשורת">תקשורת</SelectItem>
+                        <SelectItem value="מנוי">מנוי</SelectItem>
+                        <SelectItem value="שירות קבוע">שירות קבוע</SelectItem>
+                        <SelectItem value="אחר">אחר</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>מספר חשבוניות צפוי בחודש</Label>
+                    <Input type="number" min={1} max={20} value={form.expected_invoices_per_month} onChange={e => setForm({ ...form, expected_invoices_per_month: parseInt(e.target.value) || 1 })} />
+                    <p className="text-xs text-gray-500">לספקים שמוציאים מספר חשבוניות חודשיות (למשל על סעיפים שונים)</p>
+                  </div>
                 </div>
               )}
             </div>

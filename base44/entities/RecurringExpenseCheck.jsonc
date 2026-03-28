@@ -20,24 +20,30 @@
       "description": "\u05d7\u05d5\u05d3\u05e9 (YYYY-MM)",
       "index": true
     },
+    "expected_count": {
+      "type": "number",
+      "default": 1,
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05e6\u05e4\u05d5\u05d9"
+    },
+    "received_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05e9\u05d4\u05ea\u05e7\u05d1\u05dc\u05d5"
+    },
     "status": {
       "type": "string",
       "enum": [
         "\u05d7\u05e1\u05e8",
+        "\u05d7\u05dc\u05e7\u05d9",
         "\u05d4\u05ea\u05e7\u05d1\u05dc",
         "\u05d0\u05d5\u05e9\u05e8 \u05d9\u05d3\u05e0\u05d9\u05ea"
       ],
       "default": "\u05d7\u05e1\u05e8",
       "description": "\u05e1\u05d8\u05d8\u05d5\u05e1"
     },
-    "matched_invoice_id": {
+    "matched_invoices_json": {
       "type": "string",
-      "description": "\u05de\u05d6\u05d4\u05d4 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05de\u05d5\u05ea\u05d0\u05de\u05ea",
-      "index": true
-    },
-    "matched_invoice_number": {
-      "type": "string",
-      "description": "\u05de\u05e1\u05e4\u05e8 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea"
+      "description": "\u05e8\u05e9\u05d9\u05de\u05ea \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05de\u05d5\u05ea\u05d0\u05de\u05d5\u05ea (JSON)"
     },
     "notes": {
       "type": "string",
