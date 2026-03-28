@@ -193,7 +193,8 @@ function AppContent({ children, currentPageName }) {
     { title: "טיקטים", url: createPageUrl("Tickets"), icon: Ticket },
     { title: "הודעות", url: createPageUrl("MessageCenter"), icon: MessageCircle },
     { title: "לקוחות", url: createPageUrl("Customers"), icon: Users },
-    { title: "הזמנות", url: createPageUrl("Orders"), icon: Package },
+    { title: "הזמנות מרוכזות", url: createPageUrl("UnifiedOrders"), icon: Package },
+    { title: "הזמנות אתר", url: createPageUrl("Orders"), icon: Package },
     { title: "מוצרים", url: createPageUrl("Products"), icon: Briefcase },
     ] : [];
 
