@@ -44,7 +44,7 @@ export default function RepairDashboard() {
     });
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
-    const [statusFilter, setStatusFilter] = useState("all");
+    const [statusFilter, setStatusFilter] = useState("all_open");
     const [quickFilter, setQuickFilter] = useState(null);
     const [selectedRepair, setSelectedRepair] = useState(null);
     const [showNewRepairModal, setShowNewRepairModal] = useState(false);
@@ -103,23 +103,27 @@ export default function RepairDashboard() {
         console.log("🔵 RepairDashboard: Starting loadData...");
         setIsLoading(true);
         try {
-            // STEP 1: Load repairs FIRST and show them immediately (fastest path to content)
+            // Only load OPEN repairs (not closed) for fast initial load
+            const closedStatuses = ["תיקון נסגר", "לא ניתן לתיקון"];
+            const openFilter = { status: { $nin: closedStatuses } };
+
             let repairsData;
             if (isTechnicianRole) {
                 repairsData = await Repair.filter({
+                    ...openFilter,
                     repair_type: "מעבדת Gadget-Team"
                 }, "-updated_date", 200).catch(err => {
                     console.error("❌ Error loading repairs for technician:", err);
                     return [];
                 });
             } else {
-                repairsData = await Repair.filter({}, "-updated_date", 200).catch(err => {
-                    console.error("❌ Error loading all repairs:", err);
+                repairsData = await Repair.filter(openFilter, "-updated_date", 200).catch(err => {
+                    console.error("❌ Error loading open repairs:", err);
                     return [];
                 });
             }
 
-            console.log(`✅ Loaded ${repairsData.length} repairs`);
+            console.log(`✅ Loaded ${repairsData.length} open repairs`);
 
             // Show repairs immediately WITHOUT enrichment
             setRepairs(repairsData.map(r => ({ ...r, customer: null, device: null, vendor: null })));
