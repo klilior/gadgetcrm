@@ -156,3 +156,7 @@ button:focus-visible {
     @apply bg-background text-foreground;
   }
 }
+
+/* Global app styles (moved from Layout inline <style>) */
+html, body, #root { height: 100%; }
+.overflow-y-auto { -webkit-overflow-scrolling: touch; }

@@ -80,6 +80,7 @@ export default function AgentDashboard() {
 
   const loadData = useCallback(async () => {
     if (!currentUser) return;
+    const start = Date.now();
     setIsLoading(true);
 
     try {
@@ -98,18 +99,23 @@ export default function AgentDashboard() {
         dateEnd = endOfMonth(now);
       }
 
-      // Load all data in parallel - NO blocking calculateGoalProgress
+      // Format dates for server-side filtering
+      const dateFromStr = format(dateStart, 'yyyy-MM-dd');
+      const dateToStr = format(dateEnd, 'yyyy-MM-dd');
+
+      // Load all data in parallel — with DATE FILTERS on large entities
       const [allLeads, allTargets, allActivities, allEmployees, allRepairs, allGoals, allGoalProgress, allSalesTransactions, allLinetUsersMap] = await Promise.all([
         Lead.filter({ status: { $ne: 'Deleted' } }),
-        Target.list(),
-        SalesActivity.list(),
+        Target.filter({ period_start: { $lte: dateToStr }, period_end: { $gte: dateFromStr } }).catch(() => []),
+        SalesActivity.filter({ activity_date: { $gte: dateFromStr, $lte: dateToStr } }).catch(() => []),
         Employee.filter({ is_active: true }),
         isManager ? Repair.filter({ status: { $nin: ['תיקון נסגר', 'Closed'] } }, '-updated_date', 100) : Promise.resolve([]),
         GoalDefinition.filter({ is_active: true }),
-        GoalProgress.list(),
-        SalesTransaction.list(),
+        GoalProgress.filter({ period_start: { $lte: dateToStr }, period_end: { $gte: dateFromStr } }).catch(() => []),
+        SalesTransaction.filter({ issue_date: { $gte: dateFromStr, $lte: dateToStr } }, '-issue_date', 5000).catch(() => []),
         LinetUsersMap.list()
       ]);
+      console.log(`⏱️ [AgentDashboard] Data fetched in ${Date.now() - start}ms — Sales: ${allSalesTransactions.length}, Activities: ${allActivities.length}`);
 
       // Fire calculateGoalProgress in background (non-blocking)
       base44.functions.invoke('calculateGoalProgress', { calculate_all: true }).catch(() => {});
@@ -188,11 +194,8 @@ export default function AgentDashboard() {
       }, []);
       setQuickLeads(mergedQuick);
 
-      // Filter activities by period
-      const periodActivities = (allActivities || []).filter(a => {
-        const actDate = new Date(a.activity_date);
-        return isWithinInterval(actDate, { start: dateStart, end: dateEnd });
-      });
+      // Activities already filtered server-side by date
+      const periodActivities = allActivities || [];
 
       // Fallback actuals from SalesActivity for the current user
       const myActivities = (periodActivities || []).filter(a => a.user_id === userId);
@@ -204,16 +207,9 @@ export default function AgentDashboard() {
         TotalSalesRevenue: myActivities.filter(a => a.metric_type === 'TotalSalesRevenue').reduce((s, a) => s + (a.metric_value || 0), 0),
       };
 
-      // Filter period goals (within date range)
-      const periodGoals = (allGoals || []).filter(g => {
-        const matchesPeriod = new Date(g.period_start) <= dateEnd && new Date(g.period_end) >= dateStart;
-        return matchesPeriod && g.is_active;
-      });
-      
-      // Filter period targets
-      const periodTargets = (allTargets || []).filter(t =>
-        new Date(t.period_start) <= dateEnd && new Date(t.period_end) >= dateStart
-      );
+      // Goals and targets already filtered server-side by date
+      const periodGoals = allGoals || [];
+      const periodTargets = allTargets || [];
 
       // ========== Current user's targets (from GoalDefinition + Target) ==========
       const myGoals = filterGoalsByEmployee(periodGoals, employeeMap, userId);
@@ -239,11 +235,8 @@ export default function AgentDashboard() {
 
       setTargets(computedTargets);
 
-      // Calculate actuals from SalesTransactions - ALWAYS use them as primary source
-      const periodSales = (allSalesTransactions || []).filter(s => {
-        const saleDate = new Date(s.issue_date || s.created_date);
-        return isWithinInterval(saleDate, { start: dateStart, end: dateEnd });
-      });
+      // SalesTransactions already filtered server-side by date
+      const periodSales = allSalesTransactions || [];
       // שיוך חד-חד ערכי של עסקאות לנציגים
       const salesByEmployee = groupSalesByEmployee(periodSales, employeeMap);
       
@@ -427,8 +420,8 @@ export default function AgentDashboard() {
 
   useEffect(() => {
     loadData();
-    // Auto-refresh every 60 seconds
-    const interval = setInterval(loadData, 60000);
+    // Auto-refresh every 3 minutes (was 60s — reduced API load)
+    const interval = setInterval(loadData, 180000);
     return () => clearInterval(interval);
   }, [loadData]);
 
@@ -439,7 +432,6 @@ export default function AgentDashboard() {
       if (newStatus === 'Deleted') {
         updateData.deleted_at = new Date().toISOString();
       }
-      // Mark as complete if moving to InProgress
       if (newStatus === 'InProgress' && lead?.quick_incomplete) {
         updateData.quick_incomplete = false;
         updateData.capture_type = 'Full';
@@ -449,9 +441,15 @@ export default function AgentDashboard() {
         updateData.capture_type = 'Full';
       }
       await Lead.update(leadId, updateData);
-      loadData();
+      // Optimistic update — update local state instead of full reload
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...updateData } : l));
+      setMyLeads(prev => prev.filter(l => {
+        if (l.id !== leadId) return true;
+        return updateData.status === 'New' || updateData.status === 'InProgress';
+      }));
+      setQuickLeads(prev => prev.filter(l => l.id !== leadId || updateData.status !== 'Deleted'));
     } catch (error) {
-      console.error('Error updating lead status:', error);
+      console.error('❌ Error updating lead status:', error);
     }
   };
 
@@ -459,15 +457,16 @@ export default function AgentDashboard() {
     try {
       const lead = leads.find(l => l.id === leadId);
       const updateData = { reminder_done: true };
-      // Mark as complete if setting reminder done
       if (lead?.quick_incomplete) {
         updateData.quick_incomplete = false;
         updateData.capture_type = 'Full';
       }
       await Lead.update(leadId, updateData);
-      loadData();
+      // Optimistic update
+      setReminders(prev => prev.filter(l => l.id !== leadId));
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...updateData } : l));
     } catch (error) {
-      console.error('Error marking reminder done:', error);
+      console.error('❌ Error marking reminder done:', error);
     }
   };
 
@@ -482,13 +481,12 @@ export default function AgentDashboard() {
   const handleAssignChange = async (leadId, newAssigneeId) => {
     try {
       const emp = employees.find(e => e.id === newAssigneeId);
-      await Lead.update(leadId, { 
-        assigned_to: newAssigneeId,
-        assigned_to_name: emp?.employee_name || ''
-      });
-      loadData();
+      const updateData = { assigned_to: newAssigneeId, assigned_to_name: emp?.employee_name || '' };
+      await Lead.update(leadId, updateData);
+      // Optimistic update
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...updateData } : l));
     } catch (error) {
-      console.error('Error reassigning lead:', error);
+      console.error('❌ Error reassigning lead:', error);
     }
   };
 

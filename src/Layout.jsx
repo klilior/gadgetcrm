@@ -443,10 +443,7 @@ function AppContent({ children, currentPageName }) {
 
   return (
     <div dir="rtl" className="h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 font-sans">
-      <style dangerouslySetInnerHTML={{ __html: `
-        html, body, #root { height: 100%; }
-        .overflow-y-auto { -webkit-overflow-scrolling: touch; }
-      `}} />
+      {/* Styles moved to index.css for performance */}
 
       {!isOnline && (
         <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center py-1.5 text-sm z-[9999]">

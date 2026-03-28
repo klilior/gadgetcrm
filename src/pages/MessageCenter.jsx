@@ -37,7 +37,7 @@ export default function MessageCenter() {
                 base44.entities.Employee.list()
             ]);
             
-            window.employees = employeesData;
+            // _legacy: window.employees = employeesData;
 
             // 2. Extract Customer IDs and fetch ONLY them (much more efficient)
             const customerIds = [...new Set(conversationsData.map(c => c.customer_id).filter(Boolean))];
@@ -119,7 +119,8 @@ export default function MessageCenter() {
 
     useEffect(() => {
         loadData();
-        const interval = setInterval(() => loadData(true), 5000); // Auto-refresh every 5 seconds
+        // Poll every 30 seconds (was 5s — reduced API load significantly)
+        const interval = setInterval(() => loadData(true), 30000);
         return () => clearInterval(interval);
     }, [loadData]);
 

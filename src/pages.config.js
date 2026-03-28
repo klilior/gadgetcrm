@@ -1,112 +1,86 @@
 /**
- * pages.config.js - Page routing configuration
+ * pages.config.js - Page routing configuration (LAZY LOADED)
  * 
- * This file is AUTO-GENERATED. Do not add imports or modify PAGES manually.
- * Pages are auto-registered when you create files in the ./pages/ folder.
- * 
- * THE ONLY EDITABLE VALUE: mainPage
- * This controls which page is the landing page (shown when users visit the app).
- * 
- * Example file structure:
- * 
- *   import HomePage from './pages/HomePage';
- *   import Dashboard from './pages/Dashboard';
- *   import Settings from './pages/Settings';
- *   
- *   export const PAGES = {
- *       "HomePage": HomePage,
- *       "Dashboard": Dashboard,
- *       "Settings": Settings,
- *   }
- *   
- *   export const pagesConfig = {
- *       mainPage: "HomePage",
- *       Pages: PAGES,
- *   };
- * 
- * Example with Layout (wraps all pages):
- *
- *   import Home from './pages/Home';
- *   import Settings from './pages/Settings';
- *   import __Layout from './Layout.jsx';
- *
- *   export const PAGES = {
- *       "Home": Home,
- *       "Settings": Settings,
- *   }
- *
- *   export const pagesConfig = {
- *       mainPage: "Home",
- *       Pages: PAGES,
- *       Layout: __Layout,
- *   };
- *
- * To change the main page from HomePage to Dashboard, use find_replace:
- *   Old: mainPage: "HomePage",
- *   New: mainPage: "Dashboard",
- *
- * The mainPage value must match a key in the PAGES object exactly.
+ * All page imports use React.lazy() for code splitting.
+ * Each page is loaded only when the user navigates to it.
  */
-import AgentCommissionAssignment from './pages/AgentCommissionAssignment';
-import AgentDashboard from './pages/AgentDashboard';
-import AgentPerformanceDashboard from './pages/AgentPerformanceDashboard';
-import AttendanceClock from './pages/AttendanceClock';
-import AttendanceManagerReport from './pages/AttendanceManagerReport';
-import AttendanceReport from './pages/AttendanceReport';
-import AttendanceSettings from './pages/AttendanceSettings';
-import BuildSchedule from './pages/BuildSchedule';
-import CallLog from './pages/CallLog';
-import CarrierManagement from './pages/CarrierManagement';
-import CommissionCalculation from './pages/CommissionCalculation';
-import CommissionGroupMappings from './pages/CommissionGroupMappings';
-import CommissionModels from './pages/CommissionModels';
-import CustomerSync from './pages/CustomerSync';
-import Customers from './pages/Customers';
-import DebugSchedule from './pages/DebugSchedule';
-import GoalsDashboard from './pages/GoalsDashboard';
-import Home from './pages/Home';
-import IntakeInbox from './pages/IntakeInbox';
-import InvoicesOverview from './pages/InvoicesOverview';
-import InvoicesToReview from './pages/InvoicesToReview';
-import LineContractImport from './pages/LineContractImport';
-import LineProductMapping from './pages/LineProductMapping';
-import LinesToWorkOn from './pages/LinesToWorkOn';
-import ManageAttendance from './pages/ManageAttendance';
-import ManageEmployees from './pages/ManageEmployees';
-import ManagerControlCenter from './pages/ManagerControlCenter';
-import ManagerDashboard from './pages/ManagerDashboard';
-import MessageCenter from './pages/MessageCenter';
-import MobileInvoiceUpload from './pages/MobileInvoiceUpload';
-import Orders from './pages/Orders';
-import PaymentReturn from './pages/PaymentReturn';
-import PaymentSettings from './pages/PaymentSettings';
-import PriceAlerts from './pages/PriceAlerts';
-import PriceMonitor from './pages/PriceMonitor';
-import Products from './pages/Products';
-import PurchasesDashboard from './pages/PurchasesDashboard';
-import RawLinesImport from './pages/RawLinesImport';
-import RepairDashboard from './pages/RepairDashboard';
-import SalesDashboard from './pages/SalesDashboard';
-import SalesDataAdmin from './pages/SalesDataAdmin';
-import Settings from './pages/Settings';
-import ShiftBonusManagement from './pages/ShiftBonusManagement';
-import ShiftPreferences from './pages/ShiftPreferences';
-import Shifts from './pages/Shifts';
-import ShippingProviders from './pages/ShippingProviders';
-import SupplierProducts from './pages/SupplierProducts';
-import SuppliersManagement from './pages/SuppliersManagement';
-import SyncManagement from './pages/SyncManagement';
-import TargetBonusManagement from './pages/TargetBonusManagement';
-import TechnicianReport from './pages/TechnicianReport';
-import Tickets from './pages/Tickets';
-import TodaysCalls from './pages/TodaysCalls';
-import VendorReport from './pages/VendorReport';
-import WeeklySchedule from './pages/WeeklySchedule';
-import WhatsAppDebug from './pages/WhatsAppDebug';
-import WhatsAppProviders from './pages/WhatsAppProviders';
-import ShipmentLabelPreview from './pages/ShipmentLabelPreview';
+import React from 'react';
 import __Layout from './Layout.jsx';
 
+// Helper for lazy imports
+const lazy = (importFn) => React.lazy(importFn);
+
+// === Core pages (loaded by most users) ===
+const AgentDashboard = lazy(() => import('./pages/AgentDashboard'));
+const ManagerControlCenter = lazy(() => import('./pages/ManagerControlCenter'));
+const RepairDashboard = lazy(() => import('./pages/RepairDashboard'));
+const Home = lazy(() => import('./pages/Home'));
+
+// === Work pages ===
+const Tickets = lazy(() => import('./pages/Tickets'));
+const MessageCenter = lazy(() => import('./pages/MessageCenter'));
+const Customers = lazy(() => import('./pages/Customers'));
+const Orders = lazy(() => import('./pages/Orders'));
+const Products = lazy(() => import('./pages/Products'));
+const CallLog = lazy(() => import('./pages/CallLog'));
+const LinesToWorkOn = lazy(() => import('./pages/LinesToWorkOn'));
+
+// === Schedule & Attendance ===
+const ShiftPreferences = lazy(() => import('./pages/ShiftPreferences'));
+const BuildSchedule = lazy(() => import('./pages/BuildSchedule'));
+const WeeklySchedule = lazy(() => import('./pages/WeeklySchedule'));
+const AttendanceClock = lazy(() => import('./pages/AttendanceClock'));
+const AttendanceReport = lazy(() => import('./pages/AttendanceReport'));
+const AttendanceManagerReport = lazy(() => import('./pages/AttendanceManagerReport'));
+const ManageAttendance = lazy(() => import('./pages/ManageAttendance'));
+const AttendanceSettings = lazy(() => import('./pages/AttendanceSettings'));
+const Shifts = lazy(() => import('./pages/Shifts'));
+
+// === Sales & Commissions (admin/manager) ===
+const AgentPerformanceDashboard = lazy(() => import('./pages/AgentPerformanceDashboard'));
+const AgentCommissionAssignment = lazy(() => import('./pages/AgentCommissionAssignment'));
+const CommissionCalculation = lazy(() => import('./pages/CommissionCalculation'));
+const CommissionGroupMappings = lazy(() => import('./pages/CommissionGroupMappings'));
+const CommissionModels = lazy(() => import('./pages/CommissionModels'));
+const SalesDashboard = lazy(() => import('./pages/SalesDashboard'));
+const SalesDataAdmin = lazy(() => import('./pages/SalesDataAdmin'));
+const GoalsDashboard = lazy(() => import('./pages/GoalsDashboard'));
+const TargetBonusManagement = lazy(() => import('./pages/TargetBonusManagement'));
+const ShiftBonusManagement = lazy(() => import('./pages/ShiftBonusManagement'));
+const CarrierManagement = lazy(() => import('./pages/CarrierManagement'));
+
+// === Invoices & Purchases ===
+const IntakeInbox = lazy(() => import('./pages/IntakeInbox'));
+const InvoicesOverview = lazy(() => import('./pages/InvoicesOverview'));
+const InvoicesToReview = lazy(() => import('./pages/InvoicesToReview'));
+const MobileInvoiceUpload = lazy(() => import('./pages/MobileInvoiceUpload'));
+const PurchasesDashboard = lazy(() => import('./pages/PurchasesDashboard'));
+const SuppliersManagement = lazy(() => import('./pages/SuppliersManagement'));
+const PriceAlerts = lazy(() => import('./pages/PriceAlerts'));
+
+// === Admin / Settings ===
+const ManageEmployees = lazy(() => import('./pages/ManageEmployees'));
+const Settings = lazy(() => import('./pages/Settings'));
+const SyncManagement = lazy(() => import('./pages/SyncManagement'));
+const CustomerSync = lazy(() => import('./pages/CustomerSync'));
+const ShippingProviders = lazy(() => import('./pages/ShippingProviders'));
+const PaymentSettings = lazy(() => import('./pages/PaymentSettings'));
+const WhatsAppProviders = lazy(() => import('./pages/WhatsAppProviders'));
+const RawLinesImport = lazy(() => import('./pages/RawLinesImport'));
+const LineProductMapping = lazy(() => import('./pages/LineProductMapping'));
+const PriceMonitor = lazy(() => import('./pages/PriceMonitor'));
+
+// === Misc ===
+const VendorReport = lazy(() => import('./pages/VendorReport'));
+const ManagerDashboard = lazy(() => import('./pages/ManagerDashboard'));
+const PaymentReturn = lazy(() => import('./pages/PaymentReturn'));
+const LineContractImport = lazy(() => import('./pages/LineContractImport'));
+const DebugSchedule = lazy(() => import('./pages/DebugSchedule'));
+const TodaysCalls = lazy(() => import('./pages/TodaysCalls'));
+const WhatsAppDebug = lazy(() => import('./pages/WhatsAppDebug'));
+const SupplierProducts = lazy(() => import('./pages/SupplierProducts'));
+const TechnicianReport = lazy(() => import('./pages/TechnicianReport'));
+const ShipmentLabelPreview = lazy(() => import('./pages/ShipmentLabelPreview'));
 
 export const PAGES = {
     "AgentCommissionAssignment": AgentCommissionAssignment,

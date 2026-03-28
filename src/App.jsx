@@ -1,4 +1,5 @@
 import './App.css'
+import React, { Suspense } from 'react'
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import SuperPharmOrdersPage from './pages/SuperPharmOrdersPage';
@@ -15,9 +16,20 @@ const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 
+const LazyFallback = () => (
+  <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="text-center">
+      <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-3"></div>
+      <p className="text-gray-600 text-sm">טוען...</p>
+    </div>
+  </div>
+);
+
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
-  <Layout currentPageName={currentPageName}>{children}</Layout>
-  : <>{children}</>;
+  <Layout currentPageName={currentPageName}>
+    <Suspense fallback={<LazyFallback />}>{children}</Suspense>
+  </Layout>
+  : <Suspense fallback={<LazyFallback />}>{children}</Suspense>;
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
@@ -63,7 +75,7 @@ const AuthenticatedApp = () => {
       ))}
       <Route path="/SuperPharmOrders" element={
         <LayoutWrapper currentPageName="SuperPharmOrders">
-          <SuperPharmOrdersPage />
+          <Suspense fallback={<LazyFallback />}><SuperPharmOrdersPage /></Suspense>
         </LayoutWrapper>
       } />
       <Route path="*" element={<PageNotFound />} />

@@ -83,7 +83,7 @@ export default function ManagerControlCenter() {
 
     // Phase 1: Load critical data first (sales + mappings)
     const [salesData, mappingsData] = await Promise.all([
-      base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 10000).catch(() => []),
+      base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 5000).catch(() => []),
       mappings.length > 0 ? Promise.resolve(mappings) : base44.entities.CommissionGroupMapping.filter({ is_active: true }).catch(() => []),
     ]);
 

@@ -49,11 +49,14 @@ export default function OrdersPage() {
     const loadData = useCallback(async () => {
         setIsLoading(true);
         setLoadError(null);
+        const start = Date.now();
         try {
+            // Limit to 200 recent orders (was 10,000)
             const [fetchedOrders, fetchedClients] = await Promise.all([
-              base44.entities.Order.list("-order_date", 10000),
-              (await import('../components/utils/customersService')).customersService.list(2000)
+              base44.entities.Order.list("-order_date", 200),
+              (await import('../components/utils/customersService')).customersService.list()
             ]);
+            console.log(`⏱️ [Orders] Loaded ${(fetchedOrders || []).length} orders in ${Date.now() - start}ms`);
             
             setOrders(fetchedOrders || []);
             setClientsList(fetchedClients || []);
@@ -102,30 +105,8 @@ export default function OrdersPage() {
         }
     };
 
-    useEffect(() => {
-        const AUTO_SYNC_INTERVAL = 30 * 60 * 1000; // 30 דקות
-
-        const performAutoSync = async () => {
-            console.log("🔄 Initiating automatic WooCommerce orders sync...");
-            try {
-                const { data } = await base44.functions.invoke('syncWooCommerceOrders');
-                if (data.success) {
-                    console.log(`✅ Automatic sync successful: ${data.message}`);
-                    await loadData();
-                } else {
-                    console.error(`❌ Automatic sync failed: ${data.error}`);
-                }
-            } catch (error) {
-                console.error("❌ Error during automatic sync:", error.message);
-                // Don't show alert for automatic sync errors
-            }
-        };
-
-        performAutoSync(); // ריצה מיידית בטעינה
-        const intervalId = setInterval(performAutoSync, AUTO_SYNC_INTERVAL);
-
-        return () => clearInterval(intervalId);
-    }, [loadData]);
+    // _legacy: Auto-sync on mount removed — sync is handled by scheduled backend function
+    // Manual sync still available via the "סנכרון עכשיו" button
 
     const sortedAndFilteredOrders = useMemo(() => {
         return (orders || []).filter(order => {
