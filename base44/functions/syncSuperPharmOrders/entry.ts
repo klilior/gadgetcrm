@@ -82,16 +82,18 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const sr = base44.asServiceRole.entities;
 
-    // Determine what states to fetch
-    const states = body.order_state_codes || 'WAITING_ACCEPTANCE,WAITING_DEBIT,WAITING_DEBIT_PAYMENT,SHIPPING,SHIPPED,TO_COLLECT,RECEIVED';
+    // Determine what states to fetch — exclude old terminal states (RECEIVED, CLOSED, CANCELED, REFUSED)
+    const states = body.order_state_codes || 'WAITING_ACCEPTANCE,WAITING_DEBIT,WAITING_DEBIT_PAYMENT,SHIPPING,SHIPPED,TO_COLLECT';
+    
+    // Default: only fetch orders updated in the last 30 days
+    const defaultStartDate = new Date();
+    defaultStartDate.setDate(defaultStartDate.getDate() - 30);
     
     const params = {
       order_state_codes: states,
       max: body.max || 50,
+      start_update_date: body.start_update_date || defaultStartDate.toISOString(),
     };
-    if (body.start_update_date) {
-      params.start_update_date = body.start_update_date;
-    }
 
     const data = await fetchMiraklOrders(params);
     const miraklOrders = data.orders || [];
