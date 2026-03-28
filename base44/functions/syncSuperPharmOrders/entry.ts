@@ -43,11 +43,11 @@ function extractOrderData(miraklOrder) {
   return {
     mirakl_order_id: miraklOrder.order_id,
     order_state: miraklOrder.order_state,
-    customer_first_name: shipping.firstname || miraklOrder.customer?.firstname || '',
-    customer_last_name: shipping.lastname || miraklOrder.customer?.lastname || '',
-    customer_phone: shipping.phone || miraklOrder.customer?.phone || '',
+    customer_first_name: miraklOrder.customer?.firstname || shipping.firstname || '',
+    customer_last_name: miraklOrder.customer?.lastname || shipping.lastname || '',
+    customer_phone: shipping.phone || miraklOrder.customer?.billing_address?.phone || '',
     shipping_city: shipping.city || '',
-    shipping_street: `${shipping.street_1 || ''} ${shipping.street_2 || ''}`.trim(),
+    shipping_street: [shipping.street_1, shipping.street_2].filter(Boolean).join(', '),
     shipping_zip: shipping.zip_code || '',
     shipping_address_full: [
       shipping.street_1, shipping.street_2, shipping.city, shipping.zip_code
@@ -61,6 +61,9 @@ function extractOrderData(miraklOrder) {
     last_updated_mirakl: miraklOrder.last_updated_date || null,
     acceptance_decision_date: miraklOrder.acceptance_decision_date || null,
     shipping_deadline: miraklOrder.shipping_deadline || null,
+    tracking_number: miraklOrder.shipping_tracking || null,
+    carrier_code: miraklOrder.shipping_carrier_code || null,
+    carrier_name: miraklOrder.shipping_company || null,
     raw_mirakl_json: JSON.stringify(miraklOrder),
   };
 }
@@ -85,8 +88,6 @@ Deno.serve(async (req) => {
     const params = {
       order_state_codes: states,
       max: body.max || 50,
-      sort: 'date_created',
-      order: 'desc',
     };
     if (body.start_update_date) {
       params.start_update_date = body.start_update_date;
