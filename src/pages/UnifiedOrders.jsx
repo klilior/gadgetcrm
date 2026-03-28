@@ -58,8 +58,8 @@ export default function UnifiedOrders() {
     if (!silent) setIsLoading(true);
     else setIsRefreshing(true);
     const errs = [];
-    const closedWoo = new Set(['completed','cancelled','refunded','failed']);
-    const closedMirakl = new Set(['CLOSED','REFUSED','CANCELED','RECEIVED']);
+    const openWoo = new Set(['processing','on-hold']);
+    const openMirakl = new Set(['WAITING_ACCEPTANCE','SHIPPING']);
 
     // Shared client map (used by WooCommerce and Linet)
     let cM = {};
@@ -78,7 +78,7 @@ export default function UnifiedOrders() {
       const pM = {};
       for (const p of rawProducts) { if (!pM[p.order_id]) pM[p.order_id] = []; pM[p.order_id].push(p); }
       for (const o of rawOrders) {
-        if (!showClosed && closedWoo.has(o.status)) continue;
+        if (!showClosed && !openWoo.has(o.status)) continue;
         const c = cM[o.client_id];
         const pr = pM[o.id] || [];
         woo.push({
@@ -98,7 +98,7 @@ export default function UnifiedOrders() {
     try {
       const spOrders = await base44.entities.SuperPharmOrder.list('-created_at_mirakl', 200);
       for (const o of spOrders) {
-        if (!showClosed && closedMirakl.has(o.order_state)) continue;
+        if (!showClosed && !openMirakl.has(o.order_state)) continue;
         let lines = []; try { lines = JSON.parse(o.order_lines_json || '[]'); } catch(e) {}
         mk.push({
           id: 'mirakl_' + o.id, source: 'mirakl',
