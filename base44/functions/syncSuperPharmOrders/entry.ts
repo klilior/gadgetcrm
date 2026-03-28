@@ -125,15 +125,33 @@ Deno.serve(async (req) => {
 
     let created = 0, updated = 0, skipped = 0;
 
+    // Helper: retry on rate limit
+    async function withRetry(fn, label = '') {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          return await fn();
+        } catch (e) {
+          if (e.message?.includes('Rate limit') && attempt < 3) {
+            const wait = 3000 * (attempt + 1);
+            console.log(`[Rate limit] ${label} - retry ${attempt + 1}, waiting ${wait}ms...`);
+            await new Promise(r => setTimeout(r, wait));
+          } else {
+            throw e;
+          }
+        }
+      }
+    }
+
     // Process in small batches with delay to avoid rate limits
-    const BATCH_SIZE = 10;
+    const BATCH_SIZE = 5;
     for (let i = 0; i < allMiraklOrders.length; i++) {
       const mOrder = allMiraklOrders[i];
       const orderData = extractOrderData(mOrder);
 
       // Check if exists
-      const existing = await sr.SuperPharmOrder.filter(
-        { mirakl_order_id: orderData.mirakl_order_id }, null, 1
+      const existing = await withRetry(
+        () => sr.SuperPharmOrder.filter({ mirakl_order_id: orderData.mirakl_order_id }, null, 1),
+        `filter ${orderData.mirakl_order_id}`
       );
 
       if (existing.length > 0) {
@@ -148,27 +166,14 @@ Deno.serve(async (req) => {
           if (ex.accepted_at) updates.accepted_at = ex.accepted_at;
           if (ex.shipped_at) updates.shipped_at = ex.shipped_at;
           if (ex.notes) updates.notes = ex.notes;
-          await sr.SuperPharmOrder.update(ex.id, updates);
+          await withRetry(() => sr.SuperPharmOrder.update(ex.id, updates), `update ${orderData.mirakl_order_id}`);
           updated++;
         } else {
           skipped++;
         }
       } else {
-        // Retry with backoff on rate limit
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            await sr.SuperPharmOrder.create(orderData);
-            created++;
-            break;
-          } catch (e) {
-            if (e.message?.includes('Rate limit') && attempt < 2) {
-              console.log(`[Rate limit] Waiting before retry (attempt ${attempt + 1})...`);
-              await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
-            } else {
-              throw e;
-            }
-          }
-        }
+        await withRetry(() => sr.SuperPharmOrder.create(orderData), `create ${orderData.mirakl_order_id}`);
+        created++;
       }
 
       // Add a small delay every BATCH_SIZE writes to avoid rate limits
