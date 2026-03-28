@@ -31,8 +31,8 @@ export const LINET_STATUSES = {
   'טופל': 'טופל'
 };
 
-// SKUs that mark a Linet invoice as an "order" needing fulfillment
-export const LINET_ORDER_SKUS = ['963258741', '1205931237'];
+// SKU that marks a Linet invoice as an "order" needing fulfillment
+export const LINET_ORDER_SKUS = ['963258741'];
 
 export function getStatusLabel(source, status) {
   if (source === 'woocommerce') return WOO_STATUSES[status] || status;

@@ -123,11 +123,13 @@ export default function UnifiedOrders() {
         const txns = await base44.entities.SalesTransaction.filter({ sku }, '-issue_date', 200);
         allTxns.push(...txns);
       }
-      // Get unique doc_numbers from order-marker transactions (only invoices, not credits)
+      // Only include invoices from today (2026-03-28) onwards
+      const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const orderDocNumbers = new Set();
       const docMeta = {};
       for (const t of allTxns) {
         if (t.doc_type === 'חשבונית זיכוי') continue; // skip credit notes
+        if (t.issue_date && t.issue_date < todayStr) continue; // only from today onwards
         orderDocNumbers.add(t.doc_number);
         if (!docMeta[t.doc_number]) {
           docMeta[t.doc_number] = {
