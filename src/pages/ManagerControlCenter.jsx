@@ -53,20 +53,11 @@ export default function ManagerControlCenter() {
   const [repSortDir, setRepSortDir] = useState("desc");
   const [supplierSearch, setSupplierSearch] = useState("");
 
-  // Authorization check
-  if (!isManager) {
-    return (
-      <div className="p-6 text-center">
-        <h1 className="text-2xl font-bold text-red-600">אין הרשאה</h1>
-        <p className="text-gray-600 mt-2">דף זה זמין למנהלים בלבד</p>
-      </div>
-    );
-  }
-
   // Load everything in parallel on mount + when filters change
   useEffect(() => {
+    if (!isManager) return;
     loadAllData();
-  }, [dateFrom, dateTo, selectedRep, selectedCategory, selectedSupplier]);
+  }, [dateFrom, dateTo, selectedRep, selectedCategory, selectedSupplier, isManager]);
 
   const loadAllData = async () => {
     const start = Date.now();
@@ -424,6 +415,16 @@ export default function ManagerControlCenter() {
       console.error('Error updating lead status:', e);
     }
   };
+
+  // Authorization check
+  if (!isManager) {
+    return (
+      <div className="p-6 text-center">
+        <h1 className="text-2xl font-bold text-red-600">אין הרשאה</h1>
+        <p className="text-gray-600 mt-2">דף זה זמין למנהלים בלבד</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-3 md:p-6 space-y-4" style={{ background: 'linear-gradient(135deg, #F8F9FB 0%, #E8ECFF 100%)', minHeight: '100vh' }}>
