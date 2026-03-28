@@ -49,7 +49,7 @@ export function getStatusOptions(source) {
 }
 
 export function isClosedStatus(source, status) {
-  if (source === 'woocommerce') return ['completed', 'cancelled', 'refunded', 'failed'].includes(status);
+  if (source === 'woocommerce') return ['refunded', 'failed'].includes(status);
   if (source === 'mirakl') return ['CLOSED', 'REFUSED', 'CANCELED', 'RECEIVED'].includes(status);
   if (source === 'linet') return status === 'טופל';
   return false;

@@ -60,7 +60,7 @@ export default function UnifiedOrders() {
     const errs = [];
     const openWoo = new Set(['processing','on-hold']);
     const openMirakl = new Set(['WAITING_ACCEPTANCE','SHIPPING']);
-    const closedWoo = new Set(['completed','cancelled','refunded','failed']);
+    const closedWoo = new Set(['refunded','failed']);
     const closedMirakl = new Set(['CLOSED','REFUSED','CANCELED','RECEIVED']);
 
     // Shared client map (used by WooCommerce and Linet)
