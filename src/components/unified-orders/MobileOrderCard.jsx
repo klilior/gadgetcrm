@@ -1,53 +1,63 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { MessageCircle, Truck } from "lucide-react";
+import { ChevronDown, AlertTriangle } from "lucide-react";
+import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
-import { getStatusLabel, getStatusColor } from "./OrderStatusConfig";
+import { getStatusLabel, getStatusColor, isClosedStatus } from "./OrderStatusConfig";
+import OrderDetailPanel from "./OrderDetailPanel";
 
-export default function MobileOrderCard({ order, onSms, onStatusChange, onShipment }) {
+export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, onStatusChange, onShipment }) {
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
-  const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
+  const isClosed = isClosedStatus(order.source, order.status);
+  const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
+  const isOld = hoursSince > 24 && !isClosed;
+
+  const formatDate = (d) => {
+    if (!d) return '';
+    try { return format(new Date(d), "dd/MM HH:mm"); } catch { return ''; }
+  };
+
+  const productSummary = (order.products || []).slice(0, 2).map(p => p.name).join(', ');
 
   return (
-    <Card className="border-0 shadow-sm">
-      <CardContent className="p-4">
-        <div className="flex justify-between items-start mb-2">
+    <Card className={`border-0 shadow-sm overflow-hidden ${isOld ? 'border-r-4 border-r-red-400' : ''} ${isClosed ? 'opacity-50' : ''}`}>
+      {/* Clickable header */}
+      <div
+        onClick={onToggle}
+        className={`p-3 cursor-pointer select-none ${isExpanded ? 'bg-indigo-50/50' : 'hover:bg-gray-50'}`}
+      >
+        <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <SourceBadge source={order.source} />
             <span className="font-mono text-sm font-bold">#{order.order_number}</span>
+            {isOld && <AlertTriangle className="w-3 h-3 text-red-500" />}
           </div>
-          <Badge className={`${statusColor} text-xs`}>{statusLabel}</Badge>
-        </div>
-        <div className="text-sm space-y-1 text-gray-700">
-          <p><strong>{order.customer_name}</strong></p>
-          {order.customer_phone && (
-            <a href={`tel:${order.customer_phone}`} className="text-blue-600">{order.customer_phone}</a>
-          )}
-          <p className="text-xs text-gray-500">
-            {order.products?.slice(0, 2).map(p => `${p.name} ×${p.quantity}`).join(', ')}
-            {(order.products?.length || 0) > 2 && ` + ${order.products.length - 2} עוד`}
-          </p>
-          <div className="flex justify-between items-center pt-2">
-            <span className="font-bold">₪{(order.total || 0).toLocaleString()}</span>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onSms}>
-                <MessageCircle className="w-4 h-4 text-blue-600" />
-              </Button>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onShipment}>
-                <Truck className="w-4 h-4 text-purple-600" />
-              </Button>
-              {isMiraklNew && (
-                <Button size="sm" className="bg-green-600 text-white text-xs h-7" onClick={() => onStatusChange(order, 'accept_mirakl')}>
-                  אשר
-                </Button>
-              )}
-            </div>
+          <div className="flex items-center gap-2">
+            <Badge className={`${statusColor} text-[10px]`}>{statusLabel}</Badge>
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
           </div>
         </div>
-      </CardContent>
+        <div className="flex justify-between items-center mt-1.5">
+          <div className="text-sm text-gray-700 truncate flex-1">
+            <strong>{order.customer_name || '-'}</strong>
+            {productSummary && <span className="text-xs text-gray-500 mr-2">• {productSummary}</span>}
+          </div>
+          <span className="font-mono font-bold text-sm mr-2">₪{(order.total || 0).toLocaleString()}</span>
+        </div>
+        <div className="text-[10px] text-gray-400 mt-0.5">{formatDate(order.order_date)}</div>
+      </div>
+
+      {/* Expanded detail */}
+      {isExpanded && (
+        <OrderDetailPanel
+          order={order}
+          onSms={() => onSms()}
+          onStatusChange={onStatusChange}
+          onShipment={() => onShipment()}
+        />
+      )}
     </Card>
   );
 }

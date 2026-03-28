@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Package, RefreshCw, Loader2, AlertTriangle, MessageCircle, Truck
+  Package, RefreshCw, Loader2, AlertTriangle, MessageCircle, Truck, ChevronDown
 } from "lucide-react";
 import { useUser } from "../components/UserAuth";
 import { base44 } from "@/api/base44Client";
@@ -19,6 +19,7 @@ import SendSmsOrderModal from "../components/unified-orders/SendSmsOrderModal";
 import { isClosedStatus } from "../components/unified-orders/OrderStatusConfig";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import MobileOrderCard from "../components/unified-orders/MobileOrderCard";
+import OrderDetailPanel from "../components/unified-orders/OrderDetailPanel";
 
 const PAGE_SIZE = 50;
 
@@ -46,6 +47,9 @@ export default function UnifiedOrders() {
   // Modals
   const [smsOrder, setSmsOrder] = useState(null);
   const [shipmentOrder, setShipmentOrder] = useState(null);
+
+  // Expanded row
+  const [expandedId, setExpandedId] = useState(null);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -107,7 +111,7 @@ export default function UnifiedOrders() {
     } catch (e) { errs.push({source: 'mirakl', message: e.message}); }
 
     const all = [...woo, ...mk];
-    all.sort((a, b) => new Date(a.order_date || 0) - new Date(b.order_date || 0));
+    all.sort((a, b) => new Date(b.order_date || 0) - new Date(a.order_date || 0));
     setOrders(all);
     setCounts({woocommerce: woo.length, mirakl: mk.length, linet: 0, total: all.length});
     setErrors(errs);
@@ -318,31 +322,40 @@ export default function UnifiedOrders() {
                           />
                         </TableHead>
                       )}
+                      <TableHead></TableHead>
                       <TableHead>מקור</TableHead>
                       <TableHead>מס' הזמנה</TableHead>
                       <TableHead>תאריך</TableHead>
                       <TableHead>שם לקוח</TableHead>
-                      <TableHead>טלפון</TableHead>
                       <TableHead>מוצרים</TableHead>
                       <TableHead>סכום</TableHead>
-                      <TableHead>משלוח</TableHead>
                       <TableHead>סטטוס</TableHead>
-                      <TableHead>הערות</TableHead>
-                      <TableHead>פעולות</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedOrders.map(order => (
-                      <UnifiedOrderRow
-                        key={order.id}
-                        order={order}
-                        onSms={(o) => setSmsOrder(o)}
-                        onStatusChange={handleStatusChange}
-                        onShipment={(o) => setShipmentOrder(o)}
-                        onSelect={handleSelect}
-                        isSelected={selectedIds.includes(order.id)}
-                        canBulk={canBulk}
-                      />
+                      <React.Fragment key={order.id}>
+                        <UnifiedOrderRow
+                          order={order}
+                          isExpanded={expandedId === order.id}
+                          onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
+                          onSelect={handleSelect}
+                          isSelected={selectedIds.includes(order.id)}
+                          canBulk={canBulk}
+                        />
+                        {expandedId === order.id && (
+                          <TableRow>
+                            <TableCell colSpan={canBulk ? 10 : 9} className="p-0">
+                              <OrderDetailPanel
+                                order={order}
+                                onSms={(o) => setSmsOrder(o)}
+                                onStatusChange={handleStatusChange}
+                                onShipment={(o) => setShipmentOrder(o)}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
                     ))}
                   </TableBody>
                 </Table>
@@ -354,6 +367,8 @@ export default function UnifiedOrders() {
                   <MobileOrderCard
                     key={order.id}
                     order={order}
+                    isExpanded={expandedId === order.id}
+                    onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
                     onSms={() => setSmsOrder(order)}
                     onStatusChange={handleStatusChange}
                     onShipment={() => setShipmentOrder(order)}
