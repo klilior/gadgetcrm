@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
-import { X, User, Mail, Phone, MapPin, Truck, Hash, Calendar, Tag, ShoppingCart, Package, CheckCircle, Printer, Loader2, Plus } from 'lucide-react';
+import { X, User, Mail, Phone, MapPin, Truck, Hash, Calendar, Tag, ShoppingCart, Package, CheckCircle, Printer, Loader2, Plus, FileText, Copy } from 'lucide-react';
 import { format } from "date-fns";
 import { base44 } from "@/api/base44Client";
 import { Badge } from '@/components/ui/badge';
@@ -64,8 +64,7 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             console.log('🚀 [OrderDetails] Creating Velo shipment for order:', order.id);
 
             const response = await base44.functions.invoke('veloOrder', {
-                orderId: order.id,
-                polygonId: 68
+                orderId: order.id
             });
 
             console.log('📦 [OrderDetails] Velo response:', response);
@@ -73,22 +72,32 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             const data = response.data || response;
 
             if (data.success) {
-                console.log('✅ Shipment created:', data.shipment);
+                console.log('✅ Shipment created:', data);
                 setShipmentCreated(true);
-                const shipmentInfo = { ...data.shipment, warning: data.warning, provider: 'Velo' };
-                setCreatedShipmentData(shipmentInfo);
-                if (shipmentInfo.label_url) {
-                    window.open(shipmentInfo.label_url, '_blank');
+                setCreatedShipmentData({
+                    shipping_code: data.tracking_number,
+                    tracking_number: data.tracking_number,
+                    label_url: data.label_url,
+                    velo_order_id: data.velo_order_id,
+                    provider: 'Velo',
+                    service_name: data.service_name || 'קרגו שליחויות',
+                    status: data.status
+                });
+                if (data.label_url) {
+                    window.open(data.label_url, '_blank');
                 }
+                toast.success(`משלוח Velo נוצר! מספר מעקב: ${data.tracking_number}`);
             } else {
                 const errorMsg = data.error || 'שגיאה ביצירת משלוח';
                 console.error('❌ Velo error:', errorMsg);
                 setError(errorMsg);
+                toast.error(errorMsg);
             }
         } catch (error) {
             console.error('❌ [OrderDetails] Exception:', error);
             const errorMsg = error.response?.data?.error || error.message || 'שגיאה ביצירת משלוח Velo';
             setError(errorMsg);
+            toast.error(errorMsg);
         } finally {
             setIsCreatingShipment(false);
         }

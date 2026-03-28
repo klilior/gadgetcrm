@@ -152,11 +152,11 @@ Deno.serve(async (req) => {
             // WooCommerce mode — existing logic
             const { orderId, polygonId: pid, externalServiceId: esid, weight: w, dimensions: d } = body;
             
-            if (!orderId || !pid) {
-                return Response.json({ success: false, error: 'חסרים שדות נדרשים' }, { status: 200 });
+            if (!orderId) {
+                return Response.json({ success: false, error: 'חסר מזהה הזמנה' }, { status: 200 });
             }
             
-            polygonId = pid;
+            polygonId = pid || null; // Optional — Velo auto-assigns if null
             externalServiceId = esid || null;
             weight = w || 1;
             dimensions = d || { width: 20, height: 10, depth: 15 };
