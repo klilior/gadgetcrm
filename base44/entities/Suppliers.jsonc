@@ -1,0 +1,51 @@
+{
+  "name": "Suppliers",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05e1\u05e4\u05e7"
+    },
+    "vat_id": {
+      "type": "string",
+      "description": "\u05d7.\u05e4/\u05e2\u05d5\u05e1\u05e7",
+      "index": true,
+      "unique": true
+    },
+    "aliases": {
+      "type": "string",
+      "description": "\u05db\u05d9\u05e0\u05d5\u05d9\u05d9\u05dd \u05dc\u05d6\u05d9\u05d4\u05d5\u05d9"
+    },
+    "created_from_invoice": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05e0\u05d5\u05e6\u05e8 \u05de\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05e8\u05d0\u05e9\u05d5\u05e0\u05d4"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u05e4\u05e2\u05d9\u05dc"
+    },
+    "is_recurring": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d4\u05d5\u05e6\u05d0\u05d4 \u05e7\u05d1\u05d5\u05e2\u05d4"
+    },
+    "recurring_type": {
+      "type": "string",
+      "enum": [
+        "\u05e9\u05db\"\u05d3",
+        "\u05ea\u05e7\u05e9\u05d5\u05e8\u05ea",
+        "\u05de\u05e0\u05d5\u05d9",
+        "\u05e9\u05d9\u05e8\u05d5\u05ea \u05e7\u05d1\u05d5\u05e2",
+        "\u05d0\u05d7\u05e8"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05d5\u05e6\u05d0\u05d4 \u05e7\u05d1\u05d5\u05e2\u05d4"
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    }
+  },
+  "required": []
+}

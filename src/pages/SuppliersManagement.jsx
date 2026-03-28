@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,18 +8,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { RefreshCcw, Plus, Pencil, Trash2, Building, Package } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RefreshCcw, Plus, Pencil, Trash2, Building, Package, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useUser } from "../components/UserAuth";
 import { suppliersService } from "../components/utils/suppliersService";
+import RecurringExpenseTable from "../components/recurring-expenses/RecurringExpenseTable";
 
 export default function SuppliersManagement() {
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editModal, setEditModal] = useState(null); // null or supplier object
-  const [form, setForm] = useState({ name: '', vat_id: '', aliases: '', notes: '', is_active: true });
+  const [form, setForm] = useState({ name: '', vat_id: '', aliases: '', notes: '', is_active: true, is_recurring: false, recurring_type: '' });
   const [saving, setSaving] = useState(false);
   const { currentUser } = useUser();
 
@@ -38,7 +40,7 @@ export default function SuppliersManagement() {
   useEffect(() => { load(); }, []);
 
   const openNew = () => {
-    setForm({ name: '', vat_id: '', aliases: '', notes: '', is_active: true });
+    setForm({ name: '', vat_id: '', aliases: '', notes: '', is_active: true, is_recurring: false, recurring_type: '' });
     setEditModal({ isNew: true });
   };
 
@@ -48,10 +50,14 @@ export default function SuppliersManagement() {
       vat_id: s.vat_id || '',
       aliases: s.aliases || '',
       notes: s.notes || '',
-      is_active: s.is_active !== false
+      is_active: s.is_active !== false,
+      is_recurring: s.is_recurring || false,
+      recurring_type: s.recurring_type || '',
     });
     setEditModal({ isNew: false, id: s.id });
   };
+
+  const recurringSuppliers = useMemo(() => suppliers.filter(s => s.is_recurring), [suppliers]);
 
   const save = async () => {
     if (!form.name.trim()) {
@@ -121,6 +127,7 @@ export default function SuppliersManagement() {
                   <TableHead>ח.פ./עוסק</TableHead>
                   <TableHead>כינויים</TableHead>
                   <TableHead>סטטוס</TableHead>
+                  <TableHead>הוצאה קבועה</TableHead>
                   <TableHead>מקור</TableHead>
                   <TableHead>הערות</TableHead>
                   <TableHead>פעולות</TableHead>
@@ -128,9 +135,9 @@ export default function SuppliersManagement() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={7}>טוען...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8}>טוען...</TableCell></TableRow>
                 ) : suppliers.length === 0 ? (
-                  <TableRow><TableCell colSpan={7}>אין ספקים</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8}>אין ספקים</TableCell></TableRow>
                 ) : (
                   suppliers.map(s => (
                     <TableRow key={s.id}>
@@ -141,6 +148,16 @@ export default function SuppliersManagement() {
                         <Badge variant={s.is_active !== false ? "default" : "secondary"}>
                           {s.is_active !== false ? "פעיל" : "לא פעיל"}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {s.is_recurring ? (
+                          <Badge className="bg-amber-100 text-amber-800 gap-1">
+                            <Clock className="w-3 h-3" />
+                            {s.recurring_type || "קבועה"}
+                          </Badge>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {s.created_from_invoice ? (
@@ -203,6 +220,27 @@ export default function SuppliersManagement() {
               <Switch checked={form.is_active} onCheckedChange={v => setForm({ ...form, is_active: v })} />
               <Label>ספק פעיל</Label>
             </div>
+            <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
+              <div className="flex items-center gap-2">
+                <Switch checked={form.is_recurring} onCheckedChange={v => setForm({ ...form, is_recurring: v, recurring_type: v ? (form.recurring_type || '') : '' })} />
+                <Label className="font-medium text-amber-800">הוצאה קבועה</Label>
+              </div>
+              {form.is_recurring && (
+                <div className="space-y-1">
+                  <Label>סוג הוצאה</Label>
+                  <Select value={form.recurring_type} onValueChange={v => setForm({ ...form, recurring_type: v })}>
+                    <SelectTrigger><SelectValue placeholder="בחר סוג" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='שכ"ד'>שכ"ד</SelectItem>
+                      <SelectItem value="תקשורת">תקשורת</SelectItem>
+                      <SelectItem value="מנוי">מנוי</SelectItem>
+                      <SelectItem value="שירות קבוע">שירות קבוע</SelectItem>
+                      <SelectItem value="אחר">אחר</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setEditModal(null)}>ביטול</Button>
               <Button onClick={save} disabled={saving}>{saving ? "שומר..." : "שמור"}</Button>
@@ -210,6 +248,9 @@ export default function SuppliersManagement() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Recurring Expense Tracking Table */}
+      <RecurringExpenseTable recurringSuppliers={recurringSuppliers} />
     </div>
   );
 }
