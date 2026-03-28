@@ -3,34 +3,23 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
-  Loader2, RefreshCw, ShoppingCart, Clock, Truck, CheckCircle,
-  Search, Package, Ban, AlertTriangle, DollarSign, ReceiptText,
-  Eye, MapPin, Copy, XCircle
+  Loader2, RefreshCw, ShoppingCart, Clock, CheckCircle,
+  Search, Package, AlertTriangle, DollarSign, ReceiptText
 } from "lucide-react";
 import { syncSuperPharmOrders } from "@/functions/syncSuperPharmOrders";
-import SPOrderDetailsModal from "../components/superpharm/SPOrderDetailsModal";
+import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
+import SPOrderCard from "../components/superpharm/SPOrderCard";
+import SPShipDialog from "../components/superpharm/SPShipDialog";
+import SPLinetInvoiceModal from "../components/superpharm/SPLinetInvoiceModal";
 import { toast } from "sonner";
 
-const STATE_CONFIG = {
-  WAITING_ACCEPTANCE: { label: "ממתין לאישור", color: "bg-orange-100 text-orange-800 border-orange-200", icon: "⏳", dotColor: "bg-orange-500" },
-  WAITING_DEBIT: { label: "ממתין לחיוב", color: "bg-yellow-100 text-yellow-800 border-yellow-200", icon: "💳", dotColor: "bg-yellow-500" },
-  WAITING_DEBIT_PAYMENT: { label: "ממתין לתשלום", color: "bg-yellow-100 text-yellow-800 border-yellow-200", icon: "💳", dotColor: "bg-yellow-500" },
-  SHIPPING: { label: "ממתין למשלוח", color: "bg-blue-100 text-blue-800 border-blue-200", icon: "📦", dotColor: "bg-blue-500" },
-  SHIPPED: { label: "נשלח", color: "bg-green-100 text-green-800 border-green-200", icon: "🚚", dotColor: "bg-green-500" },
-  TO_COLLECT: { label: "לאיסוף", color: "bg-purple-100 text-purple-800 border-purple-200", icon: "🏪", dotColor: "bg-purple-500" },
-  RECEIVED: { label: "התקבל", color: "bg-emerald-100 text-emerald-800 border-emerald-200", icon: "✅", dotColor: "bg-emerald-500" },
-  CLOSED: { label: "נסגר", color: "bg-gray-100 text-gray-800 border-gray-200", icon: "🔒", dotColor: "bg-gray-500" },
-  REFUSED: { label: "נדחה", color: "bg-red-100 text-red-800 border-red-200", icon: "❌", dotColor: "bg-red-500" },
-  CANCELED: { label: "בוטל", color: "bg-red-100 text-red-800 border-red-200", icon: "🚫", dotColor: "bg-red-500" },
-};
+
 
 const TABS = [
-  { key: "WAITING_ACCEPTANCE", label: "ממתינות לאישור", icon: Clock, color: "orange" },
-  { key: "SHIPPING", label: "ממתינות למשלוח", icon: Package, color: "blue" },
-  { key: "SHIPPED", label: "נשלחו", icon: Truck, color: "green" },
-  { key: "RECEIVED", label: "התקבלו", icon: CheckCircle, color: "emerald" },
+  { key: "WAITING_ACCEPTANCE", label: "⏳ ממתינות לאישור", icon: Clock, color: "orange" },
+  { key: "SHIPPING", label: "📦 ממתינות למשלוח", icon: Package, color: "blue" },
+  { key: "SHIPPED_CLOSED", label: "✅ נשלחו", icon: CheckCircle, color: "green" },
   { key: "ALL", label: "הכל", icon: ShoppingCart, color: "gray" },
 ];
 
@@ -38,16 +27,8 @@ const TAB_COLORS = {
   orange: { active: "border-orange-500 bg-orange-50", badge: "bg-orange-500", text: "text-orange-700" },
   blue: { active: "border-blue-500 bg-blue-50", badge: "bg-blue-500", text: "text-blue-700" },
   green: { active: "border-green-500 bg-green-50", badge: "bg-green-500", text: "text-green-700" },
-  emerald: { active: "border-emerald-500 bg-emerald-50", badge: "bg-emerald-500", text: "text-emerald-700" },
   gray: { active: "border-gray-500 bg-gray-50", badge: "bg-gray-500", text: "text-gray-700" },
 };
-
-function formatDate(dateStr) {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("he-IL", {
-    day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit"
-  });
-}
 
 function isUrgent(order) {
   if (order.order_state === "WAITING_ACCEPTANCE" && order.acceptance_decision_date) {
@@ -59,25 +40,18 @@ function isUrgent(order) {
   return false;
 }
 
-function timeLeft(dateStr) {
-  if (!dateStr) return null;
-  const diff = new Date(dateStr) - new Date();
-  if (diff < 0) return "עבר";
-  const hours = Math.floor(diff / 3600000);
-  const mins = Math.floor((diff % 3600000) / 60000);
-  if (hours > 24) return `${Math.floor(hours / 24)} ימים`;
-  return `${hours}:${String(mins).padStart(2, "0")} שעות`;
-}
-
 export default function SuperPharmOrdersPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState("WAITING_ACCEPTANCE");
-  const [selectedOrder, setSelectedOrder] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [lastRefresh, setLastRefresh] = useState(null);
   const intervalRef = useRef(null);
+  const [shipOrder, setShipOrder] = useState(null);
+  const [shipCarrier, setShipCarrier] = useState(null);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
+  const [acceptingId, setAcceptingId] = useState(null);
 
   const loadOrders = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -100,6 +74,23 @@ export default function SuperPharmOrdersPage() {
     return () => clearInterval(intervalRef.current);
   }, [loadOrders]);
 
+  const handleAccept = async (order) => {
+    setAcceptingId(order.mirakl_order_id);
+    try {
+      const { data } = await updateSuperPharmOrder({ action: "accept", order_id: order.mirakl_order_id });
+      if (data.success) {
+        toast.success(data.message || "ההזמנה אושרה");
+        await loadOrders();
+      } else {
+        toast.error(data.error || "שגיאה");
+      }
+    } catch (e) {
+      toast.error("שגיאה: " + e.message);
+    } finally {
+      setAcceptingId(null);
+    }
+  };
+
   const handleSync = async () => {
     setSyncing(true);
     try {
@@ -117,13 +108,12 @@ export default function SuperPharmOrdersPage() {
     }
   };
 
-  const counts = useMemo(() => {
-    const c = { ALL: orders.length };
-    for (const t of TABS) {
-      if (t.key !== "ALL") c[t.key] = orders.filter(o => o.order_state === t.key).length;
-    }
-    return c;
-  }, [orders]);
+  const counts = useMemo(() => ({
+    ALL: orders.length,
+    WAITING_ACCEPTANCE: orders.filter(o => o.order_state === "WAITING_ACCEPTANCE").length,
+    SHIPPING: orders.filter(o => o.order_state === "SHIPPING").length,
+    SHIPPED_CLOSED: orders.filter(o => ["SHIPPED", "CLOSED"].includes(o.order_state)).length,
+  }), [orders]);
 
   const stats = useMemo(() => {
     const active = orders.filter(o => !["CLOSED", "CANCELED", "REFUSED"].includes(o.order_state));
@@ -135,7 +125,14 @@ export default function SuperPharmOrdersPage() {
   }, [orders]);
 
   const filteredOrders = useMemo(() => {
-    let result = activeTab === "ALL" ? orders : orders.filter(o => o.order_state === activeTab);
+    let result;
+    if (activeTab === "ALL") {
+      result = orders;
+    } else if (activeTab === "SHIPPED_CLOSED") {
+      result = orders.filter(o => ["SHIPPED", "CLOSED"].includes(o.order_state));
+    } else {
+      result = orders.filter(o => o.order_state === activeTab);
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter(o =>
@@ -250,133 +247,59 @@ export default function SuperPharmOrdersPage() {
         />
       </div>
 
-      {/* Orders Table */}
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <Loader2 className="w-8 h-8 animate-spin text-green-500" />
-              <span className="text-sm text-gray-500">טוען הזמנות...</span>
-            </div>
-          ) : filteredOrders.length === 0 ? (
-            <div className="text-center py-16">
-              <ShoppingCart className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-              <p className="text-gray-500 font-medium">
-                {searchQuery ? "לא נמצאו תוצאות לחיפוש" : "אין הזמנות בטאב זה"}
-              </p>
-              {searchQuery && (
-                <Button variant="link" onClick={() => setSearchQuery("")} className="mt-1 text-sm">
-                  נקה חיפוש
-                </Button>
-              )}
-            </div>
-          ) : (
-            <OrdersTable orders={filteredOrders} onSelect={setSelectedOrder} />
+      {/* Orders Cards */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-green-500" />
+          <span className="text-sm text-gray-500">טוען הזמנות...</span>
+        </div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="text-center py-16">
+          <ShoppingCart className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+          <p className="text-gray-500 font-medium">
+            {searchQuery ? "לא נמצאו תוצאות לחיפוש" : "אין הזמנות בטאב זה"}
+          </p>
+          {searchQuery && (
+            <Button variant="link" onClick={() => setSearchQuery("")} className="mt-1 text-sm">
+              נקה חיפוש
+            </Button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredOrders.map(order => (
+            <SPOrderCard
+              key={order.id}
+              order={order}
+              onAccept={handleAccept}
+              onShip={(o, carrier) => { setShipOrder(o); setShipCarrier(carrier); }}
+              onCreateInvoice={(o) => setInvoiceOrder(o)}
+            />
+          ))}
+        </div>
+      )}
 
-      {/* Details Modal */}
-      {selectedOrder && (
-        <SPOrderDetailsModal
-          order={selectedOrder}
-          open={!!selectedOrder}
-          onClose={() => setSelectedOrder(null)}
-          onRefresh={async () => {
+      {/* Ship Dialog */}
+      {shipOrder && (
+        <SPShipDialog
+          order={shipOrder}
+          open={!!shipOrder}
+          onClose={() => setShipOrder(null)}
+          onSuccess={async () => {
+            setShipOrder(null);
             await loadOrders();
-            setSelectedOrder(null);
           }}
         />
       )}
-    </div>
-  );
-}
 
-function OrdersTable({ orders, onSelect }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b bg-gray-50/80">
-            <th className="text-right p-3 font-medium text-gray-600">הזמנה</th>
-            <th className="text-right p-3 font-medium text-gray-600">לקוח</th>
-            <th className="text-right p-3 font-medium text-gray-600">סטטוס</th>
-            <th className="text-right p-3 font-medium text-gray-600 hidden sm:table-cell">פריטים</th>
-            <th className="text-right p-3 font-medium text-gray-600">סכום</th>
-            <th className="text-right p-3 font-medium text-gray-600 hidden md:table-cell">תאריך</th>
-            <th className="text-right p-3 font-medium text-gray-600 hidden lg:table-cell">דד-ליין / מעקב</th>
-            <th className="text-center p-3 w-10"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map(order => {
-            const state = STATE_CONFIG[order.order_state] || { label: order.order_state, color: "bg-gray-100 text-gray-800", icon: "❓", dotColor: "bg-gray-400" };
-            const urgent = isUrgent(order);
-            const deadline = order.order_state === "WAITING_ACCEPTANCE" ? order.acceptance_decision_date : order.shipping_deadline;
-            const remaining = timeLeft(deadline);
-
-            return (
-              <tr
-                key={order.id}
-                className={`border-b cursor-pointer transition-colors hover:bg-gray-50
-                  ${urgent ? "bg-red-50/60 hover:bg-red-50" : ""}`}
-                onClick={() => onSelect(order)}
-              >
-                <td className="p-3">
-                  <div className="flex items-center gap-1.5">
-                    {urgent && <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />}
-                    <span className="font-mono text-xs font-medium">{order.mirakl_order_id}</span>
-                  </div>
-                </td>
-                <td className="p-3">
-                  <div className="font-medium text-sm">{order.customer_first_name} {order.customer_last_name}</div>
-                  <div className="text-xs text-gray-500 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {order.shipping_city || "-"}
-                  </div>
-                </td>
-                <td className="p-3">
-                  <Badge variant="outline" className={`text-xs ${state.color}`}>
-                    {state.icon} {state.label}
-                  </Badge>
-                </td>
-                <td className="p-3 text-center hidden sm:table-cell">
-                  <span className="bg-gray-100 px-2 py-0.5 rounded text-xs">{order.order_lines_count || 0}</span>
-                </td>
-                <td className="p-3">
-                  <span className="font-semibold">₪{(order.total_price || 0).toLocaleString()}</span>
-                  {order.total_commission > 0 && (
-                    <div className="text-[10px] text-gray-400">עמלה: ₪{order.total_commission}</div>
-                  )}
-                </td>
-                <td className="p-3 text-xs text-gray-500 hidden md:table-cell">
-                  {formatDate(order.created_at_mirakl)}
-                </td>
-                <td className="p-3 hidden lg:table-cell">
-                  {order.tracking_number ? (
-                    <div className="flex items-center gap-1 text-xs">
-                      <Truck className="w-3 h-3 text-green-600" />
-                      <span className="font-mono text-green-700">{order.tracking_number}</span>
-                    </div>
-                  ) : deadline ? (
-                    <div className={`flex items-center gap-1 text-xs ${urgent ? "text-red-600 font-bold" : "text-gray-500"}`}>
-                      <Clock className="w-3 h-3" />
-                      {remaining}
-                    </div>
-                  ) : (
-                    <span className="text-gray-300">-</span>
-                  )}
-                </td>
-                <td className="p-3 text-center">
-                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={e => { e.stopPropagation(); onSelect(order); }}>
-                    <Eye className="w-4 h-4 text-gray-400" />
-                  </Button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      {/* Linet Invoice Modal */}
+      {invoiceOrder && (
+        <SPLinetInvoiceModal
+          order={invoiceOrder}
+          open={!!invoiceOrder}
+          onClose={() => setInvoiceOrder(null)}
+        />
+      )}
     </div>
   );
 }
