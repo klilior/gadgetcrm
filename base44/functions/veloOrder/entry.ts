@@ -20,7 +20,6 @@ async function veloHmac(jwt, apiKey, apiSecret) {
 async function getVeloJwt(base44, config) {
     const { apiKey, apiSecret, email, password, baseUrl } = config;
     
-    // Check existing session
     const sessions = await base44.asServiceRole.entities.VeloSession.list('-issued_at', 1);
     
     if (sessions.length > 0) {
@@ -34,7 +33,6 @@ async function getVeloJwt(base44, config) {
             return session.jwt;
         }
         
-        // Try refresh
         console.log('🔄 [VeloOrder] Refreshing JWT...');
         const hmac = await veloHmac(session.jwt, apiKey, apiSecret);
         const refreshRes = await fetch(`${baseUrl}/refresh`, {
@@ -61,7 +59,6 @@ async function getVeloJwt(base44, config) {
         console.log('⚠️ [VeloOrder] Refresh failed, logging in...');
     }
     
-    // Fresh login
     console.log('🔑 [VeloOrder] Performing login...');
     const loginRes = await fetch(`${baseUrl}/login`, {
         method: 'POST',
@@ -99,11 +96,11 @@ Deno.serve(async (req) => {
         console.log('🔵 [VeloOrder] Starting...');
         
         const body = await req.json();
-        const { orderId, polygonId, externalServiceId, weight, dimensions } = body;
         
-        if (!orderId || !polygonId) {
-            return Response.json({ success: false, error: 'חסרים שדות נדרשים' }, { status: 200 });
-        }
+        // Support two modes:
+        // Mode 1 (existing): orderId + polygonId (WooCommerce orders)
+        // Mode 2 (new): superpharm order data directly
+        const isSuperPharm = !!body.superpharm;
         
         // Get Provider config
         const providers = await base44.asServiceRole.entities.ShippingProvider.filter({
@@ -120,7 +117,7 @@ Deno.serve(async (req) => {
             return Response.json({ success: false, error: 'חסרים פרטי התחברות ל-Velo' }, { status: 200 });
         }
         
-        // Get JWT via Enterprise login
+        // Get JWT
         const jwt = await getVeloJwt(base44, config);
         const hmac = await veloHmac(jwt, apiKey, apiSecret);
         const headers = {
@@ -130,233 +127,237 @@ Deno.serve(async (req) => {
             'Authorization': `Bearer ${jwt}`
         };
         
-        console.log('🔑 [VeloOrder] Auth ready (JWT + HMAC + Bearer)');
-        
-        // Get order and customer data
-        const order = await base44.asServiceRole.entities.Order.get(orderId);
-        if (!order) return Response.json({ success: false, error: 'הזמנה לא נמצאה' }, { status: 200 });
-        
-        const customer = order.client_id 
-            ? await base44.asServiceRole.entities.Client.get(order.client_id) 
-            : null;
-        
-        const products = await base44.asServiceRole.entities.OrderProduct.filter({ order_id: orderId });
-        
-        let billing = {};
-        try { billing = JSON.parse(order.raw_data_billing || '{}'); } catch (e) {}
-        
-        console.log('📋 [VeloOrder] Billing:', JSON.stringify(billing));
-        
-        // Resolve names
-        const nameParts = (customer?.full_name || '').trim().split(/\s+/);
-        const firstName = (billing.first_name || '').trim() || nameParts[0] || 'לקוח';
-        const lastName = (billing.last_name || '').trim() || nameParts.slice(1).join(' ') || '-';
-        
-        console.log('👤 [VeloOrder] Name:', { firstName, lastName });
-        
-        // Parse address
-        let street = billing.address_1 || customer?.full_address || '';
-        let number = billing.address_2 || '';
-        
-        if (!number && street) {
-            const match = street.match(/^(.+?)\s+(\d+[א-ת]?)$/);
-            if (match) {
-                street = match[1].trim();
-                number = match[2];
+        console.log('🔑 [VeloOrder] Auth ready');
+
+        let firstName, lastName, phone, city, street, number, zipcode, note, externalId, products, polygonId, externalServiceId, weight, dimensions;
+
+        if (isSuperPharm) {
+            // SuperPharm mode — data comes directly from frontend
+            const sp = body.superpharm;
+            firstName = sp.firstName || 'לקוח';
+            lastName = sp.lastName || '-';
+            phone = (sp.phone || '').replace(/\D/g, '');
+            city = sp.city || '';
+            street = sp.street || '';
+            number = sp.number || '1';
+            zipcode = sp.zip || '';
+            note = sp.note || '';
+            externalId = `SP-${sp.miraklOrderId}`;
+            polygonId = null; // Let Velo auto-assign
+            externalServiceId = sp.externalServiceId || null;
+            weight = sp.weight || 1;
+            dimensions = sp.dimensions || { width: 20, height: 10, depth: 15 };
+            products = sp.products || [{ name: 'מוצר', code: 'SP', variation: '', price: 0, quantity: 1 }];
+        } else {
+            // WooCommerce mode — existing logic
+            const { orderId, polygonId: pid, externalServiceId: esid, weight: w, dimensions: d } = body;
+            
+            if (!orderId || !pid) {
+                return Response.json({ success: false, error: 'חסרים שדות נדרשים' }, { status: 200 });
             }
-        }
-        if (!number) number = '1';
-        
-        const phone = (billing.phone || customer?.phone || '').replace(/\D/g, '');
-        const city = billing.city || customer?.city || '';
-        const zipcode = billing.postcode || '';
-        
-        console.log('📍 [VeloOrder] Address:', { street, number, city });
-        
-        // Build payload matching working system format
-        const orderPayload = {
-            polygonId: polygonId,
-            externalServiceId: externalServiceId || null,
-            externalId: `Order${order.external_order_number || order.id}`,
-            weight: weight || 1,
-            dimensions: dimensions || { width: 20, height: 10, depth: 15 },
-            note: order.customer_note || `הזמנה #${order.external_order_number}`,
-            packagesCount: 1,
-            customerAddress: {
-                first_name: firstName,
-                last_name: lastName,
-                street: street,
-                number: number,
-                line2: '',
-                city: city,
-                zipcode: zipcode,
-                state: '',
-                country: 'Israel',
-                phone: phone,
-                longitude: '',
-                latitude: ''
-            },
-            storeAddress: {
-                first_name: 'Gadget',
-                last_name: 'Team',
-                street: 'סביונים',
-                number: '1',
-                line2: '',
-                city: 'יהוד',
-                zipcode: '',
-                state: '',
-                country: 'Israel',
-                phone: phone,
-                longitude: '',
-                latitude: ''
-            },
-            products: products.map(p => ({
+            
+            polygonId = pid;
+            externalServiceId = esid || null;
+            weight = w || 1;
+            dimensions = d || { width: 20, height: 10, depth: 15 };
+            
+            const order = await base44.asServiceRole.entities.Order.get(orderId);
+            if (!order) return Response.json({ success: false, error: 'הזמנה לא נמצאה' }, { status: 200 });
+            
+            const customer = order.client_id 
+                ? await base44.asServiceRole.entities.Client.get(order.client_id) 
+                : null;
+            
+            const orderProducts = await base44.asServiceRole.entities.OrderProduct.filter({ order_id: orderId });
+            
+            let billing = {};
+            try { billing = JSON.parse(order.raw_data_billing || '{}'); } catch (_e) {}
+            
+            const nameParts = (customer?.full_name || '').trim().split(/\s+/);
+            firstName = (billing.first_name || '').trim() || nameParts[0] || 'לקוח';
+            lastName = (billing.last_name || '').trim() || nameParts.slice(1).join(' ') || '-';
+            
+            street = billing.address_1 || customer?.full_address || '';
+            number = billing.address_2 || '';
+            if (!number && street) {
+                const match = street.match(/^(.+?)\s+(\d+[א-ת]?)$/);
+                if (match) { street = match[1].trim(); number = match[2]; }
+            }
+            if (!number) number = '1';
+            
+            phone = (billing.phone || customer?.phone || '').replace(/\D/g, '');
+            city = billing.city || customer?.city || '';
+            zipcode = billing.postcode || '';
+            note = order.customer_note || `הזמנה #${order.external_order_number}`;
+            externalId = `Order${order.external_order_number || order.id}`;
+            
+            products = orderProducts.map(p => ({
                 name: p.name || 'מוצר',
                 code: p.sku || p.product_id?.toString() || 'UNKNOWN',
                 variation: '',
                 price: parseFloat(p.total) || 0,
                 quantity: p.quantity || 1
-            }))
+            }));
+        }
+
+        console.log('📍 [VeloOrder] Address:', { firstName, lastName, city, street, number });
+
+        // ===== STEP 1: Create draft =====
+        const orderPayload = {
+            ...(polygonId ? { polygonId } : {}),
+            externalServiceId: externalServiceId || null,
+            externalId,
+            weight: weight || 1,
+            dimensions: dimensions || { width: 20, height: 10, depth: 15 },
+            note,
+            packagesCount: 1,
+            customerAddress: {
+                first_name: firstName,
+                last_name: lastName,
+                street, number, line2: '',
+                city, zipcode,
+                state: '', country: 'Israel',
+                phone, longitude: '', latitude: ''
+            },
+            storeAddress: {
+                first_name: 'Gadget', last_name: 'Team',
+                street: 'סביונים', number: '1', line2: '',
+                city: 'יהוד', zipcode: '', state: '', country: 'Israel',
+                phone, longitude: '', latitude: ''
+            },
+            products: products.length > 0 ? products : [{ name: 'מוצר', code: 'SP', variation: '', price: 0, quantity: 1 }]
         };
         
-        console.log('📦 [VeloOrder] Step 1 - Creating order...');
-        console.log('📦 [VeloOrder] Payload:', JSON.stringify(orderPayload, null, 2));
+        console.log('📦 [VeloOrder] Step 1 - Creating draft...');
         
-        // Use enterprise endpoint
-        const orderRes = await fetch(`${baseUrl || 'https://api.veloapp.io/api/enterprise'}/order`, {
-            method: 'POST',
-            headers,
+        const apiBase = baseUrl || 'https://api.veloapp.io/api/enterprise';
+        const orderRes = await fetch(`${apiBase}/order`, {
+            method: 'POST', headers,
             body: JSON.stringify(orderPayload)
         });
         
         const orderText = await orderRes.text();
-        console.log('📦 [VeloOrder] Response status:', orderRes.status);
-        console.log('📦 [VeloOrder] Response:', orderText);
+        console.log('📦 [VeloOrder] Step 1 response:', orderRes.status, orderText.substring(0, 500));
         
         let orderData;
-        try { orderData = JSON.parse(orderText); } catch (e) {
-            return Response.json({ success: false, error: 'תגובה לא תקינה מ-Velo', details: orderText }, { status: 200 });
+        try { orderData = JSON.parse(orderText); } catch (_e) {
+            return Response.json({ success: false, error: 'שגיאה ביצירת משלוח ב-Velo: תגובה לא תקינה', details: orderText }, { status: 200 });
         }
         
         if (orderData.fail === true) {
-            let errorMsg = orderData.message || 'שגיאה ביצירת הזמנה';
+            let errorMsg = 'שגיאה ביצירת משלוח ב-Velo';
             if (orderData.errors) {
                 const details = typeof orderData.errors === 'object' 
                     ? Object.entries(orderData.errors).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join('; ')
                     : JSON.stringify(orderData.errors);
                 errorMsg += ` - ${details}`;
+            } else if (orderData.message) {
+                errorMsg += ` - ${orderData.message}`;
             }
             return Response.json({ success: false, error: errorMsg, details: orderData }, { status: 200 });
         }
         
         const veloOrderId = orderData.data?.name;
         if (!veloOrderId) {
-            return Response.json({ success: false, error: 'לא התקבל מזהה הזמנה מ-Velo', details: orderData }, { status: 200 });
+            return Response.json({ success: false, error: 'שגיאה ביצירת משלוח ב-Velo: לא התקבל מזהה', details: orderData }, { status: 200 });
         }
         
-        console.log('✅ [VeloOrder] Order created:', veloOrderId);
-        
-        // ===== STEP 2: Accept =====
+        console.log('✅ [VeloOrder] Draft created:', veloOrderId);
+
+        // ===== STEP 2: Accept (confirm the draft) =====
         console.log('📦 [VeloOrder] Step 2 - Accept...');
         await new Promise(r => setTimeout(r, 1500));
         
-        // Refresh HMAC with same JWT for subsequent calls
-        const acceptRes = await fetch(`${baseUrl || 'https://api.veloapp.io/api/enterprise'}/accept`, {
-            method: 'POST',
-            headers,
+        const acceptRes = await fetch(`${apiBase}/accept`, {
+            method: 'POST', headers,
             body: JSON.stringify({ order_id: veloOrderId })
         });
         
         const acceptText = await acceptRes.text();
-        console.log('📦 [VeloOrder] Accept response:', acceptText);
+        console.log('📦 [VeloOrder] Accept response:', acceptText.substring(0, 500));
         
         let acceptData;
-        try { acceptData = JSON.parse(acceptText); } catch (e) {
+        try { acceptData = JSON.parse(acceptText); } catch (_e) {
             acceptData = { fail: true, message: 'Invalid accept response' };
         }
         
         if (acceptData.fail === true) {
             console.warn('⚠️ [VeloOrder] Accept failed:', acceptData.message);
+            return Response.json({
+                success: false,
+                error: `המשלוח נוצר אבל לא אושר — ${acceptData.message || 'פנה לתמיכה'}`,
+                velo_order_id: veloOrderId,
+                details: acceptData
+            }, { status: 200 });
         }
         
         const barcode = acceptData.data?.barcode || null;
-        const isConfirmed = !acceptData.fail && barcode;
-        
-        // ===== STEP 3: Label =====
-        let labelUrl = null;
-        if (isConfirmed) {
-            console.log('📦 [VeloOrder] Step 3 - Label...');
-            const labelRes = await fetch(`${baseUrl || 'https://api.veloapp.io/api/enterprise'}/label`, {
-                method: 'POST',
-                headers,
+        console.log('✅ [VeloOrder] Accepted, barcode:', barcode);
+
+        // ===== STEP 3: Get label =====
+        let labelUrl = `https://api.veloapp.io/storage/stickers/${veloOrderId}.pdf`;
+        console.log('📦 [VeloOrder] Step 3 - Getting label...');
+        try {
+            const labelRes = await fetch(`${apiBase}/label`, {
+                method: 'POST', headers,
                 body: JSON.stringify({ order_id: veloOrderId })
             });
             const labelText = await labelRes.text();
-            console.log('📦 [VeloOrder] Label response:', labelText.substring(0, 500));
+            console.log('📦 [VeloOrder] Label response:', labelText.substring(0, 300));
             try {
                 const labelData = JSON.parse(labelText);
-                if (!labelData.fail) labelUrl = labelData.data?.label_pdf || labelData.data?.label || null;
-            } catch (e) {}
+                if (!labelData.fail && labelData.data?.label_pdf) {
+                    labelUrl = labelData.data.label_pdf;
+                }
+            } catch (_e) {}
+        } catch (labelErr) {
+            console.warn('⚠️ [VeloOrder] Label fetch failed:', labelErr.message);
         }
+
+        // The Velo order name IS the tracking reference
+        // Cargo barcode is assigned asynchronously and may not be immediately available
+        const finalBarcode = barcode || veloOrderId;
+        const finalLabelUrl = labelUrl;
+        const finalStatus = 'confirmed';
         
-        // ===== STEP 4: Info =====
-        console.log('📦 [VeloOrder] Step 4 - Info...');
-        const infoRes = await fetch(`${baseUrl || 'https://api.veloapp.io/api/enterprise'}/info/${veloOrderId}`, {
-            method: 'GET', headers
-        });
-        const infoText = await infoRes.text();
-        console.log('📦 [VeloOrder] Info:', infoText.substring(0, 1000));
-        
-        let infoData = {};
-        try { infoData = JSON.parse(infoText); } catch (e) {}
-        
-        const trackingUrl = infoData.data?.external_tracking_url || infoData.data?.tracking_link || null;
-        const finalBarcode = barcode || infoData.data?.barcode || infoData.data?.shipping_code || null;
-        const finalLabelUrl = labelUrl || infoData.data?.label_pdf || null;
-        const finalStatus = infoData.data?.status || acceptData?.data?.status || 'placed';
-        
-        console.log('📋 [VeloOrder] Final:', { barcode: finalBarcode, label: finalLabelUrl, tracking: trackingUrl, status: finalStatus });
-        
-        // Save shipment
-        const shipment = await base44.asServiceRole.entities.Shipment.create({
-            shipment_type: 'standard',
-            order_id: orderId,
-            external_order_number: order.external_order_number || null,
-            client_id: order.client_id || null,
-            consignee_name: `${firstName} ${lastName}`.trim(),
-            consignee_phone: phone,
-            consignee_city: city,
-            consignee_street: street || null,
-            consignee_house: number || null,
-            consignee_zip: zipcode || null,
-            status: isConfirmed ? 'created' : 'pending',
-            tracking_number: finalBarcode || null,
-            weight: orderPayload.weight || 1,
-            num_packages: 1,
-            reference: `Velo:${veloOrderId}`,
-            notes: `Velo Order: ${veloOrderId}`,
-            api_response: { order: orderData, accept: acceptData, info: infoData }
-        });
-        
-        if (!isConfirmed) {
-            return Response.json({
-                success: true,
-                warning: `המשלוח נוצר אך לא אושר (${acceptData?.message || 'unknown'}). יש לאשר במערכת Velo.`,
-                shipment: { id: veloOrderId, shipping_code: finalBarcode, label_url: finalLabelUrl, tracking_url: trackingUrl, status: finalStatus },
-                shipment_id: shipment.id
+        console.log('📋 [VeloOrder] Final:', { barcode: finalBarcode, label: finalLabelUrl, status: finalStatus });
+
+        // Save shipment record (only for WooCommerce mode)
+        if (!isSuperPharm && body.orderId) {
+            await base44.asServiceRole.entities.Shipment.create({
+                shipment_type: 'standard',
+                order_id: body.orderId,
+                external_order_number: externalId,
+                consignee_name: `${firstName} ${lastName}`.trim(),
+                consignee_phone: phone,
+                consignee_city: city,
+                consignee_street: street || null,
+                consignee_house: number || null,
+                consignee_zip: zipcode || null,
+                status: 'created',
+                tracking_number: finalBarcode || null,
+                weight: weight || 1,
+                num_packages: 1,
+                reference: `Velo:${veloOrderId}`,
+                notes: `Velo Order: ${veloOrderId}`,
+                api_response: { order: orderData, accept: acceptData }
             });
         }
         
         return Response.json({
             success: true,
-            shipment: { id: veloOrderId, shipping_code: finalBarcode, label_url: finalLabelUrl, tracking_url: trackingUrl, status: finalStatus },
-            shipment_id: shipment.id
+            tracking_number: finalBarcode,
+            label_url: finalLabelUrl,
+            velo_order_id: veloOrderId,
+            service_name: 'קרגו שליחויות',
+            status: finalStatus
         });
         
     } catch (error) {
         console.error('❌ [VeloOrder] Error:', error);
         return Response.json({ 
-            success: false, error: error.message || 'שגיאה ביצירת משלוח',
+            success: false, 
+            error: error.message || 'שגיאה ביצירת משלוח',
             details: error.stack
         }, { status: 200 });
     }

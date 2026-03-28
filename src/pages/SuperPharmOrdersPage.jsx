@@ -281,15 +281,21 @@ export default function SuperPharmOrdersPage() {
         </div>
       )}
 
-      {/* Ship Dialog (simple - for non-pickup orders) */}
+      {/* Ship Dialog (Velo - for non-pickup orders) */}
       {shipOrder && shipCarrier !== "ups" && (
         <SPShipDialog
           order={shipOrder}
           open={!!shipOrder}
-          onClose={() => setShipOrder(null)}
+          onClose={() => { setShipOrder(null); setShipCarrier(null); }}
           onSuccess={async () => {
             setShipOrder(null);
+            setShipCarrier(null);
             await loadOrders();
+          }}
+          onCreateInvoice={(o) => {
+            setShipOrder(null);
+            setShipCarrier(null);
+            setInvoiceOrder(o);
           }}
         />
       )}
