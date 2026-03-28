@@ -21,14 +21,12 @@ import UndeliveredOrdersWidget from "../components/dashboard/UndeliveredOrdersWi
 import QuickLeadsToComplete from "../components/dashboard/QuickLeadsToComplete";
 import ZapPriceMonitorWidget from "../components/dashboard/ZapPriceMonitorWidget";
 
-// Ratio thresholds for color coding
-const RATIO_THRESHOLDS = { good: 40, warning: 60 }; // green < 40%, orange 40-60%, red > 60%
+const RATIO_THRESHOLDS = { good: 40, warning: 60 };
 
 export default function ManagerControlCenter() {
   const { currentUser } = useUser();
   const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
 
-  // Data states
   const [sales, setSales] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [mappings, setMappings] = useState([]);
@@ -37,7 +35,6 @@ export default function ManagerControlCenter() {
   const [isLoading, setIsLoading] = useState(true);
   const [quickLeads, setQuickLeads] = useState([]);
 
-  // Global filters
   const [datePreset, setDatePreset] = useState("thisMonth");
   const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
@@ -47,24 +44,33 @@ export default function ManagerControlCenter() {
   const [availableReps, setAvailableReps] = useState([]);
   const [availableCategories, setAvailableCategories] = useState([]);
 
-  // Table states
   const [repSearch, setRepSearch] = useState("");
   const [repSortField, setRepSortField] = useState("total_net");
   const [repSortDir, setRepSortDir] = useState("desc");
   const [supplierSearch, setSupplierSearch] = useState("");
 
-  // Load everything in parallel on mount + when filters change
   useEffect(() => {
     if (!isManager) return;
     loadAllData();
   }, [dateFrom, dateTo, selectedRep, selectedCategory, selectedSupplier, isManager]);
+
+  const checkFilters = (sale, filters) => {
+    if (!filters) return false;
+    if (filters.category_in && filters.category_in.length > 0) {
+      if (!filters.category_in.includes(sale.category)) return false;
+    }
+    if (filters.category && sale.category !== filters.category) return false;
+    if (filters.product_name_contains) {
+      if (!sale.product_name || !sale.product_name.includes(filters.product_name_contains)) return false;
+    }
+    return true;
+  };
 
   const loadAllData = async () => {
     const start = Date.now();
     console.log('🔄 [ManagerControlCenter] Starting data load...');
     setIsLoading(true);
 
-    // Build queries
     let salesQuery = { issue_date: { $gte: dateFrom, $lte: dateTo } };
     if (selectedRep !== "all") salesQuery.sales_rep = selectedRep;
 
@@ -74,13 +80,11 @@ export default function ManagerControlCenter() {
     };
     if (selectedSupplier !== "all") invoiceQuery.supplier = selectedSupplier;
 
-    // Phase 1: Load critical data first (sales + mappings)
     const [salesData, mappingsData] = await Promise.all([
       base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 2000).catch(() => []),
       mappings.length > 0 ? Promise.resolve(mappings) : base44.entities.CommissionGroupMapping.filter({ is_active: true }).catch(() => []),
     ]);
 
-    // Show sales data immediately
     if (mappings.length === 0 && mappingsData.length > 0) setMappings(mappingsData);
     const currentMappings = mappings.length > 0 ? mappings : mappingsData;
     let filteredSales = salesData;
@@ -100,25 +104,20 @@ export default function ManagerControlCenter() {
     const cats = [...new Set(salesData.map(s => s.category).filter(Boolean))].sort();
     setAvailableCategories(cats);
     console.log(`⏱️ [ManagerControlCenter] Phase 1 done in ${Date.now() - start}ms — ${filteredSales.length} sales`);
-    setIsLoading(false); // Show UI now with sales data
+    setIsLoading(false);
 
-    // Phase 2: Load secondary data in background (non-blocking)
     const [invoicesData, pendingInvoices, allLeads] = await Promise.all([
       base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000).catch(() => []),
       base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200).catch(() => []),
       base44.entities.Lead.filter({ status: { $ne: 'Deleted' } }).catch(() => [])
     ]);
 
-    // Process pending invoices count
     const filtered = (pendingInvoices || []).filter(inv => 
       inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
     );
     setPendingInvoicesCount(filtered.length);
-
-    // Process invoices
     setInvoices(invoicesData);
 
-    // Process quick leads
     const quickIncomplete = (allLeads || [])
       .filter(l => (l.capture_type === 'Quick' || l.quick_incomplete === true) && l.status !== 'Closed')
       .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
@@ -142,7 +141,6 @@ export default function ManagerControlCenter() {
     setDatePreset(preset);
     const today = new Date();
     let from, to;
-    
     switch (preset) {
       case 'today':
         from = today; to = today; break;
@@ -159,7 +157,6 @@ export default function ManagerControlCenter() {
       default:
         return;
     }
-    
     setDateFrom(format(from, 'yyyy-MM-dd'));
     setDateTo(format(to, 'yyyy-MM-dd'));
   };
@@ -173,9 +170,8 @@ export default function ManagerControlCenter() {
     setSupplierSearch("");
   };
 
-  // Commission group detection
   const getCommissionGroup = (sale) => {
-    for (const mapping of mappings.sort((a, b) => (b.priority || 0) - (a.priority || 0))) {
+    for (const mapping of [...mappings].sort((a, b) => (b.priority || 0) - (a.priority || 0))) {
       if (checkFilters(sale, mapping.filters_json)) {
         return mapping.commission_group_code;
       }
@@ -183,21 +179,7 @@ export default function ManagerControlCenter() {
     return null;
   };
 
-  const checkFilters = (sale, filters) => {
-    if (!filters) return false;
-    if (filters.category_in && filters.category_in.length > 0) {
-      if (!filters.category_in.includes(sale.category)) return false;
-    }
-    if (filters.category && sale.category !== filters.category) return false;
-    if (filters.product_name_contains) {
-      if (!sale.product_name || !sale.product_name.includes(filters.product_name_contains)) return false;
-    }
-    return true;
-  };
-
-  // KPI Calculations
   const kpiData = useMemo(() => {
-    // Deduplicate sales
     const uniqueSales = [];
     const seenKeys = new Set();
     for (const sale of sales) {
@@ -209,7 +191,6 @@ export default function ManagerControlCenter() {
     }
 
     const isCredit = (s) => s.doc_type?.includes('זיכוי') || s.doc_type === '3';
-    
     let grossSales = 0, netSales = 0, creditsTotal = 0;
     let devicesUnits = 0, linesUnits = 0, accessoriesNet = 0;
 
@@ -233,10 +214,8 @@ export default function ManagerControlCenter() {
       else if (group === 'ACCESSORIES_GROUP') accessoriesNet += net;
     });
 
-    // Purchases calculations
     const purchasesInvoices = invoices.filter(i => i.doc_type === 'חשבונית מס');
     const purchasesTotal = purchasesInvoices.reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
-    
     const ratio = grossSales > 0 ? (purchasesTotal / grossSales) * 100 : 0;
 
     return {
@@ -251,7 +230,6 @@ export default function ManagerControlCenter() {
     };
   }, [sales, invoices, mappings]);
 
-  // Rep performance data
   const repPerformance = useMemo(() => {
     const uniqueSales = [];
     const seenKeys = new Set();
@@ -269,41 +247,30 @@ export default function ManagerControlCenter() {
       if (!perfMap[rep]) {
         perfMap[rep] = { rep_name: rep, total_net: 0, devices_units: 0, lines_units: 0, accessories_net: 0 };
       }
-      
       const net = s.price_ex_vat || 0;
       const qty = Math.abs(s.quantity || 0);
       const group = getCommissionGroup(s);
       const isCredit = s.doc_type?.includes('זיכוי') || s.doc_type === '3';
-      
       perfMap[rep].total_net += isCredit ? -Math.abs(net) : net;
-      
       if (group === 'DEVICES') perfMap[rep].devices_units += qty;
       else if (group === 'LINES') perfMap[rep].lines_units += qty;
       else if (group === 'ACCESSORIES_GROUP') perfMap[rep].accessories_net += isCredit ? -Math.abs(net) : net;
     });
 
     let result = Object.values(perfMap);
-    
-    // Search filter
     if (repSearch) {
       result = result.filter(r => r.rep_name.toLowerCase().includes(repSearch.toLowerCase()));
     }
-    
-    // Sort
     result.sort((a, b) => {
       const aVal = a[repSortField] || 0;
       const bVal = b[repSortField] || 0;
       return repSortDir === 'desc' ? bVal - aVal : aVal - bVal;
     });
-
     return result;
   }, [sales, mappings, repSearch, repSortField, repSortDir]);
 
-  // Daily chart data
   const dailyChartData = useMemo(() => {
     const dayMap = {};
-    
-    // Sales by day
     sales.forEach(s => {
       if (!s.issue_date) return;
       const day = format(new Date(s.issue_date), 'dd/MM');
@@ -311,15 +278,12 @@ export default function ManagerControlCenter() {
       const isCredit = s.doc_type?.includes('זיכוי') || s.doc_type === '3';
       dayMap[day].sales += isCredit ? -Math.abs(s.price_ex_vat || 0) : (s.price_ex_vat || 0);
     });
-
-    // Purchases by day
     invoices.filter(i => i.doc_type === 'חשבונית מס').forEach(inv => {
       if (!inv.doc_date) return;
       const day = format(new Date(inv.doc_date), 'dd/MM');
       if (!dayMap[day]) dayMap[day] = { name: day, sales: 0, purchases: 0 };
       dayMap[day].purchases += Number(inv.total_with_vat) || 0;
     });
-
     return Object.values(dayMap).sort((a, b) => {
       const [dayA, monthA] = a.name.split('/').map(Number);
       const [dayB, monthB] = b.name.split('/').map(Number);
@@ -327,37 +291,27 @@ export default function ManagerControlCenter() {
     });
   }, [sales, invoices]);
 
-  // Top suppliers
   const topSuppliers = useMemo(() => {
     const supplierMap = {};
     const total = invoices.filter(i => i.doc_type === 'חשבונית מס')
       .reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
-
     invoices.filter(i => i.doc_type === 'חשבונית מס').forEach(inv => {
       const supplierId = inv.supplier || 'unknown';
       if (!supplierMap[supplierId]) {
-        supplierMap[supplierId] = { 
-          id: supplierId, 
-          name: suppliersMap[supplierId]?.name || supplierId, 
-          total: 0 
-        };
+        supplierMap[supplierId] = { id: supplierId, name: suppliersMap[supplierId]?.name || supplierId, total: 0 };
       }
       supplierMap[supplierId].total += Number(inv.total_with_vat) || 0;
     });
-
     let result = Object.values(supplierMap)
       .map(s => ({ ...s, percent: total > 0 ? ((s.total / total) * 100).toFixed(1) : 0 }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 10);
-
     if (supplierSearch) {
       result = result.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
     }
-
     return result;
   }, [invoices, suppliersMap, supplierSearch]);
 
-  // CSV Export
   const exportCsv = (data, filename, columns) => {
     const header = columns.map(c => c.label).join(',');
     const rows = data.map(row => columns.map(c => row[c.key] ?? '').join(','));
@@ -387,15 +341,12 @@ export default function ManagerControlCenter() {
     }
   };
 
-  const navigateToSalesReport = (rep = null) => {
-    let url = createPageUrl("SalesDashboard");
-    // Could add query params if supported
-    window.location.href = url;
+  const navigateToSalesReport = () => {
+    window.location.href = createPageUrl("SalesDashboard");
   };
 
-  const navigateToPurchases = (supplierId = null) => {
-    let url = createPageUrl("PurchasesDashboard");
-    window.location.href = url;
+  const navigateToPurchases = () => {
+    window.location.href = createPageUrl("PurchasesDashboard");
   };
 
   const handleLeadStatusChange = async (leadId, newStatus) => {
@@ -416,7 +367,6 @@ export default function ManagerControlCenter() {
     }
   };
 
-  // Authorization check
   if (!isManager) {
     return (
       <div className="p-6 text-center">
@@ -428,7 +378,6 @@ export default function ManagerControlCenter() {
 
   return (
     <div className="p-3 md:p-6 space-y-4" style={{ background: 'linear-gradient(135deg, #F8F9FB 0%, #E8ECFF 100%)', minHeight: '100vh' }}>
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
@@ -443,11 +392,9 @@ export default function ManagerControlCenter() {
         </Button>
       </div>
 
-      {/* Sticky Filter Bar */}
       <Card className="glass-card border-0 sticky top-0 z-30 shadow-md">
         <CardContent className="p-3 md:p-4">
           <div className="flex flex-wrap gap-3 items-end">
-            {/* Date Preset */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">תקופה</label>
               <Select value={datePreset} onValueChange={handleDatePreset}>
@@ -465,7 +412,6 @@ export default function ManagerControlCenter() {
               </Select>
             </div>
 
-            {/* Custom Date Range */}
             {datePreset === 'custom' && (
               <>
                 <div className="space-y-1">
@@ -479,7 +425,6 @@ export default function ManagerControlCenter() {
               </>
             )}
 
-            {/* Rep Filter */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">נציג</label>
               <Select value={selectedRep} onValueChange={setSelectedRep}>
@@ -495,7 +440,6 @@ export default function ManagerControlCenter() {
               </Select>
             </div>
 
-            {/* Category Filter */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">קבוצה</label>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -511,7 +455,6 @@ export default function ManagerControlCenter() {
               </Select>
             </div>
 
-            {/* Supplier Filter */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">ספק (רכישות)</label>
               <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
@@ -527,7 +470,6 @@ export default function ManagerControlCenter() {
               </Select>
             </div>
 
-            {/* Reset */}
             <Button variant="ghost" size="sm" onClick={resetFilters} className="h-9">
               <RotateCcw className="w-4 h-4 ml-1" />
               איפוס
@@ -536,7 +478,6 @@ export default function ManagerControlCenter() {
         </CardContent>
       </Card>
 
-      {/* Pending Invoices Alert */}
       {pendingInvoicesCount > 0 && (
         <Link to={createPageUrl("InvoicesToReview")}>
           <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 transition-all cursor-pointer">
@@ -558,7 +499,6 @@ export default function ManagerControlCenter() {
         </Link>
       )}
 
-      {/* Undelivered Orders Widget */}
       <UndeliveredOrdersWidget 
         currentUser={currentUser}
         isManager={true}
@@ -566,10 +506,8 @@ export default function ManagerControlCenter() {
         compact={false}
       />
 
-      {/* Zap Price Monitor Widget */}
       <ZapPriceMonitorWidget />
 
-      {/* Quick Leads to Complete */}
       <QuickLeadsToComplete
         leads={quickLeads}
         onProcess={(id) => handleLeadStatusChange(id, 'InProgress')}
@@ -577,7 +515,6 @@ export default function ManagerControlCenter() {
         onDelete={(id) => handleLeadStatusChange(id, 'Deleted')}
       />
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-600 to-emerald-500 text-white">
           <CardContent className="p-3">
@@ -662,9 +599,7 @@ export default function ManagerControlCenter() {
         </Card>
       </div>
 
-      {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Sales Overview - Left */}
         <Card className="glass-card border-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -685,7 +620,6 @@ export default function ManagerControlCenter() {
               </ResponsiveContainer>
             </div>
 
-            {/* Top Reps Mini Table */}
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-semibold text-gray-700">נציגים מובילים</span>
               <div className="flex gap-2">
@@ -727,7 +661,7 @@ export default function ManagerControlCenter() {
                     <TableRow 
                       key={r.rep_name} 
                       className="hover:bg-blue-50 cursor-pointer"
-                      onClick={() => navigateToSalesReport(r.rep_name)}
+                      onClick={() => navigateToSalesReport()}
                     >
                       <TableCell className="text-xs font-medium">{r.rep_name}</TableCell>
                       <TableCell className="text-xs text-left font-bold text-blue-600">₪{r.total_net.toLocaleString()}</TableCell>
@@ -742,7 +676,6 @@ export default function ManagerControlCenter() {
           </CardContent>
         </Card>
 
-        {/* Rep Performance - Right */}
         <Card className="glass-card border-0">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -768,7 +701,6 @@ export default function ManagerControlCenter() {
               </ResponsiveContainer>
             </div>
 
-            {/* Full Rep Table */}
             <div className="overflow-x-auto max-h-[200px] overflow-y-auto">
               <Table>
                 <TableHeader>
@@ -791,7 +723,7 @@ export default function ManagerControlCenter() {
                     <TableRow 
                       key={r.rep_name}
                       className="hover:bg-indigo-50 cursor-pointer"
-                      onClick={() => navigateToSalesReport(r.rep_name)}
+                      onClick={() => navigateToSalesReport()}
                     >
                       <TableCell className="text-xs font-medium">{r.rep_name}</TableCell>
                       <TableCell className="text-xs text-center text-blue-600 font-bold">{r.devices_units}</TableCell>
@@ -807,7 +739,6 @@ export default function ManagerControlCenter() {
         </Card>
       </div>
 
-      {/* Purchases Control - Full Width */}
       <Card className="glass-card border-0">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between flex-wrap gap-2">
@@ -822,7 +753,6 @@ export default function ManagerControlCenter() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Dual Line Chart */}
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">מכירות vs רכישות (יומי)</p>
               <div className="h-[220px]">
@@ -840,7 +770,6 @@ export default function ManagerControlCenter() {
               </div>
             </div>
 
-            {/* Top Suppliers */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium text-gray-700">Top 10 ספקים</p>
@@ -879,7 +808,7 @@ export default function ManagerControlCenter() {
                       <TableRow 
                         key={s.id}
                         className="hover:bg-orange-50 cursor-pointer"
-                        onClick={() => navigateToPurchases(s.id)}
+                        onClick={() => navigateToPurchases()}
                       >
                         <TableCell className="text-xs font-medium">{s.name}</TableCell>
                         <TableCell className="text-xs text-left font-bold text-orange-600">₪{s.total.toLocaleString()}</TableCell>
@@ -901,7 +830,6 @@ export default function ManagerControlCenter() {
         </CardContent>
       </Card>
 
-      {/* Loading indicator - non-blocking */}
       {isLoading && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-white/90 backdrop-blur shadow-lg rounded-full px-4 py-2 flex items-center gap-2">
           <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
