@@ -21,12 +21,18 @@ export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, on
 
   const productSummary = (order.products || []).slice(0, 2).map(p => p.name).join(', ');
 
+  const sourceBorder = {
+    woocommerce: 'border-r-purple-500',
+    mirakl: 'border-r-blue-500',
+    linet: 'border-r-amber-500',
+  };
+
   return (
-    <Card className={`border-0 shadow-sm overflow-hidden ${isOld ? 'border-r-4 border-r-red-400' : ''} ${isClosed ? 'opacity-50' : ''}`}>
+    <Card className={`border-0 shadow-lg rounded-2xl overflow-hidden border-r-4 ${sourceBorder[order.source] || 'border-r-gray-300'} ${isOld ? 'ring-2 ring-red-200' : ''} ${isClosed ? 'opacity-40' : ''} transition-all duration-200 hover:shadow-xl`}>
       {/* Clickable header */}
       <div
         onClick={onToggle}
-        className={`p-3 cursor-pointer select-none ${isExpanded ? 'bg-indigo-50/50' : 'hover:bg-gray-50'}`}
+        className={`p-3.5 cursor-pointer select-none transition-colors ${isExpanded ? 'bg-gradient-to-l from-purple-50/50 to-transparent' : 'hover:bg-gray-50/60'}`}
       >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">

@@ -310,19 +310,21 @@ export default function UnifiedOrders() {
   };
 
   return (
-    <div className="p-3 md:p-6 space-y-4">
+    <div className="p-3 md:p-6 space-y-5">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <Package className="w-7 h-7 text-indigo-600" />
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shadow-lg shadow-purple-200">
+              <Package className="w-5 h-5 text-white" />
+            </div>
             מסך הזמנות מרוכז
           </h1>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-gray-400 text-sm mt-1 mr-[52px]">
             {lastRefresh && <span>עדכון אחרון: {lastRefresh.toLocaleTimeString('he-IL')}</span>}
           </p>
         </div>
-        <Button onClick={() => loadData(true)} disabled={isRefreshing} variant="outline" size="sm">
+        <Button onClick={() => loadData(true)} disabled={isRefreshing} className="rounded-full bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700 text-white shadow-lg shadow-purple-200 px-5">
           <RefreshCw className={`w-4 h-4 ml-2 ${isRefreshing ? 'animate-spin' : ''}`} />
           רענן עכשיו
         </Button>
@@ -346,8 +348,8 @@ export default function UnifiedOrders() {
       <SummaryCards counts={counts} totalValue={totalValue} />
 
       {/* Filters */}
-      <Card className="border-0 shadow-sm">
-        <CardContent className="p-3">
+      <Card className="border-0 shadow-lg rounded-2xl bg-white/70 backdrop-blur-sm">
+        <CardContent className="p-4">
           <OrderFilters
             searchTerm={searchTerm} setSearchTerm={setSearchTerm}
             sourceFilter={sourceFilter} setSourceFilter={setSourceFilter}
@@ -359,10 +361,10 @@ export default function UnifiedOrders() {
 
       {/* Bulk actions */}
       {canBulk && selectedIds.length > 0 && (
-        <Card className="border-0 shadow-sm bg-indigo-50">
+        <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-r from-purple-50 to-violet-50">
           <CardContent className="p-3 flex items-center gap-3 flex-wrap">
-            <Badge className="bg-indigo-600 text-white">{selectedIds.length} נבחרו</Badge>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
+            <Badge className="bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-full px-3">{selectedIds.length} נבחרו</Badge>
+            <Button size="sm" variant="outline" className="h-8 text-xs rounded-full" onClick={() => {
               const msg = prompt("הקלד את ההודעה לשליחה מרוכזת:");
               if (msg) handleBulkSms(msg);
             }}>
@@ -376,9 +378,9 @@ export default function UnifiedOrders() {
       )}
 
       {/* Table */}
-      <Card className="border-0 shadow-lg">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">הזמנות ({filteredOrders.length})</CardTitle>
+      <Card className="border-0 shadow-xl rounded-2xl overflow-hidden">
+        <CardHeader className="pb-2 bg-gradient-to-l from-purple-50/30 to-transparent">
+          <CardTitle className="text-base font-bold">הזמנות ({filteredOrders.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -462,10 +464,10 @@ export default function UnifiedOrders() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 pt-4">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>הקודם</Button>
-                  <span className="text-sm text-gray-600">עמוד {page} מתוך {totalPages}</span>
-                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>הבא</Button>
+                <div className="flex justify-center items-center gap-3 pt-4">
+                  <Button variant="outline" size="sm" className="rounded-full px-5" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>הקודם</Button>
+                  <span className="text-sm text-gray-500 font-medium bg-gray-100 px-3 py-1 rounded-full">עמוד {page} מתוך {totalPages}</span>
+                  <Button variant="outline" size="sm" className="rounded-full px-5" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>הבא</Button>
                 </div>
               )}
             </>
@@ -475,9 +477,9 @@ export default function UnifiedOrders() {
 
       {/* Refresh indicator */}
       {isRefreshing && (
-        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-white/90 backdrop-blur shadow-lg rounded-full px-4 py-2 flex items-center gap-2">
-          <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
-          <span className="text-xs text-gray-600">מרענן...</span>
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-purple-500 to-violet-600 backdrop-blur shadow-xl shadow-purple-200 rounded-full px-5 py-2.5 flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 animate-spin text-white" />
+          <span className="text-xs text-white font-medium">מרענן...</span>
         </div>
       )}
 

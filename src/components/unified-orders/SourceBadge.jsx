@@ -2,20 +2,20 @@ import React from "react";
 import { Badge } from "@/components/ui/badge";
 
 const SOURCE_CONFIG = {
-  woocommerce: { label: "אתר", color: "#2196F3", bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-300" },
-  mirakl: { label: "סופר פארם", color: "#4CAF50", bg: "bg-green-100", text: "text-green-800", border: "border-green-300" },
-  linet: { label: "לינט", color: "#FF9800", bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-300" },
+  woocommerce: { label: "אתר", emoji: "🟣", gradient: "bg-gradient-to-r from-purple-500 to-violet-600", text: "text-white", glow: "shadow-purple-200" },
+  mirakl: { label: "סופר פארם", emoji: "💊", gradient: "bg-gradient-to-r from-blue-500 to-cyan-500", text: "text-white", glow: "shadow-blue-200" },
+  linet: { label: "לינט", emoji: "📋", gradient: "bg-gradient-to-r from-amber-400 to-orange-500", text: "text-white", glow: "shadow-amber-200" },
 };
 
 export function getSourceConfig(source) {
-  return SOURCE_CONFIG[source] || { label: source, color: "#9E9E9E", bg: "bg-gray-100", text: "text-gray-800", border: "border-gray-300" };
+  return SOURCE_CONFIG[source] || { label: source, emoji: "⬜", gradient: "bg-gradient-to-r from-gray-400 to-gray-500", text: "text-white", glow: "shadow-gray-200" };
 }
 
 export default function SourceBadge({ source }) {
   const cfg = getSourceConfig(source);
   return (
-    <Badge className={`${cfg.bg} ${cfg.text} ${cfg.border} border font-bold text-xs`}>
-      <span className="w-2 h-2 rounded-full mr-1.5 inline-block" style={{ backgroundColor: cfg.color }} />
+    <Badge className={`${cfg.gradient} ${cfg.text} border-0 font-bold text-xs rounded-full px-3 py-1 shadow-md ${cfg.glow}`}>
+      <span className="ml-1">{cfg.emoji}</span>
       {cfg.label}
     </Badge>
   );

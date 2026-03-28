@@ -58,33 +58,34 @@ export function isClosedStatus(source, status) {
 export function getStatusColor(source, status) {
   if (source === 'woocommerce') {
     const map = {
-      'processing': 'bg-blue-100 text-blue-800',
-      'on-hold': 'bg-orange-100 text-orange-800',
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'completed': 'bg-green-100 text-green-800',
-      'cancelled': 'bg-red-100 text-red-800',
-      'refunded': 'bg-pink-100 text-pink-800',
-      'failed': 'bg-red-200 text-red-900',
+      'processing': 'bg-purple-100 text-purple-800 border border-purple-200',
+      'on-hold': 'bg-orange-100 text-orange-800 border border-orange-200',
+      'pending': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
+      'completed': 'bg-green-100 text-green-800 border border-green-200',
+      'cancelled': 'bg-red-100 text-red-800 border border-red-200',
+      'refunded': 'bg-pink-100 text-pink-800 border border-pink-200',
+      'failed': 'bg-red-200 text-red-900 border border-red-300',
+      'wc-awaiting-serial': 'bg-violet-100 text-violet-800 border border-violet-200',
     };
     return map[status] || 'bg-gray-100 text-gray-700';
   }
   if (source === 'mirakl') {
     const map = {
-      'WAITING_ACCEPTANCE': 'bg-yellow-100 text-yellow-800',
-      'SHIPPING': 'bg-blue-100 text-blue-800',
-      'SHIPPED': 'bg-green-100 text-green-800',
+      'WAITING_ACCEPTANCE': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
+      'SHIPPING': 'bg-blue-100 text-blue-800 border border-blue-200',
+      'SHIPPED': 'bg-cyan-100 text-cyan-800 border border-cyan-200',
       'CLOSED': 'bg-gray-200 text-gray-700',
-      'REFUSED': 'bg-red-100 text-red-800',
-      'CANCELED': 'bg-red-100 text-red-800',
+      'REFUSED': 'bg-red-100 text-red-800 border border-red-200',
+      'CANCELED': 'bg-red-100 text-red-800 border border-red-200',
     };
     return map[status] || 'bg-gray-100 text-gray-700';
   }
   if (source === 'linet') {
     const map = {
-      'ממתינה לאספקה': 'bg-orange-100 text-orange-800',
-      'בטיפול': 'bg-blue-100 text-blue-800',
-      'נוצר משלוח': 'bg-purple-100 text-purple-800',
-      'טופל': 'bg-green-100 text-green-800',
+      'ממתינה לאספקה': 'bg-amber-100 text-amber-800 border border-amber-200',
+      'בטיפול': 'bg-orange-100 text-orange-800 border border-orange-200',
+      'נוצר משלוח': 'bg-violet-100 text-violet-800 border border-violet-200',
+      'טופל': 'bg-green-100 text-green-800 border border-green-200',
     };
     return map[status] || 'bg-gray-100 text-gray-700';
   }

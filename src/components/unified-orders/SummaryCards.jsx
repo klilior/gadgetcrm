@@ -1,35 +1,40 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { ShoppingBag, DollarSign } from "lucide-react";
+import { Globe, Pill, FileText, Layers, DollarSign } from "lucide-react";
 
 export default function SummaryCards({ counts, totalValue }) {
   const cards = [
-    { label: "הזמנות אתר", count: counts.woocommerce || 0, color: "from-blue-500 to-blue-600", borderColor: "border-blue-400" },
-    { label: "סופר פארם", count: counts.mirakl || 0, color: "from-green-500 to-green-600", borderColor: "border-green-400" },
-    { label: "הזמנות לינט", count: counts.linet || 0, color: "from-orange-500 to-orange-600", borderColor: "border-orange-400" },
-    { label: "סה\"כ פתוחות", count: counts.total || 0, color: "from-gray-700 to-gray-800", borderColor: "border-gray-500" },
+    { label: "הזמנות אתר", count: counts.woocommerce || 0, gradient: "from-purple-500 via-purple-600 to-violet-700", icon: Globe, glow: "shadow-purple-500/20" },
+    { label: "סופר פארם", count: counts.mirakl || 0, gradient: "from-blue-500 via-blue-600 to-cyan-600", icon: Pill, glow: "shadow-blue-500/20" },
+    { label: "הזמנות לינט", count: counts.linet || 0, gradient: "from-amber-400 via-orange-500 to-orange-600", icon: FileText, glow: "shadow-orange-500/20" },
+    { label: 'סה"כ פתוחות', count: counts.total || 0, gradient: "from-slate-700 via-slate-800 to-slate-900", icon: Layers, glow: "shadow-slate-500/20" },
   ];
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
       {cards.map((c) => (
-        <Card key={c.label} className={`border-0 shadow-lg bg-gradient-to-br ${c.color} text-white`}>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-1">
-              <ShoppingBag className="w-5 h-5 text-white/70" />
+        <Card key={c.label} className={`border-0 shadow-xl ${c.glow} bg-gradient-to-br ${c.gradient} text-white rounded-2xl overflow-hidden relative group hover:scale-[1.02] transition-transform duration-200`}>
+          <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <CardContent className="p-4 relative">
+            <div className="flex items-center justify-between mb-2">
+              <c.icon className="w-5 h-5 text-white/60" />
+              <div className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center">
+                <span className="text-sm font-bold">{c.count}</span>
+              </div>
             </div>
-            <p className="text-2xl font-bold">{c.count}</p>
-            <p className="text-xs text-white/80">{c.label}</p>
+            <p className="text-3xl font-black tracking-tight">{c.count}</p>
+            <p className="text-xs text-white/70 mt-1 font-medium">{c.label}</p>
           </CardContent>
         </Card>
       ))}
-      <Card className="border-0 shadow-lg bg-gradient-to-br from-gray-700 to-gray-800 text-white">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-1">
-            <DollarSign className="w-5 h-5 text-white/70" />
+      <Card className="border-0 shadow-xl shadow-emerald-500/10 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 text-white rounded-2xl overflow-hidden relative group hover:scale-[1.02] transition-transform duration-200">
+        <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <CardContent className="p-4 relative">
+          <div className="flex items-center justify-between mb-2">
+            <DollarSign className="w-5 h-5 text-white/60" />
           </div>
-          <p className="text-2xl font-bold">₪{(totalValue || 0).toLocaleString()}</p>
-          <p className="text-xs text-white/80">ערך פתוחות</p>
+          <p className="text-3xl font-black tracking-tight">₪{(totalValue || 0).toLocaleString()}</p>
+          <p className="text-xs text-white/70 mt-1 font-medium">ערך פתוחות</p>
         </CardContent>
       </Card>
     </div>

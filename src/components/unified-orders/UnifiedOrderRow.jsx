@@ -25,13 +25,19 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
     try { return format(new Date(d), "dd/MM HH:mm"); } catch { return '-'; }
   };
 
+  const sourceGlow = {
+    woocommerce: 'hover:bg-purple-50/60',
+    mirakl: 'hover:bg-blue-50/60',
+    linet: 'hover:bg-amber-50/60',
+  };
+
   return (
     <TableRow
       onClick={onToggle}
-      className={`cursor-pointer transition-all select-none
+      className={`cursor-pointer transition-all duration-200 select-none
         ${isOld ? 'border-r-4 border-r-red-400 bg-red-50/30' : ''}
-        ${isClosed ? 'opacity-50' : ''}
-        ${isExpanded ? 'bg-indigo-50/50 border-b-0' : 'hover:bg-gray-50/80'}
+        ${isClosed ? 'opacity-40' : ''}
+        ${isExpanded ? 'bg-gradient-to-l from-purple-50/60 to-transparent border-b-0 shadow-sm' : (sourceGlow[order.source] || 'hover:bg-gray-50/80')}
       `}
     >
       {canBulk && (

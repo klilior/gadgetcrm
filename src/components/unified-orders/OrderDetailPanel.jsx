@@ -23,8 +23,14 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
 
+  const sourceBg = {
+    woocommerce: 'from-purple-50/80 via-white to-white border-purple-100',
+    mirakl: 'from-blue-50/80 via-white to-white border-blue-100',
+    linet: 'from-amber-50/80 via-white to-white border-amber-100',
+  };
+
   return (
-    <div dir="rtl" className="bg-gradient-to-br from-slate-50 to-white p-4 md:p-5 space-y-4 border-t border-indigo-100">
+    <div dir="rtl" className={`bg-gradient-to-br ${sourceBg[order.source] || 'from-slate-50 to-white border-gray-100'} p-4 md:p-5 space-y-4 border-t`}>
       {/* Top row - source, order number, time */}
       <div className="flex flex-wrap items-center gap-3">
         <SourceBadge source={order.source} />
@@ -42,7 +48,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
       {/* Main info grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Customer */}
-        <div className="bg-white rounded-xl p-3 border shadow-sm space-y-2">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2 hover:shadow-md transition-shadow">
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">לקוח</h4>
           <p className="font-bold text-gray-900 text-base">{order.customer_name || 'לא ידוע'}</p>
           {order.customer_phone && (
@@ -64,7 +70,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         </div>
 
         {/* Products */}
-        <div className="bg-white rounded-xl p-3 border shadow-sm space-y-2">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2 hover:shadow-md transition-shadow">
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1">
             <Package className="w-3 h-3" /> מוצרים ({order.products?.length || 0})
           </h4>
@@ -89,7 +95,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         </div>
 
         {/* Status + Shipping */}
-        <div className="bg-white rounded-xl p-3 border shadow-sm space-y-2">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2 hover:shadow-md transition-shadow">
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">סטטוס ומשלוח</h4>
           <div className="flex items-center gap-2">
             <Badge className={`${statusColor} text-sm px-3`}>{statusLabel}</Badge>
@@ -125,10 +131,10 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
       </div>
 
       {/* Actions row */}
-      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-gray-100">
+      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
         {isMiraklNew ? (
           <Button
-            className="bg-green-600 hover:bg-green-700 text-white animate-pulse"
+            className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-full px-5 shadow-lg shadow-green-200 animate-pulse"
             onClick={() => onStatusChange(order, 'accept_mirakl')}
           >
             <CheckCircle className="w-4 h-4 ml-1" />
@@ -136,7 +142,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </Button>
         ) : (
           <Select value={order.status} onValueChange={(val) => onStatusChange(order, val)}>
-            <SelectTrigger className="h-9 w-[160px] text-sm">
+            <SelectTrigger className="h-9 w-[160px] text-sm rounded-full border-gray-200">
               <SelectValue placeholder="שנה סטטוס" />
             </SelectTrigger>
             <SelectContent>
@@ -147,13 +153,13 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </Select>
         )}
 
-        <Button variant="outline" onClick={() => onSms(order)}>
+        <Button variant="outline" className="rounded-full hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-colors" onClick={() => onSms(order)}>
           <MessageCircle className="w-4 h-4 ml-1" />
           שלח SMS
         </Button>
 
         {order.customer_phone && (
-          <Button variant="outline" asChild>
+          <Button variant="outline" className="rounded-full hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors" asChild>
             <a href={`tel:${order.customer_phone}`}>
               <Phone className="w-4 h-4 ml-1" />
               התקשר
@@ -162,14 +168,14 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         )}
 
         {order.customer_phone && (
-          <Button variant="outline" className="text-green-700 border-green-200 hover:bg-green-50" asChild>
+          <Button variant="outline" className="rounded-full text-green-700 border-green-200 hover:bg-green-50 hover:shadow-md transition-all" asChild>
             <a href={`https://wa.me/972${order.customer_phone.replace(/^0/, '')}`} target="_blank" rel="noopener noreferrer">
-              וואטסאפ
+              💬 וואטסאפ
             </a>
           </Button>
         )}
 
-        <Button variant="outline" onClick={() => onShipment(order)}>
+        <Button variant="outline" className="rounded-full hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-colors" onClick={() => onShipment(order)}>
           <Truck className="w-4 h-4 ml-1" />
           צור משלוח
         </Button>
