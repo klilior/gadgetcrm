@@ -1,0 +1,132 @@
+{
+  "name": "SuperPharmOrder",
+  "type": "object",
+  "properties": {
+    "mirakl_order_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d6\u05de\u05e0\u05d4 \u05d1-Mirakl",
+      "index": true,
+      "unique": true
+    },
+    "order_state": {
+      "type": "string",
+      "enum": [
+        "WAITING_ACCEPTANCE",
+        "WAITING_DEBIT",
+        "WAITING_DEBIT_PAYMENT",
+        "SHIPPING",
+        "SHIPPED",
+        "TO_COLLECT",
+        "RECEIVED",
+        "CLOSED",
+        "REFUSED",
+        "CANCELED"
+      ],
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05d6\u05de\u05e0\u05d4",
+      "index": true
+    },
+    "customer_first_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05e4\u05e8\u05d8\u05d9 \u05dc\u05e7\u05d5\u05d7"
+    },
+    "customer_last_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05de\u05e9\u05e4\u05d7\u05d4 \u05dc\u05e7\u05d5\u05d7"
+    },
+    "customer_phone": {
+      "type": "string",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05dc\u05e7\u05d5\u05d7"
+    },
+    "shipping_city": {
+      "type": "string",
+      "description": "\u05e2\u05d9\u05e8 \u05de\u05e9\u05dc\u05d5\u05d7"
+    },
+    "shipping_street": {
+      "type": "string",
+      "description": "\u05e8\u05d7\u05d5\u05d1 \u05de\u05e9\u05dc\u05d5\u05d7"
+    },
+    "shipping_zip": {
+      "type": "string",
+      "description": "\u05de\u05d9\u05e7\u05d5\u05d3"
+    },
+    "shipping_address_full": {
+      "type": "string",
+      "description": "\u05db\u05ea\u05d5\u05d1\u05ea \u05de\u05dc\u05d0\u05d4"
+    },
+    "total_price": {
+      "type": "number",
+      "description": "\u05e1\u05db\u05d5\u05dd \u05db\u05d5\u05dc\u05dc"
+    },
+    "total_commission": {
+      "type": "number",
+      "description": "\u05e2\u05de\u05dc\u05ea \u05de\u05e8\u05e7\u05d8\u05e4\u05dc\u05d9\u05d9\u05e1"
+    },
+    "currency": {
+      "type": "string",
+      "default": "ILS",
+      "description": "\u05de\u05d8\u05d1\u05e2"
+    },
+    "order_lines_json": {
+      "type": "string",
+      "description": "\u05e4\u05e8\u05d9\u05d8\u05d9 \u05d4\u05d6\u05de\u05e0\u05d4 (JSON)"
+    },
+    "order_lines_count": {
+      "type": "number",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05e4\u05e8\u05d9\u05d8\u05d9\u05dd"
+    },
+    "created_at_mirakl": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d9\u05e6\u05d9\u05e8\u05d4 \u05d1-Mirakl"
+    },
+    "last_updated_mirakl": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05e2\u05d3\u05db\u05d5\u05df \u05d0\u05d7\u05e8\u05d5\u05df \u05d1-Mirakl"
+    },
+    "acceptance_decision_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05d3\u05d3-\u05dc\u05d9\u05d9\u05df \u05dc\u05e7\u05d1\u05dc\u05d4"
+    },
+    "shipping_deadline": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05d3\u05d3-\u05dc\u05d9\u05d9\u05df \u05dc\u05de\u05e9\u05dc\u05d5\u05d7"
+    },
+    "tracking_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05de\u05e2\u05e7\u05d1"
+    },
+    "carrier_code": {
+      "type": "string",
+      "description": "\u05e7\u05d5\u05d3 \u05e9\u05dc\u05d9\u05d7"
+    },
+    "carrier_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05e9\u05dc\u05d9\u05d7"
+    },
+    "accepted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05e7\u05d1\u05dc\u05d4"
+    },
+    "shipped_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05e9\u05dc\u05d9\u05d7\u05d4"
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    },
+    "raw_mirakl_json": {
+      "type": "string",
+      "description": "JSON \u05d2\u05d5\u05dc\u05de\u05d9 \u05de-Mirakl"
+    }
+  },
+  "required": [
+    "mirakl_order_id",
+    "order_state"
+  ]
+}

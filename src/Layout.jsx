@@ -244,6 +244,10 @@ function AppContent({ children, currentPageName }) {
     { title: "דוח מכירות", url: createPageUrl("SalesDashboard") },
   ] : [];
 
+  const superPharmItems = (isManager || isShiftManager) ? [
+    { title: "הזמנות סופר-פארם", url: createPageUrl("SuperPharmOrders") },
+  ] : [];
+
   const settingsItems = isManager ? [
     { title: "עובדים", url: createPageUrl("ManageEmployees") },
     { title: "ייבוא קווים", url: createPageUrl("RawLinesImport") },
@@ -372,6 +376,18 @@ function AppContent({ children, currentPageName }) {
                 onToggle={() => toggleSection('sales')}
                 activeUrl={location.pathname}
                 color="blue"
+              />
+            )}
+
+            {superPharmItems.length > 0 && (
+              <MenuSection
+                title="סופר-פארם"
+                icon={Package}
+                items={superPharmItems}
+                isOpen={openSection === 'superpharm'}
+                onToggle={() => toggleSection('superpharm')}
+                activeUrl={location.pathname}
+                color="green"
               />
             )}
 
