@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-// rebuild trigger
 import { useUser } from "../components/UserAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,11 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { 
-  BarChart3, RefreshCw, Users, Filter, Smartphone, Radio, 
-  ShoppingBag, TrendingUp, Download, Search, RotateCcw,
-  DollarSign, CreditCard, Package, Percent, FileText, Building2, AlertCircle
+  BarChart3, RefreshCw, Users, Smartphone, Radio, 
+  ShoppingBag, TrendingUp, Download,
+  DollarSign, CreditCard, Package, Percent, FileText, AlertCircle, RotateCcw
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subMonths, subDays, startOfWeek, endOfWeek, startOfYear } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, subDays } from "date-fns";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Legend } from 'recharts';
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
