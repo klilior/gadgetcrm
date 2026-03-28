@@ -21,7 +21,7 @@ import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import MobileOrderCard from "../components/unified-orders/MobileOrderCard";
 import OrderDetailPanel from "../components/unified-orders/OrderDetailPanel";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
 
 export default function UnifiedOrders() {
   const { currentUser } = useUser();
@@ -60,6 +60,8 @@ export default function UnifiedOrders() {
     const errs = [];
     const openWoo = new Set(['processing','on-hold']);
     const openMirakl = new Set(['WAITING_ACCEPTANCE','SHIPPING']);
+    const closedWoo = new Set(['completed','cancelled','refunded','failed']);
+    const closedMirakl = new Set(['CLOSED','REFUSED','CANCELED','RECEIVED']);
 
     // Shared client map (used by WooCommerce and Linet)
     let cM = {};
@@ -78,7 +80,7 @@ export default function UnifiedOrders() {
       const pM = {};
       for (const p of rawProducts) { if (!pM[p.order_id]) pM[p.order_id] = []; pM[p.order_id].push(p); }
       for (const o of rawOrders) {
-        if (!showClosed && !openWoo.has(o.status)) continue;
+        if (!showClosed && closedWoo.has(o.status)) continue;
         const c = cM[o.client_id];
         const pr = pM[o.id] || [];
         woo.push({
@@ -98,7 +100,7 @@ export default function UnifiedOrders() {
     try {
       const spOrders = await base44.entities.SuperPharmOrder.list('-created_at_mirakl', 200);
       for (const o of spOrders) {
-        if (!showClosed && !openMirakl.has(o.order_state)) continue;
+        if (!showClosed && closedMirakl.has(o.order_state)) continue;
         let lines = []; try { lines = JSON.parse(o.order_lines_json || '[]'); } catch(e) {}
         mk.push({
           id: 'mirakl_' + o.id, source: 'mirakl',
@@ -189,7 +191,11 @@ export default function UnifiedOrders() {
     const all = [...woo, ...mk, ...lin];
     all.sort((a, b) => new Date(b.order_date || 0) - new Date(a.order_date || 0));
     setOrders(all);
-    setCounts({woocommerce: woo.length, mirakl: mk.length, linet: lin.length, total: all.length});
+    // Count only open orders for summary cards
+    const openWooCount = woo.filter(o => openWoo.has(o.status)).length;
+    const openMiraklCount = mk.filter(o => openMirakl.has(o.status)).length;
+    const openLinetCount = lin.filter(o => o.status !== 'טופל').length;
+    setCounts({woocommerce: openWooCount, mirakl: openMiraklCount, linet: openLinetCount, total: openWooCount + openMiraklCount + openLinetCount});
     setErrors(errs);
     setLastRefresh(new Date());
     setIsLoading(false);
@@ -239,11 +245,7 @@ export default function UnifiedOrders() {
   const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
   const paginatedOrders = filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // Total value of open orders
-  const totalValue = useMemo(() => {
-    return orders.filter(o => !isClosedStatus(o.source, o.status))
-      .reduce((sum, o) => sum + (o.total || 0), 0);
-  }, [orders]);
+
 
   // Status change handler
   const handleStatusChange = async (order, newStatus) => {
@@ -347,7 +349,7 @@ export default function UnifiedOrders() {
       )}
 
       {/* Summary Cards */}
-      <SummaryCards counts={counts} totalValue={totalValue} />
+      <SummaryCards counts={counts} />
 
       {/* Filters */}
       <Card className="border-0 shadow-lg rounded-2xl bg-white/70 backdrop-blur-sm">

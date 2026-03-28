@@ -1,8 +1,8 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Globe, Pill, FileText, Layers, DollarSign } from "lucide-react";
+import { Globe, Pill, FileText, Layers } from "lucide-react";
 
-export default function SummaryCards({ counts, totalValue }) {
+export default function SummaryCards({ counts }) {
   const cards = [
     { label: "הזמנות אתר", count: counts.woocommerce || 0, gradient: "from-purple-500 via-purple-600 to-violet-700", icon: Globe, glow: "shadow-purple-500/20" },
     { label: "סופר פארם", count: counts.mirakl || 0, gradient: "from-blue-500 via-blue-600 to-cyan-600", icon: Pill, glow: "shadow-blue-500/20" },
@@ -11,7 +11,7 @@ export default function SummaryCards({ counts, totalValue }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {cards.map((c) => (
         <Card key={c.label} className={`border-0 shadow-xl ${c.glow} bg-gradient-to-br ${c.gradient} text-white rounded-2xl overflow-hidden relative group hover:scale-[1.02] transition-transform duration-200`}>
           <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -27,16 +27,6 @@ export default function SummaryCards({ counts, totalValue }) {
           </CardContent>
         </Card>
       ))}
-      <Card className="border-0 shadow-xl shadow-emerald-500/10 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 text-white rounded-2xl overflow-hidden relative group hover:scale-[1.02] transition-transform duration-200">
-        <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-        <CardContent className="p-4 relative">
-          <div className="flex items-center justify-between mb-2">
-            <DollarSign className="w-5 h-5 text-white/60" />
-          </div>
-          <p className="text-3xl font-black tracking-tight">₪{(totalValue || 0).toLocaleString()}</p>
-          <p className="text-xs text-white/70 mt-1 font-medium">ערך פתוחות</p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
