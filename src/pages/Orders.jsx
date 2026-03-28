@@ -10,6 +10,7 @@ import { base44 } from "@/api/base44Client";
 import OrderDetailsModal from '../components/orders/OrderDetailsModal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CustomerCard from '../components/customers/CustomerCard';
+import { useOrdersQuery, useCustomersQuery } from '../hooks/useEntityQueries';
 
 const STATUS_MAPPING = {
     'processing': 'בטיפול', 'on-hold': 'מושהה', 'pending': 'ממתינה לתשלום',
@@ -32,11 +33,10 @@ const getStatusColor = (status) => {
 };
 
 export default function OrdersPage() {
-    const [orders, setOrders] = useState([]);
-    const [clients, setClients] = useState({});
-  const [clientsList, setClientsList] = useState([]);
+    const { data: ordersData = [], isLoading: ordersLoading, refetch: refetchOrders } = useOrdersQuery(200);
+    const { data: clientsList = [] } = useCustomersQuery();
+    const clients = useMemo(() => clientsList.reduce((acc, c) => ({ ...acc, [c.id]: c }), {}), [clientsList]);
     const [orderProducts, setOrderProducts] = useState({});
-    const [isLoading, setIsLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
@@ -47,45 +47,20 @@ export default function OrdersPage() {
     const [syncError, setSyncError] = useState(null);
 
     const loadData = useCallback(async () => {
-        setIsLoading(true);
-        setLoadError(null);
-        const start = Date.now();
-        try {
-            // Limit to 200 recent orders (was 10,000)
-            const [fetchedOrders, fetchedClients] = await Promise.all([
-              base44.entities.Order.list("-order_date", 200),
-              (await import('../components/utils/customersService')).customersService.list()
-            ]);
-            console.log(`⏱️ [Orders] Loaded ${(fetchedOrders || []).length} orders in ${Date.now() - start}ms`);
-            
-            setOrders(fetchedOrders || []);
-            setClientsList(fetchedClients || []);
-            setClients((fetchedClients || []).reduce((acc, c) => ({ ...acc, [c.id]: c }), {}));
-            
-            try {
-                const fetchedProducts = await base44.entities.OrderProduct.list();
-                const productsByOrder = (fetchedProducts || []).reduce((acc, p) => {
-                    if (!acc[p.order_id]) acc[p.order_id] = [];
-                    acc[p.order_id].push(p);
-                    return acc;
-                }, {});
-                setOrderProducts(productsByOrder);
-            } catch (e) {
-                console.log("Could not load OrderProduct:", e.message);
-                setOrderProducts({});
-            }
-            
-        } catch (error) {
-            console.error("Error loading data:", error);
-            setLoadError(error.message);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
+        await refetchOrders();
+    }, [refetchOrders]);
 
+    // Load order products once
     useEffect(() => {
-        loadData();
-    }, [loadData]);
+        base44.entities.OrderProduct.list().then(fetchedProducts => {
+            const productsByOrder = (fetchedProducts || []).reduce((acc, p) => {
+                if (!acc[p.order_id]) acc[p.order_id] = [];
+                acc[p.order_id].push(p);
+                return acc;
+            }, {});
+            setOrderProducts(productsByOrder);
+        }).catch(e => { console.log("Could not load OrderProduct:", e.message); });
+    }, []);
 
     const handleSync = async () => {
         setIsSyncing(true);
@@ -107,6 +82,9 @@ export default function OrdersPage() {
 
     // _legacy: Auto-sync on mount removed — sync is handled by scheduled backend function
     // Manual sync still available via the "סנכרון עכשיו" button
+
+    const isLoading = ordersLoading;
+    const orders = ordersData;
 
     const sortedAndFilteredOrders = useMemo(() => {
         return (orders || []).filter(order => {

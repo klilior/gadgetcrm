@@ -69,6 +69,8 @@ export default function ManagerControlCenter() {
   }, [dateFrom, dateTo, selectedRep, selectedCategory, selectedSupplier]);
 
   const loadAllData = async () => {
+    const start = Date.now();
+    console.log('🔄 [ManagerControlCenter] Starting data load...');
     setIsLoading(true);
 
     // Build queries
@@ -83,7 +85,7 @@ export default function ManagerControlCenter() {
 
     // Phase 1: Load critical data first (sales + mappings)
     const [salesData, mappingsData] = await Promise.all([
-      base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 5000).catch(() => []),
+      base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 2000).catch(() => []),
       mappings.length > 0 ? Promise.resolve(mappings) : base44.entities.CommissionGroupMapping.filter({ is_active: true }).catch(() => []),
     ]);
 
@@ -106,6 +108,7 @@ export default function ManagerControlCenter() {
     setAvailableReps(reps);
     const cats = [...new Set(salesData.map(s => s.category).filter(Boolean))].sort();
     setAvailableCategories(cats);
+    console.log(`⏱️ [ManagerControlCenter] Phase 1 done in ${Date.now() - start}ms — ${filteredSales.length} sales`);
     setIsLoading(false); // Show UI now with sales data
 
     // Phase 2: Load secondary data in background (non-blocking)

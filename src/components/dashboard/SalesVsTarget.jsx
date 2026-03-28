@@ -38,7 +38,7 @@ function Bar({ label, actual = 0, target = 0, isAmount = false }) {
   );
 }
 
-export default function SalesVsTarget({ periodLabel = "החודש", targets = {}, actuals = {} }) {
+export default React.memo(function SalesVsTarget({ periodLabel = "החודש", targets = {}, actuals = {} }) {
   const rows = [
     { key: "Devices", label: "מכשירים", isAmount: false },
     { key: "AccessoriesRevenue", label: "אביזרים (₪)", isAmount: true },
@@ -73,4 +73,4 @@ export default function SalesVsTarget({ periodLabel = "החודש", targets = {}
       </CardContent>
     </Card>
   );
-}
+});

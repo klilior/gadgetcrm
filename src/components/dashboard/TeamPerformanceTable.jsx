@@ -33,7 +33,7 @@ const PercentBadge = ({ percent, actual, target }) => {
   );
 };
 
-export default function TeamPerformanceTable({ teamData }) {
+export default React.memo(function TeamPerformanceTable({ teamData }) {
   if (!teamData || teamData.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
@@ -151,4 +151,4 @@ export default function TeamPerformanceTable({ teamData }) {
       </div>
     </div>
   );
-}
+});

@@ -3,7 +3,7 @@ import { Bell, Phone, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 
-export default function RemindersAlert({ reminders, onMarkDone, onCall }) {
+export default React.memo(function RemindersAlert({ reminders, onMarkDone, onCall }) {
   if (!reminders || reminders.length === 0) return null;
 
   const now = new Date();
@@ -63,4 +63,4 @@ export default function RemindersAlert({ reminders, onMarkDone, onCall }) {
       )}
     </div>
   );
-}
+});

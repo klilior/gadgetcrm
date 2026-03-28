@@ -82,7 +82,7 @@ export default function AgentPerformanceDashboard() {
                 issue_date: { $gte: dateFrom, $lte: dateTo }
             };
             
-            const salesData = await base44.entities.SalesTransaction.filter(query, '-issue_date', 5000);
+            const salesData = await base44.entities.SalesTransaction.filter(query, '-issue_date', 2000);
             
             // Filter by selected agents if any
             let filtered = salesData;

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { customersService } from "../components/utils/customersService";
 import { useUser } from "../components/UserAuth";
+import { useEmployees } from "../components/EmployeeProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,6 +14,7 @@ import NewConversationModal from "../components/messages/NewConversationModal";
 
 export default function MessageCenter() {
     const { currentUser } = useUser();
+    const { employees: employeesData } = useEmployees();
     const [conversations, setConversations] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [activities, setActivities] = useState([]);
@@ -31,13 +33,8 @@ export default function MessageCenter() {
         try {
             console.log('🔄 Loading message center data...');
 
-            // 1. Load Conversations & Employees
-            const [conversationsData, employeesData] = await Promise.all([
-                base44.entities.Conversation.list('-last_message_date', 200),
-                base44.entities.Employee.list()
-            ]);
-            
-            // _legacy: window.employees = employeesData;
+            // 1. Load Conversations (employees come from EmployeeProvider)
+            const conversationsData = await base44.entities.Conversation.list('-last_message_date', 200);
 
             // 2. Extract Customer IDs and fetch ONLY them (much more efficient)
             const customerIds = [...new Set(conversationsData.map(c => c.customer_id).filter(Boolean))];

@@ -99,6 +99,7 @@ export default function RepairDashboard() {
     };
 
     const loadData = useCallback(async () => {
+        const start = Date.now();
         console.log("🔵 RepairDashboard: Starting loadData...");
         setIsLoading(true);
         try {
@@ -175,7 +176,7 @@ export default function RepairDashboard() {
             }));
 
             setRepairs(enrichedRepairs);
-            console.log("✅ RepairDashboard: loadData completed with enrichment");
+            console.log(`⏱️ RepairDashboard: loadData completed in ${Date.now() - start}ms`);
 
         } catch (error) {
             console.error("❌ Error loading dashboard data:", error);

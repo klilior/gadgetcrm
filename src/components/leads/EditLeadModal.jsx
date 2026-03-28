@@ -5,14 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Lead, Employee } from '@/entities/all';
+import { Lead } from '@/entities/all';
 import { toast } from 'sonner';
+import { useEmployees } from '../EmployeeProvider';
 import { Phone, User, FileText, Bell, Clock, Loader2, Save, StickyNote } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export default function EditLeadModal({ isOpen, onClose, lead, onLeadUpdated }) {
+  const { employees } = useEmployees();
   const [isLoading, setIsLoading] = useState(false);
-  const [employees, setEmployees] = useState([]);
   
   const [formData, setFormData] = useState({
     phone: '',
@@ -28,7 +29,6 @@ export default function EditLeadModal({ isOpen, onClose, lead, onLeadUpdated }) 
 
   useEffect(() => {
     if (isOpen && lead) {
-      loadEmployees();
       setFormData({
         phone: lead.phone || '',
         customer_name: lead.customer_name || '',
@@ -42,15 +42,6 @@ export default function EditLeadModal({ isOpen, onClose, lead, onLeadUpdated }) 
       });
     }
   }, [isOpen, lead]);
-
-  const loadEmployees = async () => {
-    try {
-      const emps = await Employee.filter({ is_active: true });
-      setEmployees(emps || []);
-    } catch (error) {
-      console.error('Error loading employees:', error);
-    }
-  };
 
   const shouldMarkComplete = (data) => {
     // Check if lead should exit quick_incomplete status

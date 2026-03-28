@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from "@/api/base44Client";
-import { Lead, Target, SalesActivity, Employee, Repair, Client, GoalDefinition, GoalProgress, SalesTransaction, LinetUsersMap } from '@/entities/all';
+import { Lead, Target, SalesActivity, Repair, GoalDefinition, GoalProgress, SalesTransaction } from '@/entities/all';
+import { useEmployees } from '../components/EmployeeProvider';
 import { useUser } from '../components/UserAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,13 +54,14 @@ export default function AgentDashboard() {
   const [focusMode, setFocusMode] = useState(false);
   const [leadFilter, setLeadFilter] = useState('open');
   
+  const { employees, employeesMap: empMap, linetUsersMap: allLinetUsersMap } = useEmployees();
+
   // Data states
   const [leads, setLeads] = useState([]);
   const [myLeads, setMyLeads] = useState([]);
   const [targets, setTargets] = useState({});
   const [actuals, setActuals] = useState({});
   const [kpiData, setKpiData] = useState({});
-  const [employees, setEmployees] = useState([]);
   const [teamData, setTeamData] = useState([]);
   const [repairs, setRepairs] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -103,17 +105,16 @@ export default function AgentDashboard() {
       const dateFromStr = format(dateStart, 'yyyy-MM-dd');
       const dateToStr = format(dateEnd, 'yyyy-MM-dd');
 
-      // Load all data in parallel — with DATE FILTERS on large entities
-      const [allLeads, allTargets, allActivities, allEmployees, allRepairs, allGoals, allGoalProgress, allSalesTransactions, allLinetUsersMap] = await Promise.all([
+      // Load data in parallel — employees & linetUsersMap come from EmployeeProvider
+      const allEmployees = employees;
+      const [allLeads, allTargets, allActivities, allRepairs, allGoals, allGoalProgress, allSalesTransactions] = await Promise.all([
         Lead.filter({ status: { $ne: 'Deleted' } }),
         Target.filter({ period_start: { $lte: dateToStr }, period_end: { $gte: dateFromStr } }).catch(() => []),
         SalesActivity.filter({ activity_date: { $gte: dateFromStr, $lte: dateToStr } }).catch(() => []),
-        Employee.filter({ is_active: true }),
         isManager ? Repair.filter({ status: { $nin: ['תיקון נסגר', 'Closed'] } }, '-updated_date', 100) : Promise.resolve([]),
         GoalDefinition.filter({ is_active: true }),
         GoalProgress.filter({ period_start: { $lte: dateToStr }, period_end: { $gte: dateFromStr } }).catch(() => []),
         SalesTransaction.filter({ issue_date: { $gte: dateFromStr, $lte: dateToStr } }, '-issue_date', 5000).catch(() => []),
-        LinetUsersMap.list()
       ]);
       console.log(`⏱️ [AgentDashboard] Data fetched in ${Date.now() - start}ms — Sales: ${allSalesTransactions.length}, Activities: ${allActivities.length}`);
 
@@ -122,8 +123,6 @@ export default function AgentDashboard() {
       
       // Build employee map with all aliases for matching
       const employeeMap = buildEmployeeMap(allEmployees || [], allLinetUsersMap || []);
-
-      setEmployees(allEmployees || []);
 
       // Filter leads
       const activeLeads = (allLeads || []).filter(l => l.status !== 'Deleted');

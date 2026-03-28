@@ -5,15 +5,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Lead, Employee } from '@/entities/all';
+import { Lead } from '@/entities/all';
 import { useUser } from '../UserAuth';
+import { useEmployees } from '../EmployeeProvider';
 import { toast } from 'sonner';
 import { Phone, User, FileText, Bell, Clock, Loader2, StickyNote } from 'lucide-react';
 
 export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
   const { currentUser } = useUser();
+  const { employees } = useEmployees();
   const [isLoading, setIsLoading] = useState(false);
-  const [employees, setEmployees] = useState([]);
   
   const [formData, setFormData] = useState({
     phone: '',
@@ -25,12 +26,6 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
     reminder_at: '',
     sla_due_at: ''
   });
-
-  useEffect(() => {
-    if (isOpen) {
-      loadEmployees();
-    }
-  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !currentUser || employees.length === 0) return;
@@ -49,15 +44,6 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
       }));
     }
   }, [isOpen, currentUser, employees]);
-
-  const loadEmployees = async () => {
-    try {
-      const emps = await Employee.filter({ is_active: true });
-      setEmployees(emps || []);
-    } catch (error) {
-      console.error('Error loading employees:', error);
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();

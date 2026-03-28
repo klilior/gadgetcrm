@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { customersService } from "../components/utils/customersService";
+import { useCustomersQuery } from "../hooks/useEntityQueries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,10 +19,10 @@ import { calculateCustomerScore } from "@/functions/calculateCustomerScore";
 export default function CustomersPage() {
     const { currentUser } = useUser();
     const navigate = useNavigate();
-    const [clients, setClients] = useState([]);
-    const [filteredClients, setFilteredClients] = useState([]);
+    const { data: clientsRaw = [], isLoading: clientsQueryLoading, refetch: refetchClients } = useCustomersQuery();
     const [searchTerm, setSearchTerm] = useState("");
-    const [isLoading, setIsLoading] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 50;
     const [selectedClient, setSelectedClient] = useState(null);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showMessageModal, setShowMessageModal] = useState(false);
@@ -71,21 +72,20 @@ export default function CustomersPage() {
     };
 
     useEffect(() => {
-        const init = async () => {
-            await loadClients();
-            // Handle openCard URL param (from call log link) - open AFTER clients loaded to avoid rate limits
-            const params = new URLSearchParams(window.location.search);
-            const openCardId = params.get('openCard');
-            if (openCardId) {
-                setSelectedCustomerForCard(openCardId);
-                setShowCustomerCard(true);
-            }
-        };
-        init();
+        // Handle openCard URL param
+        const params = new URLSearchParams(window.location.search);
+        const openCardId = params.get('openCard');
+        if (openCardId) {
+            setSelectedCustomerForCard(openCardId);
+            setShowCustomerCard(true);
+        }
     }, []);
 
-    useEffect(() => {
-        let result = clients;
+    // Reset page on filter change
+    useEffect(() => { setCurrentPage(1); }, [searchTerm, sortBy]);
+
+    const filteredClients = useMemo(() => {
+        let result = clientsRaw;
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             result = result.filter(client => 
@@ -96,24 +96,14 @@ export default function CustomersPage() {
                 client.customer_tier?.includes(term)
             );
         }
-        // Sort
         if (sortBy === 'score') result = [...result].sort((a, b) => (b.customer_score || 0) - (a.customer_score || 0));
         else if (sortBy === 'spent') result = [...result].sort((a, b) => (b.total_spent || 0) - (a.total_spent || 0));
         else result = [...result].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
-        setFilteredClients(result);
-    }, [searchTerm, clients, sortBy]);
+        return result;
+    }, [searchTerm, clientsRaw, sortBy]);
 
-    const loadClients = async () => {
-        setIsLoading(true);
-        try {
-            const data = await customersService.list();
-            setClients(data);
-            setFilteredClients(data);
-        } catch (error) {
-            console.error("Error loading clients:", error);
-        }
-        setIsLoading(false);
-    };
+    const isLoading = clientsQueryLoading;
+    const loadClients = async () => { await refetchClients(); customersService.invalidateCache(); };
 
     const handleClientUpdate = async () => {
         await loadClients();
@@ -251,8 +241,9 @@ export default function CustomersPage() {
                             {searchTerm ? "לא נמצאו לקוחות התואמים לחיפוש" : "אין לקוחות במערכת"}
                         </div>
                     ) : (
+                      <>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {filteredClients.map((client) => (
+                            {filteredClients.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((client) => (
                                 <Card 
                                     key={client.id} 
                                     className={`glass-card rounded-2xl hover:shadow-xl transition-all duration-300 border-0 ${selectionMode && selectedIds.has(client.id) ? 'ring-2 ring-red-400 bg-red-50/50' : ''}`}
@@ -354,6 +345,16 @@ export default function CustomersPage() {
                                 </Card>
                             ))}
                         </div>
+
+                        {/* Pagination */}
+                        {Math.ceil(filteredClients.length / ITEMS_PER_PAGE) > 1 && (
+                          <div className="flex items-center justify-center gap-4 mt-6">
+                            <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>הקודם</Button>
+                            <span className="text-sm text-gray-600">עמוד {currentPage} מתוך {Math.ceil(filteredClients.length / ITEMS_PER_PAGE)}</span>
+                            <Button variant="outline" size="sm" disabled={currentPage >= Math.ceil(filteredClients.length / ITEMS_PER_PAGE)} onClick={() => setCurrentPage(p => p + 1)}>הבא</Button>
+                          </div>
+                        )}
+                    </>
                     )}
                 </CardContent>
             </Card>

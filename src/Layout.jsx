@@ -17,13 +17,14 @@ import { Badge } from "@/components/ui/badge";
 import { useUser } from "./components/UserAuth";
 import LoginScreen from "./components/LoginScreen";
 import { UserProvider } from "./components/UserAuth";
+import { EmployeeProvider } from "./components/EmployeeProvider";
 import AddUserModal from "./components/AddUserModal";
 import PaymentModal from "./components/payments/PaymentModal";
 import QuickLeadButton from "./components/leads/QuickLeadButton";
 import IncomingCallPopup from "./components/calls/IncomingCallPopup";
 
 // Compact menu item component
-function MenuItem({ item, isActive, onClick }) {
+const MenuItem = React.memo(function MenuItem({ item, isActive, onClick }) {
   const Component = onClick ? 'button' : Link;
   const props = onClick ? { onClick } : { to: item.url };
   
@@ -40,10 +41,10 @@ function MenuItem({ item, isActive, onClick }) {
       <span className="truncate">{item.title}</span>
     </Component>
   );
-}
+});
 
 // Collapsible section component
-function MenuSection({ title, icon: Icon, items, isOpen, onToggle, activeUrl, color = "purple" }) {
+const MenuSection = React.memo(function MenuSection({ title, icon: Icon, items, isOpen, onToggle, activeUrl, color = "purple" }) {
   const isActive = items.some(item => activeUrl === item.url);
   const colorClasses = {
     purple: { bg: 'from-purple-500/20 to-indigo-500/20', border: 'border-purple-200/50', text: 'text-purple-700', icon: 'text-purple-600' },
@@ -91,7 +92,7 @@ function MenuSection({ title, icon: Icon, items, isOpen, onToggle, activeUrl, co
       </div>
     </div>
   );
-}
+});
 
 function AppContent({ children, currentPageName }) {
   const { currentUser, activeUsers, logout, switchUser, isLoading } = useUser();
@@ -528,7 +529,9 @@ function AppContent({ children, currentPageName }) {
 export default function Layout({ children, currentPageName }) {
   return (
     <UserProvider>
-      <AppContent children={children} currentPageName={currentPageName} />
+      <EmployeeProvider>
+        <AppContent children={children} currentPageName={currentPageName} />
+      </EmployeeProvider>
     </UserProvider>
   );
 }

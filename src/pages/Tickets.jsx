@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Ticket, Employee } from "@/entities/all";
-import { customersService } from "../components/utils/customersService";
+import { Ticket } from "@/entities/all";
 import { Button } from "@/components/ui/button";
+import { useEmployees } from "../components/EmployeeProvider";
+import { useCustomersQuery, useInvalidateEntity } from "../hooks/useEntityQueries";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, User, ChevronDown, PlusCircle, Inbox, Trash2, CheckSquare, Square } from "lucide-react";
 import { format } from "date-fns";
@@ -23,7 +24,7 @@ const getTicketCategory = (ticket) => {
     return 'שירות';
 };
 
-const TicketRow = ({ ticket, customer, assignedAgent, onSelect, isSelected, onDelete, isManager, isChecked, onCheck }) => {
+const TicketRow = React.memo(({ ticket, customer, assignedAgent, onSelect, isSelected, onDelete, isManager, isChecked, onCheck }) => {
     const getCategoryClass = (category) => {
         const cat = category || 'שירות';
         switch (cat) {
@@ -106,18 +107,22 @@ const TicketRow = ({ ticket, customer, assignedAgent, onSelect, isSelected, onDe
             </div>
         </motion.div>
     );
-};
+});
+
+const TICKETS_PER_PAGE = 30;
 
 export default function TicketsPage() {
   const { currentUser } = useUser();
   const isManager = currentUser?.role === "מנהל";
   
+  const { employees, employeesMap } = useEmployees();
+  const { data: clients = [], isLoading: clientsLoading } = useCustomersQuery();
+  const invalidateTickets = useInvalidateEntity('tickets');
+  
   const [tickets, setTickets] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [employeesMap, setEmployeesMap] = useState({});
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isNewTicketModalOpen, setIsNewTicketModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("open");
   const [filters, setFilters] = useState({
@@ -133,28 +138,14 @@ export default function TicketsPage() {
   }, []);
 
   const loadTickets = async () => {
+    const start = Date.now();
     setIsLoading(true);
     try {
-        const [fetchedTickets, fetchedEmployees, fetchedClients] = await Promise.all([
-          Ticket.list("-updated_date", 200),
-          Employee.list(),
-          customersService.list()
-        ]);
-        
-        const empMap = fetchedEmployees.reduce((acc, e) => {
-            if (e && e.id) acc[e.id] = e;
-            return acc;
-        }, {});
-
+        const fetchedTickets = await Ticket.list("-updated_date", 200);
         setTickets(fetchedTickets);
-        setEmployees(fetchedEmployees);
-        setEmployeesMap(empMap);
-        setClients(fetchedClients);
-        
-        console.log(`✅ Loaded ${fetchedTickets.length} tickets, ${fetchedEmployees.length} employees, ${fetchedClients.length} clients.`);
+        console.log(`⏱️ [Tickets] Loaded ${fetchedTickets.length} tickets in ${Date.now() - start}ms`);
     } catch (error) {
-        console.error("❌ Error loading data:", error);
-        setClients([]);
+        console.error("❌ Error loading tickets:", error);
     } finally {
         setIsLoading(false);
     }
@@ -252,10 +243,19 @@ export default function TicketsPage() {
     }
   };
 
-  const getClientById = useCallback((id) => {
-    if (!id || !clients) return null;
-    return clients.find(c => c && c.id === id) || null;
+  // Reset page on filter change
+  useEffect(() => { setCurrentPage(1); }, [filters, statusFilter]);
+
+  const clientsMap = useMemo(() => {
+    const map = {};
+    clients.forEach(c => { if (c?.id) map[c.id] = c; });
+    return map;
   }, [clients]);
+
+  const getClientById = useCallback((id) => {
+    if (!id) return null;
+    return clientsMap[id] || null;
+  }, [clientsMap]);
 
   const filteredTickets = useMemo(() => {
       if (!Array.isArray(tickets)) return [];
@@ -362,17 +362,13 @@ export default function TicketsPage() {
 
         <div className="space-y-2">
             <AnimatePresence>
-                {isLoading ? (
-                    <div className="text-center py-8 sm:py-16">
-                        <div className="text-sm sm:text-base">טוען...</div>
-                    </div>
-                ) : filteredTickets.length === 0 ? (
+                {(isLoading || clientsLoading) ? (
                     <div className="text-center py-8 sm:py-16 text-gray-500 glass-card rounded-2xl">
                         <Inbox className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 text-gray-400" />
                         <p className="text-sm sm:text-base">אין טיקטים להצגה התואמים לסינון.</p>
                     </div>
                 ) : (
-                    filteredTickets.map((ticket) => {
+                    filteredTickets.slice((currentPage - 1) * TICKETS_PER_PAGE, currentPage * TICKETS_PER_PAGE).map((ticket) => {
                        const client = getClientById(ticket.customer_id);
                        return (
                            <React.Fragment key={ticket.id}>
@@ -413,6 +409,15 @@ export default function TicketsPage() {
                 )}
             </AnimatePresence>
         </div>
+
+        {/* Pagination */}
+        {Math.ceil(filteredTickets.length / TICKETS_PER_PAGE) > 1 && (
+          <div className="flex items-center justify-center gap-4 mt-4">
+            <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>הקודם</Button>
+            <span className="text-sm text-gray-600">עמוד {currentPage} מתוך {Math.ceil(filteredTickets.length / TICKETS_PER_PAGE)}</span>
+            <Button variant="outline" size="sm" disabled={currentPage >= Math.ceil(filteredTickets.length / TICKETS_PER_PAGE)} onClick={() => setCurrentPage(p => p + 1)}>הבא</Button>
+          </div>
+        )}
         
         <NewTicketModal 
             isOpen={isNewTicketModalOpen}

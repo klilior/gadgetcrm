@@ -13,7 +13,7 @@ const KPICard = ({ title, value, icon: Icon, prefix = '', suffix = '' }) => (
   </div>
 );
 
-export default function KPIStrip({ data, showTeamStats = false }) {
+export default React.memo(function KPIStrip({ data, showTeamStats = false }) {
   const kpis = [
     { key: 'devices', title: 'מכשירים', icon: Smartphone, value: data?.devices || 0 },
     { key: 'accessories', title: 'אביזרים', icon: ShoppingBag, value: data?.accessories || 0, prefix: '₪' },
@@ -43,4 +43,4 @@ export default function KPIStrip({ data, showTeamStats = false }) {
       ))}
     </div>
   );
-}
+});
