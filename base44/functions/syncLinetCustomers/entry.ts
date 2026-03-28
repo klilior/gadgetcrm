@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 const BASE_URL = "https://app.linet.org.il/api";
 const BATCH_SIZE = 200;
