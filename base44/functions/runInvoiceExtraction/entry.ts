@@ -271,11 +271,24 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
   const supplierName = extraction.supplier_name?.trim();
   const normalizedName = extraction.supplier_name_normalized?.trim();
   
-  // First try to find by VAT ID
+  // First try to find by VAT ID (exact match)
   if (vatId) {
     const found = await base44.asServiceRole.entities.Suppliers.filter({ vat_id: vatId }, undefined, 1);
     if (found && found.length > 0) {
       supplierId = found[0].id;
+    }
+  }
+  
+  // If not found by VAT, check if VAT ID appears in any supplier's aliases field
+  if (!supplierId && vatId) {
+    const allSuppliers = await base44.asServiceRole.entities.Suppliers.filter({}, undefined, 500);
+    const aliasMatch = allSuppliers.find(s => {
+      if (!s.aliases) return false;
+      return s.aliases.split(',').map(a => a.trim()).includes(vatId);
+    });
+    if (aliasMatch) {
+      supplierId = aliasMatch.id;
+      console.log(`Matched supplier via alias: ${aliasMatch.name} (alias contains VAT ${vatId})`);
     }
   }
   
