@@ -89,19 +89,43 @@ Deno.serve(async (req) => {
     const defaultStartDate = new Date();
     defaultStartDate.setDate(defaultStartDate.getDate() - 30);
     
-    const params = {
-      order_state_codes: states,
-      max: body.max || 50,
-      start_update_date: body.start_update_date || defaultStartDate.toISOString(),
-    };
+    const PAGE_SIZE = 100; // Mirakl max is 100
+    let offset = 0;
+    let allMiraklOrders = [];
+    let hasMore = true;
 
-    const data = await fetchMiraklOrders(params);
-    const miraklOrders = data.orders || [];
-    console.log(`[Mirakl] Received ${miraklOrders.length} orders`);
+    // Paginate through ALL results
+    while (hasMore) {
+      const params = {
+        order_state_codes: states,
+        max: PAGE_SIZE,
+        offset: offset,
+        start_update_date: body.start_update_date || defaultStartDate.toISOString(),
+      };
+
+      const data = await fetchMiraklOrders(params);
+      const pageOrders = data.orders || [];
+      console.log(`[Mirakl] Page offset=${offset}: received ${pageOrders.length} orders (total_count=${data.total_count || '?'})`);
+      
+      allMiraklOrders = allMiraklOrders.concat(pageOrders);
+      offset += pageOrders.length;
+      
+      // Stop if we got fewer than PAGE_SIZE (last page) or if total_count is known
+      if (pageOrders.length < PAGE_SIZE) {
+        hasMore = false;
+      }
+      // Safety cap to prevent infinite loops
+      if (allMiraklOrders.length > 1000) {
+        console.warn('[Mirakl] Safety cap reached at 1000 orders');
+        hasMore = false;
+      }
+    }
+
+    console.log(`[Mirakl] Total fetched across all pages: ${allMiraklOrders.length} orders`);
 
     let created = 0, updated = 0, skipped = 0;
 
-    for (const mOrder of miraklOrders) {
+    for (const mOrder of allMiraklOrders) {
       const orderData = extractOrderData(mOrder);
 
       // Check if exists
@@ -138,11 +162,11 @@ Deno.serve(async (req) => {
 
     return Response.json({
       success: true,
-      total_fetched: miraklOrders.length,
+      total_fetched: allMiraklOrders.length,
       created,
       updated,
       skipped,
-      message: `סנכרון הושלם: ${created} חדשות, ${updated} עודכנו`,
+      message: `סנכרון הושלם: ${created} חדשות, ${updated} עודכנו (סה"כ נמשכו ${allMiraklOrders.length})`,
     });
   } catch (error) {
     console.error('[Mirakl Sync] Error:', error.message);
