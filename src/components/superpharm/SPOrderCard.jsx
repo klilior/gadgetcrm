@@ -44,13 +44,12 @@ function isUrgent(order) {
 
 function detectPickup(order) {
   try {
-    const lines = JSON.parse(order.order_lines_json || "[]");
-    const hasPickup = lines.some(l => 
-      (l.shipping_type_label || "").includes("נקודת") || 
-      (l.shipping_type_label || "").includes("pickup") ||
-      (l.shipping_type_code || "").includes("pickup")
-    );
-    return hasPickup;
+    // Check raw Mirakl JSON for shipping_type_code at order level
+    const raw = JSON.parse(order.raw_mirakl_json || "{}");
+    if (raw.shipping_type_code === "pickup-locations") return true;
+    const label = (raw.shipping_type_label || "").toLowerCase();
+    if (label.includes("איסוף") || label.includes("pickup")) return true;
+    return false;
   } catch {
     return false;
   }

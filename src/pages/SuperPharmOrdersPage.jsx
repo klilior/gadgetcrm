@@ -12,6 +12,7 @@ import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
 import SPOrderCard from "../components/superpharm/SPOrderCard";
 import SPShipDialog from "../components/superpharm/SPShipDialog";
 import SPLinetInvoiceModal from "../components/superpharm/SPLinetInvoiceModal";
+import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import { toast } from "sonner";
 
 
@@ -52,6 +53,7 @@ export default function SuperPharmOrdersPage() {
   const [shipCarrier, setShipCarrier] = useState(null);
   const [invoiceOrder, setInvoiceOrder] = useState(null);
   const [acceptingId, setAcceptingId] = useState(null);
+  const [upsPickupOrder, setUpsPickupOrder] = useState(null);
 
   const loadOrders = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -279,14 +281,59 @@ export default function SuperPharmOrdersPage() {
         </div>
       )}
 
-      {/* Ship Dialog */}
-      {shipOrder && (
+      {/* Ship Dialog (simple - for non-pickup orders) */}
+      {shipOrder && shipCarrier !== "ups" && (
         <SPShipDialog
           order={shipOrder}
           open={!!shipOrder}
           onClose={() => setShipOrder(null)}
           onSuccess={async () => {
             setShipOrder(null);
+            await loadOrders();
+          }}
+        />
+      )}
+
+      {/* UPS Pickup Point Shipment Modal */}
+      {shipOrder && shipCarrier === "ups" && (
+        <CreateShipmentModal
+          open={true}
+          onClose={() => { setShipOrder(null); setShipCarrier(null); }}
+          order={{
+            raw_data_billing: JSON.stringify({
+              first_name: shipOrder.customer_first_name,
+              last_name: shipOrder.customer_last_name,
+              phone: shipOrder.customer_phone,
+              city: shipOrder.shipping_city,
+              address_1: shipOrder.shipping_street,
+              postcode: shipOrder.shipping_zip,
+            }),
+            external_order_number: shipOrder.mirakl_order_id,
+            shipping_method: "איסוף מנקודת איסוף",
+            id: null,
+            client_id: null,
+          }}
+          client={{
+            full_name: `${shipOrder.customer_first_name} ${shipOrder.customer_last_name}`.trim(),
+            phone: shipOrder.customer_phone,
+            city: shipOrder.shipping_city,
+          }}
+          onSuccess={async ({ tracking_number }) => {
+            if (tracking_number) {
+              try {
+                await updateSuperPharmOrder({
+                  action: "ship",
+                  order_id: shipOrder.mirakl_order_id,
+                  tracking_number,
+                  carrier_name: "UPS Israel",
+                });
+                toast.success("ההזמנה עודכנה ב-Mirakl עם מספר מעקב: " + tracking_number);
+              } catch (e) {
+                toast.error("שטר מטען נוצר אבל לא הצלחנו לעדכן ב-Mirakl: " + e.message);
+              }
+            }
+            setShipOrder(null);
+            setShipCarrier(null);
             await loadOrders();
           }}
         />
