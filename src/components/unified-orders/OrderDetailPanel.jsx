@@ -100,6 +100,16 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
               {order.shipping_method}
             </div>
           )}
+          {order.sales_rep && (
+            <div className="text-xs text-gray-500">
+              <span className="font-semibold">נציג:</span> {order.sales_rep}
+            </div>
+          )}
+          {order.linet_doc_id && (
+            <div className="text-xs text-gray-500">
+              <span className="font-semibold">מזהה לינט:</span> {order.linet_doc_id}
+            </div>
+          )}
           {order.tracking_number && (
             <div className="text-xs text-gray-500">
               <span className="font-semibold">מעקב:</span> {order.tracking_number}

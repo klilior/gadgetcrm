@@ -1,0 +1,44 @@
+{
+  "name": "LinetOrderStatus",
+  "type": "object",
+  "properties": {
+    "doc_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05dc\u05d9\u05e0\u05d8",
+      "index": true,
+      "unique": true
+    },
+    "linet_doc_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e1\u05de\u05da \u05d1\u05dc\u05d9\u05e0\u05d8"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "\u05de\u05de\u05ea\u05d9\u05e0\u05d4 \u05dc\u05d0\u05e1\u05e4\u05e7\u05d4",
+        "\u05d1\u05d8\u05d9\u05e4\u05d5\u05dc",
+        "\u05e0\u05d5\u05e6\u05e8 \u05de\u05e9\u05dc\u05d5\u05d7",
+        "\u05d8\u05d5\u05e4\u05dc"
+      ],
+      "default": "\u05de\u05de\u05ea\u05d9\u05e0\u05d4 \u05dc\u05d0\u05e1\u05e4\u05e7\u05d4",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05d8\u05d9\u05e4\u05d5\u05dc"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05dc\u05e7\u05d5\u05d7"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05dc\u05e7\u05d5\u05d7 \u05de\u05e7\u05d5\u05de\u05d9",
+      "index": true
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    }
+  },
+  "required": [
+    "doc_number",
+    "status"
+  ]
+}

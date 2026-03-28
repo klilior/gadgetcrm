@@ -25,11 +25,14 @@ export const MIRAKL_STATUSES = {
 };
 
 export const LINET_STATUSES = {
-  'חדשה': 'חדשה',
+  'ממתינה לאספקה': 'ממתינה לאספקה',
   'בטיפול': 'בטיפול',
   'נוצר משלוח': 'נוצר משלוח',
   'טופל': 'טופל'
 };
+
+// SKUs that mark a Linet invoice as an "order" needing fulfillment
+export const LINET_ORDER_SKUS = ['963258741', '1205931237'];
 
 export function getStatusLabel(source, status) {
   if (source === 'woocommerce') return WOO_STATUSES[status] || status;
@@ -78,7 +81,7 @@ export function getStatusColor(source, status) {
   }
   if (source === 'linet') {
     const map = {
-      'חדשה': 'bg-yellow-100 text-yellow-800',
+      'ממתינה לאספקה': 'bg-orange-100 text-orange-800',
       'בטיפול': 'bg-blue-100 text-blue-800',
       'נוצר משלוח': 'bg-purple-100 text-purple-800',
       'טופל': 'bg-green-100 text-green-800',

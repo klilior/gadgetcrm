@@ -16,7 +16,7 @@ import SummaryCards from "../components/unified-orders/SummaryCards";
 import OrderFilters from "../components/unified-orders/OrderFilters";
 import UnifiedOrderRow from "../components/unified-orders/UnifiedOrderRow";
 import SendSmsOrderModal from "../components/unified-orders/SendSmsOrderModal";
-import { isClosedStatus } from "../components/unified-orders/OrderStatusConfig";
+import { isClosedStatus, LINET_ORDER_SKUS } from "../components/unified-orders/OrderStatusConfig";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import MobileOrderCard from "../components/unified-orders/MobileOrderCard";
 import OrderDetailPanel from "../components/unified-orders/OrderDetailPanel";
@@ -61,16 +61,20 @@ export default function UnifiedOrders() {
     const closedWoo = new Set(['completed','cancelled','refunded','failed']);
     const closedMirakl = new Set(['CLOSED','REFUSED','CANCELED','RECEIVED']);
 
+    // Shared client map (used by WooCommerce and Linet)
+    let cM = {};
+    try {
+      const rawClients = await base44.entities.Client.list(null, 1000);
+      for (const c of rawClients) cM[c.id] = c;
+    } catch (e) { /* clients will be empty */ }
+
     // WooCommerce
     let woo = [];
     try {
-      const [rawOrders, rawClients, rawProducts] = await Promise.all([
+      const [rawOrders, rawProducts] = await Promise.all([
         base44.entities.Order.list('-order_date', 200),
-        base44.entities.Client.list(null, 1000),
         base44.entities.OrderProduct.list(null, 2000)
       ]);
-      const cM = {};
-      for (const c of rawClients) cM[c.id] = c;
       const pM = {};
       for (const p of rawProducts) { if (!pM[p.order_id]) pM[p.order_id] = []; pM[p.order_id].push(p); }
       for (const o of rawOrders) {
@@ -110,10 +114,80 @@ export default function UnifiedOrders() {
       }
     } catch (e) { errs.push({source: 'mirakl', message: e.message}); }
 
-    const all = [...woo, ...mk];
+    // Linet - invoices containing order SKUs
+    let lin = [];
+    try {
+      // Fetch all transactions that have order-marker SKUs
+      const allTxns = [];
+      for (const sku of LINET_ORDER_SKUS) {
+        const txns = await base44.entities.SalesTransaction.filter({ sku }, '-issue_date', 200);
+        allTxns.push(...txns);
+      }
+      // Get unique doc_numbers from order-marker transactions (only invoices, not credits)
+      const orderDocNumbers = new Set();
+      const docMeta = {};
+      for (const t of allTxns) {
+        if (t.doc_type === 'חשבונית זיכוי') continue; // skip credit notes
+        orderDocNumbers.add(t.doc_number);
+        if (!docMeta[t.doc_number]) {
+          docMeta[t.doc_number] = {
+            customer_name: t.customer_name || '', issue_date: t.issue_date || '',
+            linet_doc_id: t.linet_doc_id || '', client_id: t.client_id || '',
+            linet_account_id: t.linet_account_id, sales_rep: t.sales_rep || ''
+          };
+        }
+      }
+      // Fetch all transaction lines for those doc_numbers to build product lists
+      const docProducts = {};
+      const docTotals = {};
+      for (const dn of orderDocNumbers) {
+        const lines = await base44.entities.SalesTransaction.filter({ doc_number: dn }, null, 50);
+        docProducts[dn] = [];
+        docTotals[dn] = 0;
+        for (const l of lines) {
+          if (LINET_ORDER_SKUS.includes(l.sku)) continue; // skip the order-marker line itself
+          if (l.doc_type === 'חשבונית זיכוי') continue;
+          docProducts[dn].push({ name: l.product_name || '', quantity: l.quantity || 1, total: l.total_row_amount || 0 });
+          docTotals[dn] += (l.total_row_amount || 0);
+        }
+      }
+      // Fetch existing statuses from LinetOrderStatus entity
+      const existingStatuses = await base44.entities.LinetOrderStatus.list(null, 500);
+      const statusMap = {};
+      for (const s of existingStatuses) statusMap[s.doc_number] = s;
+
+      // Build unified order objects
+      for (const dn of orderDocNumbers) {
+        const meta = docMeta[dn];
+        const existing = statusMap[dn];
+        const status = existing?.status || 'ממתינה לאספקה';
+        // Auto-create status record if missing
+        if (!existing) {
+          base44.entities.LinetOrderStatus.create({
+            doc_number: dn, linet_doc_id: meta.linet_doc_id,
+            status: 'ממתינה לאספקה', customer_name: meta.customer_name, client_id: meta.client_id
+          }).catch(() => {});
+        }
+        if (!showClosed && status === 'טופל') continue;
+        const client = meta.client_id ? cM[meta.client_id] : null;
+        lin.push({
+          id: 'linet_' + dn, source: 'linet',
+          order_number: dn, order_date: meta.issue_date || '',
+          customer_name: meta.customer_name || '',
+          customer_phone: client?.phone || '',
+          products: docProducts[dn] || [],
+          total: docTotals[dn] || 0, shipping_method: '', shipping_city: '',
+          status, notes: existing?.notes || '',
+          raw_id: existing?.id || '', linet_doc_id: meta.linet_doc_id || '',
+          sales_rep: meta.sales_rep || '', currency: 'ILS'
+        });
+      }
+    } catch (e) { errs.push({source: 'linet', message: e.message}); }
+
+    const all = [...woo, ...mk, ...lin];
     all.sort((a, b) => new Date(b.order_date || 0) - new Date(a.order_date || 0));
     setOrders(all);
-    setCounts({woocommerce: woo.length, mirakl: mk.length, linet: 0, total: all.length});
+    setCounts({woocommerce: woo.length, mirakl: mk.length, linet: lin.length, total: all.length});
     setErrors(errs);
     setLastRefresh(new Date());
     setIsLoading(false);
@@ -184,6 +258,16 @@ export default function UnifiedOrders() {
           setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
         }
       } else if (order.source === 'linet') {
+        // Update LinetOrderStatus entity
+        if (order.raw_id) {
+          await base44.entities.LinetOrderStatus.update(order.raw_id, { status: newStatus });
+        } else {
+          // Find or create
+          const existing = await base44.entities.LinetOrderStatus.filter({ doc_number: order.order_number });
+          if (existing.length > 0) {
+            await base44.entities.LinetOrderStatus.update(existing[0].id, { status: newStatus });
+          }
+        }
         setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
       }
     } catch (err) {
