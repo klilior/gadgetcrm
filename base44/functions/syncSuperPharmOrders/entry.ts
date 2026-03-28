@@ -125,7 +125,10 @@ Deno.serve(async (req) => {
 
     let created = 0, updated = 0, skipped = 0;
 
-    for (const mOrder of allMiraklOrders) {
+    // Process in small batches with delay to avoid rate limits
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < allMiraklOrders.length; i++) {
+      const mOrder = allMiraklOrders[i];
       const orderData = extractOrderData(mOrder);
 
       // Check if exists
@@ -134,10 +137,8 @@ Deno.serve(async (req) => {
       );
 
       if (existing.length > 0) {
-        // Update only if state changed or data changed
         const ex = existing[0];
         if (ex.order_state !== orderData.order_state || ex.last_updated_mirakl !== orderData.last_updated_mirakl) {
-          // Preserve local fields
           const updates = { ...orderData };
           if (ex.tracking_number) {
             updates.tracking_number = ex.tracking_number;
@@ -153,8 +154,27 @@ Deno.serve(async (req) => {
           skipped++;
         }
       } else {
-        await sr.SuperPharmOrder.create(orderData);
-        created++;
+        // Retry with backoff on rate limit
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await sr.SuperPharmOrder.create(orderData);
+            created++;
+            break;
+          } catch (e) {
+            if (e.message?.includes('Rate limit') && attempt < 2) {
+              console.log(`[Rate limit] Waiting before retry (attempt ${attempt + 1})...`);
+              await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+            } else {
+              throw e;
+            }
+          }
+        }
+      }
+
+      // Add a small delay every BATCH_SIZE writes to avoid rate limits
+      if ((created + updated) > 0 && (created + updated) % BATCH_SIZE === 0) {
+        console.log(`[Mirakl Sync] Processed ${created + updated + skipped}/${allMiraklOrders.length}... pausing`);
+        await new Promise(r => setTimeout(r, 2000));
       }
     }
 
