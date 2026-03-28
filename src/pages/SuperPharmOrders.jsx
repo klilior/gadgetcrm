@@ -29,7 +29,7 @@ export default function SuperPharmOrders() {
   const loadOrders = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const all = await base44.entities.SuperPharmOrder.list("-created_at_mirakl", 200);
+      const all = await base44.entities.SuperPharmOrder.list("-created_at_mirakl", 50);
       setOrders(all);
       setLastRefresh(new Date());
     } catch (e) {
