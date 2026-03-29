@@ -2,13 +2,25 @@ import React from "react";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronDown, AlertTriangle } from "lucide-react";
+import { ChevronDown, AlertTriangle, Package, Truck } from "lucide-react";
+
+function detectMiraklPickup(order) {
+  if (order.source !== 'mirakl') return null;
+  try {
+    const raw = JSON.parse(order.raw_mirakl_json || '{}');
+    if (raw.shipping_type_code === 'pickup-locations') return true;
+    const label = (raw.shipping_type_label || '').toLowerCase();
+    if (label.includes('איסוף') || label.includes('pickup')) return true;
+    return false;
+  } catch { return false; }
+}
 import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusColor, isClosedStatus } from "./OrderStatusConfig";
 
 export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect, isSelected, canBulk }) {
   const isClosed = isClosedStatus(order.source, order.status);
+  const miraklPickup = detectMiraklPickup(order);
   const hoursSinceOrder = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
   const isOld = hoursSinceOrder > 24 && !isClosed;
 
@@ -58,7 +70,19 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
       <TableCell className="text-xs text-gray-600 max-w-[180px] truncate">{productSummary}</TableCell>
       <TableCell className="font-mono text-sm font-bold whitespace-nowrap">₪{(order.total || 0).toLocaleString()}</TableCell>
       <TableCell>
-        <Badge className={`${statusColor} text-xs`}>{statusLabel}</Badge>
+        <div className="flex items-center gap-1.5">
+          <Badge className={`${statusColor} text-xs`}>{statusLabel}</Badge>
+          {miraklPickup === true && (
+            <span className="inline-flex items-center gap-0.5 text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded text-[10px] font-medium" title="UPS נקודת איסוף">
+              <Package className="w-3 h-3" /> UPS
+            </span>
+          )}
+          {miraklPickup === false && (
+            <span className="inline-flex items-center gap-0.5 text-blue-800 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-medium" title="Velo שליח עד הבית">
+              <Truck className="w-3 h-3" /> Velo
+            </span>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );

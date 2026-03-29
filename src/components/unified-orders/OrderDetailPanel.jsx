@@ -7,6 +7,17 @@ import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusOptions, getStatusColor } from "./OrderStatusConfig";
 
+function detectMiraklPickup(order) {
+  if (order.source !== 'mirakl') return null;
+  try {
+    const raw = JSON.parse(order.raw_mirakl_json || '{}');
+    if (raw.shipping_type_code === 'pickup-locations') return true;
+    const label = (raw.shipping_type_label || '').toLowerCase();
+    if (label.includes('איסוף') || label.includes('pickup')) return true;
+    return false;
+  } catch { return false; }
+}
+
 function copyText(text) {
   navigator.clipboard.writeText(text);
 }
@@ -21,6 +32,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const statusLabel = getStatusLabel(order.source, order.status);
   const statusOptions = getStatusOptions(order.source);
   const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
+  const miraklPickup = detectMiraklPickup(order);
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
 
   const sourceBg = {
@@ -61,10 +73,13 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
               </button>
             </div>
           )}
-          {order.shipping_city && (
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <MapPin className="w-3 h-3" />
-              {order.shipping_city}
+          {(order.shipping_address_full || order.shipping_street || order.shipping_city) && (
+            <div className="flex items-start gap-1 text-xs text-gray-500">
+              <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
+              <span>{order.shipping_address_full || [order.shipping_street, order.shipping_city, order.shipping_zip].filter(Boolean).join(', ')}</span>
+              <button onClick={() => copyText(order.shipping_address_full || [order.shipping_street, order.shipping_city, order.shipping_zip].filter(Boolean).join(', '))} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="העתק כתובת">
+                <Copy className="w-3 h-3" />
+              </button>
             </div>
           )}
         </div>
@@ -100,7 +115,21 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           <div className="flex items-center gap-2">
             <Badge className={`${statusColor} text-sm px-3`}>{statusLabel}</Badge>
           </div>
-          {order.shipping_method && (
+          {/* Shipping type indicator for Mirakl */}
+          {order.source === 'mirakl' && miraklPickup !== null && (
+            <div className="mt-1">
+              {miraklPickup ? (
+                <span className="inline-flex items-center gap-1.5 text-amber-900 bg-amber-100 border border-amber-300 px-3 py-1.5 rounded-lg font-medium text-sm">
+                  <Package className="w-4 h-4" /> 📦 UPS — נקודת איסוף
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-blue-800 bg-blue-100 border border-blue-300 px-3 py-1.5 rounded-lg font-medium text-sm">
+                  <Truck className="w-4 h-4" /> 🚚 Velo — שליח עד הבית
+                </span>
+              )}
+            </div>
+          )}
+          {order.source !== 'mirakl' && order.shipping_method && (
             <div className="flex items-center gap-1 text-sm text-gray-600">
               <Truck className="w-3.5 h-3.5" />
               {order.shipping_method}
@@ -175,10 +204,25 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </Button>
         )}
 
-        <Button variant="outline" className="rounded-full hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-colors" onClick={() => onShipment(order)}>
-          <Truck className="w-4 h-4 ml-1" />
-          צור משלוח
-        </Button>
+        {/* Mirakl-specific shipping buttons */}
+        {order.source === 'mirakl' && miraklPickup === true && (
+          <Button className="rounded-full bg-amber-700 hover:bg-amber-800 text-white shadow-lg shadow-amber-200" onClick={() => onShipment({ ...order, _shipCarrier: 'ups' })}>
+            <Package className="w-4 h-4 ml-1" />
+            📦 שלח UPS — נקודת איסוף
+          </Button>
+        )}
+        {order.source === 'mirakl' && miraklPickup === false && (
+          <Button className="rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200" onClick={() => onShipment({ ...order, _shipCarrier: 'velo' })}>
+            <Truck className="w-4 h-4 ml-1" />
+            🚚 שלח Velo — עד הבית
+          </Button>
+        )}
+        {order.source !== 'mirakl' && (
+          <Button variant="outline" className="rounded-full hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-colors" onClick={() => onShipment(order)}>
+            <Truck className="w-4 h-4 ml-1" />
+            צור משלוח
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -19,6 +19,7 @@ import PendingProductsSummary from "../components/unified-orders/PendingProducts
 import SendSmsOrderModal from "../components/unified-orders/SendSmsOrderModal";
 import { isClosedStatus, LINET_ORDER_SKUS } from "../components/unified-orders/OrderStatusConfig";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
+import SPShipDialog from "../components/superpharm/SPShipDialog";
 import MobileOrderCard from "../components/unified-orders/MobileOrderCard";
 import OrderDetailPanel from "../components/unified-orders/OrderDetailPanel";
 
@@ -111,9 +112,14 @@ export default function UnifiedOrders() {
           customer_phone: o.customer_phone || '',
           products: lines.map(l => ({name: l.product_title||l.offer_sku||'', quantity: l.quantity||1, total: l.price||0})),
           total: o.total_price || 0, shipping_method: 'superpharm', shipping_city: o.shipping_city || '',
+          shipping_street: o.shipping_street || '', shipping_zip: o.shipping_zip || '',
+          shipping_address_full: o.shipping_address_full || '',
           status: o.order_state || '', notes: o.notes || '',
           raw_id: o.id, mirakl_order_id: o.mirakl_order_id || '',
-          tracking_number: o.tracking_number || '', currency: o.currency || 'ILS'
+          tracking_number: o.tracking_number || '', currency: o.currency || 'ILS',
+          raw_mirakl_json: o.raw_mirakl_json || '',
+          customer_first_name: o.customer_first_name || '',
+          customer_last_name: o.customer_last_name || '',
         });
       }
     } catch (e) { errs.push({source: 'mirakl', message: e.message}); }
@@ -515,8 +521,73 @@ export default function UnifiedOrders() {
         />
       )}
 
-      {/* Shipment Modal */}
-      {shipmentOrder && (
+      {/* Mirakl Velo (home delivery) */}
+      {shipmentOrder && shipmentOrder._shipCarrier === 'velo' && (
+        <SPShipDialog
+          order={{
+            mirakl_order_id: shipmentOrder.mirakl_order_id || shipmentOrder.order_number,
+            customer_first_name: shipmentOrder.customer_first_name || shipmentOrder.customer_name?.split(' ')[0] || '',
+            customer_last_name: shipmentOrder.customer_last_name || shipmentOrder.customer_name?.split(' ').slice(1).join(' ') || '',
+            customer_phone: shipmentOrder.customer_phone || '',
+            shipping_city: shipmentOrder.shipping_city || '',
+            shipping_street: shipmentOrder.shipping_street || '',
+            shipping_zip: shipmentOrder.shipping_zip || '',
+            order_lines_json: JSON.stringify(shipmentOrder.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
+          }}
+          open={true}
+          onClose={() => { setShipmentOrder(null); }}
+          onSuccess={async () => {
+            setShipmentOrder(null);
+            await loadData(true);
+          }}
+        />
+      )}
+
+      {/* Mirakl UPS (pickup point) */}
+      {shipmentOrder && shipmentOrder._shipCarrier === 'ups' && (
+        <CreateShipmentModal
+          open={true}
+          onClose={() => { setShipmentOrder(null); loadData(true); }}
+          order={{
+            raw_data_billing: JSON.stringify({
+              first_name: shipmentOrder.customer_first_name || shipmentOrder.customer_name?.split(' ')[0] || '',
+              last_name: shipmentOrder.customer_last_name || shipmentOrder.customer_name?.split(' ').slice(1).join(' ') || '',
+              phone: shipmentOrder.customer_phone || '',
+              city: shipmentOrder.shipping_city || '',
+              address_1: shipmentOrder.shipping_street || '',
+              postcode: shipmentOrder.shipping_zip || '',
+            }),
+            external_order_number: shipmentOrder.mirakl_order_id || shipmentOrder.order_number,
+            shipping_method: 'איסוף מנקודת איסוף',
+            id: null,
+            client_id: null,
+          }}
+          client={{
+            full_name: shipmentOrder.customer_name,
+            phone: shipmentOrder.customer_phone,
+            city: shipmentOrder.shipping_city || '',
+          }}
+          onSuccess={async ({ tracking_number }) => {
+            if (tracking_number && shipmentOrder.mirakl_order_id) {
+              try {
+                await updateSuperPharmOrder({
+                  action: 'ship',
+                  order_id: shipmentOrder.mirakl_order_id,
+                  tracking_number,
+                  carrier_name: 'UPS Israel',
+                });
+              } catch (e) {
+                console.error('Failed to update Mirakl:', e);
+              }
+            }
+            setShipmentOrder(null);
+            await loadData(true);
+          }}
+        />
+      )}
+
+      {/* Non-Mirakl shipment */}
+      {shipmentOrder && !shipmentOrder._shipCarrier && (
         <CreateShipmentModal
           open={!!shipmentOrder}
           onClose={() => { setShipmentOrder(null); loadData(true); }}
