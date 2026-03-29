@@ -44,24 +44,24 @@ Deno.serve(async (req) => {
 
     const sr = base44.asServiceRole.entities;
 
-    // Find orders accepted in the last 30 minutes that are in SHIPPING or WAITING_DEBIT state
+    // Find all orders in active states that might need updates
+    const [shippingOrders, waitingDebit, waitingDebitPayment, waitingAcceptance] = await Promise.all([
+      sr.SuperPharmOrder.filter({ order_state: 'SHIPPING' }, '-updated_date', 50),
+      sr.SuperPharmOrder.filter({ order_state: 'WAITING_DEBIT' }, '-updated_date', 50),
+      sr.SuperPharmOrder.filter({ order_state: 'WAITING_DEBIT_PAYMENT' }, '-updated_date', 50),
+      sr.SuperPharmOrder.filter({ order_state: 'WAITING_ACCEPTANCE' }, '-updated_date', 50),
+    ]);
+
+    // Include: orders missing shipping data OR recently accepted (last 30 min)
     const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    const recentOrders = await sr.SuperPharmOrder.filter(
-      { order_state: 'SHIPPING' }, '-accepted_at', 50
-    );
+    const allActive = [...shippingOrders, ...waitingDebit, ...waitingDebitPayment, ...waitingAcceptance];
+    const candidates = allActive.filter(o => {
+      const missingShipping = !o.shipping_city || !o.shipping_street;
+      const recentlyAccepted = o.accepted_at && o.accepted_at >= cutoff;
+      return missingShipping || recentlyAccepted;
+    });
 
-    // Also check WAITING_DEBIT / WAITING_DEBIT_PAYMENT (intermediate states after accept)
-    const waitingDebit = await sr.SuperPharmOrder.filter(
-      { order_state: 'WAITING_DEBIT' }, '-updated_date', 50
-    );
-    const waitingDebitPayment = await sr.SuperPharmOrder.filter(
-      { order_state: 'WAITING_DEBIT_PAYMENT' }, '-updated_date', 50
-    );
-
-    const candidates = [...recentOrders, ...waitingDebit, ...waitingDebitPayment]
-      .filter(o => o.accepted_at && o.accepted_at >= cutoff);
-
-    console.log(`[Resync] Found ${candidates.length} recently accepted orders to check`);
+    console.log(`[Resync] Found ${candidates.length} orders to check (${allActive.length} total active)`);
 
     let updated = 0;
     let unchanged = 0;
@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
       }
 
       const shipping = miraklOrder.customer?.shipping_address || {};
+      const billing = miraklOrder.customer?.billing_address || {};
       const lines = miraklOrder.order_lines || [];
 
       const orderLinesSimple = lines.map(line => ({
@@ -87,16 +88,24 @@ Deno.serve(async (req) => {
         status: line.status?.state,
       }));
 
+      // Use shipping address, fallback to billing
+      const city = shipping.city || billing.city || '';
+      const street = [shipping.street_1 || billing.street_1, shipping.street_2 || billing.street_2].filter(Boolean).join(', ');
+      const zip = shipping.zip_code || billing.zip_code || '';
+      const phone = shipping.phone || billing.phone || '';
+
       const updates = {
         order_state: miraklOrder.order_state,
-        customer_first_name: miraklOrder.customer?.firstname || shipping.firstname || local.customer_first_name || '',
+        customer_first_name: miraklOrder.customer?.firstname || local.customer_first_name || '',
         customer_last_name: miraklOrder.customer?.lastname || shipping.lastname || local.customer_last_name || '',
-        customer_phone: shipping.phone || miraklOrder.customer?.billing_address?.phone || local.customer_phone || '',
-        shipping_city: shipping.city || local.shipping_city || '',
-        shipping_street: [shipping.street_1, shipping.street_2].filter(Boolean).join(', ') || local.shipping_street || '',
-        shipping_zip: shipping.zip_code || local.shipping_zip || '',
+        customer_phone: phone || local.customer_phone || '',
+        shipping_city: city || local.shipping_city || '',
+        shipping_street: street || local.shipping_street || '',
+        shipping_zip: zip || local.shipping_zip || '',
         shipping_address_full: [
-          shipping.street_1, shipping.street_2, shipping.city, shipping.zip_code
+          shipping.street_1 || billing.street_1,
+          shipping.street_2 || billing.street_2,
+          city, zip
         ].filter(Boolean).join(', ') || local.shipping_address_full || '',
         total_price: miraklOrder.total_price || local.total_price,
         total_commission: miraklOrder.total_commission || local.total_commission,
@@ -107,7 +116,7 @@ Deno.serve(async (req) => {
         raw_mirakl_json: JSON.stringify(miraklOrder),
       };
 
-      // Preserve local fields
+      // Preserve local fields that shouldn't be overwritten
       if (local.tracking_number) {
         updates.tracking_number = local.tracking_number;
         updates.carrier_code = local.carrier_code;
@@ -120,15 +129,15 @@ Deno.serve(async (req) => {
       // Check if anything meaningful changed
       const hasNewData = (
         updates.order_state !== local.order_state ||
-        updates.shipping_city !== local.shipping_city ||
-        updates.shipping_street !== local.shipping_street ||
-        updates.customer_phone !== local.customer_phone ||
-        updates.shipping_deadline !== local.shipping_deadline
+        updates.shipping_city !== (local.shipping_city || '') ||
+        updates.shipping_street !== (local.shipping_street || '') ||
+        updates.customer_phone !== (local.customer_phone || '') ||
+        updates.shipping_deadline !== (local.shipping_deadline || null)
       );
 
       if (hasNewData) {
         await sr.SuperPharmOrder.update(local.id, updates);
-        console.log(`[Resync] Updated ${local.mirakl_order_id}: state=${updates.order_state}, city=${updates.shipping_city}, street=${updates.shipping_street}`);
+        console.log(`[Resync] Updated ${local.mirakl_order_id}: state=${updates.order_state}, city=${updates.shipping_city}, street=${updates.shipping_street}, phone=${updates.customer_phone}`);
         updated++;
       } else {
         unchanged++;
