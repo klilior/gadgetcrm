@@ -74,10 +74,10 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1">
             <Package className="w-3 h-3" /> מוצרים ({order.products?.length || 0})
           </h4>
-          <div className="space-y-1 max-h-32 overflow-y-auto">
+          <div className="space-y-1 max-h-48 overflow-y-auto">
             {(order.products || []).map((p, i) => (
-              <div key={i} className="flex justify-between items-center text-sm">
-                <span className="text-gray-800 truncate flex-1">{p.name}</span>
+              <div key={i} className="flex justify-between items-start text-sm gap-2">
+                <span className="text-gray-800 break-words flex-1">{p.name}</span>
                 <div className="flex items-center gap-2 flex-shrink-0 mr-2">
                   <span className="text-gray-500">×{p.quantity}</span>
                   {p.total > 0 && <span className="font-mono text-gray-700">₪{p.total.toLocaleString()}</span>}
