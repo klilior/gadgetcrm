@@ -15,6 +15,7 @@ import { sendTextMeSMS } from "@/functions/sendTextMeSMS";
 import SummaryCards from "../components/unified-orders/SummaryCards";
 import OrderFilters from "../components/unified-orders/OrderFilters";
 import UnifiedOrderRow from "../components/unified-orders/UnifiedOrderRow";
+import PendingProductsSummary from "../components/unified-orders/PendingProductsSummary";
 import SendSmsOrderModal from "../components/unified-orders/SendSmsOrderModal";
 import { isClosedStatus, LINET_ORDER_SKUS } from "../components/unified-orders/OrderStatusConfig";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
@@ -39,6 +40,7 @@ export default function UnifiedOrders() {
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [showClosed, setShowClosed] = useState(false);
 
   // Selection
@@ -87,7 +89,7 @@ export default function UnifiedOrders() {
           id: 'woo_' + o.id, source: 'woocommerce',
           order_number: o.external_order_number || '', order_date: o.order_date || '',
           customer_name: c?.full_name || '', customer_phone: c?.phone || '',
-          products: pr.map(x => ({name: x.name||'', quantity: x.quantity||1, total: parseFloat(x.total)||0})),
+          products: pr.map(x => ({name: x.name||'', quantity: x.quantity||1, total: parseFloat(x.total)||0, meta_data: x.meta_data || ''})),
           total: parseFloat(o.total) || 0, shipping_method: o.shipping_method || '',
           status: o.status || '', notes: o.customer_note || '',
           raw_id: o.id, client_id: o.client_id || '', pickup_point_data: o.pickup_point_data, currency: 'ILS'
@@ -225,12 +227,21 @@ export default function UnifiedOrders() {
     return () => clearInterval(interval);
   }, [lastRefresh, loadData]);
 
+  // Helper: is order pending/needs action
+  const isPendingOrder = (o) => {
+    if (o.source === 'woocommerce') return ['processing', 'on-hold', 'wc-awaiting-serial'].includes(o.status);
+    if (o.source === 'mirakl') return ['WAITING_ACCEPTANCE', 'SHIPPING'].includes(o.status);
+    if (o.source === 'linet') return o.status !== 'טופל';
+    return false;
+  };
+
   // Filtered + searched orders
   const filteredOrders = useMemo(() => {
     const search = searchTerm.toLowerCase().trim();
     return orders.filter(o => {
       if (sourceFilter !== 'all' && o.source !== sourceFilter) return false;
       if (!showClosed && isClosedStatus(o.source, o.status)) return false;
+      if (statusFilter === 'pending' && !isPendingOrder(o)) return false;
       if (!search) return true;
       return (
         o.order_number?.toLowerCase().includes(search) ||
@@ -239,7 +250,7 @@ export default function UnifiedOrders() {
         o.products?.some(p => p.name?.toLowerCase().includes(search))
       );
     });
-  }, [orders, searchTerm, sourceFilter, showClosed]);
+  }, [orders, searchTerm, sourceFilter, statusFilter, showClosed]);
 
   // Pagination
   const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
@@ -309,6 +320,7 @@ export default function UnifiedOrders() {
   const resetFilters = () => {
     setSearchTerm("");
     setSourceFilter("all");
+    setStatusFilter("all");
     setShowClosed(false);
     setPage(1);
   };
@@ -357,11 +369,15 @@ export default function UnifiedOrders() {
           <OrderFilters
             searchTerm={searchTerm} setSearchTerm={setSearchTerm}
             sourceFilter={sourceFilter} setSourceFilter={setSourceFilter}
+            statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             showClosed={showClosed} setShowClosed={setShowClosed}
             onReset={resetFilters}
           />
         </CardContent>
       </Card>
+
+      {/* Products to prepare */}
+      <PendingProductsSummary orders={orders} />
 
       {/* Bulk actions */}
       {canBulk && selectedIds.length > 0 && (
@@ -502,7 +518,7 @@ export default function UnifiedOrders() {
       {/* Shipment Modal */}
       {shipmentOrder && (
         <CreateShipmentModal
-          isOpen={!!shipmentOrder}
+          open={!!shipmentOrder}
           onClose={() => { setShipmentOrder(null); loadData(true); }}
           order={{
             id: shipmentOrder.raw_id,

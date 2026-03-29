@@ -52,10 +52,12 @@ Deno.serve(async (req) => {
     if (action === 'accept') {
       // Accept all order lines
       const lines = JSON.parse(localOrder.order_lines_json || '[]');
+      console.log('[Mirakl Accept] Order lines:', JSON.stringify(lines));
       const orderLines = lines.map(line => ({
         accepted: true,
-        id: line.id,
+        id: line.id || line.order_line_id,
       }));
+      console.log('[Mirakl Accept] Payload:', JSON.stringify({ order_lines: orderLines }));
 
       await miraklRequest('PUT', `/orders/${order_id}/accept`, {
         order_lines: orderLines,
@@ -73,7 +75,7 @@ Deno.serve(async (req) => {
       const lines = JSON.parse(localOrder.order_lines_json || '[]');
       const orderLines = lines.map(line => ({
         accepted: false,
-        id: line.id,
+        id: line.id || line.order_line_id,
       }));
 
       await miraklRequest('PUT', `/orders/${order_id}/accept`, {

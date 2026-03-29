@@ -35,6 +35,16 @@ export default function OrderFilters({
         </SelectContent>
       </Select>
 
+      <Select value={statusFilter || 'all'} onValueChange={(val) => setStatusFilter?.(val)}>
+        <SelectTrigger className="w-[180px] h-10 text-sm rounded-full border-gray-200 bg-white/80 backdrop-blur-sm">
+          <SelectValue placeholder="כל הסטטוסים" />
+        </SelectTrigger>
+        <SelectContent className="rounded-xl">
+          <SelectItem value="all">📋 כל הסטטוסים</SelectItem>
+          <SelectItem value="pending">⏳ ממתינות לטיפול</SelectItem>
+        </SelectContent>
+      </Select>
+
       <Button
         variant={showClosed ? "default" : "outline"}
         size="sm"
