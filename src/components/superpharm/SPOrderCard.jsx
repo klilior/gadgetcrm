@@ -110,12 +110,12 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
         {/* Shipping type indicator */}
         <div className="flex items-center gap-2 text-sm">
           {isPickup ? (
-            <span className="flex items-center gap-1 text-blue-700 bg-blue-50 px-2 py-1 rounded-lg">
-              <Package className="w-3.5 h-3.5" /> 📦 UPS נקודת איסוף
+            <span className="flex items-center gap-1.5 text-amber-900 bg-amber-100 border border-amber-300 px-3 py-1.5 rounded-lg font-medium">
+              <Package className="w-4 h-4" /> 📦 UPS — נקודת איסוף
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-orange-700 bg-orange-50 px-2 py-1 rounded-lg">
-              <Truck className="w-3.5 h-3.5" /> 🚚 שליח עד הבית
+            <span className="flex items-center gap-1.5 text-blue-800 bg-blue-100 border border-blue-300 px-3 py-1.5 rounded-lg font-medium">
+              <Truck className="w-4 h-4" /> 🚚 Velo — שליח עד הבית
             </span>
           )}
         </div>
@@ -178,18 +178,18 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
               {isPickup ? (
                 <Button
                   onClick={() => onShip(order, "ups")}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                  className="flex-1 bg-amber-700 hover:bg-amber-800 text-white"
                   size="sm"
                 >
-                  📦 שלח UPS
+                  📦 שלח UPS — נקודת איסוף
                 </Button>
               ) : (
                 <Button
                   onClick={() => onShip(order, "velo")}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                   size="sm"
                 >
-                  🚚 שלח Velo
+                  🚚 שלח Velo — עד הבית
                 </Button>
               )}
             </>

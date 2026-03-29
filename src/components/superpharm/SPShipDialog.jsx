@@ -245,7 +245,7 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
       <DialogContent className="max-w-md" dir="rtl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Truck className="w-5 h-5 text-orange-600" />
+            <Truck className="w-5 h-5 text-blue-600" />
             שליחת הזמנה #{order?.mirakl_order_id}
           </DialogTitle>
         </DialogHeader>
@@ -263,7 +263,7 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
           <Button
             onClick={handleVeloShip}
             disabled={veloLoading || loading}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-base"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-base"
           >
             {veloLoading ? (
               <>
