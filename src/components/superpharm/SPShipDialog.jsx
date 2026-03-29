@@ -118,7 +118,6 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
       // Show success
       setSuccessData({
         tracking_number: tn,
-        label_url: labelUrl,
         velo_order_id: data.velo_order_id,
         service_name: data.service_name || "קרגו שליחויות",
       });
@@ -200,7 +199,7 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
               )}
               {!hasCargoBarcodeReady && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-                  ⚠️ ברקוד קרגו יוקצה בדקות הקרובות — ניתן לצפות בדשבורד Velo בעוד כמה דקות
+                  ⚠️ ברקוד קרגו יוקצה בדקות הקרובות. ניתן להדפיס תעודת משלוח מדשבורד Velo.
                 </div>
               )}
               <div className="text-sm text-gray-600">
@@ -209,22 +208,12 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
             </div>
 
             <div className="flex flex-col gap-2 pt-2">
-              {successData.label_url && (
-                <Button
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={() => window.open(successData.label_url, "_blank")}
-                >
-                  <FileText className="w-4 h-4 ml-2" />
-                  📄 הצג תעודת משלוח
-                </Button>
-              )}
-
               <Button
-                variant="outline"
-                className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 onClick={() => window.open(`https://app.veloapp.io/dashboard/orders`, "_blank")}
               >
-                📂 צפה בדשבורד Velo
+                <FileText className="w-4 h-4 ml-2" />
+                📄 צפה + הדפס תעודת משלוח מדשבורד Velo
               </Button>
 
               {onCreateInvoice && (

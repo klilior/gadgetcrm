@@ -295,7 +295,8 @@ Deno.serve(async (req) => {
         console.log('✅ [VeloOrder] Accepted, barcode:', barcode);
 
         // ===== STEP 3: Get barcode (Cargo assigns asynchronously) =====
-        let labelUrl = `https://api.veloapp.io/storage/stickers/${veloOrderId}.pdf`;
+        // NOTE: Velo sticker/label URLs require browser login — no API access.
+        // Users must print labels from the Velo dashboard.
         let cargoBarcode = barcode;
 
         // Re-accept to try to get barcode (Cargo may have assigned it by now)
@@ -341,10 +342,9 @@ Deno.serve(async (req) => {
         }
 
         const finalBarcode = cargoBarcode || veloOrderId;
-        const finalLabelUrl = labelUrl;
         const finalStatus = 'confirmed';
         
-        console.log('📋 [VeloOrder] Final:', { barcode: finalBarcode, label: finalLabelUrl, status: finalStatus });
+        console.log('📋 [VeloOrder] Final:', { barcode: finalBarcode, status: finalStatus });
 
         // Save shipment record (only for WooCommerce mode)
         if (!isSuperPharm && body.orderId) {
@@ -371,7 +371,6 @@ Deno.serve(async (req) => {
         return Response.json({
             success: true,
             tracking_number: finalBarcode,
-            label_url: finalLabelUrl,
             velo_order_id: veloOrderId,
             service_name: 'קרגו שליחויות',
             status: finalStatus
