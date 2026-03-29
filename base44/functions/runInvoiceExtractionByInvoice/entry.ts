@@ -240,7 +240,7 @@ const VALIDATE_SCHEMA = {
 };
 
 Deno.serve(async (req) => {
-    // Read body BEFORE creating base44 client (req body can only be read once)
+    // Read body BEFORE creating base44 client (body can only be read once)
     let body = {};
     try {
       body = await req.json();
@@ -261,9 +261,14 @@ Deno.serve(async (req) => {
     const invoice = invList?.[0];
     if (!invoice) return Response.json({ error: 'Invoice not found' }, { status: 404 });
 
-    // Conditions (Option A - updated)
+    // Allow re-run for any non-finalized status
     if (invoice.extraction_status === 'אושר' || invoice.extraction_status === 'נדחה') {
-      return Response.json({ success: true, skipped: true, reason: 'Finalized' });
+      // Check if force re-run was requested
+      if (!body.force) {
+        return Response.json({ success: true, skipped: true, reason: 'Finalized' });
+      }
+      // Reset status to allow re-extraction
+      await base44.asServiceRole.entities.Invoices.update(invoice.id, { extraction_status: 'ממתין לאימות' });
     }
     if (!invoice.source_intake) {
       return Response.json({ success: true, skipped: true, reason: 'No source intake' });
@@ -286,10 +291,10 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, skipped: true, reason: 'No file on intake', ai_debug_last_error_he: errMsg });
     }
 
-    // Idempotency: run only if doc_number OR total_with_vat missing
+    // Idempotency: run only if doc_number OR total_with_vat missing (unless force re-run)
     const hasDocNumber = !!(invoice.doc_number && String(invoice.doc_number).trim());
     const hasTotal = typeof invoice.total_with_vat === 'number' && !Number.isNaN(invoice.total_with_vat);
-    if (hasDocNumber && hasTotal) {
+    if (hasDocNumber && hasTotal && !body.force) {
       return Response.json({ success: true, skipped: true, reason: 'Already populated' });
     }
 

@@ -1,11 +1,11 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     
-    const bodyText = await req.text();
-    const body = bodyText ? JSON.parse(bodyText) : {};
+    let body = {};
+    try { body = await req.json(); } catch (_) { body = {}; }
     const { invoice_id, action, employee_role, employee_email } = body;
     if (!invoice_id || !action) return Response.json({ error: 'Missing params' }, { status: 400 });
 

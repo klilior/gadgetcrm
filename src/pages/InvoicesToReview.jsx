@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { updateInvoiceStatus } from "@/functions/updateInvoiceStatus";
+import { runInvoiceExtractionByInvoice } from "@/functions/runInvoiceExtractionByInvoice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -158,13 +160,27 @@ export default function InvoicesToReview() {
     if (approving) return;
     setApproving(true);
     try {
-      const result = await base44.functions.invoke('updateInvoiceStatus', { 
+      // First save any edits the user made
+      const updatePayload = {
+        supplier: selected.supplier || undefined,
+        doc_type: selected.doc_type || undefined,
+        doc_number: selected.doc_number || undefined,
+        doc_date: selected.doc_date || undefined,
+        currency: selected.currency || undefined,
+        subtotal_before_vat: selected.subtotal_before_vat != null ? Number(selected.subtotal_before_vat) : undefined,
+        vat_amount: selected.vat_amount != null ? Number(selected.vat_amount) : undefined,
+        total_with_vat: selected.total_with_vat != null ? Number(selected.total_with_vat) : undefined,
+        notes: selected.notes || undefined,
+      };
+      await base44.entities.Invoices.update(selected.id, updatePayload);
+
+      const result = await updateInvoiceStatus({ 
         invoice_id: selected.id, 
         action: 'approve',
         employee_role: currentUser?.role,
         employee_email: currentUser?.email || currentUser?.employee_name
       });
-      if (result.data?.error) {
+      if (result?.data?.error) {
         throw new Error(result.data.error);
       }
       toast.success("החשבונית אושרה");
@@ -182,13 +198,13 @@ export default function InvoicesToReview() {
     if (rejecting) return;
     setRejecting(true);
     try {
-      const result = await base44.functions.invoke('updateInvoiceStatus', { 
+      const result = await updateInvoiceStatus({ 
         invoice_id: selected.id, 
         action: 'reject',
         employee_role: currentUser?.role,
         employee_email: currentUser?.email || currentUser?.employee_name 
       });
-      if (result.data?.error) {
+      if (result?.data?.error) {
         throw new Error(result.data.error);
       }
       toast.info("החשבונית נדחתה");
@@ -202,18 +218,28 @@ export default function InvoicesToReview() {
     }
   };
 
+  const [runningAI, setRunningAI] = useState(false);
   const handleRunAI = async () => {
+    if (runningAI) return;
+    setRunningAI(true);
     try {
-      toast.info("מריץ חילוץ AI...");
-      await base44.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: selected.id });
-      toast.success("חילוץ הושלם");
+      toast.info("מריץ חילוץ AI מחדש...");
+      const result = await runInvoiceExtractionByInvoice({ invoice_id: selected.id, force: true });
+      if (result?.data?.skipped) {
+        toast.info("חילוץ לא התבצע: " + (result.data.reason || "לא ידוע"));
+      } else {
+        toast.success("חילוץ AI הושלם");
+      }
       // Reload the record to show updated data
       const updated = await base44.entities.Invoices.filter({ id: selected.id });
       if (updated && updated.length > 0) {
-        setSelected(updated[0]);
+        setSelected({ ...updated[0] });
       }
     } catch (e) {
-      toast.error("שגיאה בחילוץ: " + (e?.message || "שגיאה"));
+      console.error("RunAI error:", e);
+      toast.error("שגיאה בחילוץ: " + (e?.response?.data?.error || e?.message || "שגיאה"));
+    } finally {
+      setRunningAI(false);
     }
   };
 
@@ -714,8 +740,8 @@ export default function InvoicesToReview() {
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <Button className="flex-1 h-9" variant="secondary" onClick={handleRunAI}>
-                      🤖 הרץ AI שוב
+                    <Button className="flex-1 h-9" variant="secondary" onClick={handleRunAI} disabled={runningAI}>
+                      {runningAI ? "מריץ AI..." : "🤖 הרץ AI מחדש"}
                     </Button>
                     <Button className="flex-1 h-9" variant="outline" onClick={saveRecord} disabled={saving}>
                       {saving ? "שומר..." : "💾 שמור"}
