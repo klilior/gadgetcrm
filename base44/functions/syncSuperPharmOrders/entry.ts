@@ -1,10 +1,21 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
-const MIRAKL_API_URL = Deno.env.get('MIRAKL_API_URL');
+const RAW_MIRAKL_API_URL = Deno.env.get('MIRAKL_API_URL');
 const MIRAKL_API_KEY = Deno.env.get('MIRAKL_API_KEY');
 
+// Extract clean base URL — the env var may contain extra path/query like /api/orders?limit=25
+function getMiraklBaseUrl() {
+  try {
+    const u = new URL(RAW_MIRAKL_API_URL);
+    return `${u.protocol}//${u.host}/api`;
+  } catch(e) {
+    return RAW_MIRAKL_API_URL;
+  }
+}
+
 async function fetchMiraklOrders(params = {}) {
-  const url = new URL(`${MIRAKL_API_URL}/orders`);
+  const baseUrl = getMiraklBaseUrl();
+  const url = new URL(`${baseUrl}/orders`);
   for (const [key, val] of Object.entries(params)) {
     if (val != null) url.searchParams.set(key, String(val));
   }
