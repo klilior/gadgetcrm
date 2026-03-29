@@ -294,29 +294,53 @@ Deno.serve(async (req) => {
         const barcode = acceptData.data?.barcode || null;
         console.log('✅ [VeloOrder] Accepted, barcode:', barcode);
 
-        // ===== STEP 3: Get label =====
+        // ===== STEP 3: Get barcode (Cargo assigns asynchronously) =====
         let labelUrl = `https://api.veloapp.io/storage/stickers/${veloOrderId}.pdf`;
-        console.log('📦 [VeloOrder] Step 3 - Getting label...');
-        try {
-            const labelRes = await fetch(`${apiBase}/label`, {
-                method: 'POST', headers,
-                body: JSON.stringify({ order_id: veloOrderId })
-            });
-            const labelText = await labelRes.text();
-            console.log('📦 [VeloOrder] Label response:', labelText.substring(0, 300));
+        let cargoBarcode = barcode;
+
+        // Re-accept to try to get barcode (Cargo may have assigned it by now)
+        if (!cargoBarcode) {
+            await new Promise(r => setTimeout(r, 3000));
+            console.log('📦 [VeloOrder] Step 3 - Re-accept to get Cargo barcode...');
             try {
-                const labelData = JSON.parse(labelText);
-                if (!labelData.fail && labelData.data?.label_pdf) {
-                    labelUrl = labelData.data.label_pdf;
-                }
+                const reAcceptRes = await fetch(`${apiBase}/accept`, {
+                    method: 'POST', headers,
+                    body: JSON.stringify({ order_id: veloOrderId })
+                });
+                const reAcceptText = await reAcceptRes.text();
+                console.log('📦 [VeloOrder] Re-accept response:', reAcceptText.substring(0, 500));
+                try {
+                    const reAcceptData = JSON.parse(reAcceptText);
+                    if (reAcceptData.data?.barcode) {
+                        cargoBarcode = reAcceptData.data.barcode;
+                        console.log('✅ [VeloOrder] Got barcode from re-accept:', cargoBarcode);
+                    }
+                } catch (_e) {}
             } catch (_e) {}
-        } catch (labelErr) {
-            console.warn('⚠️ [VeloOrder] Label fetch failed:', labelErr.message);
         }
 
-        // The Velo order name IS the tracking reference
-        // Cargo barcode is assigned asynchronously and may not be immediately available
-        const finalBarcode = barcode || veloOrderId;
+        // If still no barcode after re-accept, try one more time with longer wait
+        if (!cargoBarcode) {
+            await new Promise(r => setTimeout(r, 3000));
+            console.log('📦 [VeloOrder] Step 3b - Second re-accept attempt...');
+            try {
+                const reAcceptRes2 = await fetch(`${apiBase}/accept`, {
+                    method: 'POST', headers,
+                    body: JSON.stringify({ order_id: veloOrderId })
+                });
+                const reAcceptText2 = await reAcceptRes2.text();
+                console.log('📦 [VeloOrder] Second re-accept response:', reAcceptText2.substring(0, 500));
+                try {
+                    const reAcceptData2 = JSON.parse(reAcceptText2);
+                    if (reAcceptData2.data?.barcode) {
+                        cargoBarcode = reAcceptData2.data.barcode;
+                        console.log('✅ [VeloOrder] Got barcode from second re-accept:', cargoBarcode);
+                    }
+                } catch (_e) {}
+            } catch (_e) {}
+        }
+
+        const finalBarcode = cargoBarcode || veloOrderId;
         const finalLabelUrl = labelUrl;
         const finalStatus = 'confirmed';
         

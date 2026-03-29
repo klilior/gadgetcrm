@@ -123,7 +123,7 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
         service_name: data.service_name || "קרגו שליחויות",
       });
 
-      toast.success("משלוח נוצר ואושר בהצלחה!");
+      toast.success("משלוח נוצר ואושר ב-Velo + עודכן ב-Mirakl!");
     } catch (e) {
       toast.error("שגיאה: " + e.message);
     } finally {
@@ -167,17 +167,29 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
 
   // ===== SUCCESS SCREEN =====
   if (successData) {
+    const hasCargoBarcodeReady = successData.tracking_number && successData.tracking_number !== successData.velo_order_id;
     return (
       <Dialog open={true} onOpenChange={() => {}}>
         <DialogContent className="max-w-md" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()}>
           <div className="text-center py-6 space-y-4">
             <CheckCircle className="w-16 h-16 mx-auto text-green-500" />
-            <h2 className="text-xl font-bold text-green-800">✅ משלוח נוצר בהצלחה!</h2>
+            <h2 className="text-xl font-bold text-green-800">✅ משלוח נוצר ואושר בהצלחה!</h2>
 
             <div className="bg-green-50 rounded-xl p-4 space-y-3">
-              {successData.tracking_number && (
+              {successData.velo_order_id && (
                 <div>
-                  <div className="text-xs text-gray-500">מספר מעקב קרגו:</div>
+                  <div className="text-xs text-gray-500">מזהה משלוח Velo:</div>
+                  <div className="text-xl font-mono font-bold text-green-700 flex items-center justify-center gap-2">
+                    {successData.velo_order_id}
+                    <Button size="icon" variant="ghost" onClick={() => copyTracking(successData.velo_order_id)}>
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {hasCargoBarcodeReady && (
+                <div>
+                  <div className="text-xs text-gray-500">ברקוד קרגו:</div>
                   <div className="text-2xl font-mono font-bold text-green-700 flex items-center justify-center gap-2">
                     {successData.tracking_number}
                     <Button size="icon" variant="ghost" onClick={() => copyTracking(successData.tracking_number)}>
@@ -186,14 +198,14 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
                   </div>
                 </div>
               )}
+              {!hasCargoBarcodeReady && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                  ⚠️ ברקוד קרגו יוקצה בדקות הקרובות — ניתן לצפות בדשבורד Velo בעוד כמה דקות
+                </div>
+              )}
               <div className="text-sm text-gray-600">
                 שליח: <span className="font-medium">{successData.service_name} (Velo)</span>
               </div>
-              {successData.velo_order_id && (
-                <Badge variant="outline" className="text-xs">
-                  Velo ID: {successData.velo_order_id}
-                </Badge>
-              )}
             </div>
 
             <div className="flex flex-col gap-2 pt-2">
@@ -206,6 +218,14 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
                   📄 הצג תעודת משלוח
                 </Button>
               )}
+
+              <Button
+                variant="outline"
+                className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                onClick={() => window.open(`https://app.veloapp.io/dashboard/orders`, "_blank")}
+              >
+                📂 צפה בדשבורד Velo
+              </Button>
 
               {onCreateInvoice && (
                 <Button
