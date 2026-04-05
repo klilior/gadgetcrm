@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Loader2, RefreshCw, ShoppingCart, Clock, CheckCircle,
-  Search, Package, AlertTriangle, DollarSign, ReceiptText
+  Search, Package, AlertTriangle, DollarSign, ReceiptText, Truck
 } from "lucide-react";
 import { syncSuperPharmOrders } from "@/functions/syncSuperPharmOrders";
 import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
@@ -19,14 +19,18 @@ import { toast } from "sonner";
 
 const TABS = [
   { key: "WAITING_ACCEPTANCE", label: "⏳ ממתינות לאישור", icon: Clock, color: "orange" },
+  { key: "WAITING_PAYMENT", label: "💳 ממתינות לחיוב", icon: DollarSign, color: "yellow" },
   { key: "SHIPPING", label: "📦 ממתינות למשלוח", icon: Package, color: "blue" },
-  { key: "SHIPPED_CLOSED", label: "✅ נשלחו", icon: CheckCircle, color: "green" },
+  { key: "SHIPPED_ACTIVE", label: "🚚 נשלחו/לאיסוף", icon: Truck, color: "cyan" },
+  { key: "TERMINAL", label: "✅ סגורות", icon: CheckCircle, color: "green" },
   { key: "ALL", label: "הכל", icon: ShoppingCart, color: "gray" },
 ];
 
 const TAB_COLORS = {
   orange: { active: "border-orange-500 bg-orange-50", badge: "bg-orange-500", text: "text-orange-700" },
+  yellow: { active: "border-yellow-500 bg-yellow-50", badge: "bg-yellow-500", text: "text-yellow-700" },
   blue: { active: "border-blue-500 bg-blue-50", badge: "bg-blue-500", text: "text-blue-700" },
+  cyan: { active: "border-cyan-500 bg-cyan-50", badge: "bg-cyan-500", text: "text-cyan-700" },
   green: { active: "border-green-500 bg-green-50", badge: "bg-green-500", text: "text-green-700" },
   gray: { active: "border-gray-500 bg-gray-50", badge: "bg-gray-500", text: "text-gray-700" },
 };
@@ -113,8 +117,10 @@ export default function SuperPharmOrdersPage() {
   const counts = useMemo(() => ({
     ALL: orders.length,
     WAITING_ACCEPTANCE: orders.filter(o => o.order_state === "WAITING_ACCEPTANCE").length,
+    WAITING_PAYMENT: orders.filter(o => ["WAITING_DEBIT", "WAITING_DEBIT_PAYMENT"].includes(o.order_state)).length,
     SHIPPING: orders.filter(o => o.order_state === "SHIPPING").length,
-    SHIPPED_CLOSED: orders.filter(o => ["SHIPPED", "CLOSED"].includes(o.order_state)).length,
+    SHIPPED_ACTIVE: orders.filter(o => ["SHIPPED", "TO_COLLECT"].includes(o.order_state)).length,
+    TERMINAL: orders.filter(o => ["CLOSED", "RECEIVED", "REFUSED", "CANCELED"].includes(o.order_state)).length,
   }), [orders]);
 
   const stats = useMemo(() => {
@@ -130,8 +136,12 @@ export default function SuperPharmOrdersPage() {
     let result;
     if (activeTab === "ALL") {
       result = orders;
-    } else if (activeTab === "SHIPPED_CLOSED") {
-      result = orders.filter(o => ["SHIPPED", "CLOSED"].includes(o.order_state));
+    } else if (activeTab === "WAITING_PAYMENT") {
+      result = orders.filter(o => ["WAITING_DEBIT", "WAITING_DEBIT_PAYMENT"].includes(o.order_state));
+    } else if (activeTab === "SHIPPED_ACTIVE") {
+      result = orders.filter(o => ["SHIPPED", "TO_COLLECT"].includes(o.order_state));
+    } else if (activeTab === "TERMINAL") {
+      result = orders.filter(o => ["CLOSED", "RECEIVED", "REFUSED", "CANCELED"].includes(o.order_state));
     } else {
       result = orders.filter(o => o.order_state === activeTab);
     }

@@ -173,6 +173,12 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
             </Button>
           )}
 
+          {["WAITING_DEBIT", "WAITING_DEBIT_PAYMENT"].includes(order.order_state) && (
+            <div className="flex-1 text-center text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg py-2 px-3">
+              💳 ממתינה לחיוב הלקוח ע"י סופר-פארם
+            </div>
+          )}
+
           {order.order_state === "SHIPPING" && (
             <>
               {isPickup ? (
@@ -195,18 +201,7 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
             </>
           )}
 
-          {order.order_state === "SHIPPING" && (
-            <Button
-              onClick={() => onCreateInvoice(order)}
-              variant="outline"
-              className="flex-1 border-purple-300 text-purple-700 hover:bg-purple-50"
-              size="sm"
-            >
-              💳 צור חשבונית לינט
-            </Button>
-          )}
-
-          {order.order_state === "SHIPPED" && (
+          {["SHIPPING", "SHIPPED", "TO_COLLECT"].includes(order.order_state) && (
             <Button
               onClick={() => onCreateInvoice(order)}
               variant="outline"

@@ -196,13 +196,57 @@ Deno.serve(async (req) => {
 
     console.log(`[Mirakl Sync] Done: ${created} created, ${updated} updated, ${skipped} skipped`);
 
+    // Phase 2: Re-check locally active orders that might have been changed in Mirakl directly
+    const localActiveStates = ['WAITING_ACCEPTANCE', 'WAITING_DEBIT', 'WAITING_DEBIT_PAYMENT', 'SHIPPING'];
+    let staleFixed = 0;
+    for (const localState of localActiveStates) {
+      const localOrders = await withRetry(
+        () => sr.SuperPharmOrder.filter({ order_state: localState }, '-updated_date', 50),
+        `filter local ${localState}`
+      );
+      // Check which of these were NOT in the Mirakl fetch (meaning their state changed to something else)
+      const fetchedIds = new Set(allMiraklOrders.map(o => o.order_id));
+      const staleOrders = localOrders.filter(o => !fetchedIds.has(o.mirakl_order_id));
+      
+      for (const stale of staleOrders) {
+        // Fetch current state from Mirakl
+        const params = { order_ids: stale.mirakl_order_id };
+        const data = await fetchMiraklOrders(params);
+        const miraklOrder = data?.orders?.[0];
+        if (miraklOrder && miraklOrder.order_state !== stale.order_state) {
+          const orderData = extractOrderData(miraklOrder);
+          // Preserve local-only fields
+          if (stale.tracking_number) {
+            orderData.tracking_number = stale.tracking_number;
+            orderData.carrier_code = stale.carrier_code;
+            orderData.carrier_name = stale.carrier_name;
+          }
+          if (stale.accepted_at) orderData.accepted_at = stale.accepted_at;
+          if (stale.shipped_at) orderData.shipped_at = stale.shipped_at;
+          if (stale.notes) orderData.notes = stale.notes;
+          await withRetry(
+            () => sr.SuperPharmOrder.update(stale.id, orderData),
+            `fix stale ${stale.mirakl_order_id}`
+          );
+          console.log(`[Mirakl Sync] Fixed stale order ${stale.mirakl_order_id}: ${stale.order_state} -> ${miraklOrder.order_state}`);
+          staleFixed++;
+        }
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+
+    if (staleFixed > 0) {
+      console.log(`[Mirakl Sync] Fixed ${staleFixed} stale orders`);
+    }
+
     return Response.json({
       success: true,
       total_fetched: allMiraklOrders.length,
       created,
       updated,
       skipped,
-      message: `סנכרון הושלם: ${created} חדשות, ${updated} עודכנו (סה"כ נמשכו ${allMiraklOrders.length})`,
+      stale_fixed: staleFixed,
+      message: `סנכרון הושלם: ${created} חדשות, ${updated} עודכנו${staleFixed > 0 ? `, ${staleFixed} תוקנו` : ''} (סה"כ נמשכו ${allMiraklOrders.length})`,
     });
   } catch (error) {
     console.error('[Mirakl Sync] Error:', error.message);

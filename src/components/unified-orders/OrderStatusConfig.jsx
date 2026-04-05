@@ -57,7 +57,7 @@ export function isClosedStatus(source, status) {
 
 export function isOpenStatus(source, status) {
   if (source === 'woocommerce') return ['processing', 'on-hold'].includes(status);
-  if (source === 'mirakl') return ['WAITING_ACCEPTANCE', 'SHIPPING'].includes(status);
+  if (source === 'mirakl') return ['WAITING_ACCEPTANCE', 'WAITING_DEBIT', 'WAITING_DEBIT_PAYMENT', 'SHIPPING', 'TO_COLLECT'].includes(status);
   if (source === 'linet') return status !== 'טופל';
   return false;
 }
@@ -79,8 +79,12 @@ export function getStatusColor(source, status) {
   if (source === 'mirakl') {
     const map = {
       'WAITING_ACCEPTANCE': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
+      'WAITING_DEBIT': 'bg-amber-100 text-amber-800 border border-amber-200',
+      'WAITING_DEBIT_PAYMENT': 'bg-amber-100 text-amber-800 border border-amber-200',
       'SHIPPING': 'bg-blue-100 text-blue-800 border border-blue-200',
       'SHIPPED': 'bg-cyan-100 text-cyan-800 border border-cyan-200',
+      'TO_COLLECT': 'bg-purple-100 text-purple-800 border border-purple-200',
+      'RECEIVED': 'bg-emerald-100 text-emerald-800 border border-emerald-200',
       'CLOSED': 'bg-gray-200 text-gray-700',
       'REFUSED': 'bg-red-100 text-red-800 border border-red-200',
       'CANCELED': 'bg-red-100 text-red-800 border border-red-200',

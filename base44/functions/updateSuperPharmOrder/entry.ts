@@ -1,11 +1,21 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
-const MIRAKL_API_URL = Deno.env.get('MIRAKL_API_URL');
+const RAW_MIRAKL_API_URL = Deno.env.get('MIRAKL_API_URL');
 const MIRAKL_API_KEY = Deno.env.get('MIRAKL_API_KEY');
 
+function getMiraklBaseUrl() {
+  try {
+    const u = new URL(RAW_MIRAKL_API_URL);
+    return `${u.protocol}//${u.host}/api`;
+  } catch (e) {
+    return RAW_MIRAKL_API_URL;
+  }
+}
+
 async function miraklRequest(method, path, body = null) {
-  const url = `${MIRAKL_API_URL}${path}`;
-  console.log(`[Mirakl] ${method} ${path}`);
+  const baseUrl = getMiraklBaseUrl();
+  const url = `${baseUrl}${path}`;
+  console.log(`[Mirakl] ${method} ${url}`);
   
   const options = {
     method,
@@ -57,7 +67,7 @@ Deno.serve(async (req) => {
     const localOrder = orders[0];
 
     if (action === 'accept') {
-      // Accept all order lines
+      // Accept all order lines — OR21 format: { order_lines: [{accepted, id}] }
       const lines = JSON.parse(localOrder.order_lines_json || '[]');
       console.log('[Mirakl Accept] Order lines:', JSON.stringify(lines));
       const orderLines = lines.map(line => ({
@@ -65,10 +75,7 @@ Deno.serve(async (req) => {
         id: line.id || line.order_line_id,
       }));
       const acceptPayload = {
-        orders: [{
-          order_id: order_id,
-          order_lines: orderLines,
-        }],
+        order_lines: orderLines,
       };
       console.log('[Mirakl Accept] Payload:', JSON.stringify(acceptPayload));
 
@@ -129,10 +136,7 @@ Deno.serve(async (req) => {
       }));
 
       await miraklRequest('PUT', `/orders/${order_id}/accept`, {
-        orders: [{
-          order_id: order_id,
-          order_lines: orderLines,
-        }],
+        order_lines: orderLines,
       });
 
       // Verify the order state in Mirakl
