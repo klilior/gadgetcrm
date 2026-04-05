@@ -64,11 +64,15 @@ Deno.serve(async (req) => {
         accepted: true,
         id: line.id || line.order_line_id,
       }));
-      console.log('[Mirakl Accept] Payload:', JSON.stringify({ order_lines: orderLines }));
+      const acceptPayload = {
+        orders: [{
+          order_id: order_id,
+          order_lines: orderLines,
+        }],
+      };
+      console.log('[Mirakl Accept] Payload:', JSON.stringify(acceptPayload));
 
-      await miraklRequest('PUT', `/orders/${order_id}/accept`, {
-        order_lines: orderLines,
-      });
+      await miraklRequest('PUT', `/orders/${order_id}/accept`, acceptPayload);
 
       await sr.SuperPharmOrder.update(localOrder.id, {
         order_state: 'SHIPPING',
@@ -86,7 +90,10 @@ Deno.serve(async (req) => {
       }));
 
       await miraklRequest('PUT', `/orders/${order_id}/accept`, {
-        order_lines: orderLines,
+        orders: [{
+          order_id: order_id,
+          order_lines: orderLines,
+        }],
       });
 
       await sr.SuperPharmOrder.update(localOrder.id, {
