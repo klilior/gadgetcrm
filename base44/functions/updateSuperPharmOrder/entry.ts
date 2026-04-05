@@ -74,12 +74,51 @@ Deno.serve(async (req) => {
 
       await miraklRequest('PUT', `/orders/${order_id}/accept`, acceptPayload);
 
+      // Verify the order state in Mirakl after accept call
+      console.log('[Mirakl Accept] Verifying order state after accept...');
+      let verifiedState = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          await new Promise(r => setTimeout(r, 2000)); // wait 2s between retries
+        }
+        const orderData = await miraklRequest('GET', `/orders?order_ids=${order_id}`);
+        const miraklOrder = orderData?.orders?.[0];
+        if (miraklOrder) {
+          verifiedState = miraklOrder.order_state;
+          console.log(`[Mirakl Accept] Attempt ${attempt + 1}: order state = ${verifiedState}`);
+          if (verifiedState !== 'WAITING_ACCEPTANCE') {
+            break; // State changed, accept was processed
+          }
+        }
+      }
+
+      if (!verifiedState || verifiedState === 'WAITING_ACCEPTANCE') {
+        // Accept was NOT processed by Mirakl
+        console.error('[Mirakl Accept] Order still in WAITING_ACCEPTANCE after accept call');
+        return Response.json({
+          success: false,
+          error: 'הפעולה נשלחה ל-Mirakl אך ההזמנה עדיין בסטטוס ממתינה לאישור. יש לנסות שוב או לבדוק במערכת Mirakl.',
+        }, { status: 409 });
+      }
+
+      // Update local status to match the verified Mirakl state
       await sr.SuperPharmOrder.update(localOrder.id, {
-        order_state: 'SHIPPING',
+        order_state: verifiedState,
         accepted_at: new Date().toISOString(),
       });
 
-      return Response.json({ success: true, message: 'ההזמנה אושרה בהצלחה' });
+      const stateLabels = {
+        'WAITING_DEBIT': 'ממתינה לחיוב',
+        'WAITING_DEBIT_PAYMENT': 'ממתינה לאישור חיוב',
+        'SHIPPING': 'ממתינה למשלוח',
+      };
+      const stateLabel = stateLabels[verifiedState] || verifiedState;
+
+      return Response.json({
+        success: true,
+        message: `ההזמנה אושרה בהצלחה. סטטוס נוכחי: ${stateLabel}`,
+        new_state: verifiedState,
+      });
     }
 
     if (action === 'refuse') {
@@ -96,11 +135,32 @@ Deno.serve(async (req) => {
         }],
       });
 
+      // Verify the order state in Mirakl
+      console.log('[Mirakl Refuse] Verifying order state...');
+      let verifiedState = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
+        const orderData = await miraklRequest('GET', `/orders?order_ids=${order_id}`);
+        const miraklOrder = orderData?.orders?.[0];
+        if (miraklOrder) {
+          verifiedState = miraklOrder.order_state;
+          console.log(`[Mirakl Refuse] Attempt ${attempt + 1}: order state = ${verifiedState}`);
+          if (verifiedState !== 'WAITING_ACCEPTANCE') break;
+        }
+      }
+
+      if (!verifiedState || verifiedState === 'WAITING_ACCEPTANCE') {
+        return Response.json({
+          success: false,
+          error: 'הפעולה נשלחה ל-Mirakl אך ההזמנה עדיין בסטטוס ממתינה לאישור. יש לנסות שוב.',
+        }, { status: 409 });
+      }
+
       await sr.SuperPharmOrder.update(localOrder.id, {
-        order_state: 'REFUSED',
+        order_state: verifiedState,
       });
 
-      return Response.json({ success: true, message: 'ההזמנה נדחתה' });
+      return Response.json({ success: true, message: 'ההזמנה נדחתה', new_state: verifiedState });
     }
 
     if (action === 'ship') {
