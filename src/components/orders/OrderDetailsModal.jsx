@@ -50,6 +50,7 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
     const [newStatus, setNewStatus] = useState(order?.status || '');
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
     const [showUpsShipment, setShowUpsShipment] = useState(false);
+    const [printingLabel, setPrintingLabel] = useState(null);
     
     if (!order) return null;
     
@@ -146,8 +147,6 @@ export default function OrderDetailsModal({ order, open, onClose, getStatusColor
             return raw && raw.length > 5;
         } catch { return false; }
     })();
-
-    const [printingLabel, setPrintingLabel] = useState(null); // null | 'thermal' | 'a4'
 
     const handlePrintLabel = async (format = 'thermal') => {
         if (!createdShipmentData) return;

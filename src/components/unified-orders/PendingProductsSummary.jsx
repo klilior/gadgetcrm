@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Package, ShoppingBag } from "lucide-react";
+import { ChevronDown, ChevronUp, Package, ShoppingBag, Printer } from "lucide-react";
 import { isOpenStatus } from "./OrderStatusConfig";
 
 export default function PendingProductsSummary({ orders }) {
@@ -78,9 +78,34 @@ export default function PendingProductsSummary({ orders }) {
               {totalItems} יח' • {aggregatedProducts.length} מוצרים • {pendingOrders.length} הזמנות
             </Badge>
           </CardTitle>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-            {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </Button>
+          <div className="flex items-center gap-1">
+            {isOpen && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 text-xs rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const printWindow = window.open('', '_blank', 'width=800,height=600');
+                  if (!printWindow) return;
+                  const rows = aggregatedProducts.map(p => 
+                    `<tr><td style="padding:8px 12px;border-bottom:1px solid #ccc;text-align:right;font-size:14px;">${p.name}${p.variant ? ' <span style="color:#666;font-size:12px;">' + p.variant + '</span>' : ''}</td><td style="padding:8px 12px;border-bottom:1px solid #ccc;text-align:center;font-size:16px;font-weight:bold;">${p.quantity}</td></tr>`
+                  ).join('');
+                  const now = new Date().toLocaleString('he-IL');
+                  printWindow.document.write(`<!DOCTYPE html><html dir="rtl"><head><title>מוצרים להכנה</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#000;}table{width:100%;border-collapse:collapse;margin-top:10px;}th{padding:10px 12px;border-bottom:2px solid #000;text-align:right;font-size:13px;font-weight:bold;}td{padding:8px 12px;}@media print{body{margin:10px;}}</style></head><body><h2 style="margin-bottom:4px;">📦 מוצרים להכנה</h2><p style="color:#666;font-size:12px;margin-top:0;">${now} • ${totalItems} יח' • ${aggregatedProducts.length} מוצרים • ${pendingOrders.length} הזמנות</p><table><thead><tr><th style="text-align:right;">מוצר</th><th style="text-align:center;width:80px;">כמות</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+                  printWindow.document.close();
+                  printWindow.focus();
+                  setTimeout(() => printWindow.print(), 300);
+                }}
+              >
+                <Printer className="w-3.5 h-3.5 ml-1" />
+                הדפסה
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+              {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       {isOpen && (

@@ -131,7 +131,7 @@ export default function OrdersPage() {
     }
 
     const handleStatusChange = (orderId, newStatus) => {
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+        refetchOrders();
         // Re-open with updated status
         setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
     };

@@ -49,8 +49,11 @@ Deno.serve(async (req) => {
 
   const authString = btoa(`${consumerKey}:${consumerSecret}`);
 
+  // WooCommerce REST API expects statuses without the 'wc-' prefix
+  const wooStatus = new_status.startsWith('wc-') ? new_status.slice(3) : new_status;
+
   // Update WooCommerce
-  console.log(`📤 Updating WooCommerce order #${externalOrderNumber} to status: ${new_status}`);
+  console.log(`📤 Updating WooCommerce order #${externalOrderNumber} to status: ${wooStatus} (original: ${new_status})`);
   
   const wooRes = await fetch(`${wooUrl}/wp-json/wc/v3/orders/${externalOrderNumber}`, {
     method: 'PUT',
@@ -58,7 +61,7 @@ Deno.serve(async (req) => {
       'Authorization': `Basic ${authString}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ status: new_status }),
+    body: JSON.stringify({ status: wooStatus }),
     signal: AbortSignal.timeout(15000)
   });
 

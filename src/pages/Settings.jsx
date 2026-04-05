@@ -13,6 +13,7 @@ import WhatsAppStatusAlert from "../components/WhatsAppStatusAlert";
 import { useUser } from "../components/UserAuth";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
+import { base44 } from "@/api/base44Client";
 import { importerReminders } from "@/functions/importerReminders";
 import TextMeConfigPanel from "../components/sms/TextMeConfigPanel";
 import SmsLogTable from "../components/sms/SmsLogTable";
