@@ -300,9 +300,13 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
     );
   }
 
+  const handleClose = () => {
+    if (!loading) onClose();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()}>
+    <Dialog open={open} onOpenChange={() => {}}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()} onEscapeKeyDown={e => { if (!loading) onClose(); }}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Truck className="w-5 h-5" />
@@ -500,7 +504,7 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
         </Tabs>
 
         <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
-          <Button variant="outline" onClick={onClose} disabled={loading}>ביטול</Button>
+          <Button variant="outline" onClick={handleClose} disabled={loading}>ביטול</Button>
           <Button 
             onClick={handleCreate} 
             disabled={loading || (tab === "pickup_point" && !wooPickupPoint && !selectedPoint)} 

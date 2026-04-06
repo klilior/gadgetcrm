@@ -2,7 +2,7 @@ import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock } from "lucide-react";
+import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Printer, ExternalLink } from "lucide-react";
 import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusOptions, getStatusColor } from "./OrderStatusConfig";
@@ -205,16 +205,31 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         )}
 
         {/* Mirakl-specific shipping buttons */}
-        {order.source === 'mirakl' && miraklPickup === true && (
+        {order.source === 'mirakl' && !order.tracking_number && miraklPickup === true && (
           <Button className="rounded-full bg-amber-700 hover:bg-amber-800 text-white shadow-lg shadow-amber-200" onClick={() => onShipment({ ...order, _shipCarrier: 'ups' })}>
             <Package className="w-4 h-4 ml-1" />
             📦 שלח UPS — נקודת איסוף
           </Button>
         )}
-        {order.source === 'mirakl' && miraklPickup === false && (
+        {order.source === 'mirakl' && !order.tracking_number && miraklPickup === false && (
           <Button className="rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200" onClick={() => onShipment({ ...order, _shipCarrier: 'velo' })}>
             <Truck className="w-4 h-4 ml-1" />
             🚚 שלח Velo — עד הבית
+          </Button>
+        )}
+        {order.source === 'mirakl' && order.tracking_number && (
+          <Button
+            variant="outline"
+            className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
+            onClick={() => {
+              const url = order.sticker_url || (miraklPickup
+                ? `https://www.ups.co.il/tracking?trackingNumbers=${order.tracking_number}`
+                : `https://app.veloapp.io/dashboard/orders`);
+              window.open(url, "_blank");
+            }}
+          >
+            <Printer className="w-4 h-4 ml-1" />
+            📎 צפה בשטר מטען ({order.tracking_number})
           </Button>
         )}
         {order.source !== 'mirakl' && (

@@ -2,7 +2,7 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, Truck, Package, MapPin, Phone, User, Clock, AlertTriangle, Receipt } from "lucide-react";
+import { CheckCircle, Truck, Package, MapPin, Phone, User, Clock, AlertTriangle, Receipt, ExternalLink, Printer } from "lucide-react";
 
 const STATE_CONFIG = {
   WAITING_ACCEPTANCE: { label: "ממתין לאישור", color: "bg-orange-100 text-orange-800 border-orange-200", icon: "⏳" },
@@ -179,7 +179,7 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
             </div>
           )}
 
-          {order.order_state === "SHIPPING" && (
+          {order.order_state === "SHIPPING" && !order.tracking_number && (
             <>
               {isPickup ? (
                 <Button
@@ -199,6 +199,23 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
                 </Button>
               )}
             </>
+          )}
+
+          {order.order_state === "SHIPPING" && order.tracking_number && (
+            <Button
+              variant="outline"
+              className="flex-1 border-green-300 text-green-700 hover:bg-green-50"
+              size="sm"
+              onClick={() => {
+                const url = order.sticker_url || (isPickup
+                  ? `https://www.ups.co.il/tracking?trackingNumbers=${order.tracking_number}`
+                  : `https://app.veloapp.io/dashboard/orders`);
+                window.open(url, "_blank");
+              }}
+            >
+              <Printer className="w-4 h-4 ml-1" />
+              📎 צפה בשטר מטען ({order.tracking_number})
+            </Button>
           )}
 
           {["SHIPPING", "SHIPPED", "TO_COLLECT"].includes(order.order_state) && (
