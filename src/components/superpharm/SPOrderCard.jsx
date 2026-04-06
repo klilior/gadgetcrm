@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, Truck, Package, MapPin, Phone, User, Clock, AlertTriangle, Receipt, ExternalLink, Printer } from "lucide-react";
+import { CheckCircle, Truck, Package, MapPin, Phone, User, Clock, AlertTriangle, Receipt, ExternalLink, Printer, Loader2 } from "lucide-react";
+import { printShipmentLabel } from "@/functions/printShipmentLabel";
+import { toast } from "sonner";
 
 const STATE_CONFIG = {
   WAITING_ACCEPTANCE: { label: "ממתין לאישור", color: "bg-orange-100 text-orange-800 border-orange-200", icon: "⏳" },
@@ -59,6 +61,41 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
   const state = STATE_CONFIG[order.order_state] || { label: order.order_state, color: "bg-gray-100 text-gray-800", icon: "❓" };
   const urgent = isUrgent(order);
   const isPickup = detectPickup(order);
+  const [printingLabel, setPrintingLabel] = useState(null);
+
+  const handlePrintLabel = async (trackingNum, format = 'a4') => {
+    setPrintingLabel(format);
+    try {
+      const { data } = await printShipmentLabel({ tracking_number: trackingNum, label_format: format });
+      if (data.success && data.pdf_base64) {
+        const byteChars = atob(data.pdf_base64);
+        const byteNumbers = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+        const htmlContent = `<!DOCTYPE html><html><head><title>שטר מטען - ${trackingNum}</title><style>html,body{margin:0;padding:0;height:100%;overflow:hidden;}iframe{width:100%;height:100%;border:none;}</style></head><body><iframe src="${blobUrl}#toolbar=1&navpanes=0"></iframe></body></html>`;
+        const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+        const htmlUrl = URL.createObjectURL(htmlBlob);
+        const opened = window.open(htmlUrl, '_blank');
+        if (!opened) {
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = `label-${format}-${trackingNum}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+        toast.success('שטר מטען נפתח');
+      } else {
+        toast.error(data.error || 'שגיאה בהורדת שטר מטען');
+      }
+    } catch (e) {
+      toast.error('שגיאה: ' + e.message);
+    } finally {
+      setPrintingLabel(null);
+    }
+  };
 
   const lines = (() => {
     try { return JSON.parse(order.order_lines_json || "[]"); } catch { return []; }
@@ -202,20 +239,28 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
           )}
 
           {order.order_state === "SHIPPING" && order.tracking_number && (
-            <Button
-              variant="outline"
-              className="flex-1 border-green-300 text-green-700 hover:bg-green-50"
-              size="sm"
-              onClick={() => {
-                const url = order.sticker_url || (isPickup
-                  ? `https://www.ups.co.il/tracking?trackingNumbers=${order.tracking_number}`
-                  : `https://app.veloapp.io/dashboard/orders`);
-                window.open(url, "_blank");
-              }}
-            >
-              <Printer className="w-4 h-4 ml-1" />
-              📎 צפה בשטר מטען ({order.tracking_number})
-            </Button>
+            isPickup ? (
+              <Button
+                variant="outline"
+                className="flex-1 border-green-300 text-green-700 hover:bg-green-50"
+                size="sm"
+                disabled={!!printingLabel}
+                onClick={() => handlePrintLabel(order.tracking_number, 'a4')}
+              >
+                {printingLabel ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
+                📄 הדפס שטר מטען ({order.tracking_number})
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="flex-1 border-green-300 text-green-700 hover:bg-green-50"
+                size="sm"
+                onClick={() => window.open('https://app.veloapp.io/dashboard/orders', '_blank')}
+              >
+                <Printer className="w-4 h-4 ml-1" />
+                📎 צפה בשטר מטען ({order.tracking_number})
+              </Button>
+            )
           )}
 
           {["SHIPPING", "SHIPPED", "TO_COLLECT"].includes(order.order_state) && (
