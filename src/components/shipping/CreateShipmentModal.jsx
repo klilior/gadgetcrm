@@ -249,23 +249,13 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
     }
   };
 
-  // Auto-open label after success screen renders
-  useEffect(() => {
-    if (result?.autoOpenLabel && result?.tracking) {
-      // Small delay to ensure the success dialog is fully rendered before opening popup
-      const timer = setTimeout(() => {
-        openPrintableLabel(result.tracking, 'a4');
-        setResult(prev => prev ? { ...prev, autoOpenLabel: false } : prev);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [result?.autoOpenLabel, result?.tracking]);
+  // Auto-open removed to prevent popup/focus issues that close the dialog
 
   // Success screen
   if (result) {
     return (
       <Dialog open={true} onOpenChange={() => {}}>
-        <DialogContent className="max-w-md" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()}>
+        <DialogContent className="max-w-md" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()} hideCloseButton>
           <div className="text-center py-6 space-y-4">
             <CheckCircle className="w-16 h-16 mx-auto text-green-500" />
             <h2 className="text-xl font-bold text-green-800">שטר מטען נוצר בהצלחה!</h2>
@@ -306,7 +296,7 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
 
   return (
     <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()} onEscapeKeyDown={e => { if (!loading) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()} onEscapeKeyDown={e => { if (!loading) onClose(); }} hideCloseButton>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Truck className="w-5 h-5" />

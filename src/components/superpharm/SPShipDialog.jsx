@@ -169,7 +169,7 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
     const hasCargoBarcodeReady = successData.tracking_number && successData.tracking_number !== successData.velo_order_id;
     return (
       <Dialog open={true} onOpenChange={() => {}}>
-        <DialogContent className="max-w-md" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()}>
+        <DialogContent className="max-w-md" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()} hideCloseButton>
           <div className="text-center py-6 space-y-4">
             <CheckCircle className="w-16 h-16 mx-auto text-green-500" />
             <h2 className="text-xl font-bold text-green-800">✅ משלוח נוצר ואושר בהצלחה!</h2>
@@ -250,8 +250,8 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
 
   // ===== MAIN FORM =====
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md" dir="rtl">
+    <Dialog open={open} onOpenChange={() => {}}>
+      <DialogContent className="max-w-md" dir="rtl" onPointerDownOutside={e => e.preventDefault()} onInteractOutside={e => e.preventDefault()} hideCloseButton>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Truck className="w-5 h-5 text-blue-600" />
