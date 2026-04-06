@@ -27,12 +27,6 @@ export default function SPShipmentSuccessScreen({
   };
 
   const openPrintableLabel = async (format = 'a4') => {
-    const newWindow = window.open('about:blank', '_blank');
-    if (newWindow) {
-      newWindow.document.title = `שטר מטען - ${trackingNumber}`;
-      newWindow.document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;font-size:20px;color:#555;">⏳ טוען שטר מטען PDF...</div>';
-    }
-
     setPrintingLabel(format);
     try {
       const { data } = await printShipmentLabel({ tracking_number: trackingNumber, label_format: format });
@@ -44,9 +38,18 @@ export default function SPShipmentSuccessScreen({
         const blob = new Blob([byteArray], { type: 'application/pdf' });
         const blobUrl = URL.createObjectURL(blob);
 
-        if (newWindow && !newWindow.closed) {
-          newWindow.location.href = blobUrl;
-        } else {
+        // Build a full HTML document that embeds the PDF
+        const htmlContent = `<!DOCTYPE html>
+<html><head><title>שטר מטען - ${trackingNumber}</title>
+<style>html,body{margin:0;padding:0;height:100%;overflow:hidden;}
+iframe{width:100%;height:100%;border:none;}</style></head>
+<body><iframe src="${blobUrl}#toolbar=1&navpanes=0"></iframe></body></html>`;
+        const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+        const htmlUrl = URL.createObjectURL(htmlBlob);
+
+        const opened = window.open(htmlUrl, '_blank');
+        if (!opened) {
+          // Popup blocked — fallback to download
           const a = document.createElement('a');
           a.href = blobUrl;
           a.download = `label-${format}-${trackingNumber}.pdf`;
@@ -56,11 +59,9 @@ export default function SPShipmentSuccessScreen({
         }
         toast.success(`שטר מטען ${format === 'a4' ? 'A4' : 'תרמי'} נפתח`);
       } else {
-        if (newWindow && !newWindow.closed) newWindow.close();
         toast.error(data.error || "שגיאה בהורדת שטר מטען");
       }
     } catch (e) {
-      if (newWindow && !newWindow.closed) newWindow.close();
       toast.error("שגיאה: " + e.message);
     } finally {
       setPrintingLabel(null);
