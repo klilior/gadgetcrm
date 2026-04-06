@@ -12,8 +12,8 @@ function getLinetCreds() {
 
 async function linetPost(endpoint, payload) {
   const url = `${BASE_URL}/${endpoint}`;
-  console.log(`[Linet] POST ${url}`);
-  console.log(`[Linet] Payload:`, JSON.stringify(payload).substring(0, 1500));
+  console.log('[Linet] POST ' + url);
+  console.log('[Linet] Payload:', JSON.stringify(payload).substring(0, 1500));
 
   const res = await fetch(url, {
     method: 'POST',
@@ -23,23 +23,21 @@ async function linetPost(endpoint, payload) {
   });
 
   const text = await res.text();
-  console.log(`[Linet] Status: ${res.status}, Response: ${text.substring(0, 1000)}`);
+  console.log('[Linet] Status: ' + res.status + ', Response: ' + text.substring(0, 1000));
 
   if (!res.ok) {
-    throw new Error(`Linet HTTP ${res.status}: ${text}`);
+    throw new Error('Linet HTTP ' + res.status + ': ' + text);
   }
 
   const data = JSON.parse(text);
-  // errorCode 1000 = "No items found" — not a real error, just empty results
   if (data.errorCode && data.errorCode !== 0 && data.errorCode !== 1000) {
-    throw new Error(`Linet Error ${data.errorCode}: ${JSON.stringify(data)}`);
+    throw new Error('Linet Error ' + data.errorCode + ': ' + JSON.stringify(data));
   }
   return data;
 }
 
 async function findOrCreateClient(creds, { name, phone, email }) {
-  // Search for existing client by name in Linet "accounts" model
-  console.log(`[Linet] Searching account: ${name}`);
+  console.log('[Linet] Searching account: ' + name);
   const searchResult = await linetPost('newsearch/accounts', {
     ...creds,
     query: { name: name },
@@ -47,28 +45,26 @@ async function findOrCreateClient(creds, { name, phone, email }) {
     offset: 0,
   });
 
-  // Response: { body: [...] } or array
   const accounts = searchResult?.body || (Array.isArray(searchResult) ? searchResult : []);
   if (Array.isArray(accounts) && accounts.length > 0) {
-    console.log(`[Linet] Found existing account: ${accounts[0].id} - ${accounts[0].company_name}`);
+    console.log('[Linet] Found existing account: ' + accounts[0].id + ' - ' + accounts[0].name);
     return accounts[0].id;
   }
 
-  // Create new account (client)
-  console.log(`[Linet] Creating new account: ${name}`);
+  console.log('[Linet] Creating new account: ' + name);
   const newAccount = await linetPost('create/accounts', {
     ...creds,
-    company_name: name,
+    name: name,
     phone: phone || '',
     email: email || '',
-    type: 1, // 1 = client/customer
   });
 
-  const accountId = newAccount?.id || newAccount?.body?.id;
+  const accountBody = newAccount?.body || newAccount;
+  const accountId = accountBody?.id;
   if (!accountId) {
     throw new Error('Failed to create Linet account: ' + JSON.stringify(newAccount));
   }
-  console.log(`[Linet] Created account ID: ${accountId}`);
+  console.log('[Linet] Created account ID: ' + accountId);
   return accountId;
 }
 
@@ -76,7 +72,6 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
-    // Auth check
     let user = null;
     try { user = await base44.auth.me(); } catch (_) {}
 
@@ -87,9 +82,10 @@ Deno.serve(async (req) => {
       customer_email,
       product_description,
       quantity,
-      unit_price,      // price per unit inc VAT
-      shipping_amount,  // shipping cost inc VAT
+      unit_price,
+      shipping_amount,
       mirakl_order_id,
+      send_email,
     } = body;
 
     if (!customer_name || !product_description || !unit_price) {
@@ -101,71 +97,103 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'הגדרות לינט חסרות' }, { status: 500 });
     }
 
-    // 1. Find or create client
+    // 1. Find or create client (with name, phone, email)
     const clientId = await findOrCreateClient(creds, {
       name: customer_name,
       phone: customer_phone || '',
-      email: customer_email || '',
+      email: customer_email || send_email || '',
     });
 
-    // 2. Build invoice lines
-    // Doc type 9 = חשבונית מס-קבלה
-    // SKU "1" = מוצר כללי
-    // Payment type 50 = סופר פארם
-    const lines = [];
+    // 2. Build invoice lines (docDet)
+    const docDet = [];
 
-    // Product line
-    lines.push({
-      item_id: 1,  // SKU 1 = מוצר כללי
-      details: product_description,
-      quantity: quantity || 1,
-      price_nis: Number(unit_price),
-      // price is inc VAT, Linet needs the price. We send the full amount and let Linet calculate VAT.
+    docDet.push({
+      item_id: 1,
+      name: product_description,
+      description: 'הזמנת סופר-פארם ' + (mirakl_order_id || ''),
+      qty: quantity || 1,
+      iItem: Number(unit_price),
+      iItemWithVat: 1,
+      currency_id: "ILS",
+      vat_cat_id: 1,
     });
 
-    // Shipping line (if there's shipping cost)
     if (shipping_amount && Number(shipping_amount) > 0) {
-      lines.push({
-        item_id: 1,  // Same general item
-        details: 'דמי משלוח',
-        quantity: 1,
-        price_nis: Number(shipping_amount),
+      docDet.push({
+        item_id: 1,
+        name: 'דמי משלוח',
+        description: 'משלוח הזמנה ' + (mirakl_order_id || ''),
+        qty: 1,
+        iItem: Number(shipping_amount),
+        iItemWithVat: 1,
+        currency_id: "ILS",
+        vat_cat_id: 1,
       });
     }
 
-    // 3. Create the document (type 9 = חשבונית מס-קבלה)
-    const totalSum = lines.reduce((sum, l) => sum + (l.price_nis * (l.quantity || 1)), 0);
+    const totalSum = docDet.reduce(function(sum, l) { return sum + (l.iItem * (l.qty || 1)); }, 0);
+
+    // 3. Create document (type 9 = חשבונית מס-קבלה)
+    const emailTarget = send_email || customer_email || '';
     const docPayload = {
       ...creds,
-      doctype: 9,
-      account_id: clientId,
-      description: `הזמנת סופר-פארם ${mirakl_order_id || ''}`.trim(),
-      lines: lines.map(l => ({
-        item_id: l.item_id,
-        details: l.details,
-        quantity: l.quantity || 1,
-        price_nis: l.price_nis,
-      })),
-      payments: [{
-        payment_type: 50, // סופר פארם
-        payment_sum: totalSum,
+      company: creds.login_company,
+      doctype: "9",
+      status: 2,
+      account_id: String(clientId),
+      currency_id: "ILS",
+      refnum_ext: mirakl_order_id || '',
+      phone: customer_phone || '',
+      email: emailTarget,
+      docDet: docDet,
+      docCheq: [{
+        type: 50,
+        currency_id: "ILS",
+        sum: totalSum,
+        doc_sum: totalSum,
+        line: 1,
       }],
     };
 
-    console.log(`[Linet] Creating doc type 9...`);
-    const docResult = await linetPost('create/docs', docPayload);
+    // If email provided, tell Linet to send the doc by email automatically
+    if (emailTarget) {
+      docPayload.sendmail = 1;
+    }
 
-    const docId = docResult?.id || docResult?.body?.id;
-    const docNumber = docResult?.doc_number || docResult?.body?.doc_number;
+    console.log('[Linet] Creating doc type 9...');
+    const docResult = await linetPost('create/doc', docPayload);
+
+    console.log('[Linet] Full doc response:', JSON.stringify(docResult).substring(0, 2000));
+    const docBody = docResult?.body || docResult;
+    const docId = docBody?.id;
+    const docNumber = docBody?.docnum;
     
-    console.log(`[Linet] ✅ Invoice created: ID=${docId}, Number=${docNumber}`);
+    console.log('[Linet] Invoice created: ID=' + docId + ', Number=' + docNumber);
+
+    // 4. Email was sent by Linet if sendmail=1 was set
+    const emailSent = !!emailTarget;
+    if (emailSent) {
+      console.log('[Linet] Document created with sendmail=1, email will be sent to: ' + emailTarget);
+    }
+
+    // 5. Build PDF URL for manual access
+    const pdfUrl = BASE_URL + '/doc/pdf?' + new URLSearchParams({
+      login_id: creds.login_id,
+      login_hash: creds.login_hash,
+      login_company: String(creds.login_company),
+      id: String(docId),
+    }).toString();
+
+    const msg = 'חשבונית מס-קבלה ' + (docNumber || docId) + ' נוצרה בהצלחה' + (emailSent ? ' ונשלחה במייל' : '');
 
     return Response.json({
       success: true,
       doc_id: docId,
       doc_number: docNumber,
       client_id: clientId,
-      message: `חשבונית מס-קבלה ${docNumber || docId} נוצרה בהצלחה`,
+      email_sent: emailSent,
+      pdf_url: pdfUrl,
+      message: msg,
     });
 
   } catch (error) {

@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle, Copy, Printer, Save, Receipt } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, CheckCircle, Copy, Printer, Save, Receipt, Mail } from "lucide-react";
 import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
 import { createSPLinetInvoice } from "@/functions/createSPLinetInvoice";
@@ -10,14 +11,15 @@ import { toast } from "sonner";
 
 export default function SPShipmentSuccessScreen({ 
   trackingNumber, 
-  order, // SuperPharmOrder entity
-  onDone, // called when fully done
+  order,
+  onDone,
 }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [printingLabel, setPrintingLabel] = useState(null);
   const [invoiceResult, setInvoiceResult] = useState(null);
-  const [step, setStep] = useState(""); // current step description
+  const [step, setStep] = useState("");
+  const [sendEmail, setSendEmail] = useState("");
 
   const copyTracking = () => {
     navigator.clipboard.writeText(trackingNumber);
@@ -25,24 +27,28 @@ export default function SPShipmentSuccessScreen({
   };
 
   const openPrintableLabel = async (format = 'a4') => {
-    // Open blank window immediately to avoid popup blockers
-    const newWindow = window.open('', '_blank');
+    const newWindow = window.open('about:blank', '_blank');
     if (newWindow) {
-      newWindow.document.write(`<html dir="rtl"><head><title>שטר מטען - ${trackingNumber}</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;font-size:20px;color:#555;}</style></head><body>⏳ טוען שטר מטען PDF...</body></html>`);
-      newWindow.document.close();
+      newWindow.document.title = `שטר מטען - ${trackingNumber}`;
+      newWindow.document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;font-size:20px;color:#555;">⏳ טוען שטר מטען PDF...</div>';
     }
 
     setPrintingLabel(format);
     try {
       const { data } = await printShipmentLabel({ tracking_number: trackingNumber, label_format: format });
       if (data.success && data.pdf_base64) {
-        const dataUri = `data:application/pdf;base64,${data.pdf_base64}`;
+        const byteChars = atob(data.pdf_base64);
+        const byteNumbers = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+
         if (newWindow && !newWindow.closed) {
-          newWindow.location.href = dataUri;
+          newWindow.location.href = blobUrl;
         } else {
-          // Fallback: download
           const a = document.createElement('a');
-          a.href = dataUri;
+          a.href = blobUrl;
           a.download = `label-${format}-${trackingNumber}.pdf`;
           document.body.appendChild(a);
           a.click();
@@ -86,7 +92,6 @@ export default function SPShipmentSuccessScreen({
       // Step 2: Create Linet invoice
       setStep("יוצר חשבונית מס-קבלה בלינט...");
       
-      // Parse order lines for product description
       let productDesc = "";
       let totalProductPrice = 0;
       let shippingAmount = 0;
@@ -101,7 +106,6 @@ export default function SPShipmentSuccessScreen({
         }
       } catch (_) {}
 
-      // If total_price > totalProductPrice, the difference is shipping
       const orderTotal = order.total_price || 0;
       if (orderTotal > totalProductPrice && totalProductPrice > 0) {
         shippingAmount = orderTotal - totalProductPrice;
@@ -111,17 +115,19 @@ export default function SPShipmentSuccessScreen({
         const { data: invoiceData } = await createSPLinetInvoice({
           customer_name: `${order.customer_first_name || ""} ${order.customer_last_name || ""}`.trim(),
           customer_phone: order.customer_phone || "",
-          customer_email: "", // Mirakl doesn't provide email directly
+          customer_email: sendEmail || "",
           product_description: productDesc || `הזמנת סופר-פארם ${order.mirakl_order_id}`,
           quantity: qty,
           unit_price: totalProductPrice || orderTotal,
           shipping_amount: shippingAmount,
           mirakl_order_id: order.mirakl_order_id,
+          send_email: sendEmail || undefined,
         });
 
         if (invoiceData.success) {
           setInvoiceResult(invoiceData);
-          toast.success(`✅ חשבונית לינט ${invoiceData.doc_number || invoiceData.doc_id} נוצרה`);
+          const emailNote = invoiceData.email_sent ? " ונשלחה במייל" : "";
+          toast.success(`✅ חשבונית לינט ${invoiceData.doc_number || invoiceData.doc_id} נוצרה${emailNote}`);
         } else {
           toast.error("שגיאה ביצירת חשבונית לינט: " + (invoiceData.error || ""));
         }
@@ -165,29 +171,38 @@ export default function SPShipmentSuccessScreen({
 
           {/* Print Buttons */}
           <div className="flex gap-2 justify-center">
-            <Button 
-              variant="outline" 
-              onClick={() => openPrintableLabel('a4')} 
-              disabled={!!printingLabel}
-            >
+            <Button variant="outline" onClick={() => openPrintableLabel('a4')} disabled={!!printingLabel}>
               {printingLabel === 'a4' ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
               📄 הדפס A4
             </Button>
-            <Button 
-              variant="outline" 
-              onClick={() => openPrintableLabel('thermal')} 
-              disabled={!!printingLabel}
-            >
+            <Button variant="outline" onClick={() => openPrintableLabel('thermal')} disabled={!!printingLabel}>
               {printingLabel === 'thermal' ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
               🖨️ תווית תרמית
             </Button>
           </div>
 
-          {/* Save & Finalize Button */}
+          {/* Save & Finalize */}
           {!saved ? (
-            <div className="pt-2 border-t space-y-2">
+            <div className="pt-2 border-t space-y-3">
+              {/* Email field */}
+              <div className="text-right">
+                <Label className="text-xs text-gray-600 flex items-center gap-1 mb-1">
+                  <Mail className="w-3.5 h-3.5" />
+                  מייל לשליחת חשבונית (אופציונלי)
+                </Label>
+                <Input 
+                  value={sendEmail} 
+                  onChange={e => setSendEmail(e.target.value)} 
+                  placeholder="example@email.com"
+                  type="email"
+                  dir="ltr"
+                  className="text-left"
+                />
+              </div>
+
               <p className="text-xs text-gray-500">
-                לחיצה על שמירה תעדכן את Mirakl עם מספר המעקב, תסמן כנשלחה ותיצור חשבונית מס-קבלה בלינט
+                לחיצה על שמירה תעדכן את Mirakl, תסמן כנשלחה ותיצור חשבונית מס-קבלה בלינט
+                {sendEmail && " + תשלח במייל"}
               </p>
               <Button
                 onClick={handleSaveAndFinalize}
@@ -213,9 +228,16 @@ export default function SPShipmentSuccessScreen({
                 ✅ Mirakl עודכן — הזמנה סומנה כנשלחה
               </div>
               {invoiceResult ? (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm text-purple-800">
-                  <Receipt className="w-4 h-4 inline ml-1" />
-                  חשבונית מס-קבלה #{invoiceResult.doc_number || invoiceResult.doc_id} נוצרה בלינט
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm text-purple-800 space-y-1">
+                  <div className="flex items-center gap-1">
+                    <Receipt className="w-4 h-4" />
+                    <span>חשבונית מס-קבלה #{invoiceResult.doc_number || invoiceResult.doc_id} נוצרה בלינט</span>
+                  </div>
+                  {invoiceResult.email_sent && (
+                    <div className="text-xs text-purple-600 flex items-center gap-1">
+                      <Mail className="w-3 h-3" /> נשלחה למייל {sendEmail}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">

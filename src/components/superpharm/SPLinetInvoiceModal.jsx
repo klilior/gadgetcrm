@@ -3,9 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Receipt } from "lucide-react";
-import { createLinetInvoice } from "@/functions/createLinetInvoice";
+import { Loader2, Receipt, Mail } from "lucide-react";
+import { createSPLinetInvoice } from "@/functions/createSPLinetInvoice";
 import { toast } from "sonner";
 
 export default function SPLinetInvoiceModal({ order, open, onClose }) {
@@ -17,31 +16,37 @@ export default function SPLinetInvoiceModal({ order, open, onClose }) {
     `${order?.customer_first_name || ""} ${order?.customer_last_name || ""}`.trim()
   );
   const [phone, setPhone] = useState(order?.customer_phone || "");
+  const [email, setEmail] = useState("");
   const [productName, setProductName] = useState(
     lines.map(l => l.product_title || l.offer_sku).join(", ")
   );
   const [totalPrice, setTotalPrice] = useState(order?.total_price || 0);
-  const [needsSerial, setNeedsSerial] = useState(false);
-  const [sku, setSku] = useState(lines[0]?.offer_sku || "");
-  const [serialNumber, setSerialNumber] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
     setLoading(true);
     try {
-      const payload = {
-        customerName,
-        phone,
-        productName,
-        totalPrice: Number(totalPrice),
-        miraklOrderId: order.mirakl_order_id,
-        needsSerial,
-        sku: needsSerial ? sku : undefined,
-        serialNumber: needsSerial ? serialNumber : undefined,
-      };
-      const { data } = await createLinetInvoice(payload);
+      // Calculate shipping as difference between total and product lines
+      const productTotal = lines.reduce((sum, l) => sum + (l.total_price || l.price || 0), 0);
+      const shippingAmount = (order?.total_price || 0) > productTotal && productTotal > 0
+        ? (order.total_price - productTotal)
+        : 0;
+
+      const { data } = await createSPLinetInvoice({
+        customer_name: customerName,
+        customer_phone: phone,
+        customer_email: email,
+        product_description: productName || `הזמנת סופר-פארם ${order.mirakl_order_id}`,
+        quantity: lines.reduce((sum, l) => sum + (l.quantity || 1), 0) || 1,
+        unit_price: productTotal || Number(totalPrice),
+        shipping_amount: shippingAmount,
+        mirakl_order_id: order.mirakl_order_id,
+        send_email: email || undefined,
+      });
+
       if (data.success) {
-        toast.success("חשבונית נוצרה בהצלחה");
+        const emailNote = data.email_sent ? " ונשלחה במייל" : "";
+        toast.success(`חשבונית ${data.doc_number || data.doc_id} נוצרה בהצלחה${emailNote}`);
         onClose();
       } else {
         toast.error(data.error || "שגיאה ביצירת חשבונית");
@@ -72,7 +77,21 @@ export default function SPLinetInvoiceModal({ order, open, onClose }) {
           </div>
           <div>
             <Label>טלפון</Label>
-            <Input value={phone} onChange={e => setPhone(e.target.value)} dir="ltr" />
+            <Input value={phone} onChange={e => setPhone(e.target.value)} dir="ltr" className="text-right" />
+          </div>
+          <div>
+            <Label className="flex items-center gap-1">
+              <Mail className="w-3.5 h-3.5" />
+              מייל לשליחת חשבונית
+            </Label>
+            <Input 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
+              placeholder="example@email.com"
+              type="email"
+              dir="ltr" 
+              className="text-left" 
+            />
           </div>
           <div>
             <Label>שם מוצר</Label>
@@ -80,30 +99,8 @@ export default function SPLinetInvoiceModal({ order, open, onClose }) {
           </div>
           <div>
             <Label>מחיר כולל מע״מ (₪)</Label>
-            <Input type="number" value={totalPrice} onChange={e => setTotalPrice(e.target.value)} dir="ltr" />
+            <Input type="number" value={totalPrice} onChange={e => setTotalPrice(e.target.value)} dir="ltr" className="text-right" />
           </div>
-
-          <div className="flex items-center gap-2 pt-1">
-            <Checkbox
-              id="needsSerial"
-              checked={needsSerial}
-              onCheckedChange={setNeedsSerial}
-            />
-            <Label htmlFor="needsSerial" className="cursor-pointer">צריך סריאלי?</Label>
-          </div>
-
-          {needsSerial && (
-            <div className="space-y-3 pr-6 border-r-2 border-purple-200">
-              <div>
-                <Label>מק״ט</Label>
-                <Input value={sku} onChange={e => setSku(e.target.value)} />
-              </div>
-              <div>
-                <Label>מספר סריאל</Label>
-                <Input value={serialNumber} onChange={e => setSerialNumber(e.target.value)} />
-              </div>
-            </div>
-          )}
 
           <Button
             onClick={handleCreate}
@@ -111,7 +108,7 @@ export default function SPLinetInvoiceModal({ order, open, onClose }) {
             className="w-full bg-purple-600 hover:bg-purple-700"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Receipt className="w-4 h-4 ml-2" />}
-            צור חשבונית
+            צור חשבונית {email ? "ושלח במייל" : ""}
           </Button>
         </div>
       </DialogContent>
