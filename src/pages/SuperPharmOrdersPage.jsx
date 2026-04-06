@@ -369,6 +369,7 @@ export default function SuperPharmOrdersPage() {
           order={invoiceOrder}
           open={!!invoiceOrder}
           onClose={() => setInvoiceOrder(null)}
+          onInvoiceCreated={() => loadOrders(true)}
         />
       )}
     </div>

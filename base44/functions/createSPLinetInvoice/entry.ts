@@ -92,12 +92,35 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'חסרים שדות חובה: שם לקוח, תיאור מוצר, מחיר' }, { status: 400 });
     }
 
+    // === DUPLICATE CHECK: look for existing invoice by mirakl_order_id ===
+    if (mirakl_order_id) {
+      console.log('[SP Invoice] Checking for existing invoice for mirakl_order_id:', mirakl_order_id);
+      const existingOrders = await base44.asServiceRole.entities.SuperPharmOrder.filter(
+        { mirakl_order_id: mirakl_order_id }
+      );
+      
+      if (existingOrders.length > 0) {
+        const existingOrder = existingOrders[0];
+        if (existingOrder.linet_invoice_doc_id) {
+          console.log('[SP Invoice] DUPLICATE BLOCKED - Invoice already exists: doc_id=' + existingOrder.linet_invoice_doc_id + ', doc_number=' + existingOrder.linet_invoice_doc_number);
+          return Response.json({
+            success: false,
+            error: `חשבונית כבר הונפקה להזמנה זו (חשבונית מס׳ ${existingOrder.linet_invoice_doc_number || existingOrder.linet_invoice_doc_id})`,
+            existing_doc_id: existingOrder.linet_invoice_doc_id,
+            existing_doc_number: existingOrder.linet_invoice_doc_number,
+            existing_pdf_url: existingOrder.linet_invoice_pdf_url,
+            duplicate: true,
+          });
+        }
+      }
+    }
+
     const creds = getLinetCreds();
     if (!creds.login_id || !creds.login_hash || !creds.login_company) {
       return Response.json({ error: 'הגדרות לינט חסרות' }, { status: 500 });
     }
 
-    // 1. Find or create client (with name, phone, email)
+    // 1. Find or create client
     const clientId = await findOrCreateClient(creds, {
       name: customer_name,
       phone: customer_phone || '',
@@ -155,7 +178,6 @@ Deno.serve(async (req) => {
       }],
     };
 
-    // If email provided, tell Linet to send the doc by email automatically
     if (emailTarget) {
       docPayload.sendmail = 1;
     }
@@ -170,19 +192,37 @@ Deno.serve(async (req) => {
     
     console.log('[Linet] Invoice created: ID=' + docId + ', Number=' + docNumber);
 
-    // 4. Email was sent by Linet if sendmail=1 was set
     const emailSent = !!emailTarget;
-    if (emailSent) {
-      console.log('[Linet] Document created with sendmail=1, email will be sent to: ' + emailTarget);
-    }
 
-    // 5. Build PDF URL for manual access
+    // 4. Build PDF URL
     const pdfUrl = BASE_URL + '/doc/pdf?' + new URLSearchParams({
       login_id: creds.login_id,
       login_hash: creds.login_hash,
       login_company: String(creds.login_company),
       id: String(docId),
     }).toString();
+
+    // 5. === SAVE invoice data back to SuperPharmOrder entity ===
+    if (mirakl_order_id) {
+      try {
+        const orders = await base44.asServiceRole.entities.SuperPharmOrder.filter(
+          { mirakl_order_id: mirakl_order_id }
+        );
+        if (orders.length > 0) {
+          await base44.asServiceRole.entities.SuperPharmOrder.update(orders[0].id, {
+            linet_invoice_doc_id: String(docId),
+            linet_invoice_doc_number: String(docNumber || ''),
+            linet_invoice_pdf_url: pdfUrl,
+            linet_invoice_created_at: new Date().toISOString(),
+            linet_invoice_email_sent: emailSent,
+          });
+          console.log('[SP Invoice] Saved invoice data to SuperPharmOrder:', orders[0].id);
+        }
+      } catch (saveErr) {
+        console.error('[SP Invoice] Failed to save invoice to order entity:', saveErr.message);
+        // Don't fail the whole request - invoice was created successfully
+      }
+    }
 
     const msg = 'חשבונית מס-קבלה ' + (docNumber || docId) + ' נוצרה בהצלחה' + (emailSent ? ' ונשלחה במייל' : '');
 

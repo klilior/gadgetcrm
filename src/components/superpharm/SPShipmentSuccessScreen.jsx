@@ -14,6 +14,7 @@ export default function SPShipmentSuccessScreen({
   order,
   onDone,
 }) {
+  const hasExistingInvoice = !!(order?.linet_invoice_doc_id);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [printingLabel, setPrintingLabel] = useState(null);
@@ -90,50 +91,57 @@ iframe{width:100%;height:100%;border:none;}</style></head>
 
       toast.success("✅ Mirakl עודכן — הזמנה סומנה כנשלחה");
 
-      // Step 2: Create Linet invoice
-      setStep("יוצר חשבונית מס-קבלה בלינט...");
-      
-      let productDesc = "";
-      let totalProductPrice = 0;
-      let shippingAmount = 0;
-      let qty = 1;
-      
-      try {
-        const lines = JSON.parse(order.order_lines_json || "[]");
-        if (lines.length > 0) {
-          productDesc = lines.map(l => l.product_title || l.offer_sku).join(", ");
-          qty = lines.reduce((sum, l) => sum + (l.quantity || 1), 0);
-          totalProductPrice = lines.reduce((sum, l) => sum + (l.total_price || l.price || 0), 0);
+      // Step 2: Create Linet invoice (only if not already created)
+      if (!hasExistingInvoice) {
+        setStep("יוצר חשבונית מס-קבלה בלינט...");
+        
+        let productDesc = "";
+        let totalProductPrice = 0;
+        let shippingAmount = 0;
+        let qty = 1;
+        
+        try {
+          const lines = JSON.parse(order.order_lines_json || "[]");
+          if (lines.length > 0) {
+            productDesc = lines.map(l => l.product_title || l.offer_sku).join(", ");
+            qty = lines.reduce((sum, l) => sum + (l.quantity || 1), 0);
+            totalProductPrice = lines.reduce((sum, l) => sum + (l.total_price || l.price || 0), 0);
+          }
+        } catch (_) {}
+
+        const orderTotal = order.total_price || 0;
+        if (orderTotal > totalProductPrice && totalProductPrice > 0) {
+          shippingAmount = orderTotal - totalProductPrice;
         }
-      } catch (_) {}
 
-      const orderTotal = order.total_price || 0;
-      if (orderTotal > totalProductPrice && totalProductPrice > 0) {
-        shippingAmount = orderTotal - totalProductPrice;
-      }
+        try {
+          const { data: invoiceData } = await createSPLinetInvoice({
+            customer_name: `${order.customer_first_name || ""} ${order.customer_last_name || ""}`.trim(),
+            customer_phone: order.customer_phone || "",
+            customer_email: sendEmail || "",
+            product_description: productDesc || `הזמנת סופר-פארם ${order.mirakl_order_id}`,
+            quantity: qty,
+            unit_price: totalProductPrice || orderTotal,
+            shipping_amount: shippingAmount,
+            mirakl_order_id: order.mirakl_order_id,
+            send_email: sendEmail || undefined,
+          });
 
-      try {
-        const { data: invoiceData } = await createSPLinetInvoice({
-          customer_name: `${order.customer_first_name || ""} ${order.customer_last_name || ""}`.trim(),
-          customer_phone: order.customer_phone || "",
-          customer_email: sendEmail || "",
-          product_description: productDesc || `הזמנת סופר-פארם ${order.mirakl_order_id}`,
-          quantity: qty,
-          unit_price: totalProductPrice || orderTotal,
-          shipping_amount: shippingAmount,
-          mirakl_order_id: order.mirakl_order_id,
-          send_email: sendEmail || undefined,
-        });
-
-        if (invoiceData.success) {
-          setInvoiceResult(invoiceData);
-          const emailNote = invoiceData.email_sent ? " ונשלחה במייל" : "";
-          toast.success(`✅ חשבונית לינט ${invoiceData.doc_number || invoiceData.doc_id} נוצרה${emailNote}`);
-        } else {
-          toast.error("שגיאה ביצירת חשבונית לינט: " + (invoiceData.error || ""));
+          if (invoiceData.duplicate) {
+            toast.warning(invoiceData.error);
+          } else if (invoiceData.success) {
+            setInvoiceResult(invoiceData);
+            const emailNote = invoiceData.email_sent ? " ונשלחה במייל" : "";
+            toast.success(`✅ חשבונית לינט ${invoiceData.doc_number || invoiceData.doc_id} נוצרה${emailNote}`);
+          } else {
+            toast.error("שגיאה ביצירת חשבונית לינט: " + (invoiceData.error || ""));
+          }
+        } catch (invErr) {
+          toast.error("שגיאה ביצירת חשבונית: " + invErr.message);
         }
-      } catch (invErr) {
-        toast.error("שגיאה ביצירת חשבונית: " + invErr.message);
+      } else {
+        setInvoiceResult({ doc_number: order.linet_invoice_doc_number, doc_id: order.linet_invoice_doc_id });
+        toast.info(`חשבונית כבר קיימת: #${order.linet_invoice_doc_number || order.linet_invoice_doc_id}`);
       }
 
       setSaved(true);

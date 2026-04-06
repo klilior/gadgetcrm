@@ -264,14 +264,27 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
           )}
 
           {["SHIPPING", "SHIPPED", "TO_COLLECT"].includes(order.order_state) && (
-            <Button
-              onClick={() => onCreateInvoice(order)}
-              variant="outline"
-              className="flex-1 border-purple-300 text-purple-700 hover:bg-purple-50"
-              size="sm"
-            >
-              💳 צור חשבונית לינט
-            </Button>
+            order.linet_invoice_doc_id ? (
+              <div className="flex-1 flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-800">
+                <Receipt className="w-4 h-4 text-purple-600" />
+                <span>חשבונית #{order.linet_invoice_doc_number || order.linet_invoice_doc_id}</span>
+                {order.linet_invoice_email_sent && <span className="text-xs text-purple-500">📧 נשלחה</span>}
+                {order.linet_invoice_pdf_url && (
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-purple-600" onClick={() => window.open(order.linet_invoice_pdf_url, '_blank')}>
+                    PDF
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <Button
+                onClick={() => onCreateInvoice(order)}
+                variant="outline"
+                className="flex-1 border-purple-300 text-purple-700 hover:bg-purple-50"
+                size="sm"
+              >
+                💳 צור חשבונית לינט
+              </Button>
+            )
           )}
         </div>
       </CardContent>
