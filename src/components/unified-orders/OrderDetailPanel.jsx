@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Printer, ExternalLink, Loader2 } from "lucide-react";
+import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Printer, ExternalLink, Loader2, Receipt } from "lucide-react";
 import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { toast } from "sonner";
 import { format, differenceInHours } from "date-fns";
@@ -29,7 +29,7 @@ function formatDate(d) {
   try { return format(new Date(d), "dd/MM/yyyy HH:mm"); } catch { return '-'; }
 }
 
-export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment }) {
+export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice }) {
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
   const statusOptions = getStatusOptions(order.source);
@@ -280,6 +280,32 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           <Button variant="outline" className="rounded-full hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-colors" onClick={() => onShipment(order)}>
             <Truck className="w-4 h-4 ml-1" />
             צור משלוח
+          </Button>
+        )}
+
+        {/* Invoice button for Mirakl orders */}
+        {order.source === 'mirakl' && onCreateInvoice && (
+          <Button
+            variant="outline"
+            className={`rounded-full ${order.linet_invoice_doc_id ? 'border-green-300 text-green-700 hover:bg-green-50' : 'border-purple-300 text-purple-700 hover:bg-purple-50'}`}
+            onClick={() => {
+              const spOrder = {
+                mirakl_order_id: order.mirakl_order_id || order.order_number,
+                customer_first_name: order.customer_first_name || order.customer_name?.split(' ')[0] || '',
+                customer_last_name: order.customer_last_name || order.customer_name?.split(' ').slice(1).join(' ') || '',
+                customer_phone: order.customer_phone || '',
+                order_lines_json: order.order_lines_json || JSON.stringify(order.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
+                total_price: order.total || 0,
+                linet_invoice_doc_id: order.linet_invoice_doc_id || '',
+                linet_invoice_doc_number: order.linet_invoice_doc_number || '',
+                linet_invoice_pdf_url: order.linet_invoice_pdf_url || '',
+                linet_invoice_email_sent: order.linet_invoice_email_sent || false,
+              };
+              onCreateInvoice(spOrder);
+            }}
+          >
+            <Receipt className="w-4 h-4 ml-1" />
+            {order.linet_invoice_doc_id ? `✅ חשבונית #${order.linet_invoice_doc_number || order.linet_invoice_doc_id}` : '💳 חשבונית לינט'}
           </Button>
         )}
       </div>

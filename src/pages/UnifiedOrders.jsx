@@ -20,6 +20,8 @@ import SendSmsOrderModal from "../components/unified-orders/SendSmsOrderModal";
 import { isClosedStatus, LINET_ORDER_SKUS } from "../components/unified-orders/OrderStatusConfig";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import SPShipDialog from "../components/superpharm/SPShipDialog";
+import SPShipmentSuccessScreen from "../components/superpharm/SPShipmentSuccessScreen";
+import SPLinetInvoiceModal from "../components/superpharm/SPLinetInvoiceModal";
 import MobileOrderCard from "../components/unified-orders/MobileOrderCard";
 import OrderDetailPanel from "../components/unified-orders/OrderDetailPanel";
 
@@ -50,6 +52,8 @@ export default function UnifiedOrders() {
   // Modals
   const [smsOrder, setSmsOrder] = useState(null);
   const [shipmentOrder, setShipmentOrder] = useState(null);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
+  const [upsSuccessData, setUpsSuccessData] = useState(null);
 
   // Expanded row
   const [expandedId, setExpandedId] = useState(null);
@@ -120,6 +124,11 @@ export default function UnifiedOrders() {
           raw_mirakl_json: o.raw_mirakl_json || '',
           customer_first_name: o.customer_first_name || '',
           customer_last_name: o.customer_last_name || '',
+          linet_invoice_doc_id: o.linet_invoice_doc_id || '',
+          linet_invoice_doc_number: o.linet_invoice_doc_number || '',
+          linet_invoice_pdf_url: o.linet_invoice_pdf_url || '',
+          linet_invoice_email_sent: o.linet_invoice_email_sent || false,
+          order_lines_json: o.order_lines_json || '[]',
         });
       }
     } catch (e) { errs.push({source: 'mirakl', message: e.message}); }
@@ -463,6 +472,7 @@ export default function UnifiedOrders() {
                                 onSms={(o) => setSmsOrder(o)}
                                 onStatusChange={handleStatusChange}
                                 onShipment={(o) => setShipmentOrder(o)}
+                                onCreateInvoice={(o) => setInvoiceOrder(o)}
                               />
                             </TableCell>
                           </TableRow>
@@ -484,6 +494,7 @@ export default function UnifiedOrders() {
                     onSms={() => setSmsOrder(order)}
                     onStatusChange={handleStatusChange}
                     onShipment={() => setShipmentOrder(order)}
+                    onCreateInvoice={() => setInvoiceOrder(order)}
                   />
                 ))}
               </div>
@@ -533,6 +544,7 @@ export default function UnifiedOrders() {
             shipping_street: shipmentOrder.shipping_street || '',
             shipping_zip: shipmentOrder.shipping_zip || '',
             order_lines_json: JSON.stringify(shipmentOrder.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
+            total_price: shipmentOrder.total || 0,
           }}
           open={true}
           onClose={() => { setShipmentOrder(null); }}
@@ -540,11 +552,15 @@ export default function UnifiedOrders() {
             setShipmentOrder(null);
             await loadData(true);
           }}
+          onCreateInvoice={(o) => {
+            setShipmentOrder(null);
+            setInvoiceOrder(o);
+          }}
         />
       )}
 
       {/* Mirakl UPS (pickup point) */}
-      {shipmentOrder && shipmentOrder._shipCarrier === 'ups' && (
+      {shipmentOrder && shipmentOrder._shipCarrier === 'ups' && !upsSuccessData && (
         <CreateShipmentModal
           open={true}
           onClose={() => { setShipmentOrder(null); loadData(true); }}
@@ -567,21 +583,35 @@ export default function UnifiedOrders() {
             phone: shipmentOrder.customer_phone,
             city: shipmentOrder.shipping_city || '',
           }}
-          onSuccess={async ({ tracking_number }) => {
-            if (tracking_number && shipmentOrder.mirakl_order_id) {
-              try {
-                await updateSuperPharmOrder({
-                  action: 'ship',
-                  order_id: shipmentOrder.mirakl_order_id,
-                  tracking_number,
-                  carrier_name: 'UPS Israel',
-                });
-              } catch (e) {
-                console.error('Failed to update Mirakl:', e);
-              }
+          onSuccess={({ tracking_number }) => {
+            if (tracking_number) {
+              // Build a full SP order object for SPShipmentSuccessScreen
+              const spOrder = {
+                mirakl_order_id: shipmentOrder.mirakl_order_id || shipmentOrder.order_number,
+                customer_first_name: shipmentOrder.customer_first_name || shipmentOrder.customer_name?.split(' ')[0] || '',
+                customer_last_name: shipmentOrder.customer_last_name || shipmentOrder.customer_name?.split(' ').slice(1).join(' ') || '',
+                customer_phone: shipmentOrder.customer_phone || '',
+                order_lines_json: JSON.stringify(shipmentOrder.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
+                total_price: shipmentOrder.total || 0,
+              };
+              setUpsSuccessData({ trackingNumber: tracking_number, order: spOrder });
+            } else {
+              setShipmentOrder(null);
+              loadData(true);
             }
+          }}
+        />
+      )}
+
+      {/* UPS Success Screen with Mirakl update + Linet invoice */}
+      {upsSuccessData && (
+        <SPShipmentSuccessScreen
+          trackingNumber={upsSuccessData.trackingNumber}
+          order={upsSuccessData.order}
+          onDone={() => {
+            setUpsSuccessData(null);
             setShipmentOrder(null);
-            await loadData(true);
+            loadData(true);
           }}
         />
       )}
@@ -603,6 +633,16 @@ export default function UnifiedOrders() {
             phone: shipmentOrder.customer_phone,
             city: shipmentOrder.shipping_city || '',
           }}
+        />
+      )}
+
+      {/* Linet Invoice Modal for Mirakl orders */}
+      {invoiceOrder && (
+        <SPLinetInvoiceModal
+          order={invoiceOrder}
+          open={!!invoiceOrder}
+          onClose={() => setInvoiceOrder(null)}
+          onInvoiceCreated={() => loadData(true)}
         />
       )}
     </div>
