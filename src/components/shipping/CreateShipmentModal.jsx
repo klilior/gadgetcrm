@@ -233,6 +233,14 @@ iframe{width:100%;height:100%;border:none;}</style></head>
 
       if (data.success) {
         const trackingNum = data.tracking_number;
+        // For SuperPharm orders (external_order_number starts with 0 and no order_id),
+        // call onSuccess immediately so the parent can handle the SP flow
+        if (!order?.id && onSuccess) {
+          toast.success(`שטר מטען נוצר: ${trackingNum}`);
+          onSuccess({ tracking_number: trackingNum });
+          onClose();
+          return;
+        }
         setResult({ tracking: trackingNum, shipment_id: data.shipment_id, autoOpenLabel: true });
         toast.success(`שטר מטען נוצר: ${trackingNum}`);
       } else {

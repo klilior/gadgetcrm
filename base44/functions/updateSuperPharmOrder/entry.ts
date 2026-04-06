@@ -172,24 +172,47 @@ Deno.serve(async (req) => {
         return Response.json({ error: 'חסר מספר מעקב' }, { status: 400 });
       }
 
-      // Use the correct tracking endpoint per SuperPharm/Mirakl docs
+      // Step 1: Set tracking info on the order
       const finalCarrierCode = carrier_code || 'deliv_ups';
       const finalCarrierName = carrier_name || 'UPS';
+      console.log(`[Mirakl Ship] Setting tracking: ${tracking_number}, carrier: ${finalCarrierCode}`);
       await miraklRequest('PUT', `/orders/${order_id}/tracking`, {
         carrier_code: finalCarrierCode,
         carrier_name: finalCarrierName,
         tracking_number: tracking_number,
       });
 
+      // Step 2: Validate shipment — mark all order lines as shipped
+      // Mirakl OR24: PUT /orders/{order_id}/ship (no body required = ships all lines)
+      console.log(`[Mirakl Ship] Validating shipment (OR24)...`);
+      await miraklRequest('PUT', `/orders/${order_id}/ship`);
+      console.log('[Mirakl Ship] Shipment validated successfully');
+
+      // Step 3: Verify the order state actually changed in Mirakl
+      let verifiedState = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
+        const orderData = await miraklRequest('GET', `/orders?order_ids=${order_id}`);
+        const miraklOrder = orderData?.orders?.[0];
+        if (miraklOrder) {
+          verifiedState = miraklOrder.order_state;
+          console.log(`[Mirakl Ship] Attempt ${attempt + 1}: order state = ${verifiedState}`);
+          if (verifiedState === 'SHIPPED' || verifiedState === 'TO_COLLECT') break;
+        }
+      }
+
+      // Update local entity with the verified state
+      const finalState = (verifiedState === 'SHIPPED' || verifiedState === 'TO_COLLECT') ? verifiedState : 'SHIPPED';
       await sr.SuperPharmOrder.update(localOrder.id, {
-        order_state: 'SHIPPED',
+        order_state: finalState,
         tracking_number,
         carrier_code: finalCarrierCode,
         carrier_name: finalCarrierName,
         shipped_at: new Date().toISOString(),
       });
 
-      return Response.json({ success: true, message: `ההזמנה נשלחה עם מעקב: ${tracking_number}` });
+      const stateLabel = finalState === 'TO_COLLECT' ? 'לאיסוף' : 'נשלחה';
+      return Response.json({ success: true, message: `ההזמנה סומנה כ${stateLabel} עם מעקב: ${tracking_number}`, new_state: finalState });
     }
 
     return Response.json({ error: 'פעולה לא מוכרת' }, { status: 400 });
