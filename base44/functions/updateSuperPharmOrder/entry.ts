@@ -173,17 +173,19 @@ Deno.serve(async (req) => {
       }
 
       // Use the correct tracking endpoint per SuperPharm/Mirakl docs
+      const finalCarrierCode = carrier_code || 'deliv_ups';
+      const finalCarrierName = carrier_name || 'UPS';
       await miraklRequest('PUT', `/orders/${order_id}/tracking`, {
-        carrier_code: carrier_code || 'OTHER',
-        carrier_name: carrier_name || 'UPS Israel',
+        carrier_code: finalCarrierCode,
+        carrier_name: finalCarrierName,
         tracking_number: tracking_number,
       });
 
       await sr.SuperPharmOrder.update(localOrder.id, {
         order_state: 'SHIPPED',
         tracking_number,
-        carrier_code: carrier_code || 'OTHER',
-        carrier_name: carrier_name || 'UPS Israel',
+        carrier_code: finalCarrierCode,
+        carrier_name: finalCarrierName,
         shipped_at: new Date().toISOString(),
       });
 

@@ -13,6 +13,7 @@ import SPOrderCard from "../components/superpharm/SPOrderCard";
 import SPShipDialog from "../components/superpharm/SPShipDialog";
 import SPLinetInvoiceModal from "../components/superpharm/SPLinetInvoiceModal";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
+import SPShipmentSuccessScreen from "../components/superpharm/SPShipmentSuccessScreen";
 import { toast } from "sonner";
 
 
@@ -58,6 +59,7 @@ export default function SuperPharmOrdersPage() {
   const [invoiceOrder, setInvoiceOrder] = useState(null);
   const [acceptingId, setAcceptingId] = useState(null);
   const [upsPickupOrder, setUpsPickupOrder] = useState(null);
+  const [upsSuccessData, setUpsSuccessData] = useState(null); // { trackingNumber, order }
 
   const loadOrders = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -311,7 +313,7 @@ export default function SuperPharmOrdersPage() {
       )}
 
       {/* UPS Pickup Point Shipment Modal */}
-      {shipOrder && shipCarrier === "ups" && (
+      {shipOrder && shipCarrier === "ups" && !upsSuccessData && (
         <CreateShipmentModal
           open={true}
           onClose={() => { setShipOrder(null); setShipCarrier(null); }}
@@ -334,23 +336,29 @@ export default function SuperPharmOrdersPage() {
             phone: shipOrder.customer_phone,
             city: shipOrder.shipping_city,
           }}
-          onSuccess={async ({ tracking_number }) => {
+          onSuccess={({ tracking_number }) => {
             if (tracking_number) {
-              try {
-                await updateSuperPharmOrder({
-                  action: "ship",
-                  order_id: shipOrder.mirakl_order_id,
-                  tracking_number,
-                  carrier_name: "UPS Israel",
-                });
-                toast.success("ההזמנה עודכנה ב-Mirakl עם מספר מעקב: " + tracking_number);
-              } catch (e) {
-                toast.error("שטר מטען נוצר אבל לא הצלחנו לעדכן ב-Mirakl: " + e.message);
-              }
+              // Show the SP success screen with save & invoice flow
+              setUpsSuccessData({ trackingNumber: tracking_number, order: shipOrder });
+            } else {
+              setShipOrder(null);
+              setShipCarrier(null);
+              loadOrders();
             }
+          }}
+        />
+      )}
+
+      {/* UPS Success Screen with Mirakl update + Linet invoice */}
+      {upsSuccessData && (
+        <SPShipmentSuccessScreen
+          trackingNumber={upsSuccessData.trackingNumber}
+          order={upsSuccessData.order}
+          onDone={() => {
+            setUpsSuccessData(null);
             setShipOrder(null);
             setShipCarrier(null);
-            await loadOrders();
+            loadOrders();
           }}
         />
       )}

@@ -158,25 +158,30 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
 
   const openPrintableLabel = async (trackingNum, format = 'thermal') => {
     // Open window IMMEDIATELY on click (before async) to avoid popup blocker
-    const newWindow = window.open('', '_blank');
+    const newWindow = window.open('about:blank', '_blank');
     if (newWindow) {
-      newWindow.document.write(`<html dir="rtl"><head><title>שטר מטען - ${trackingNum}</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;font-size:20px;color:#555;}</style></head><body>⏳ טוען שטר מטען PDF...</body></html>`);
-      newWindow.document.close();
+      newWindow.document.title = `שטר מטען - ${trackingNum}`;
+      newWindow.document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;font-size:20px;color:#555;">⏳ טוען שטר מטען PDF...</div>';
     }
 
     setPrintingLabel(format);
     try {
       const { data } = await printShipmentLabel({ tracking_number: trackingNum, label_format: format });
       if (data.success && data.pdf_base64) {
-        const dataUri = `data:application/pdf;base64,${data.pdf_base64}`;
+        // Convert base64 to blob URL — more reliable than data URI for large PDFs
+        const byteChars = atob(data.pdf_base64);
+        const byteNumbers = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
         
         if (newWindow && !newWindow.closed) {
-          newWindow.document.open();
-          newWindow.document.write(`<html><head><title>שטר מטען ${format === 'a4' ? 'A4' : 'תרמי'} - ${trackingNum}</title><style>body{margin:0;overflow:hidden;}</style></head><body><iframe src="${dataUri}" style="border:none;position:absolute;top:0;left:0;width:100%;height:100%;"></iframe></body></html>`);
-          newWindow.document.close();
+          newWindow.location.href = blobUrl;
         } else {
+          // Fallback: download
           const a = document.createElement('a');
-          a.href = dataUri;
+          a.href = blobUrl;
           a.download = `label-${format}-${trackingNum}.pdf`;
           document.body.appendChild(a);
           a.click();
@@ -248,8 +253,6 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
       toast.success("מספר מעקב הועתק");
     }
   };
-
-  // Auto-open removed to prevent popup/focus issues that close the dialog
 
   // Success screen
   if (result) {
