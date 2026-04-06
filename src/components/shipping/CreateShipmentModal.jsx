@@ -230,11 +230,8 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
 
       if (data.success) {
         const trackingNum = data.tracking_number;
-        setResult({ tracking: trackingNum, shipment_id: data.shipment_id });
+        setResult({ tracking: trackingNum, shipment_id: data.shipment_id, autoOpenLabel: true });
         toast.success(`שטר מטען נוצר: ${trackingNum}`);
-        
-        // Auto-open real PDF label in new tab (A4 default)
-        openPrintableLabel(trackingNum, 'a4');
       } else {
         toast.error(data.error || "שגיאה ביצירת המשלוח");
       }
@@ -251,6 +248,18 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
       toast.success("מספר מעקב הועתק");
     }
   };
+
+  // Auto-open label after success screen renders
+  useEffect(() => {
+    if (result?.autoOpenLabel && result?.tracking) {
+      // Small delay to ensure the success dialog is fully rendered before opening popup
+      const timer = setTimeout(() => {
+        openPrintableLabel(result.tracking, 'a4');
+        setResult(prev => prev ? { ...prev, autoOpenLabel: false } : prev);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [result?.autoOpenLabel, result?.tracking]);
 
   // Success screen
   if (result) {
