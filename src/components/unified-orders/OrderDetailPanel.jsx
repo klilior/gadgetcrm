@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Printer, ExternalLink } from "lucide-react";
+import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Printer, ExternalLink, Loader2 } from "lucide-react";
+import { printShipmentLabel } from "@/functions/printShipmentLabel";
+import { toast } from "sonner";
 import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusOptions, getStatusColor } from "./OrderStatusConfig";
@@ -31,6 +33,41 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
   const statusOptions = getStatusOptions(order.source);
+  const [printingLabel, setPrintingLabel] = useState(false);
+
+  const handlePrintLabel = async (trackingNum) => {
+    setPrintingLabel(true);
+    try {
+      const { data } = await printShipmentLabel({ tracking_number: trackingNum, label_format: 'a4' });
+      if (data.success && data.pdf_base64) {
+        const byteChars = atob(data.pdf_base64);
+        const byteNumbers = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+        const htmlContent = `<!DOCTYPE html><html><head><title>שטר מטען - ${trackingNum}</title><style>html,body{margin:0;padding:0;height:100%;overflow:hidden;}iframe{width:100%;height:100%;border:none;}</style></head><body><iframe src="${blobUrl}#toolbar=1&navpanes=0"></iframe></body></html>`;
+        const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+        const htmlUrl = URL.createObjectURL(htmlBlob);
+        const opened = window.open(htmlUrl, '_blank');
+        if (!opened) {
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = `label-${trackingNum}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+        toast.success('שטר מטען נפתח');
+      } else {
+        toast.error(data.error || 'שגיאה בהורדת שטר מטען');
+      }
+    } catch (e) {
+      toast.error('שגיאה: ' + e.message);
+    } finally {
+      setPrintingLabel(false);
+    }
+  };
   const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
   const miraklPickup = detectMiraklPickup(order);
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
@@ -218,19 +255,26 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </Button>
         )}
         {order.source === 'mirakl' && order.tracking_number && (
-          <Button
-            variant="outline"
-            className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
-            onClick={() => {
-              const url = order.sticker_url || (miraklPickup
-                ? `https://www.ups.co.il/tracking?trackingNumbers=${order.tracking_number}`
-                : `https://app.veloapp.io/dashboard/orders`);
-              window.open(url, "_blank");
-            }}
-          >
-            <Printer className="w-4 h-4 ml-1" />
-            📎 צפה בשטר מטען ({order.tracking_number})
-          </Button>
+          miraklPickup ? (
+            <Button
+              variant="outline"
+              className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
+              disabled={printingLabel}
+              onClick={() => handlePrintLabel(order.tracking_number)}
+            >
+              {printingLabel ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
+              📄 הדפס שטר מטען ({order.tracking_number})
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
+              onClick={() => window.open('https://app.veloapp.io/dashboard/orders', '_blank')}
+            >
+              <Printer className="w-4 h-4 ml-1" />
+              📎 צפה בשטר מטען ({order.tracking_number})
+            </Button>
+          )
         )}
         {order.source !== 'mirakl' && (
           <Button variant="outline" className="rounded-full hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-colors" onClick={() => onShipment(order)}>
