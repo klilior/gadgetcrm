@@ -139,18 +139,21 @@ Deno.serve(async (req) => {
                 let baseNetAmount = 0;
                 let baseQuantity = 0;
 
+                // Use signed quantity to handle credit notes properly
+                const signedQuantity = sale.quantity || 0;
+
                 switch (rule.rule_type) {
-                    case 'PERCENT_OF_NET':
-                        baseNetAmount = sale.price_ex_vat || 0;
-                        commissionAmount = baseNetAmount * ((rule.percentage || 0) / 100);
-                        break;
-                    
-                    case 'PER_UNIT':
-                    case 'LINE_4G':
-                    case 'LINE_5G':
-                        baseQuantity = Math.abs(sale.quantity || 0);
-                        commissionAmount = baseQuantity * (rule.amount_per_unit || 0);
-                        break;
+                case 'PERCENT_OF_NET':
+                    baseNetAmount = sale.price_ex_vat || 0;
+                    commissionAmount = baseNetAmount * ((rule.percentage || 0) / 100);
+                    break;
+
+                case 'PER_UNIT':
+                case 'LINE_4G':
+                case 'LINE_5G':
+                    baseQuantity = signedQuantity;
+                    commissionAmount = baseQuantity * (rule.amount_per_unit || 0);
+                    break;
                 }
 
                 if (commissionAmount === 0) continue;
@@ -221,6 +224,23 @@ Deno.serve(async (req) => {
 // Helper function to check if a sale matches the rule filters
 function checkFilters(sale, filters) {
     if (!filters) return true;
+
+    // SKU list match (for warranty items, etc.)
+    if (filters.product_skus && filters.product_skus.length > 0) {
+        if (filters.product_skus.includes(sale.sku)) return true;
+    }
+
+    // Product name contains any (e.g. ['אחריות'])
+    if (filters.product_name_contains_any && filters.product_name_contains_any.length > 0) {
+        const pName = sale.product_name || '';
+        if (filters.product_name_contains_any.some(term => pName.includes(term))) return true;
+    }
+
+    // If product_skus or product_name_contains_any were specified but didn't match, reject
+    if ((filters.product_skus && filters.product_skus.length > 0) ||
+        (filters.product_name_contains_any && filters.product_name_contains_any.length > 0)) {
+        return false;
+    }
 
     // Categories
     if (filters.categories_included && filters.categories_included.length > 0) {
