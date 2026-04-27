@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Repair, Client, RepairDevice, RepairVendor, RepairLog } from "@/entities/all";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -98,39 +98,36 @@ export default function RepairDashboard() {
         return configs[status] || defaultBadge;
     };
 
-    const loadData = useCallback(async () => {
+    // Track which mode was last loaded to avoid redundant fetches
+    const lastLoadedMode = useRef(null);
+
+    const loadData = useCallback(async (mode = "open") => {
+        // mode: "open" = only open repairs, "all" = all repairs including closed
         const start = Date.now();
-        console.log("🔵 RepairDashboard: Starting loadData...");
+        console.log(`🔵 RepairDashboard: Starting loadData (mode=${mode})...`);
         setIsLoading(true);
         try {
-            // Only load OPEN repairs (not closed) for fast initial load
             const closedStatuses = ["תיקון נסגר", "לא ניתן לתיקון"];
-            const openFilter = { status: { $nin: closedStatuses } };
-
-            let repairsData;
+            const baseFilter = mode === "open" ? { status: { $nin: closedStatuses } } : {};
+            
             if (isTechnicianRole) {
-                repairsData = await Repair.filter({
-                    ...openFilter,
-                    repair_type: "מעבדת Gadget-Team"
-                }, "-updated_date", 200).catch(err => {
-                    console.error("❌ Error loading repairs for technician:", err);
-                    return [];
-                });
-            } else {
-                repairsData = await Repair.filter(openFilter, "-updated_date", 200).catch(err => {
-                    console.error("❌ Error loading open repairs:", err);
-                    return [];
-                });
+                baseFilter.repair_type = "מעבדת Gadget-Team";
             }
 
-            console.log(`✅ Loaded ${repairsData.length} open repairs`);
+            let repairsData = await Repair.filter(baseFilter, "-updated_date", 500).catch(err => {
+                console.error("❌ Error loading repairs:", err);
+                return [];
+            });
+
+            console.log(`✅ Loaded ${repairsData.length} repairs (mode=${mode})`);
+            lastLoadedMode.current = mode;
 
             // Show repairs immediately WITHOUT enrichment
             setRepairs(repairsData.map(r => ({ ...r, customer: null, device: null, vendor: null })));
             setSelectedRepairs([]);
             setIsLoading(false); // Table is now visible!
 
-            // Calculate stats from raw data (no enrichment needed for stats)
+            // Calculate stats from raw data
             const nonOpenStatuses = [
                 "תיקון נסגר", "לא ניתן לתיקון", "מכשיר סיים תיקון וממתין לאיסוף",
                 "Closed", "Return_Unrepaired", "Ready"
@@ -138,32 +135,44 @@ export default function RepairDashboard() {
 
             if (isTechnicianRole) {
                 setStats({
-                    openLab: repairsData.filter(r => !nonOpenStatuses.includes(r.status) && r.status !== 'הוזמן חלק').length,
+                    openLab: repairsData.filter(r => !nonOpenStatuses.includes(r.status) && r.status !== 'הוזמן חלק' && !closedStatuses.includes(r.status)).length,
                     orderedParts: repairsData.filter(r => r.status === 'הוזמן חלק').length,
-                    slaBreached: repairsData.filter(r => getSlaStatus(r).isBreached && !nonOpenStatuses.includes(r.status)).length,
+                    slaBreached: repairsData.filter(r => getSlaStatus(r).isBreached && !nonOpenStatuses.includes(r.status) && !closedStatuses.includes(r.status)).length,
                     openImporter: 0,
                     readyForPickup: 0
                 });
             } else {
+                const openRepairs = repairsData.filter(r => !closedStatuses.includes(r.status));
                 setStats({
-                    openLab: repairsData.filter(r => r.repair_type === 'מעבדת Gadget-Team' && !nonOpenStatuses.includes(r.status)).length,
-                    openImporter: repairsData.filter(r => r.status === 'At_Importer').length,
-                    readyForPickup: repairsData.filter(r => r.status === "מכשיר סיים תיקון וממתין לאיסוף" || r.status === "Ready").length,
-                    slaBreached: repairsData.filter(r => getSlaStatus(r).isBreached && !nonOpenStatuses.includes(r.status)).length,
+                    openLab: openRepairs.filter(r => r.repair_type === 'מעבדת Gadget-Team' && !nonOpenStatuses.includes(r.status)).length,
+                    openImporter: openRepairs.filter(r => r.status === 'At_Importer').length,
+                    readyForPickup: openRepairs.filter(r => r.status === "מכשיר סיים תיקון וממתין לאיסוף" || r.status === "Ready").length,
+                    slaBreached: openRepairs.filter(r => getSlaStatus(r).isBreached && !nonOpenStatuses.includes(r.status)).length,
                     orderedParts: 0
                 });
             }
 
-            // STEP 2: Load enrichment data in BACKGROUND (non-blocking)
-            // Extract unique IDs to minimize queries
+            // STEP 2: Enrich only the IDs we need (NOT full table scans)
             const clientIds = [...new Set(repairsData.map(r => r.client_id).filter(Boolean))];
             const deviceIds = [...new Set(repairsData.map(r => r.device_id).filter(Boolean))];
             const vendorIds = [...new Set(repairsData.map(r => r.vendor_id).filter(Boolean))];
 
-            // Load only what we need in parallel
+            // Fetch only relevant records by IDs, in batches if needed
+            const fetchByIds = async (entity, ids) => {
+                if (ids.length === 0) return [];
+                // Fetch in batches of 50 to avoid query limits
+                const results = [];
+                for (let i = 0; i < ids.length; i += 50) {
+                    const batch = ids.slice(i, i + 50);
+                    const data = await entity.filter({ id: { $in: batch } }).catch(() => []);
+                    results.push(...data);
+                }
+                return results;
+            };
+
             const [clientsData, devicesData, vendorsData] = await Promise.all([
-                customersService.list().catch(() => []),
-                deviceIds.length > 0 ? RepairDevice.list().catch(() => []) : Promise.resolve([]),
+                fetchByIds(Client, clientIds),
+                fetchByIds(RepairDevice, deviceIds),
                 vendorIds.length > 0 ? RepairVendor.filter({ active: true }).catch(() => []) : Promise.resolve([])
             ]);
 
@@ -188,9 +197,21 @@ export default function RepairDashboard() {
         }
     }, [isTechnicianRole]);
 
+    // Initial load - open repairs only
     useEffect(() => {
-        loadData();
+        loadData("open");
     }, [loadData]);
+
+    // When user switches to "all" statuses or specific closed status, reload with all data
+    useEffect(() => {
+        const needsAllData = statusFilter === "all" || statusFilter === "תיקון נסגר" || statusFilter === "לא ניתן לתיקון";
+        if (needsAllData && lastLoadedMode.current !== "all") {
+            loadData("all");
+        } else if (!needsAllData && lastLoadedMode.current === "all") {
+            // Optionally switch back to "open" mode for performance
+            loadData("open");
+        }
+    }, [statusFilter, loadData]);
 
     // Open repair details directly when coming with ?repairId=...
     useEffect(() => {
@@ -216,12 +237,15 @@ export default function RepairDashboard() {
     }, [repairs, selectedRepair]);
 
     const filteredRepairs = repairs.filter(repair => {
+        const q = searchTerm.toLowerCase();
         const matchesSearch = searchTerm === "" ||
-            repair.repair_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            repair.customer?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            repair.repair_id?.toLowerCase().includes(q) ||
+            repair.customer?.full_name?.toLowerCase().includes(q) ||
             repair.customer?.phone?.includes(searchTerm) ||
-            repair.device?.model?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            repair.device?.serial_imei?.toLowerCase().includes(searchTerm.toLowerCase());
+            repair.device?.model?.toLowerCase().includes(q) ||
+            repair.device?.serial_imei?.toLowerCase().includes(q) ||
+            repair.customer_name?.toLowerCase().includes(q) ||
+            repair.issue_description?.toLowerCase().includes(q);
 
         const closedStatuses = ["תיקון נסגר", "לא ניתן לתיקון", "Closed", "Return_Unrepaired"];
         const matchesStatus = statusFilter === "all" 
