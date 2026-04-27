@@ -60,6 +60,9 @@ export default function UnifiedOrders() {
   // Expanded row
   const [expandedId, setExpandedId] = useState(null);
 
+  // Active shipping providers
+  const [activeProviders, setActiveProviders] = useState({ velo: false, cargo: false });
+
   // Pagination
   const [page, setPage] = useState(1);
 
@@ -222,6 +225,18 @@ export default function UnifiedOrders() {
   }, [showClosed]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Load active shipping providers
+  useEffect(() => {
+    base44.entities.ShippingProvider.list().then(providers => {
+      const map = { velo: false, cargo: false };
+      for (const p of providers) {
+        if (p.provider_type === 'velo' && p.is_active) map.velo = true;
+        if (p.provider_type === 'cargo' && p.is_active) map.cargo = true;
+      }
+      setActiveProviders(map);
+    }).catch(() => {});
+  }, []);
 
   // Auto-refresh every 5 minutes during business hours
   useEffect(() => {
@@ -475,7 +490,8 @@ export default function UnifiedOrders() {
                                 onStatusChange={handleStatusChange}
                                 onShipment={(o) => setShipmentOrder(o)}
                                 onCreateInvoice={(o) => setInvoiceOrder(o)}
-                                onCargoShipment={(o) => setCargoOrder(o)}
+                                onCargoShipment={activeProviders.cargo ? (o) => setCargoOrder(o) : undefined}
+                                activeProviders={activeProviders}
                               />
                             </TableCell>
                           </TableRow>
@@ -498,7 +514,8 @@ export default function UnifiedOrders() {
                     onStatusChange={handleStatusChange}
                     onShipment={() => setShipmentOrder(order)}
                     onCreateInvoice={() => setInvoiceOrder(order)}
-                    onCargoShipment={() => setCargoOrder(order)}
+                    onCargoShipment={activeProviders.cargo ? () => setCargoOrder(order) : undefined}
+                    activeProviders={activeProviders}
                   />
                 ))}
               </div>

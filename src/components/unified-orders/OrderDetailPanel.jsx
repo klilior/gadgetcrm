@@ -29,7 +29,7 @@ function formatDate(d) {
   try { return format(new Date(d), "dd/MM/yyyy HH:mm"); } catch { return '-'; }
 }
 
-export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment }) {
+export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment, activeProviders = {} }) {
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
   const statusOptions = getStatusOptions(order.source);
@@ -161,7 +161,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 text-blue-800 bg-blue-100 border border-blue-300 px-3 py-1.5 rounded-lg font-medium text-sm">
-                  <Truck className="w-4 h-4" /> 🚚 Velo — שליח עד הבית
+                  <Truck className="w-4 h-4" /> 🚚 שליח עד הבית
                 </span>
               )}
             </div>
@@ -248,7 +248,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
             📦 שלח UPS — נקודת איסוף
           </Button>
         )}
-        {order.source === 'mirakl' && !order.tracking_number && miraklPickup === false && (
+        {order.source === 'mirakl' && !order.tracking_number && miraklPickup === false && activeProviders.velo && (
           <Button className="rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200" onClick={() => onShipment({ ...order, _shipCarrier: 'velo' })}>
             <Truck className="w-4 h-4 ml-1" />
             🚚 שלח Velo — עד הבית
@@ -265,7 +265,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
               {printingLabel ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
               📄 הדפס שטר מטען ({order.tracking_number})
             </Button>
-          ) : (
+          ) : activeProviders.velo ? (
             <Button
               variant="outline"
               className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
@@ -274,7 +274,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
               <Printer className="w-4 h-4 ml-1" />
               📎 צפה בשטר מטען ({order.tracking_number})
             </Button>
-          )
+          ) : null
         )}
         {order.source !== 'mirakl' && (
           <Button variant="outline" className="rounded-full hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-colors" onClick={() => onShipment(order)}>
