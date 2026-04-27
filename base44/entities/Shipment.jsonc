@@ -1,0 +1,154 @@
+{
+  "name": "Shipment",
+  "type": "object",
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d6\u05de\u05e0\u05d4 \u05de\u05e7\u05d5\u05de\u05d9",
+      "index": true
+    },
+    "external_order_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d4\u05d6\u05de\u05e0\u05d4 \u05d7\u05d9\u05e6\u05d5\u05e0\u05d9 (\u05de-WooCommerce)",
+      "index": true
+    },
+    "client_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05dc\u05e7\u05d5\u05d7",
+      "index": true
+    },
+    "shipment_type": {
+      "type": "string",
+      "enum": [
+        "pickup_point",
+        "standard",
+        "pickup_drop",
+        "cargo_delivery",
+        "cargo_return",
+        "cargo_exchange"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05de\u05e9\u05dc\u05d5\u05d7"
+    },
+    "tracking_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05de\u05e2\u05e7\u05d1",
+      "index": true
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "created",
+        "picked_up",
+        "in_transit",
+        "delivered",
+        "cancelled",
+        "failed"
+      ],
+      "default": "pending",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05de\u05e9\u05dc\u05d5\u05d7",
+      "index": true
+    },
+    "carrier": {
+      "type": "string",
+      "enum": [
+        "ups",
+        "velo",
+        "cargo",
+        "other"
+      ],
+      "description": "\u05d7\u05d1\u05e8\u05ea \u05e9\u05d9\u05dc\u05d5\u05d7"
+    },
+    "pickup_point_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e0\u05e7\u05d5\u05d3\u05ea \u05d0\u05d9\u05e1\u05d5\u05e3 (\u05dc\u05e1\u05d5\u05d2 pickup_point)"
+    },
+    "pickup_point_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05e0\u05e7\u05d5\u05d3\u05ea \u05d4\u05d0\u05d9\u05e1\u05d5\u05e3"
+    },
+    "pickup_point_address": {
+      "type": "string",
+      "description": "\u05db\u05ea\u05d5\u05d1\u05ea \u05e0\u05e7\u05d5\u05d3\u05ea \u05d4\u05d0\u05d9\u05e1\u05d5\u05e3"
+    },
+    "consignee_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05e0\u05de\u05e2\u05df"
+    },
+    "consignee_phone": {
+      "type": "string",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05d4\u05e0\u05de\u05e2\u05df"
+    },
+    "consignee_city": {
+      "type": "string",
+      "description": "\u05e2\u05d9\u05e8 \u05d4\u05e0\u05de\u05e2\u05df"
+    },
+    "consignee_street": {
+      "type": "string",
+      "description": "\u05e8\u05d7\u05d5\u05d1 \u05d4\u05e0\u05de\u05e2\u05df"
+    },
+    "consignee_house": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d1\u05d9\u05ea"
+    },
+    "consignee_zip": {
+      "type": "string",
+      "description": "\u05de\u05d9\u05e7\u05d5\u05d3"
+    },
+    "weight": {
+      "type": "number",
+      "description": "\u05de\u05e9\u05e7\u05dc (\u05e7\"\u05d2)",
+      "default": 1
+    },
+    "num_packages": {
+      "type": "number",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d7\u05d1\u05d9\u05dc\u05d5\u05ea",
+      "default": 1
+    },
+    "reference": {
+      "type": "string",
+      "description": "\u05d4\u05e4\u05e0\u05d9\u05d4 (\u05d1\u05d3\"\u05db \u05de\u05e1\u05e4\u05e8 \u05d4\u05d6\u05de\u05e0\u05d4)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    },
+    "api_response": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "\u05ea\u05e9\u05d5\u05d1\u05d4 \u05de\u05dc\u05d0\u05d4 \u05de\u05d4-API"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "\u05d4\u05d5\u05d3\u05e2\u05ea \u05e9\u05d2\u05d9\u05d0\u05d4"
+    },
+    "cargo_shipment_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05dc\u05d5\u05d7 \u05d1\u05e7\u05d0\u05e8\u05d2\u05d5",
+      "index": true
+    },
+    "cargo_status": {
+      "type": "string",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05e7\u05d0\u05e8\u05d2\u05d5 (\u05e7\u05d5\u05d3)"
+    },
+    "cargo_status_text": {
+      "type": "string",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05e7\u05d0\u05e8\u05d2\u05d5 (\u05d8\u05e7\u05e1\u05d8 \u05e2\u05d1\u05e8\u05d9\u05ea)"
+    },
+    "cargo_shipment_type": {
+      "type": "string",
+      "enum": [
+        "delivery",
+        "return",
+        "exchange"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05de\u05e9\u05dc\u05d5\u05d7 \u05e7\u05d0\u05e8\u05d2\u05d5"
+    }
+  },
+  "required": [
+    "shipment_type",
+    "consignee_name",
+    "consignee_phone",
+    "consignee_city"
+  ]
+}

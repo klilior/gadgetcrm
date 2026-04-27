@@ -7,7 +7,7 @@ import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusColor, isClosedStatus } from "./OrderStatusConfig";
 import OrderDetailPanel from "./OrderDetailPanel";
 
-export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, onStatusChange, onShipment, onCreateInvoice }) {
+export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment }) {
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
   const isClosed = isClosedStatus(order.source, order.status);
@@ -63,6 +63,7 @@ export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, on
           onStatusChange={onStatusChange}
           onShipment={() => onShipment()}
           onCreateInvoice={onCreateInvoice}
+          onCargoShipment={onCargoShipment ? () => onCargoShipment() : undefined}
         />
       )}
     </Card>

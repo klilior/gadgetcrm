@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Truck, Plus, Settings, Check, X, Zap } from "lucide-react";
+import CargoSettingsCard from "../components/cargo/CargoSettingsCard";
 
 export default function ShippingProvidersPage() {
     const [providers, setProviders] = useState([]);
@@ -132,8 +133,14 @@ export default function ShippingProvidersPage() {
                 </Card>
             )}
 
+            {/* Cargo Settings Card */}
+            <CargoSettingsCard
+              provider={providers.find(p => p.provider_type === 'cargo')}
+              onUpdate={loadProviders}
+            />
+
             <div className="grid gap-4">
-                {providers.map(provider => (
+                {providers.filter(p => p.provider_type !== 'cargo').map(provider => (
                     <Card key={provider.id} className="glass-card border-0">
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between">

@@ -29,7 +29,7 @@ function formatDate(d) {
   try { return format(new Date(d), "dd/MM/yyyy HH:mm"); } catch { return '-'; }
 }
 
-export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice }) {
+export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment }) {
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
   const statusOptions = getStatusOptions(order.source);
@@ -280,6 +280,18 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           <Button variant="outline" className="rounded-full hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-colors" onClick={() => onShipment(order)}>
             <Truck className="w-4 h-4 ml-1" />
             צור משלוח
+          </Button>
+        )}
+
+        {/* Cargo shipment button */}
+        {onCargoShipment && (
+          <Button
+            variant="outline"
+            className="rounded-full border-blue-300 text-blue-700 hover:bg-blue-50 hover:shadow-md transition-all"
+            onClick={() => onCargoShipment(order)}
+          >
+            <Truck className="w-4 h-4 ml-1" />
+            🚚 שלח עם קארגו
           </Button>
         )}
 

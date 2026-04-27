@@ -24,6 +24,7 @@ import SPShipmentSuccessScreen from "../components/superpharm/SPShipmentSuccessS
 import SPLinetInvoiceModal from "../components/superpharm/SPLinetInvoiceModal";
 import MobileOrderCard from "../components/unified-orders/MobileOrderCard";
 import OrderDetailPanel from "../components/unified-orders/OrderDetailPanel";
+import CargoShipmentModal from "../components/cargo/CargoShipmentModal";
 
 const PAGE_SIZE = 25;
 
@@ -54,6 +55,7 @@ export default function UnifiedOrders() {
   const [shipmentOrder, setShipmentOrder] = useState(null);
   const [invoiceOrder, setInvoiceOrder] = useState(null);
   const [upsSuccessData, setUpsSuccessData] = useState(null);
+  const [cargoOrder, setCargoOrder] = useState(null);
 
   // Expanded row
   const [expandedId, setExpandedId] = useState(null);
@@ -473,6 +475,7 @@ export default function UnifiedOrders() {
                                 onStatusChange={handleStatusChange}
                                 onShipment={(o) => setShipmentOrder(o)}
                                 onCreateInvoice={(o) => setInvoiceOrder(o)}
+                                onCargoShipment={(o) => setCargoOrder(o)}
                               />
                             </TableCell>
                           </TableRow>
@@ -495,6 +498,7 @@ export default function UnifiedOrders() {
                     onStatusChange={handleStatusChange}
                     onShipment={() => setShipmentOrder(order)}
                     onCreateInvoice={() => setInvoiceOrder(order)}
+                    onCargoShipment={() => setCargoOrder(order)}
                   />
                 ))}
               </div>
@@ -633,6 +637,17 @@ export default function UnifiedOrders() {
             phone: shipmentOrder.customer_phone,
             city: shipmentOrder.shipping_city || '',
           }}
+        />
+      )}
+
+      {/* Cargo Shipment Modal */}
+      {cargoOrder && (
+        <CargoShipmentModal
+          open={!!cargoOrder}
+          onClose={() => setCargoOrder(null)}
+          order={cargoOrder}
+          client={{ full_name: cargoOrder.customer_name, phone: cargoOrder.customer_phone, city: cargoOrder.shipping_city || '' }}
+          onSuccess={() => loadData(true)}
         />
       )}
 
