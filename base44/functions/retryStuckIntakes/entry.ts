@@ -1,20 +1,30 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   try {
-    const user = await base44.auth.me();
-    if (!user || user.role !== 'admin') {
+    // Allow admin users or service role calls
+    let user = null;
+    try {
+      user = await base44.auth.me();
+    } catch (_) {}
+    
+    if (user && user.role !== 'admin') {
       return Response.json({ error: 'Unauthorized - admin only' }, { status: 401 });
     }
 
-    const text = await req.text();
-    const body = text ? JSON.parse(text) : {};
-    const limit = body.limit || 10; // Process max 10 at a time to avoid timeout
+    const body = await req.json().catch(() => ({}));
+    const limit = body.limit || 20;
+    const sinceDate = body.since_date || null; // e.g. "2026-04-01"
 
-    // Find intakes stuck in "מוכן לניתוח" with linked invoices
+    // Find intakes stuck in "מוכן לניתוח" or "חדש"
+    const filter = { status: { $in: ['מוכן לניתוח', 'חדש'] } };
+    if (sinceDate) {
+      filter.created_date = { $gte: sinceDate + 'T00:00:00.000Z' };
+    }
+
     const stuckIntakes = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter(
-      { status: 'מוכן לניתוח' },
+      filter,
       '-created_date',
       limit
     );
@@ -71,8 +81,8 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Call the extraction function using direct HTTP call (service role doesn't pass user context)
-        const extractionResult = await base44.functions.invoke('runInvoiceExtractionByInvoice', {
+        // Call the extraction function via service role
+        const extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', {
           invoice_id: intake.linked_invoice
         });
 
@@ -82,6 +92,9 @@ Deno.serve(async (req) => {
           status: 'processed', 
           extraction_result: extractionResult?.data || extractionResult
         });
+
+        // Delay between items to avoid rate limits
+        await new Promise(r => setTimeout(r, 3000));
 
       } catch (err) {
         results.push({ 
