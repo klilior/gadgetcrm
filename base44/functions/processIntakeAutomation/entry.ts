@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
  * Automation handler for InvoiceIntakeRaw entity creation
@@ -40,6 +40,9 @@ Deno.serve(async (req) => {
     
     const intakeId = event.entity_id;
     console.log(`Processing intake from automation: ${intakeId}, event type: ${event.type}`);
+    
+    // Small delay to ensure the entity is fully persisted
+    await new Promise(r => setTimeout(r, 2000));
     
     // Always fetch full intake data to ensure we have current state
     const list = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ id: intakeId });
@@ -124,23 +127,41 @@ Deno.serve(async (req) => {
     // Update intake status to show processing
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, { status: 'עובד' });
     
-    // Trigger AI extraction pipeline
+    // Trigger AI extraction pipeline with retry on rate limit
     let extractionResult = null;
     let extractionError = null;
-    try { 
-      console.log(`Triggering AI extraction for invoice: ${invoiceId}`);
-      extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: invoiceId }); 
-      
-      if (extractionResult?.data?.success) {
-        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, { 
-          status: 'עובד', 
-          status_reason: 'ניתוח AI הושלם בהצלחה' 
-        });
-        console.log(`AI extraction successful for invoice: ${invoiceId}`);
+    const MAX_RETRIES = 3;
+    
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try { 
+        console.log(`Triggering AI extraction for invoice: ${invoiceId} (attempt ${attempt}/${MAX_RETRIES})`);
+        extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: invoiceId }); 
+        
+        if (extractionResult?.data?.success) {
+          await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, { 
+            status: 'עובד', 
+            status_reason: 'ניתוח AI הושלם בהצלחה' 
+          });
+          console.log(`AI extraction successful for invoice: ${invoiceId}`);
+        }
+        extractionError = null;
+        break; // Success - exit retry loop
+      } catch (extractErr) {
+        extractionError = extractErr?.message || String(extractErr);
+        const isRateLimit = extractionError.includes('429') || extractionError.includes('Rate limit');
+        console.error(`Extraction attempt ${attempt} failed: ${extractionError}`);
+        
+        if (isRateLimit && attempt < MAX_RETRIES) {
+          const delay = attempt * 5000; // 5s, 10s
+          console.log(`Rate limited, waiting ${delay/1000}s before retry...`);
+          await new Promise(r => setTimeout(r, delay));
+        } else {
+          break;
+        }
       }
-    } catch (extractErr) {
-      extractionError = extractErr?.message || String(extractErr);
-      console.error('Extraction pipeline error:', extractionError);
+    }
+    
+    if (extractionError) {
       await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, { 
         status: 'מוכן לניתוח', 
         status_reason: `שגיאה בניתוח אוטומטי: ${extractionError}` 

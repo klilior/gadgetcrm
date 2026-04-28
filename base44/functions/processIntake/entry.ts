@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 function isValidFile(intake) {
   const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
@@ -126,19 +126,15 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { linked_invoice: invoiceId });
         try { await base44.asServiceRole.entities.Invoices.update(invoiceId, { source_intake: intake.id }); } catch (_) {}
         
-        // Update intake status to show processing
-        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'עובד' });
-        
-        // Mark as ready for extraction (extraction will be triggered by the caller)
+        // Update intake status - mark as ready for extraction
+        // The processIntakeAutomation will handle the actual AI extraction
         await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'מוכן לניתוח' });
+        
         return Response.json({ 
           success: true, 
           updates_applied: updates, 
           created_invoice_id: createdInvoice?.id || invoiceId, 
-          intake_id: intake.id,
-          extraction_triggered: true,
-          extraction_result: extractionResult?.data || null,
-          extraction_error: extractionError
+          intake_id: intake.id
         });
       }
     }

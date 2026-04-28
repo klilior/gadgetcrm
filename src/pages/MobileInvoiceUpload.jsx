@@ -98,21 +98,11 @@ export default function MobileInvoiceUpload() {
         status: "חדש",
       };
 
-      const created = await base44.entities.InvoiceIntakeRaw.create(payload);
+      await base44.entities.InvoiceIntakeRaw.create(payload);
 
-      toast.success(files.length > 1 ? "החשבונית מרובת העמודים נשלחה!" : "החשבונית נשלחה!");
+      toast.success(files.length > 1 ? "החשבונית מרובת העמודים נשלחה! העיבוד יתבצע אוטומטית." : "החשבונית נשלחה! העיבוד יתבצע אוטומטית.");
       setFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
-
-      base44.functions.invoke('processIntake', { intake_id: created.id })
-        .then((res) => {
-          if (res?.data?.created_invoice_id) {
-            toast.success("העיבוד הושלם בהצלחה.");
-          }
-        })
-        .catch(() => {
-          toast.warning("המסמך נקלט, אך העיבוד האוטומטי נכשל. ניתן לעבד ידנית.");
-        });
     } catch (err) {
       toast.error("שגיאה בהעלאת המסמך: " + (err?.message || "שגיאה"));
     } finally {
