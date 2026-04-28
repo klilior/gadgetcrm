@@ -2,7 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 const EXTRACT_PROMPT = `SYSTEM / INSTRUCTION
 
-You are an invoice header extraction engine.
+You are an EXTREMELY PRECISE invoice data extraction engine. Your job is to read the EXACT text from the document — never guess, never approximate, never hallucinate.
 
 INPUT
 You will receive ONE document file (PDF/JPG/PNG) attached to this request.
@@ -18,32 +18,50 @@ Only two document types are relevant:
 - Credit Note (חשבונית זיכוי)
 Anything else must be classified as OTHER and skipped.
 
-CRITICAL SUPPLIER IDENTIFICATION RULES:
+═══════════════════════════════════════
+ABSOLUTE PRECISION RULES — READ CAREFULLY
+═══════════════════════════════════════
+
+*** DATE EXTRACTION — MOST CRITICAL ***
+1. The document date (doc_date) MUST be read EXACTLY as printed on the invoice.
+2. Look for labels like "תאריך חשבונית:", "תאריך:", "Date:" — read the date next to them.
+3. Israeli date formats: DD/MM/YY or DD/MM/YYYY. Convert to ISO: YYYY-MM-DD.
+   - "28/04/26" means 2026-04-28 (NOT 2023!)
+   - "28/04/2026" means 2026-04-28
+   - "15/01/25" means 2025-01-15
+   - Two-digit years: 20-29 = 2020-2029, 30-99 = 2030-2099
+4. NEVER fabricate a date. If you cannot read it clearly, set to null.
+5. Cross-check: if the document has multiple date fields (תאריך חשבונית, תאריך הדפסה), use "תאריך חשבונית" as the primary date.
+
+*** AMOUNT EXTRACTION — CRITICAL ***
+1. Read ALL amounts EXACTLY as printed. Do NOT calculate or estimate.
+2. Look for the FINAL totals section at the bottom of the invoice:
+   - "מחיר כולל" or "סה"כ לפני מע"מ" = subtotal_before_vat
+   - "מע"מ" or "מע״מ (18%)" = vat_amount
+   - "סה"כ כולל מע"מ" or "סה״כ מחיר" = total_with_vat
+3. The total_with_vat is the FINAL number the customer pays (the largest amount).
+4. Verify: subtotal + VAT should approximately equal total. If not, re-read the numbers.
+5. Israeli number format: commas for thousands (17,987.34), period for decimals.
+
+*** LINE ITEMS — CRITICAL ***
+1. Read EVERY row in the products table exactly as written.
+2. For each line: read the SKU/מק"ט, product name, quantity, unit price, and line total.
+3. The unit price (מחיר ליח') is BEFORE VAT (לפני מע"מ), not the final price.
+4. quantity × unit_price_before_vat should approximately equal line_total_before_vat.
+
+*** SUPPLIER IDENTIFICATION ***
 1. The supplier name is the COMPANY that ISSUED the invoice (the seller), NOT the customer/buyer.
 2. Look for the supplier name at the TOP of the invoice, usually with their logo.
 3. The supplier VAT ID (עוסק מורשה / ח.פ.) is a 9-digit Israeli number - extract ONLY the digits.
-4. Common patterns to identify the supplier section:
-   - Logo area (top left or top right)
-   - "עוסק מורשה:" followed by a 9-digit number
-   - "ח.פ.:" or "מספר חברה:" followed by a number
-5. CRITICAL: NEVER use document numbers as VAT ID! These are NOT VAT IDs:
-   - Numbers starting with "IL" or "IN" (e.g., "IN264000429" is a document number, NOT a VAT ID)
-   - Invoice numbers, order numbers, account numbers
-   - Any number that appears next to "מספר חשבונית", "Invoice No", "Document No", etc.
-6. The correct VAT ID format is EXACTLY 9 digits (e.g., "516542024"), no letters, no prefixes.
-7. VAT ID is ALWAYS labeled as one of: "עוסק מורשה", "ח.פ.", "מספר חברה", "VAT ID", "Tax ID"
-8. If you cannot find a clearly labeled 9-digit VAT ID, set supplier_vat_id to null - do NOT guess!
-9. If you see multiple numbers, ONLY use the one explicitly labeled as VAT/Tax ID.
-10. VERY IMPORTANT - OUR BUSINESS VAT ID IS: 040638660
-    - This number belongs to the BUYER (us), NOT the supplier!
-    - If you see "040638660" anywhere on the invoice, it is OUR company's VAT ID
-    - NEVER use "040638660" as the supplier_vat_id
-    - The supplier VAT ID is DIFFERENT and should appear in the supplier's header/logo area
+4. Common patterns: "עוסק מורשה:", "ח.פ.:", "מספר חברה:" followed by a 9-digit number.
+5. NEVER use document numbers as VAT ID! Document numbers start with "IN", "IL", etc.
+6. If you cannot find a clearly labeled 9-digit VAT ID, set supplier_vat_id to null.
+7. OUR BUSINESS VAT ID IS: 040638660 — this is the BUYER, never use it as supplier_vat_id.
 
 STRICT OUTPUT RULES
 1) Output ONLY a single valid JSON object. No markdown, no code fences, no commentary.
 2) Never guess. If not confidently found, use null.
-3) Dates must be ISO-8601: YYYY-MM-DD.
+3) Dates must be ISO-8601: YYYY-MM-DD. Two-digit year YY → 20YY.
 4) Amounts must be numbers only (no currency symbols, no commas). Use '.' decimal separator.
 5) Currency must be a 3-letter ISO code (ILS, USD, EUR...). If not found, null.
 6) For multi-page docs: use totals for the entire document.
@@ -60,7 +78,8 @@ If CREDIT_NOTE:
 
 CONFIDENCE
 Provide overall_confidence (0..100) and per-field confidence (0..100).
-Do not inflate confidence if key fields are missing.
+Do not inflate confidence — if ANY field was hard to read or ambiguous, lower its confidence.
+If you had to guess or approximate ANY value, set overall_confidence below 80.
 
 CRITICAL FIELDS
 supplier_name, doc_number, doc_date, total_with_vat, doc_type_he
@@ -69,8 +88,8 @@ ADDITIONAL: EXTRACT LINE ITEMS
 You MUST also extract ALL line items (products/services) from the invoice.
 Each line item should include:
 - line_number: sequential number (1, 2, 3...)
-- sku: product code/SKU/מק"ט (exactly as appears)
-- product_name: product description/name
+- sku: product code/SKU/מק"ט (exactly as appears on document, including barcode numbers)
+- product_name: product description/name (exactly as written)
 - quantity: number of units
 - unit_price_before_vat: price per unit before VAT (number)
 - line_total_before_vat: total for this line before VAT (number)
@@ -137,6 +156,7 @@ DECISION RULES
   doc_type_he must match classification:
     TAX_INVOICE => "חשבונית מס"
     CREDIT_NOTE => "חשבונית זיכוי"`;
+
 
 const EXTRACT_SCHEMA = {
   type: 'object',
@@ -342,7 +362,8 @@ Deno.serve(async (req) => {
         prompt: EXTRACT_PROMPT,
         add_context_from_internet: false,
         response_json_schema: EXTRACT_SCHEMA,
-        file_urls: [fileUrlToUse]
+        file_urls: [fileUrlToUse],
+        model: 'gpt_5_4'
       });
     } catch (llmErr) {
       const errMsg = llmErr?.message || String(llmErr);
@@ -359,7 +380,8 @@ Deno.serve(async (req) => {
               prompt: EXTRACT_PROMPT,
               add_context_from_internet: false,
               response_json_schema: EXTRACT_SCHEMA,
-              file_urls: [correctedUrl]
+              file_urls: [correctedUrl],
+              model: 'gpt_5_4'
             });
             console.log('PDF extraction succeeded after re-upload');
           } catch (retryErr) {
