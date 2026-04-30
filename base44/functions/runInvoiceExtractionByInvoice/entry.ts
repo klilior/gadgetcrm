@@ -441,7 +441,10 @@ Deno.serve(async (req) => {
         ai_debug_last_error_he: skipReason
       });
       const newNotes = `מסמך דולג: ${skipReason}`;
-      await base44.asServiceRole.entities.Invoices.update(invoice.id, { notes: (invoice.notes ? invoice.notes + '\n' : '') + newNotes });
+      await base44.asServiceRole.entities.Invoices.update(invoice.id, { 
+        extraction_status: 'נדחה',
+        notes: (invoice.notes ? invoice.notes + '\n' : '') + newNotes 
+      });
       return Response.json({ success: true, skipped: true, reason: 'OTHER', extraction });
     }
 
@@ -701,9 +704,12 @@ Deno.serve(async (req) => {
 
     // Determine final status and notes
     const fieldsComplete = !!(extraction.doc_type_he && extraction.doc_number && extraction.doc_date && (typeof extraction.total_with_vat === 'number'));
+    // Auto-approve if: deterministic validation passed (math OK + all fields present) AND
+    // AI confidence >= 75 (lowered from 90 because GPT-4o gives more conservative/honest scores;
+    // the real safety net is the deterministic math + fields check above)
     const canAutoApprove = (
       validation.recommended_extraction_status_he === 'נקרא בהצלחה' &&
-      (typeof extraction.overall_confidence === 'number' ? extraction.overall_confidence >= 90 : false) &&
+      (typeof extraction.overall_confidence === 'number' ? extraction.overall_confidence >= 75 : false) &&
       validation.is_math_consistent === true &&
       fieldsComplete
     );
