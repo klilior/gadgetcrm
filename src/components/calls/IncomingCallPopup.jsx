@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { PhoneIncoming, X, User, Ticket, Wrench, Star, ExternalLink, Bell, ShoppingCart, CreditCard } from 'lucide-react';
+import { PhoneIncoming, X, User, Ticket, Wrench, Star, ExternalLink, Bell, ShoppingCart, CreditCard, Flame } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
@@ -112,6 +112,16 @@ export default function IncomingCallPopup() {
             return orderDate >= threeDaysAgo;
           });
         }
+        // Check for active leads regardless of customer match
+        if (phone) {
+          const normalized = phone.startsWith('0') ? phone : '0' + phone;
+          let leads = await base44.entities.Lead.filter({ phone: normalized, status: 'New' }, '-created_date', 3).catch(() => []);
+          if (leads.length === 0) leads = await base44.entities.Lead.filter({ phone: normalized, status: 'InProgress' }, '-created_date', 3).catch(() => []);
+          if (leads.length > 0) {
+            if (!customerInfo) customerInfo = {};
+            customerInfo.activeLeads = leads;
+          }
+        }
       } catch (_e) { /* silent */ }
     }
 
@@ -138,6 +148,7 @@ export default function IncomingCallPopup() {
     const notifBody = customerInfo
       ? [
           phone,
+          customerInfo.activeLeads?.length > 0 ? `🔥 ליד מכירה פעיל! ${customerInfo.activeLeads.map(l => l.topic).join(', ')}` : null,
           customerInfo.pendingOrders?.length > 0 ? `💳 ${customerInfo.pendingOrders.length} הזמנות ממתינות לתשלום!` : null,
           customerInfo.recentCompletedOrders?.length > 0 ? `📦 הזמנה ב-3 ימים אחרונים` : null,
           customerInfo.openTickets?.length > 0 ? `${customerInfo.openTickets.length} טיקטים פתוחים` : null,
@@ -270,6 +281,14 @@ export default function IncomingCallPopup() {
             </div>
 
             <div className="space-y-2">
+              {customer.activeLeads?.length > 0 && (
+                <div className="flex items-center gap-2 bg-orange-50 p-2 rounded-lg text-sm border-2 border-orange-400 animate-pulse">
+                  <Flame className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                  <span className="text-orange-800 font-bold">
+                    🔥 ליד מכירה פעיל! {customer.activeLeads.map(l => l.topic).join(', ')}
+                  </span>
+                </div>
+              )}
               {customer.pendingOrders?.length > 0 && (
                 <div className="flex items-center gap-2 bg-yellow-50 p-2 rounded-lg text-sm border border-yellow-300 animate-pulse">
                   <CreditCard className="w-4 h-4 text-yellow-600 flex-shrink-0" />
@@ -327,6 +346,14 @@ export default function IncomingCallPopup() {
                 <div className="text-sm text-gray-500">{callData.phone}</div>
               </div>
             </div>
+            {callData.customer?.activeLeads?.length > 0 && (
+              <div className="flex items-center gap-2 bg-orange-50 p-2 rounded-lg text-sm border-2 border-orange-400 animate-pulse">
+                <Flame className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                <span className="text-orange-800 font-bold">
+                  🔥 ליד מכירה פעיל! {callData.customer.activeLeads.map(l => l.topic).join(', ')}
+                </span>
+              </div>
+            )}
             <Link
               to={createPageUrl('Customers') + `?newCustomerPhone=${callData.phone}`}
               className="flex items-center justify-center gap-2 w-full border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"

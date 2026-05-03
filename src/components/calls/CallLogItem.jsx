@@ -1,11 +1,11 @@
 import React from 'react';
-import { PhoneIncoming, PhoneOutgoing, PhoneMissed, User, ExternalLink, Clock, Lightbulb, Copy, CreditCard, ShoppingCart, Mic } from 'lucide-react';
+import { PhoneIncoming, PhoneOutgoing, PhoneMissed, User, ExternalLink, Clock, Lightbulb, Copy, CreditCard, ShoppingCart, Mic, Flame, Link2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import moment from 'moment';
 
-export default function CallLogItem({ call, client, aiTip, dupCount }) {
+export default function CallLogItem({ call, client, aiTip, dupCount, activeLeads = [] }) {
     const content = call.content || '';
     const summary = call.summary || '';
     const isIncoming = call.activity_type === 'שיחה נכנסת';
@@ -116,6 +116,15 @@ export default function CallLogItem({ call, client, aiTip, dupCount }) {
                     </span>
                 </div>
             )}
+            {/* Active sales lead */}
+            {activeLeads.length > 0 && (
+                <div className="mt-2 flex items-center gap-2 bg-orange-50 border border-orange-300 rounded-lg px-3 py-2 mr-[52px] animate-pulse">
+                    <Flame className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                    <span className="text-xs text-orange-800 font-semibold">
+                        🔥 ליד מכירה פעיל! {activeLeads.map(l => l.topic).join(', ')}
+                    </span>
+                </div>
+            )}
             {/* Recent completed order */}
             {client?.recentCompletedOrders?.length > 0 && !client?.pendingOrders?.length && (
                 <div className="mt-2 flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 mr-[52px]">
@@ -139,9 +148,17 @@ export default function CallLogItem({ call, client, aiTip, dupCount }) {
             {call.recording_url && (
                 <div className="mt-2 mr-[52px] flex items-center gap-2">
                     <Mic className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
-                    <audio controls preload="none" className="h-8 flex-1 max-w-sm">
-                        <source src={call.recording_url} />
-                    </audio>
+                    {call.recording_url.includes('drive.google.com') ? (
+                        <a href={call.recording_url} target="_blank" rel="noopener noreferrer"
+                           className="text-xs text-purple-600 hover:text-purple-800 underline flex items-center gap-1">
+                            <Link2 className="w-3 h-3" />
+                            האזנה להקלטה (Google Drive)
+                        </a>
+                    ) : (
+                        <audio controls preload="none" className="h-8 flex-1 max-w-sm">
+                            <source src={call.recording_url} />
+                        </audio>
+                    )}
                 </div>
             )}
         </div>

@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
         const direction = callData.call_direction || callData.direction || callData.type || 'incoming';
         const callStatus = (callData.call_status || callData.status || callData.event || 'Ring').toLowerCase();
         const duration = callData.call_duration || callData.duration || callData.billsec || '0';
-        const recordingUrl = callData.recording_url || callData.recordingUrl || callData.recording || '';
+        const recordingUrl = callData.recording_url || callData.recordingUrl || callData.recording || callData.file || callData.file_url || '';
         const hangupReason = callData.reason || '';
         const answerTime = callData.call_answer_time || '';
 
@@ -281,12 +281,36 @@ Deno.serve(async (req) => {
                 }
             }
             
-            if (recordingUrl && !existingActivity.recording_url) {
+            // Try to get recording URL from payload or fetch from PBX API
+            let recUrl = recordingUrl;
+            if (!recUrl && isHangup && callId && parseInt(duration) >= 5 && !existingActivity.recording_url) {
+                try {
+                    const settingsList = await sr.Settings.list();
+                    const getSetting = (name) => settingsList.find(s => s.setting_name === name)?.setting_value;
+                    const PBX_API_URL = getSetting('PBX_API_URL') || 'https://master.ippbx.co.il/ippbx_api/v1.4/api';
+                    const PBX_TOKEN_ID = getSetting('PBX_TOKEN_ID') || '7AaJmwvruPun2z2H';
+                    console.log(`🎙️ [PBX] Fetching recording for existing activity, callId=${callId}...`);
+                    const recResp = await fetch(`${PBX_API_URL}/info/recordingPath`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token_id: PBX_TOKEN_ID, userType: 'TENANT', callid: callId }),
+                        signal: AbortSignal.timeout(10000)
+                    });
+                    if (recResp.ok) {
+                        const recData = await recResp.json();
+                        recUrl = recData.data?.recording_path || recData.data?.url || recData.data?.file || '';
+                        console.log(`🎙️ [PBX] Recording found: ${recUrl ? 'YES' : 'NO'}`);
+                    }
+                } catch (recErr) {
+                    console.log(`🎙️ [PBX] Recording fetch failed: ${recErr.message}`);
+                }
+            }
+            if (recUrl && !existingActivity.recording_url) {
                 // Try to upload to Google Drive
-                let finalUrl = recordingUrl;
+                let finalUrl = recUrl;
                 try {
                     const custName = existingActivity.summary?.replace(/שיחה (מ|ל)-/, '') || null;
-                    const driveLink = await uploadRecordingToDrive(recordingUrl, normalizedPhone, custName, isIncoming, callId);
+                    const driveLink = await uploadRecordingToDrive(recUrl, normalizedPhone, custName, isIncoming, callId);
                     if (driveLink) { finalUrl = driveLink; console.log(`✅ [PBX→GDrive] Uploaded: ${driveLink}`); }
                 } catch (driveErr) { console.error(`⚠️ [PBX→GDrive] Upload failed, keeping PBX URL:`, driveErr.message); }
                 updates.recording_url = finalUrl;
@@ -375,9 +399,36 @@ Deno.serve(async (req) => {
 
         // Upload recording to Drive if available
         let finalRecordingUrl = recordingUrl || undefined;
-        if (recordingUrl) {
+        // If hangup with callId but no recording URL, try to fetch it from PBX API
+        let fetchedRecordingUrl = recordingUrl;
+        if (!fetchedRecordingUrl && isHangup && callId && parseInt(duration) >= 5) {
             try {
-                const driveLink = await uploadRecordingToDrive(recordingUrl, normalizedPhone, customer?.full_name, isIncoming, callId);
+                const settingsList = await sr.Settings.list();
+                const getSetting = (name) => settingsList.find(s => s.setting_name === name)?.setting_value;
+                const PBX_API_URL = getSetting('PBX_API_URL') || 'https://master.ippbx.co.il/ippbx_api/v1.4/api';
+                const PBX_TOKEN_ID = getSetting('PBX_TOKEN_ID') || '7AaJmwvruPun2z2H';
+                console.log(`🎙️ [PBX] Fetching recording path for callId=${callId}...`);
+                const recResp = await fetch(`${PBX_API_URL}/info/recordingPath`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token_id: PBX_TOKEN_ID, userType: 'TENANT', callid: callId }),
+                    signal: AbortSignal.timeout(10000) // 10s timeout
+                });
+                if (recResp.ok) {
+                    const recData = await recResp.json();
+                    fetchedRecordingUrl = recData.data?.recording_path || recData.data?.url || recData.data?.file || '';
+                    console.log(`🎙️ [PBX] Recording path: ${fetchedRecordingUrl ? fetchedRecordingUrl.substring(0, 100) : 'NOT FOUND'}`);
+                } else {
+                    console.log(`🎙️ [PBX] Recording path API returned ${recResp.status}`);
+                }
+            } catch (recErr) {
+                console.log(`🎙️ [PBX] Recording path fetch failed: ${recErr.message}`);
+            }
+        }
+        if (fetchedRecordingUrl) {
+            finalRecordingUrl = fetchedRecordingUrl;
+            try {
+                const driveLink = await uploadRecordingToDrive(fetchedRecordingUrl, normalizedPhone, customer?.full_name, isIncoming, callId);
                 if (driveLink) { finalRecordingUrl = driveLink; console.log(`✅ [PBX→GDrive] New activity upload: ${driveLink}`); }
             } catch (driveErr) { console.error(`⚠️ [PBX→GDrive] New activity upload failed:`, driveErr.message); }
         }

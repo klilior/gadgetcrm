@@ -106,16 +106,19 @@ export default function CallLog() {
     const [activities, setActivities] = useState([]);
     const [clients, setClients] = useState({});
     const [clientTips, setClientTips] = useState({});
+    const [activeLeads, setActiveLeads] = useState({});
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('all');
+    const [pageSize, setPageSize] = useState(10);
 
     const loadData = async () => {
         setLoading(true);
         try {
+            const fetchLimit = pageSize * 3; // fetch more to account for dedup
             const [incoming, outgoing] = await Promise.all([
-                base44.entities.Activity.filter({ activity_type: 'שיחה נכנסת' }, '-created_date', 150),
-                base44.entities.Activity.filter({ activity_type: 'שיחה יוצאת' }, '-created_date', 150),
+                base44.entities.Activity.filter({ activity_type: 'שיחה נכנסת' }, '-created_date', fetchLimit),
+                base44.entities.Activity.filter({ activity_type: 'שיחה יוצאת' }, '-created_date', fetchLimit),
             ]);
 
             const allCalls = [...incoming, ...outgoing].sort((a, b) => 
@@ -178,6 +181,27 @@ export default function CallLog() {
                 }));
             }
 
+            // Look up active Leads by phone for sales interest detection
+            const leadsMap = {};
+            for (let i = 0; i < phonesArr.length; i += 10) {
+                const batch = phonesArr.slice(i, i + 10);
+                const leadResults = await Promise.all(
+                    batch.map(async (phone) => {
+                        const normalized = normalizePhone(phone);
+                        let leads = await base44.entities.Lead.filter({ phone: normalized, status: 'New' }, '-created_date', 3).catch(() => []);
+                        if (leads.length === 0) leads = await base44.entities.Lead.filter({ phone: normalized, status: 'InProgress' }, '-created_date', 3).catch(() => []);
+                        return leads;
+                    })
+                );
+                leadResults.forEach((res, idx) => {
+                    if (res.length > 0) {
+                        leadsMap[batch[idx]] = res;
+                        const norm = normalizePhone(batch[idx]);
+                        if (norm) leadsMap[norm] = res;
+                    }
+                });
+            }
+            setActiveLeads(leadsMap);
             setClients(clientMap);
 
             // Generate AI tips for identified clients
@@ -292,7 +316,7 @@ ${facts.join('\n')}`,
         setClientTips(prev => ({ ...prev, ...tipsMap }));
     };
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => { loadData(); }, [pageSize]);
 
     // Deduplicate then filter
     const dedupedCalls = useMemo(() => deduplicateCalls(activities), [activities]);
@@ -378,6 +402,16 @@ ${facts.join('\n')}`,
                         <SelectItem value="missed">לא נענו</SelectItem>
                     </SelectContent>
                 </Select>
+                <Select value={String(pageSize)} onValueChange={v => setPageSize(Number(v))}>
+                    <SelectTrigger className="w-full sm:w-32">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="10">10 שיחות</SelectItem>
+                        <SelectItem value="50">50 שיחות</SelectItem>
+                        <SelectItem value="100">100 שיחות</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
 
             {loading ? (
@@ -389,11 +423,12 @@ ${facts.join('\n')}`,
                 </div>
             ) : (
                 <div className="bg-white rounded-xl border shadow-sm divide-y">
-                    {filteredCalls.map(call => {
+                    {filteredCalls.slice(0, pageSize).map(call => {
                         const phone = extractPhone(call.content);
                         const normalized = normalizePhone(phone);
                         const client = (phone && clients[phone]) || (normalized && clients[normalized]) || null;
                         const tip = client ? clientTips[client.id] : null;
+                        const leads = (phone && activeLeads[phone]) || (normalized && activeLeads[normalized]) || [];
                         return (
                             <CallLogItem
                                 key={call.id}
@@ -401,6 +436,7 @@ ${facts.join('\n')}`,
                                 client={client}
                                 aiTip={tip}
                                 dupCount={call._dupCount || 0}
+                                activeLeads={leads}
                             />
                         );
                     })}
