@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Printer, ExternalLink, Loader2, Receipt } from "lucide-react";
 import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { toast } from "sonner";
+import GetPackageOrderCard from "../getpackage/GetPackageOrderCard";
 import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusOptions, getStatusColor } from "./OrderStatusConfig";
@@ -29,7 +30,7 @@ function formatDate(d) {
   try { return format(new Date(d), "dd/MM/yyyy HH:mm"); } catch { return '-'; }
 }
 
-export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment, activeProviders = {} }) {
+export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment, activeProviders = {}, isManager = false, isShiftManager = false }) {
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
   const statusOptions = getStatusOptions(order.source);
@@ -195,6 +196,11 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           )}
         </div>
       </div>
+
+      {/* GetPackage Shipment Card */}
+      {activeProviders.getpackage && (
+        <GetPackageOrderCard order={order} isManager={isManager} isShiftManager={isShiftManager} />
+      )}
 
       {/* Actions row */}
       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">

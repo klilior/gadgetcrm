@@ -61,7 +61,7 @@ export default function UnifiedOrders() {
   const [expandedId, setExpandedId] = useState(null);
 
   // Active shipping providers
-  const [activeProviders, setActiveProviders] = useState({ velo: false, cargo: false });
+  const [activeProviders, setActiveProviders] = useState({ velo: false, cargo: false, getpackage: false });
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -95,14 +95,21 @@ export default function UnifiedOrders() {
         if (!showClosed && closedWoo.has(o.status)) continue;
         const c = cM[o.client_id];
         const pr = pM[o.id] || [];
+        let billing = {};
+        try { billing = JSON.parse(o.raw_data_billing || '{}'); } catch(_){}
         woo.push({
           id: 'woo_' + o.id, source: 'woocommerce',
           order_number: o.external_order_number || '', order_date: o.order_date || '',
           customer_name: c?.full_name || '', customer_phone: c?.phone || '',
+          customer_email: billing.email || c?.email || '',
           products: pr.map(x => ({name: x.name||'', quantity: x.quantity||1, total: parseFloat(x.total)||0, meta_data: x.meta_data || ''})),
           total: parseFloat(o.total) || 0, shipping_method: o.shipping_method || '',
           status: o.status || '', notes: o.customer_note || '',
-          raw_id: o.id, client_id: o.client_id || '', pickup_point_data: o.pickup_point_data, currency: 'ILS'
+          raw_id: o.id, client_id: o.client_id || '', pickup_point_data: o.pickup_point_data, currency: 'ILS',
+          shipping_city: billing.city || c?.city || '',
+          shipping_street: billing.address_1 || c?.address || '',
+          shipping_address_full: [billing.address_1, billing.city, billing.postcode].filter(Boolean).join(', '),
+          external_order_number: o.external_order_number || '',
         });
       }
     } catch (e) { errs.push({source: 'woocommerce', message: e.message}); }
@@ -228,14 +235,22 @@ export default function UnifiedOrders() {
 
   // Load active shipping providers
   useEffect(() => {
-    base44.entities.ShippingProvider.list().then(providers => {
-      const map = { velo: false, cargo: false };
-      for (const p of providers) {
-        if (p.provider_type === 'velo' && p.is_active) map.velo = true;
-        if (p.provider_type === 'cargo' && p.is_active) map.cargo = true;
-      }
+    const loadProviders = async () => {
+      const map = { velo: false, cargo: false, getpackage: false };
+      try {
+        const providers = await base44.entities.ShippingProvider.list();
+        for (const p of providers) {
+          if (p.provider_type === 'velo' && p.is_active) map.velo = true;
+          if (p.provider_type === 'cargo' && p.is_active) map.cargo = true;
+        }
+      } catch (_) {}
+      try {
+        const gpSettings = await base44.entities.GetPackageSettings.list('-created_date', 1);
+        if (gpSettings?.[0]?.is_active) map.getpackage = true;
+      } catch (_) {}
       setActiveProviders(map);
-    }).catch(() => {});
+    };
+    loadProviders();
   }, []);
 
   // Auto-refresh every 5 minutes during business hours
@@ -492,6 +507,8 @@ export default function UnifiedOrders() {
                                 onCreateInvoice={(o) => setInvoiceOrder(o)}
                                 onCargoShipment={activeProviders.cargo ? (o) => setCargoOrder(o) : undefined}
                                 activeProviders={activeProviders}
+                                isManager={isManager}
+                                isShiftManager={isShiftManager}
                               />
                             </TableCell>
                           </TableRow>

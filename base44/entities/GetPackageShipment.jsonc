@@ -1,0 +1,171 @@
+{
+  "name": "GetPackageShipment",
+  "type": "object",
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d6\u05de\u05e0\u05d4 \u05de\u05e7\u05d5\u05de\u05d9",
+      "index": true
+    },
+    "woo_order_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d6\u05de\u05e0\u05d4 WooCommerce"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05dc\u05e7\u05d5\u05d7"
+    },
+    "customer_phone": {
+      "type": "string",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05dc\u05e7\u05d5\u05d7"
+    },
+    "customer_email": {
+      "type": "string",
+      "description": "\u05d0\u05d9\u05de\u05d9\u05d9\u05dc \u05dc\u05e7\u05d5\u05d7"
+    },
+    "pickup_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d0\u05d9\u05e9 \u05e7\u05e9\u05e8 \u05dc\u05d0\u05d9\u05e1\u05d5\u05e3"
+    },
+    "pickup_phone": {
+      "type": "string",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05dc\u05d0\u05d9\u05e1\u05d5\u05e3"
+    },
+    "pickup_address": {
+      "type": "string",
+      "description": "\u05db\u05ea\u05d5\u05d1\u05ea \u05d0\u05d9\u05e1\u05d5\u05e3"
+    },
+    "pickup_city": {
+      "type": "string",
+      "description": "\u05e2\u05d9\u05e8 \u05d0\u05d9\u05e1\u05d5\u05e3"
+    },
+    "pickup_notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea \u05dc\u05d0\u05d9\u05e1\u05d5\u05e3"
+    },
+    "dropoff_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05e0\u05de\u05e2\u05df"
+    },
+    "dropoff_phone": {
+      "type": "string",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05e0\u05de\u05e2\u05df"
+    },
+    "dropoff_address": {
+      "type": "string",
+      "description": "\u05db\u05ea\u05d5\u05d1\u05ea \u05de\u05e1\u05d9\u05e8\u05d4"
+    },
+    "dropoff_city": {
+      "type": "string",
+      "description": "\u05e2\u05d9\u05e8 \u05de\u05e1\u05d9\u05e8\u05d4"
+    },
+    "dropoff_notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea \u05dc\u05de\u05e1\u05d9\u05e8\u05d4"
+    },
+    "package_description": {
+      "type": "string",
+      "description": "\u05ea\u05d9\u05d0\u05d5\u05e8 \u05d7\u05d1\u05d9\u05dc\u05d4"
+    },
+    "package_quantity": {
+      "type": "number",
+      "default": 1,
+      "description": "\u05db\u05de\u05d5\u05ea \u05d7\u05d1\u05d9\u05dc\u05d5\u05ea"
+    },
+    "package_size": {
+      "type": "string",
+      "enum": [
+        "ENVELOPE",
+        "SMALL",
+        "MEDIUM",
+        "LARGE"
+      ],
+      "default": "MEDIUM",
+      "description": "\u05d2\u05d5\u05d3\u05dc \u05d7\u05d1\u05d9\u05dc\u05d4"
+    },
+    "quote_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05e6\u05e2\u05ea \u05de\u05d7\u05d9\u05e8",
+      "index": true
+    },
+    "quote_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05d4\u05e6\u05e2\u05d4"
+    },
+    "quote_currency": {
+      "type": "string",
+      "description": "\u05de\u05d8\u05d1\u05e2"
+    },
+    "delivery_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05dc\u05d5\u05d7 GetPackage",
+      "index": true
+    },
+    "route_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e1\u05dc\u05d5\u05dc"
+    },
+    "tracking_url": {
+      "type": "string",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05de\u05e2\u05e7\u05d1"
+    },
+    "courier_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05e9\u05dc\u05d9\u05d7"
+    },
+    "courier_phone": {
+      "type": "string",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05e9\u05dc\u05d9\u05d7"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "quote_received",
+        "quote_failed",
+        "accepted",
+        "pickup_pending",
+        "picked_up",
+        "in_transit",
+        "delivered",
+        "cancelled",
+        "failed"
+      ],
+      "default": "draft",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05de\u05e9\u05dc\u05d5\u05d7",
+      "index": true
+    },
+    "gp_delivery_status": {
+      "type": "string",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 GetPackage \u05de\u05e7\u05d5\u05e8\u05d9"
+    },
+    "last_error": {
+      "type": "string",
+      "description": "\u05e9\u05d2\u05d9\u05d0\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "raw_quote_response": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "\u05ea\u05d2\u05d5\u05d1\u05ea \u05d4\u05e6\u05e2\u05ea \u05de\u05d7\u05d9\u05e8 \u05d2\u05d5\u05dc\u05de\u05d9\u05ea"
+    },
+    "raw_accept_response": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "\u05ea\u05d2\u05d5\u05d1\u05ea \u05d0\u05d9\u05e9\u05d5\u05e8 \u05d2\u05d5\u05dc\u05de\u05d9\u05ea"
+    },
+    "raw_status_response": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "\u05ea\u05d2\u05d5\u05d1\u05ea \u05e1\u05d8\u05d8\u05d5\u05e1 \u05d2\u05d5\u05dc\u05de\u05d9\u05ea"
+    },
+    "last_status_checked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05d1\u05d3\u05d9\u05e7\u05ea \u05e1\u05d8\u05d8\u05d5\u05e1 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    }
+  },
+  "required": [
+    "order_id",
+    "status"
+  ]
+}

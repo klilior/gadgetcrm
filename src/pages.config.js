@@ -81,6 +81,7 @@ const WhatsAppDebug = lazy(() => import('./pages/WhatsAppDebug'));
 const SupplierProducts = lazy(() => import('./pages/SupplierProducts'));
 const TechnicianReport = lazy(() => import('./pages/TechnicianReport'));
 const ShipmentLabelPreview = lazy(() => import('./pages/ShipmentLabelPreview'));
+const GetPackageSettings = lazy(() => import('./pages/GetPackageSettings'));
 
 export const PAGES = {
     "AgentCommissionAssignment": AgentCommissionAssignment,
@@ -141,6 +142,7 @@ export const PAGES = {
     "WhatsAppDebug": WhatsAppDebug,
     "WhatsAppProviders": WhatsAppProviders,
     "ShipmentLabelPreview": ShipmentLabelPreview,
+    "GetPackageSettings": GetPackageSettings,
 }
 
 export const pagesConfig = {

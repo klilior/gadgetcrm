@@ -18,6 +18,7 @@ import { importerReminders } from "@/functions/importerReminders";
 import TextMeConfigPanel from "../components/sms/TextMeConfigPanel";
 import SmsLogTable from "../components/sms/SmsLogTable";
 import SmsTemplatesManager from "../components/sms/SmsTemplatesManager";
+import GetPackageSettingsPanel from "../components/getpackage/GetPackageSettingsPanel";
 
 export default function SettingsPage() {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -471,6 +472,10 @@ GADGET-TEAM`);
                     <TabsTrigger value="sms" className="rounded-xl data-[state=active]:bg-teal-500 data-[state=active]:text-white">
                         <MessageCircle className="w-4 h-4 mr-2" />
                         <span className="hidden sm:inline">SMS</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="getpackage" className="rounded-xl data-[state=active]:bg-emerald-500 data-[state=active]:text-white">
+                        <Truck className="w-4 h-4 mr-2" />
+                        <span className="hidden sm:inline">GetPackage</span>
                     </TabsTrigger>
                     <TabsTrigger value="advanced" className="rounded-xl data-[state=active]:bg-gray-500 data-[state=active]:text-white">
                         <SettingsIcon className="w-4 h-4 mr-2" />
@@ -1515,6 +1520,10 @@ GADGET-TEAM`);
                     <TextMeConfigPanel />
                     <SmsTemplatesManager />
                     <SmsLogTable />
+                </TabsContent>
+
+                <TabsContent value="getpackage" className="space-y-6 mt-6">
+                    <GetPackageSettingsPanel />
                 </TabsContent>
 
                 <TabsContent value="advanced" className="space-y-6 mt-6">
