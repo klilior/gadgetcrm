@@ -255,7 +255,6 @@ function AppContent({ children, currentPageName }) {
     { title: "סנכרון לקוחות", url: createPageUrl("CustomerSync") },
     { title: "ספקי וואטסאפ", url: createPageUrl("WhatsAppProviders") },
     { title: "ספקי משלוחים", url: createPageUrl("ShippingProviders") },
-    { title: "GetPackage", url: createPageUrl("GetPackageSettings") },
     { title: "הגדרות תשלום", url: createPageUrl("PaymentSettings") },
     { title: "הגדרות נוכחות", url: createPageUrl("AttendanceSettings") },
     { title: "נתוני מכירות", url: createPageUrl("SalesDataAdmin") },

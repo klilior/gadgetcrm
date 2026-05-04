@@ -23,7 +23,7 @@
     },
     "production_api_base_url": {
       "type": "string",
-      "default": "https://apiv2.getpackage.com",
+      "default": "https://api.getpackage.com",
       "description": "\u05db\u05ea\u05d5\u05d1\u05ea API \u05e4\u05e8\u05d5\u05d3\u05e7\u05e9\u05df"
     },
     "api_token": {
