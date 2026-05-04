@@ -9,17 +9,7 @@ import GetPackageOrderCard from "../getpackage/GetPackageOrderCard";
 import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusOptions, getStatusColor } from "./OrderStatusConfig";
-
-function detectMiraklPickup(order) {
-  if (order.source !== 'mirakl') return null;
-  try {
-    const raw = JSON.parse(order.raw_mirakl_json || '{}');
-    if (raw.shipping_type_code === 'pickup-locations') return true;
-    const label = (raw.shipping_type_label || '').toLowerCase();
-    if (label.includes('איסוף') || label.includes('pickup')) return true;
-    return false;
-  } catch { return false; }
-}
+import { detectShippingType, getShippingTypeBadge } from "./ShippingTypeHelper";
 
 function copyText(text) {
   navigator.clipboard.writeText(text);
@@ -30,11 +20,13 @@ function formatDate(d) {
   try { return format(new Date(d), "dd/MM/yyyy HH:mm"); } catch { return '-'; }
 }
 
-export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment, activeProviders = {}, isManager = false, isShiftManager = false }) {
+export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment, onGetPackageShipment, activeProviders = {}, isManager = false, isShiftManager = false }) {
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
   const statusOptions = getStatusOptions(order.source);
   const [printingLabel, setPrintingLabel] = useState(false);
+  const shippingType = detectShippingType(order);
+  const shippingBadge = getShippingTypeBadge(shippingType);
 
   const handlePrintLabel = async (trackingNum) => {
     setPrintingLabel(true);
@@ -70,7 +62,6 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
     }
   };
   const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
-  const miraklPickup = detectMiraklPickup(order);
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
 
   const sourceBg = {
@@ -153,21 +144,15 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           <div className="flex items-center gap-2">
             <Badge className={`${statusColor} text-sm px-3`}>{statusLabel}</Badge>
           </div>
-          {/* Shipping type indicator for Mirakl */}
-          {order.source === 'mirakl' && miraklPickup !== null && (
+          {/* Shipping type indicator */}
+          {shippingBadge && (
             <div className="mt-1">
-              {miraklPickup ? (
-                <span className="inline-flex items-center gap-1.5 text-amber-900 bg-amber-100 border border-amber-300 px-3 py-1.5 rounded-lg font-medium text-sm">
-                  <Package className="w-4 h-4" /> 📦 UPS — נקודת איסוף
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-blue-800 bg-blue-100 border border-blue-300 px-3 py-1.5 rounded-lg font-medium text-sm">
-                  <Truck className="w-4 h-4" /> 🚚 שליח עד הבית
-                </span>
-              )}
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium text-sm ${shippingBadge.className}`}>
+                <Truck className="w-4 h-4" /> {shippingBadge.label}
+              </span>
             </div>
           )}
-          {order.source !== 'mirakl' && order.shipping_method && (
+          {!shippingBadge && order.shipping_method && (
             <div className="flex items-center gap-1 text-sm text-gray-600">
               <Truck className="w-3.5 h-3.5" />
               {order.shipping_method}
@@ -197,10 +182,10 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         </div>
       </div>
 
-      {/* GetPackage Shipment Card */}
-      {activeProviders.getpackage && (
+      {/* GetPackage Shipment Card - always shown */}
+      <div data-getpackage-card>
         <GetPackageOrderCard order={order} isManager={isManager} isShiftManager={isShiftManager} />
-      )}
+      </div>
 
       {/* Actions row */}
       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
@@ -247,62 +232,66 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </Button>
         )}
 
-        {/* Mirakl-specific shipping buttons */}
-        {order.source === 'mirakl' && !order.tracking_number && miraklPickup === true && (
-          <Button className="rounded-full bg-amber-700 hover:bg-amber-800 text-white shadow-lg shadow-amber-200" onClick={() => onShipment({ ...order, _shipCarrier: 'ups' })}>
-            <Package className="w-4 h-4 ml-1" />
-            📦 שלח UPS — נקודת איסוף
-          </Button>
-        )}
-        {order.source === 'mirakl' && !order.tracking_number && miraklPickup === false && activeProviders.velo && (
-          <Button className="rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200" onClick={() => onShipment({ ...order, _shipCarrier: 'velo' })}>
-            <Truck className="w-4 h-4 ml-1" />
-            🚚 שלח Velo — עד הבית
-          </Button>
-        )}
-        {order.source === 'mirakl' && order.tracking_number && (
-          miraklPickup ? (
-            <Button
-              variant="outline"
-              className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
-              disabled={printingLabel}
-              onClick={() => handlePrintLabel(order.tracking_number)}
-            >
-              {printingLabel ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
-              📄 הדפס שטר מטען ({order.tracking_number})
-            </Button>
-          ) : activeProviders.velo ? (
-            <Button
-              variant="outline"
-              className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
-              onClick={() => window.open('https://app.veloapp.io/dashboard/orders', '_blank')}
-            >
-              <Printer className="w-4 h-4 ml-1" />
-              📎 צפה בשטר מטען ({order.tracking_number})
-            </Button>
-          ) : null
-        )}
-        {order.source !== 'mirakl' && (
-          <Button variant="outline" className="rounded-full hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-colors" onClick={() => onShipment(order)}>
-            <Truck className="w-4 h-4 ml-1" />
-            צור משלוח
-          </Button>
-        )}
-
-        {/* Cargo shipment button */}
-        {onCargoShipment && (
+        {/* Tracking / Print label */}
+        {order.tracking_number && (
           <Button
             variant="outline"
-            className="rounded-full border-blue-300 text-blue-700 hover:bg-blue-50 hover:shadow-md transition-all"
-            onClick={() => onCargoShipment(order)}
+            className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
+            disabled={printingLabel}
+            onClick={() => handlePrintLabel(order.tracking_number)}
           >
-            <Truck className="w-4 h-4 ml-1" />
-            🚚 שלח עם קארגו
+            {printingLabel ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
+            📄 שטר מטען ({order.tracking_number})
           </Button>
         )}
 
-        {/* Invoice button for Mirakl orders */}
-        {order.source === 'mirakl' && onCreateInvoice && (
+        {/* 3 Shipping Buttons - always visible */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Cargo - Blue - שליח עד הבית */}
+          <Button
+            className={`rounded-full transition-all ${
+              shippingType === 'cargo'
+                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200 ring-2 ring-blue-400 ring-offset-1'
+                : 'bg-blue-500/80 hover:bg-blue-600 text-white'
+            }`}
+            onClick={() => onCargoShipment ? onCargoShipment(order) : onShipment({ ...order, _shipCarrier: 'velo' })}
+          >
+            <Truck className="w-4 h-4 ml-1" />
+            🚚 קארגו
+            {shippingType === 'cargo' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
+          </Button>
+
+          {/* UPS - Brown/Amber - נקודות איסוף */}
+          <Button
+            className={`rounded-full transition-all ${
+              shippingType === 'ups'
+                ? 'bg-amber-700 hover:bg-amber-800 text-white shadow-lg shadow-amber-200 ring-2 ring-amber-400 ring-offset-1'
+                : 'bg-amber-600/80 hover:bg-amber-700 text-white'
+            }`}
+            onClick={() => onShipment({ ...order, _shipCarrier: 'ups' })}
+          >
+            <Package className="w-4 h-4 ml-1" />
+            📦 UPS
+            {shippingType === 'ups' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
+          </Button>
+
+          {/* GetPackage - Red - מהיום להיום */}
+          <Button
+            className={`rounded-full transition-all ${
+              shippingType === 'getpackage'
+                ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 ring-2 ring-red-400 ring-offset-1'
+                : 'bg-red-500/80 hover:bg-red-600 text-white'
+            }`}
+            onClick={() => onGetPackageShipment ? onGetPackageShipment(order) : null}
+          >
+            <Truck className="w-4 h-4 ml-1" />
+            ⚡ GetPackage
+            {shippingType === 'getpackage' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
+          </Button>
+        </div>
+
+        {/* Invoice button */}
+        {onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id) && (
           <Button
             variant="outline"
             className={`rounded-full ${order.linet_invoice_doc_id ? 'border-green-300 text-green-700 hover:bg-green-50' : 'border-purple-300 text-purple-700 hover:bg-purple-50'}`}

@@ -505,7 +505,14 @@ export default function UnifiedOrders() {
                                 onStatusChange={handleStatusChange}
                                 onShipment={(o) => setShipmentOrder(o)}
                                 onCreateInvoice={(o) => setInvoiceOrder(o)}
-                                onCargoShipment={activeProviders.cargo ? (o) => setCargoOrder(o) : undefined}
+                                onCargoShipment={(o) => setCargoOrder(o)}
+                                onGetPackageShipment={() => {
+                                  // Scroll to GetPackage card within the expanded detail
+                                  setTimeout(() => {
+                                    const el = document.querySelector('[data-getpackage-card]');
+                                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  }, 100);
+                                }}
                                 activeProviders={activeProviders}
                                 isManager={isManager}
                                 isShiftManager={isShiftManager}
@@ -531,7 +538,13 @@ export default function UnifiedOrders() {
                     onStatusChange={handleStatusChange}
                     onShipment={() => setShipmentOrder(order)}
                     onCreateInvoice={() => setInvoiceOrder(order)}
-                    onCargoShipment={activeProviders.cargo ? () => setCargoOrder(order) : undefined}
+                    onCargoShipment={() => setCargoOrder(order)}
+                    onGetPackageShipment={() => {
+                      setTimeout(() => {
+                        const el = document.querySelector('[data-getpackage-card]');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
                     activeProviders={activeProviders}
                   />
                 ))}

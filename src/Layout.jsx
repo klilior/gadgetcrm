@@ -193,8 +193,7 @@ function AppContent({ children, currentPageName }) {
     { title: "טיקטים", url: createPageUrl("Tickets"), icon: Ticket },
     { title: "הודעות", url: createPageUrl("MessageCenter"), icon: MessageCircle },
     { title: "לקוחות", url: createPageUrl("Customers"), icon: Users },
-    { title: "הזמנות מרוכזות", url: createPageUrl("UnifiedOrders"), icon: Package },
-    { title: "הזמנות אתר", url: createPageUrl("Orders"), icon: Package },
+    { title: "הזמנות", url: createPageUrl("UnifiedOrders"), icon: Package },
     { title: "מוצרים", url: createPageUrl("Products"), icon: Briefcase },
     ] : [];
 
@@ -246,9 +245,7 @@ function AppContent({ children, currentPageName }) {
     { title: "דוח מכירות", url: createPageUrl("SalesDashboard") },
   ] : [];
 
-  const superPharmItems = (isManager || isShiftManager) ? [
-    { title: "הזמנות סופר-פארם", url: createPageUrl("SuperPharmOrders") },
-  ] : [];
+  const superPharmItems = [];
 
   const settingsItems = isManager ? [
     { title: "עובדים", url: createPageUrl("ManageEmployees") },
