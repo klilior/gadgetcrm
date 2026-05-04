@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Truck } from "lucide-react";
 
 export default function GetPackageSettings() {
+
   const { currentUser } = useUser();
   const isManager = currentUser?.role === "מנהל" || currentUser?.role === "admin";
 
