@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
           instructions: body.dropoff_notes || '',
         },
         package: {
-          size: body.package_size || 'MEDIUM',
+          size: body.package_size || 'SMALL',
         },
       };
 
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
         dropoff_notes: body.dropoff_notes || '',
         package_description: body.package_description || '',
         package_quantity: body.package_quantity || 1,
-        package_size: body.package_size || 'MEDIUM',
+        package_size: body.package_size || 'SMALL',
         raw_quote_response: result.data,
       };
 

@@ -28,7 +28,7 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [packageSize, setPackageSize] = useState("MEDIUM");
+  const [packageSize, setPackageSize] = useState("SMALL");
   const [dropoffNotes, setDropoffNotes] = useState(order.notes || "");
 
   const orderId = order.id || order.order_number || order.external_order_number;
@@ -37,13 +37,22 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
     loadShipments();
   }, [orderId]);
 
+  // Listen for external event to open quote form
+  useEffect(() => {
+    const handler = () => {
+      if (!activeShipment) setShowForm(true);
+    };
+    window.addEventListener('openGetPackageQuoteForm', handler);
+    return () => window.removeEventListener('openGetPackageQuoteForm', handler);
+  }, [activeShipment]);
+
   const loadShipments = async () => {
     setLoading(true);
     try {
       const { data } = await getPackageApi({ action: "getShipmentsForOrder", order_id: orderId });
       setShipments(data.shipments || []);
     } catch (e) {
-      console.error(e);
+      console.error("GetPackage load error:", e?.response?.data?.error || e?.message);
     }
     setLoading(false);
   };
@@ -92,7 +101,8 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
         toast.error(data.error || "שגיאה בקבלת הצעת מחיר");
       }
     } catch (e) {
-      toast.error("שגיאה: " + e.message);
+      const errMsg = e?.response?.data?.error || e?.message || "שגיאה לא ידועה";
+      toast.error(errMsg);
     }
     setActionLoading(null);
     setShowForm(false);
@@ -112,7 +122,7 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
         toast.error(data.error || "שגיאה באישור המשלוח");
       }
     } catch (e) {
-      toast.error("שגיאה: " + e.message);
+      toast.error(e?.response?.data?.error || e?.message || "שגיאה");
     }
     setActionLoading(null);
   };
@@ -128,7 +138,7 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
         toast.error(data.error || "שגיאה ברענון סטטוס");
       }
     } catch (e) {
-      toast.error("שגיאה: " + e.message);
+      toast.error(e?.response?.data?.error || e?.message || "שגיאה");
     }
     setActionLoading(null);
   };
@@ -143,7 +153,7 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
         toast.error(data.error || "שגיאה בשליחת SMS");
       }
     } catch (e) {
-      toast.error("שגיאה: " + e.message);
+      toast.error(e?.response?.data?.error || e?.message || "שגיאה");
     }
     setActionLoading(null);
   };
@@ -161,7 +171,7 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
         toast.error(data.error || "שגיאה בביטול המשלוח");
       }
     } catch (e) {
-      toast.error("שגיאה: " + e.message);
+      toast.error(e?.response?.data?.error || e?.message || "שגיאה");
     }
     setActionLoading(null);
   };

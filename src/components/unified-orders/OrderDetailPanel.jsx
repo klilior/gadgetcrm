@@ -282,7 +282,12 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
                 ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 ring-2 ring-red-400 ring-offset-1'
                 : 'bg-red-500/80 hover:bg-red-600 text-white'
             }`}
-            onClick={() => onGetPackageShipment ? onGetPackageShipment(order) : null}
+            onClick={() => {
+              // Scroll to the GetPackage card and auto-open the quote form
+              if (onGetPackageShipment) onGetPackageShipment(order);
+              // Dispatch custom event to open the quote form
+              window.dispatchEvent(new CustomEvent('openGetPackageQuoteForm'));
+            }}
           >
             <Truck className="w-4 h-4 ml-1" />
             ⚡ GetPackage
