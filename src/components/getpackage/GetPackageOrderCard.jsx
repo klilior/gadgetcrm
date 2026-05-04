@@ -37,6 +37,11 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
     loadShipments();
   }, [orderId]);
 
+  const activeShipment = shipments.find(s =>
+    ["quote_received", "accepted", "pickup_pending", "picked_up", "in_transit"].includes(s.status)
+  );
+  const latestShipment = shipments[0];
+
   // Listen for external event to open quote form
   useEffect(() => {
     const handler = () => {
@@ -56,11 +61,6 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
     }
     setLoading(false);
   };
-
-  const activeShipment = shipments.find(s =>
-    ["quote_received", "accepted", "pickup_pending", "picked_up", "in_transit"].includes(s.status)
-  );
-  const latestShipment = shipments[0];
 
   const handleGetQuote = async () => {
     if (activeShipment) {
