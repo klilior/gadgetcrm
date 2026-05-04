@@ -182,6 +182,7 @@ function AppContent({ children, currentPageName }) {
   ] : [
     { title: "דשבורד", url: dashboardUrl, icon: Home },
     { title: "תיקונים", url: createPageUrl("RepairDashboard"), icon: Wrench },
+    { title: "הזמנות מרוכזות", url: "/UnifiedOrders", icon: Package },
     ...(isManager ? [{ title: "דוח התחשבנות מעבדה", url: createPageUrl("VendorReport"), icon: FileText }] : []),
     ...((isManager || isShiftManager) ? [{ title: "ניטור מחירים Zap", url: createPageUrl("PriceMonitor"), icon: BarChart3 }] : []),
     { title: "קווים לטיפול", url: createPageUrl("LinesToWorkOn"), icon: Phone },
