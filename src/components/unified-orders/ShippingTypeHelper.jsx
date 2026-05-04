@@ -24,7 +24,8 @@ export function detectShippingType(order) {
   }
 
   // WooCommerce / Linet orders - detect from shipping method text
-  if (method.includes('מהיום') || method.includes('express') || method.includes('same') || method.includes('דחוף') || method.includes('getpackage')) {
+  // IMPORTANT: Check getpackage BEFORE cargo — "משלוח היום" contains "משלוח" which would match cargo first
+  if (method.includes('מהיום') || method.includes('משלוח היום') || method.includes('express') || method.includes('same') || method.includes('דחוף') || method.includes('getpackage')) {
     return 'getpackage';
   }
   if (method.includes('נקודת') || method.includes('pickup') || method.includes('איסוף') || method.includes('picku') || method.includes('ups')) {
