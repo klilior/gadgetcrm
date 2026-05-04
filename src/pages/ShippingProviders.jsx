@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Truck, Plus, Settings, Check, X, Zap } from "lucide-react";
 import CargoSettingsCard from "../components/cargo/CargoSettingsCard";
+import GetPackageSettingsPanel from "../components/getpackage/GetPackageSettingsPanel";
 
 export default function ShippingProvidersPage() {
     const [providers, setProviders] = useState([]);
@@ -138,6 +139,9 @@ export default function ShippingProvidersPage() {
               provider={providers.find(p => p.provider_type === 'cargo')}
               onUpdate={loadProviders}
             />
+
+            {/* GetPackage Settings */}
+            <GetPackageSettingsPanel />
 
             <div className="grid gap-4">
                 {providers.filter(p => p.provider_type !== 'cargo').map(provider => (
