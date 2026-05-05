@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Truck, DollarSign, RefreshCw, Send, XCircle, CheckCircle, Loader2, ExternalLink, Package, AlertTriangle, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getPackageApi } from "@/functions/getPackageApi";
-import GetPackageShipmentLabel from "./GetPackageShipmentLabel";
+import GetPackageLabel from "../shipping/GetPackageLabel";
 
 const STATUS_MAP = {
   draft: { label: "טיוטה", color: "bg-gray-100 text-gray-700" },
@@ -325,9 +325,8 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
         </div>
 
         {showLabel && shipment && (
-          <GetPackageShipmentLabel
+          <GetPackageLabel
             shipment={shipment}
-            order={order}
             open={showLabel}
             onClose={() => setShowLabel(false)}
           />

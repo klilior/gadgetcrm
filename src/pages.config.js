@@ -20,7 +20,7 @@ const Home = lazy(() => import('./pages/Home'));
 const Tickets = lazy(() => import('./pages/Tickets'));
 const MessageCenter = lazy(() => import('./pages/MessageCenter'));
 const Customers = lazy(() => import('./pages/Customers'));
-const Orders = lazy(() => import('./pages/Orders'));
+// Orders page removed - use UnifiedOrders instead
 const Products = lazy(() => import('./pages/Products'));
 const CallLog = lazy(() => import('./pages/CallLog'));
 const LinesToWorkOn = lazy(() => import('./pages/LinesToWorkOn'));
@@ -114,7 +114,7 @@ export const PAGES = {
     "ManagerDashboard": ManagerDashboard,
     "MessageCenter": MessageCenter,
     "MobileInvoiceUpload": MobileInvoiceUpload,
-    "Orders": Orders,
+    // "Orders" removed - use UnifiedOrders
     "PaymentReturn": PaymentReturn,
     "PaymentSettings": PaymentSettings,
     "PriceAlerts": PriceAlerts,

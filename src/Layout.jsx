@@ -5,7 +5,7 @@ import {
   Phone, Ticket, Users, Package, BarChart3, Wrench,
   Settings, MessageCircle, LogOut, UserPlus,
   ChevronDown, Clock, FileText, Briefcase,
-  CreditCard, Trophy, Home, CalendarDays, Receipt, X, Menu
+  CreditCard, Trophy, Home, CalendarDays, Receipt, X, Menu, Truck
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -194,7 +194,7 @@ function AppContent({ children, currentPageName }) {
     { title: "טיקטים", url: createPageUrl("Tickets"), icon: Ticket },
     { title: "הודעות", url: createPageUrl("MessageCenter"), icon: MessageCircle },
     { title: "לקוחות", url: createPageUrl("Customers"), icon: Users },
-    { title: "הזמנות", url: createPageUrl("UnifiedOrders"), icon: Package },
+    { title: "משלוחים", url: "/Shipments", icon: Truck },
     { title: "מוצרים", url: createPageUrl("Products"), icon: Briefcase },
     ] : [];
 

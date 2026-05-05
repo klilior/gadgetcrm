@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import SuperPharmOrdersPage from './pages/SuperPharmOrdersPage';
 import UnifiedOrders from './pages/UnifiedOrders';
+import Shipments from './pages/Shipments';
 import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
@@ -82,6 +83,11 @@ const AuthenticatedApp = () => {
       <Route path="/UnifiedOrders" element={
         <LayoutWrapper currentPageName="UnifiedOrders">
           <Suspense fallback={<LazyFallback />}><UnifiedOrders /></Suspense>
+        </LayoutWrapper>
+      } />
+      <Route path="/Shipments" element={
+        <LayoutWrapper currentPageName="Shipments">
+          <Suspense fallback={<LazyFallback />}><Shipments /></Suspense>
         </LayoutWrapper>
       } />
       <Route path="*" element={<PageNotFound />} />
