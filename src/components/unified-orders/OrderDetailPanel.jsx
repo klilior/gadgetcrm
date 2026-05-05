@@ -10,6 +10,7 @@ import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusOptions, getStatusColor } from "./OrderStatusConfig";
 import { detectShippingType, getShippingTypeBadge } from "./ShippingTypeHelper";
+import ProductMetaBadges from "./ProductMetaBadges";
 
 function copyText(text) {
   navigator.clipboard.writeText(text);
@@ -86,12 +87,15 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </h4>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {(order.products || []).map((p, i) => (
-              <div key={i} className="flex justify-between items-start text-sm gap-2">
-                <span className="text-gray-800 break-words flex-1">{p.name}</span>
-                <div className="flex items-center gap-2 flex-shrink-0 mr-2">
-                  <span className="text-gray-500">×{p.quantity}</span>
-                  {p.total > 0 && <span className="font-mono text-gray-700">₪{p.total.toLocaleString()}</span>}
+              <div key={i} className="text-sm">
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-gray-800 break-words flex-1">{p.name}</span>
+                  <div className="flex items-center gap-2 flex-shrink-0 mr-2">
+                    <span className="text-gray-500">×{p.quantity}</span>
+                    {p.total > 0 && <span className="font-mono text-gray-700">₪{p.total.toLocaleString()}</span>}
+                  </div>
                 </div>
+                <ProductMetaBadges metaData={p.meta_data} />
               </div>
             ))}
             {(!order.products || order.products.length === 0) && (
