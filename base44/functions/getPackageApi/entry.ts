@@ -9,28 +9,67 @@ async function getSettings(sr) {
 
 // Helper: get API base URL
 function getApiBase(settings) {
-  return settings.environment === 'production'
-    ? (settings.production_api_base_url || 'https://apiv2.getpackage.com')
-    : (settings.sandbox_api_base_url || 'https://sandbox-apiv2.getpackage.com');
+  if (settings.environment === 'production') {
+    return settings.production_api_base_url || 'https://api.getpackage.com';
+  }
+  return settings.sandbox_api_base_url || 'https://sandbox-apiv2.getpackage.com';
 }
 
-// Helper: make API request
+// Helper: make API request to GetPackage
 async function gpFetch(settings, method, path, body) {
   const base = getApiBase(settings);
   const url = `${base}${path}`;
+  const token = settings.api_token;
+  
   const headers = {
     'Content-Type': 'application/json',
-    'X-API-Key': settings.api_token,
+    'Authorization': `APIKEY ${token}`,
+    'X-API-Key': token,
   };
+  
   const opts = { method, headers, signal: AbortSignal.timeout(30000) };
   if (body && (method === 'POST' || method === 'PUT')) {
     opts.body = JSON.stringify(body);
   }
+  
+  console.log(`[GetPackage] ${method} ${url}`);
   const resp = await fetch(url, opts);
   const text = await resp.text();
   let data;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  try { data = JSON.parse(text); } catch { data = { raw: text.substring(0, 500) }; }
+  
+  if (!resp.ok) {
+    console.error(`[GetPackage] API Error ${resp.status}:`, JSON.stringify(data).substring(0, 500));
+  }
+  
   return { ok: resp.ok, status: resp.status, data };
+}
+
+// Helper: safely convert error to string
+function errorToString(err) {
+  if (!err) return '';
+  if (typeof err === 'string') return err;
+  if (Array.isArray(err)) return err.join('; ');
+  if (typeof err === 'object') return JSON.stringify(err).substring(0, 500);
+  return String(err);
+}
+
+// Helper: build address object, omitting empty/short strings (API requires minLength 2)
+function buildAddress(city, street, country) {
+  const addr = {};
+  if (country && country.length >= 2) addr.country = country;
+  if (city && city.length >= 2) addr.city = city;
+  if (street && street.length >= 2) addr.street = street;
+  return addr;
+}
+
+// Helper: build point object, omitting empty optional strings
+function buildPoint(address, contactName, contactPhone, instructions) {
+  const point = { address };
+  if (contactName && contactName.length >= 2) point.contactName = contactName;
+  if (contactPhone && contactPhone.length >= 8) point.contactPhoneNumber = contactPhone;
+  if (instructions && instructions.length >= 2) point.instructions = instructions;
+  return point;
 }
 
 // Map GP delivery status to our status
@@ -70,7 +109,6 @@ Deno.serve(async (req) => {
     if (action === 'getSettings') {
       const settings = await getSettings(sr);
       if (!settings) return Response.json({ success: true, settings: null });
-      // Mask token
       const masked = { ...settings };
       masked.api_token_set = !!(settings.api_token && settings.api_token.length > 0);
       delete masked.api_token;
@@ -79,7 +117,6 @@ Deno.serve(async (req) => {
 
     // ===== SAVE SETTINGS =====
     if (action === 'saveSettings') {
-      // Permission check - allow if no user auth available (custom auth system)
       if (user) {
         const appRole = user.app_role || user.role;
         if (appRole !== 'מנהל' && user.role !== 'admin') {
@@ -89,7 +126,6 @@ Deno.serve(async (req) => {
       const data = body.data || {};
       const existing = await getSettings(sr);
       if (existing) {
-        // Only update api_token if explicitly provided
         const updatePayload = { ...data };
         if (!updatePayload.api_token || updatePayload.api_token === '') {
           delete updatePayload.api_token;
@@ -107,12 +143,15 @@ Deno.serve(async (req) => {
       if (!settings || !settings.api_token) {
         return Response.json({ success: false, error: 'לא הוזן API Token' });
       }
-      // Try quota endpoint as connection test
       const result = await gpFetch(settings, 'GET', '/v1/deliveries/quota', null);
       if (result.ok) {
         return Response.json({ success: true, message: 'החיבור ל-GetPackage תקין.', quota: result.data });
       } else {
-        return Response.json({ success: false, error: 'החיבור ל-GetPackage נכשל. יש לבדוק את ה-API Token ואת כתובת ה-API.' });
+        return Response.json({ 
+          success: false, 
+          error: `החיבור ל-GetPackage נכשל (${result.status}). יש לבדוק את ה-API Token ואת כתובת ה-API.`,
+          details: errorToString(result.data),
+        });
       }
     }
 
@@ -142,48 +181,73 @@ Deno.serve(async (req) => {
       if (!dropoffCity) return Response.json({ error: 'חסרה עיר למשלוח.' }, { status: 400 });
       if (!dropoffAddress) return Response.json({ error: 'חסרה כתובת למשלוח.' }, { status: 400 });
 
-      // Build quote request per GetPackage Express API
+      const pickupCity = settings.default_pickup_city || '';
+      const pickupStreet = settings.default_pickup_address || '';
+      const pickupName = settings.default_pickup_name || settings.business_name || 'GADGET-TEAM';
+      const pickupPhone = settings.default_pickup_phone || '';
+      const pickupNotes = settings.default_pickup_notes || '';
+
+      // Build Express quote request body per GetPackage API spec:
+      // POST /v1/deliveries/express/quote
+      const packageSize = String(body.package_size || 'SMALL');
+      const pickUpPointData = buildPoint(
+        buildAddress(pickupCity, pickupStreet, 'IL'),
+        pickupName,
+        pickupPhone,
+        pickupNotes
+      );
+      const dropOffPointData = buildPoint(
+        buildAddress(dropoffCity, dropoffAddress, 'IL'),
+        dropoffName,
+        dropoffPhone,
+        body.dropoff_notes || ''
+      );
+      
       const quoteBody = {
-        pickUpPoint: {
-          address: {
-            city: settings.default_pickup_city || '',
-            street: settings.default_pickup_address || '',
-            country: 'IL',
-          },
-          contactName: settings.default_pickup_name || settings.business_name || 'GADGET-TEAM',
-          contactPhoneNumber: settings.default_pickup_phone || '',
-          instructions: settings.default_pickup_notes || '',
-        },
-        dropOffPoint: {
-          address: {
-            city: dropoffCity,
-            street: dropoffAddress,
-            country: 'IL',
-          },
-          contactName: dropoffName || '',
-          contactPhoneNumber: dropoffPhone,
-          instructions: body.dropoff_notes || '',
-        },
-        package: {
-          size: body.package_size || 'SMALL',
-        },
+        deliveries: [{
+          pickUpPoint: pickUpPointData,
+          dropOffPoint: dropOffPointData,
+          package: { size: packageSize },
+        }],
+        stopPointsOrder: [0, 1],
       };
 
       console.log(`[GetPackage] Creating quote for order ${orderId}`);
-      const result = await gpFetch(settings, 'POST', '/v1/deliveries/express/quote', quoteBody);
+      console.log(`[GetPackage] Full quote body:`, JSON.stringify(quoteBody));
+      
+      // Try Shared Route quote first (simple flat body)
+      const sharedRouteBody = {
+        pickUpPoint: pickUpPointData,
+        dropOffPoint: dropOffPointData,
+        package: { size: packageSize },
+      };
+      
+      console.log(`[GetPackage] Trying sharedRoute body:`, JSON.stringify(sharedRouteBody));
+      let result = await gpFetch(settings, 'POST', '/v1/deliveries/sharedRoute/quote', sharedRouteBody);
+      let usedEndpoint = 'sharedRoute';
+      
+      // If Shared Route fails, try Express
+      if (!result.ok) {
+        console.log(`[GetPackage] Shared Route failed (${result.status}):`, JSON.stringify(result.data).substring(0, 300));
+        console.log(`[GetPackage] Trying express body:`, JSON.stringify(quoteBody));
+        usedEndpoint = 'express';
+        result = await gpFetch(settings, 'POST', '/v1/deliveries/express/quote', quoteBody);
+      }
+      
+      console.log(`[GetPackage] Used endpoint: ${usedEndpoint}, result status: ${result.status}`);
 
-      // Create or update shipment record
+      // Build shipment record
       const shipmentData = {
         order_id: orderId,
         woo_order_id: body.woo_order_id || '',
         customer_name: body.customer_name || '',
         customer_phone: dropoffPhone,
         customer_email: body.customer_email || '',
-        pickup_name: quoteBody.pickUpPoint.contactName,
-        pickup_phone: settings.default_pickup_phone || '',
-        pickup_address: settings.default_pickup_address || '',
-        pickup_city: settings.default_pickup_city || '',
-        pickup_notes: settings.default_pickup_notes || '',
+        pickup_name: pickupName,
+        pickup_phone: pickupPhone,
+        pickup_address: pickupStreet,
+        pickup_city: pickupCity,
+        pickup_notes: pickupNotes,
         dropoff_name: dropoffName || '',
         dropoff_phone: dropoffPhone,
         dropoff_address: dropoffAddress,
@@ -196,11 +260,23 @@ Deno.serve(async (req) => {
       };
 
       if (result.ok && result.data) {
-        // Extract quote details from response
-        const quoteId = result.data.id || result.data.quoteId || result.data.deliveryId || '';
-        const price = result.data.price?.amount || result.data.totalPrice?.amount || result.data.price || null;
-        const currency = result.data.price?.currency || result.data.totalPrice?.currency || 'ILS';
-        const trackingUrl = result.data.trackingUrl || result.data.tracking_url || '';
+        // Extract quote details - response structure: { id, routes: [{ price, ... }], trackingUrl, ... }
+        const quoteId = result.data.id || result.data.quoteId || '';
+        
+        // Price can be in different places depending on the response
+        let price = null;
+        let currency = 'ILS';
+        if (result.data.routes && result.data.routes.length > 0) {
+          const route = result.data.routes[0];
+          price = route.price?.amount || route.price || route.totalPrice?.amount || null;
+          currency = route.price?.currency || route.totalPrice?.currency || 'ILS';
+        }
+        if (price === null) {
+          price = result.data.price?.amount || result.data.totalPrice?.amount || result.data.price || null;
+          if (result.data.price?.currency) currency = result.data.price.currency;
+        }
+        
+        const trackingUrl = result.data.trackingUrl || '';
 
         shipmentData.quote_id = String(quoteId);
         shipmentData.quote_price = typeof price === 'number' ? price : parseFloat(price) || 0;
@@ -214,13 +290,14 @@ Deno.serve(async (req) => {
         return Response.json({ success: true, shipment: created, quote: result.data });
       } else {
         shipmentData.status = 'quote_failed';
-        shipmentData.last_error = result.data?.message || result.data?.error || `שגיאה ${result.status}`;
+        shipmentData.last_error = errorToString(result.data?.message || result.data?.error || result.data?.errors || result.data);
+        
         const created = await sr.entities.GetPackageShipment.create(shipmentData);
-        console.error(`[GetPackage] Quote failed:`, JSON.stringify(result.data));
+        console.error(`[GetPackage] Quote failed:`, JSON.stringify(result.data).substring(0, 1000));
         return Response.json({
           success: false,
-          error: 'לא ניתן לקבל הצעת מחיר מ-GetPackage. יש לבדוק את פרטי החיבור.',
-          details: shipmentData.last_error,
+          error: shipmentData.last_error || 'לא ניתן לקבל הצעת מחיר מ-GetPackage.',
+          details: errorToString(result.data),
           shipment_id: created.id,
         });
       }
@@ -245,25 +322,41 @@ Deno.serve(async (req) => {
       if (!shipment.quote_id) return Response.json({ error: 'חסר מזהה הצעת מחיר' }, { status: 400 });
 
       console.log(`[GetPackage] Accepting quote ${shipment.quote_id} for shipment ${shipmentId}`);
+      // Accept Express quote per API: PUT /v1/deliveries/express/quote/accept { quoteId: "..." }
       const result = await gpFetch(settings, 'PUT', '/v1/deliveries/express/quote/accept', {
-        id: shipment.quote_id,
+        quoteId: shipment.quote_id,
       });
 
       if (result.ok && result.data) {
         const deliveryId = result.data.deliveryId || result.data.id || shipment.quote_id;
-        const routeId = result.data.routeId || result.data.route_id || '';
-        const trackingUrl = result.data.trackingUrl || result.data.tracking_url || shipment.tracking_url || '';
+        const routeId = result.data.routeId || '';
+        const trackingUrl = result.data.trackingUrl || shipment.tracking_url || '';
 
-        await sr.entities.GetPackageShipment.update(shipmentId, {
-          delivery_id: String(deliveryId),
-          route_id: String(routeId),
-          tracking_url: trackingUrl,
-          status: 'accepted',
-          raw_accept_response: result.data,
-          last_error: '',
-        });
+        // Try to extract route info
+        if (result.data.routes && result.data.routes.length > 0) {
+          const route = result.data.routes[0];
+          if (route.id) {
+            await sr.entities.GetPackageShipment.update(shipmentId, {
+              delivery_id: String(deliveryId),
+              route_id: String(route.id || routeId),
+              tracking_url: route.trackingUrl || trackingUrl,
+              status: 'accepted',
+              raw_accept_response: result.data,
+              last_error: '',
+            });
+          }
+        } else {
+          await sr.entities.GetPackageShipment.update(shipmentId, {
+            delivery_id: String(deliveryId),
+            route_id: String(routeId),
+            tracking_url: trackingUrl,
+            status: 'accepted',
+            raw_accept_response: result.data,
+            last_error: '',
+          });
+        }
 
-        console.log(`[GetPackage] Quote accepted: delivery=${deliveryId}, route=${routeId}`);
+        console.log(`[GetPackage] Quote accepted: delivery=${deliveryId}`);
         return Response.json({
           success: true,
           delivery_id: deliveryId,
@@ -271,15 +364,15 @@ Deno.serve(async (req) => {
           tracking_url: trackingUrl,
         });
       } else {
-        const errMsg = result.data?.message || result.data?.error || `שגיאה ${result.status}`;
+        const errMsg = errorToString(result.data?.message || result.data?.error || result.data);
         await sr.entities.GetPackageShipment.update(shipmentId, {
           last_error: errMsg,
           raw_accept_response: result.data,
         });
-        console.error(`[GetPackage] Accept failed:`, JSON.stringify(result.data));
+        console.error(`[GetPackage] Accept failed:`, JSON.stringify(result.data).substring(0, 500));
         return Response.json({
           success: false,
-          error: 'לא ניתן לאשר את המשלוח. נסה שוב או פנה לתמיכה.',
+          error: errMsg || 'לא ניתן לאשר את המשלוח.',
           details: errMsg,
         });
       }
@@ -320,7 +413,7 @@ Deno.serve(async (req) => {
         await sr.entities.GetPackageShipment.update(shipmentId, updates);
         return Response.json({ success: true, status: updates.status, gp_status: gpStatus, data: result.data });
       } else {
-        const errMsg = result.data?.message || `שגיאה ${result.status}`;
+        const errMsg = errorToString(result.data?.message || result.data);
         await sr.entities.GetPackageShipment.update(shipmentId, { last_error: errMsg });
         return Response.json({ success: false, error: 'לא ניתן לרענן סטטוס', details: errMsg });
       }
@@ -331,7 +424,6 @@ Deno.serve(async (req) => {
       const settings = await getSettings(sr);
       if (!settings?.api_token) return Response.json({ error: 'חסר Token' }, { status: 400 });
 
-      // Permission check: manager or shift manager only
       if (user) {
         const appRole = user.app_role || user.role;
         if (appRole !== 'מנהל' && appRole !== 'מנהל משמרת' && user.role !== 'admin') {
@@ -348,13 +440,13 @@ Deno.serve(async (req) => {
 
       const deliveryId = shipment.delivery_id || shipment.quote_id;
       if (!deliveryId) {
-        // No delivery created yet, just mark as cancelled
         await sr.entities.GetPackageShipment.update(shipmentId, { status: 'cancelled', last_error: '' });
         return Response.json({ success: true, message: 'המשלוח בוטל (טרם נוצר ב-GetPackage)' });
       }
 
       console.log(`[GetPackage] Cancelling delivery ${deliveryId}`);
-      const result = await gpFetch(settings, 'DELETE', `/v1/deliveries/express/${deliveryId}/routes`, null);
+      // Cancel via common endpoint: DELETE /v1/deliveries/common/deliveries/{id}
+      const result = await gpFetch(settings, 'DELETE', `/v1/deliveries/common/deliveries/${deliveryId}`, null);
 
       if (result.ok || result.status === 404) {
         await sr.entities.GetPackageShipment.update(shipmentId, {
@@ -363,7 +455,7 @@ Deno.serve(async (req) => {
         });
         return Response.json({ success: true, message: 'משלוח GetPackage בוטל.' });
       } else {
-        const errMsg = result.data?.message || `שגיאה ${result.status}`;
+        const errMsg = errorToString(result.data?.message || result.data);
         await sr.entities.GetPackageShipment.update(shipmentId, { last_error: errMsg });
         return Response.json({ success: false, error: 'לא ניתן לבטל את המשלוח', details: errMsg });
       }
@@ -383,8 +475,7 @@ Deno.serve(async (req) => {
       const firstName = (shipment.customer_name || '').split(' ')[0] || 'לקוח';
       const smsBody = `שלום ${firstName}, ההזמנה שלך מ-GADGET-TEAM יצאה למשלוח עם GetPackage.\n\nלמעקב אחר המשלוח:\n${shipment.tracking_url}\n\nתודה,\nצוות GADGET-TEAM`;
 
-      // Use existing SMS function
-      const smsResult = await sr.functions.invoke('sendTextMeSMS', {
+      await sr.functions.invoke('sendTextMeSMS', {
         to: shipment.customer_phone,
         message: smsBody,
       });
@@ -397,7 +488,6 @@ Deno.serve(async (req) => {
       const settings = await getSettings(sr);
       if (!settings?.api_token) return Response.json({ error: 'חסר Token' }, { status: 400 });
 
-      // Only get open shipments from last 72 hours
       const openStatuses = ['accepted', 'pickup_pending', 'picked_up', 'in_transit'];
       const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
 
@@ -406,7 +496,6 @@ Deno.serve(async (req) => {
         const batch = await sr.entities.GetPackageShipment.filter({ status }, '-created_date', 50);
         allOpen.push(...batch);
       }
-      // Filter to recent only
       allOpen = allOpen.filter(s => s.created_date >= cutoff);
 
       let updated = 0;
@@ -455,6 +544,6 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error(`[GetPackage] Error in action=${action}:`, error.message);
-    return Response.json({ error: 'שגיאת מערכת. נסה שוב.' }, { status: 500 });
+    return Response.json({ error: error.message || 'שגיאת מערכת. נסה שוב.' }, { status: 500 });
   }
 });
