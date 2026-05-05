@@ -2,11 +2,12 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Truck, Package, Loader2 } from "lucide-react";
+import { Truck, Package, Loader2, List } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import UPSShipmentForm from "../components/shipping/UPSShipmentForm";
 import CargoShipmentForm from "../components/shipping/CargoShipmentForm";
 import GetPackageShipmentForm from "../components/shipping/GetPackageShipmentForm";
+import CargoShipmentsList from "../components/shipping/CargoShipmentsList";
 
 export default function Shipments() {
   const [activeProviders, setActiveProviders] = useState({ ups: false, cargo: false, getpackage: false });
@@ -68,8 +69,12 @@ export default function Shipments() {
         </Badge>
       </div>
 
-      <Tabs defaultValue="ups" dir="rtl">
-        <TabsList className="w-full grid grid-cols-3 h-12">
+      <Tabs defaultValue="shipments_list" dir="rtl">
+        <TabsList className="w-full grid grid-cols-4 h-12">
+          <TabsTrigger value="shipments_list" className="text-sm data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+            <List className="w-4 h-4 ml-1" />
+            שטרי מטען
+          </TabsTrigger>
           <TabsTrigger value="ups" className="text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white" disabled={!activeProviders.ups}>
             <Package className="w-4 h-4 ml-1" />
             UPS
@@ -83,6 +88,10 @@ export default function Shipments() {
             GetPackage
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="shipments_list">
+          <CargoShipmentsList />
+        </TabsContent>
 
         <TabsContent value="ups">
           <UPSShipmentForm />

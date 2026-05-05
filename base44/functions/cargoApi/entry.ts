@@ -276,6 +276,32 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ACTION: cancel_shipment
+    if (action === 'cancel_shipment') {
+      const config = await getCargoConfig();
+      const { shipment_id } = body;
+      if (!shipment_id) return Response.json({ success: false, error: 'חסר מזהה משלוח' });
+
+      const customer_code = parseInt(config.customer_code) || 7625;
+      const data = await cargoRequest(config.api_token, 'shipments/update-status', 'POST', {
+        shipment_id: parseInt(shipment_id),
+        customer_code,
+        status_code: 8, // 8 = Cancelled
+      });
+
+      // Update local Shipment entity
+      const existing = await base44.asServiceRole.entities.Shipment.filter({ cargo_shipment_id: String(shipment_id) });
+      if (existing.length > 0) {
+        await base44.asServiceRole.entities.Shipment.update(existing[0].id, {
+          cargo_status: '8',
+          cargo_status_text: 'בוטל',
+          status: 'cancelled',
+        });
+      }
+
+      return Response.json({ success: true, message: 'המשלוח בוטל בהצלחה' });
+    }
+
     return Response.json({ error: 'Unknown action: ' + action }, { status: 400 });
 
   } catch (error) {
