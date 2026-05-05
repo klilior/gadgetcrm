@@ -144,11 +144,13 @@ Deno.serve(async (req) => {
         payload.cash_on_delivery = cash_on_delivery;
       }
 
-      const data = await cargoRequest(config.api_token, 'shipments/create', 'POST', payload);
+      const apiResult = await cargoRequest(config.api_token, 'shipments/create', 'POST', payload);
 
-      const shipment_id = data.shipment_id || data.id || data.tracking_number || null;
+      // Cargo API returns { errors, data: { shipment_id, ... }, message }
+      const innerData = apiResult.data || apiResult;
+      const shipment_id = innerData.shipment_id || apiResult.shipment_id || null;
       if (!shipment_id) {
-        return Response.json({ success: false, error: 'לא התקבל מזהה משלוח מקארגו', raw: data });
+        return Response.json({ success: false, error: 'לא התקבל מזהה משלוח מקארגו', raw: apiResult });
       }
 
       // Save Shipment record
@@ -166,7 +168,7 @@ Deno.serve(async (req) => {
         num_packages: number_of_parcels || 1,
         notes: notes || '',
         reference: order_number || order_id || '',
-        api_response: data,
+        api_response: apiResult,
         cargo_shipment_id: String(shipment_id),
         cargo_status: '1',
         cargo_status_text: 'פתוח',
@@ -177,7 +179,7 @@ Deno.serve(async (req) => {
         success: true,
         shipment_id: String(shipment_id),
         shipment_record_id: shipmentRecord.id,
-        raw: data,
+        raw: apiResult,
       });
     }
 
@@ -187,9 +189,15 @@ Deno.serve(async (req) => {
       const { shipment_id } = body;
       if (!shipment_id) return Response.json({ success: false, error: 'חסר מזהה משלוח' });
 
-      const data = await cargoRequest(config.api_token, 'shipments/status', 'POST', { shipment_id });
-      const statusCode = data.status || data.shipment_status || null;
-      const statusText = CARGO_STATUS_MAP[statusCode] || `קוד ${statusCode}`;
+      const customer_code = parseInt(config.customer_code) || 7625;
+      const statusPayload = { shipment_id: parseInt(shipment_id), customer_code };
+      
+      const data = await cargoRequest(config.api_token, 'shipments/status', 'POST', statusPayload);
+      
+      console.log('📦 Status response:', JSON.stringify(data).slice(0, 500));
+      const innerStatus = data.data || data;
+      const statusCode = innerStatus.status || innerStatus.shipment_status || data.status || null;
+      const statusText = CARGO_STATUS_MAP[statusCode] || `סטטוס ${statusCode || 'לא ידוע'}`;
 
       // Update Shipment entity if exists
       const existing = await base44.asServiceRole.entities.Shipment.filter({ cargo_shipment_id: String(shipment_id) });
@@ -209,11 +217,14 @@ Deno.serve(async (req) => {
       const { shipment_id } = body;
       if (!shipment_id) return Response.json({ success: false, error: 'חסר מזהה משלוח' });
 
-      const data = await cargoRequest(config.api_token, 'shipments/label', 'POST', { shipment_id, format: 'pdf' });
+      // Per Cargo docs: parameter is shipment_ids (array or integer)
+      const customer_code = parseInt(config.customer_code) || 7625;
+      const data = await cargoRequest(config.api_token, 'shipments/label', 'POST', { shipment_ids: [parseInt(shipment_id)], customer_code, format: 'pdf' });
 
-      // data might contain a url or base64
-      const label_url = data.label_url || data.url || data.pdf_url || null;
-      const label_base64 = data.label_base64 || data.pdf || data.base64 || null;
+      // data might contain a url or base64 (could be nested in data.data)
+      const inner = data.data || data;
+      const label_url = inner.label_url || inner.url || inner.pdf_url || data.label_url || data.url || null;
+      const label_base64 = inner.label_base64 || inner.pdf || inner.base64 || data.label_base64 || data.pdf || null;
 
       return Response.json({ success: true, label_url, label_base64, raw: data });
     }
