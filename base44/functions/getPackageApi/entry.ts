@@ -420,6 +420,10 @@ Deno.serve(async (req) => {
             error: 'לא נמצא חלון זמן זמין למשלוח. נסה שוב מאוחר יותר.',
           });
         }
+        // Ensure date is in YYYY-MM-DD format (API may return ISO datetime)
+        if (deliveryDate.includes('T')) {
+          deliveryDate = deliveryDate.split('T')[0];
+        }
         console.log(`[GetPackage] Using date=${deliveryDate}, timeRange=${deliveryTimeRange}`);
 
         const createBody = {
