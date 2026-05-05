@@ -21,6 +21,67 @@ function formatDate(d) {
   try { return format(new Date(d), "dd/MM/yyyy HH:mm"); } catch { return '-'; }
 }
 
+// Wrapper that only shows GetPackage card if there are existing shipments for this order
+function GetPackageOrderCardWrapper({ order, isManager, isShiftManager }) {
+  const [show, setShow] = React.useState(false);
+
+  // Listen for external event to show the card
+  React.useEffect(() => {
+    const handler = () => {
+      setShow(true);
+      // Re-dispatch the event after a short delay so the card's own listener picks it up
+      setTimeout(() => window.dispatchEvent(new CustomEvent('openGetPackageQuoteForm')), 100);
+    };
+    window.addEventListener('openGetPackageQuoteForm', handler);
+    return () => window.removeEventListener('openGetPackageQuoteForm', handler);
+  }, []);
+
+  // Always render if explicitly opened, let the card itself handle loading/checking
+  if (show) {
+    return (
+      <div data-getpackage-card>
+        <GetPackageOrderCard order={order} isManager={isManager} isShiftManager={isShiftManager} />
+      </div>
+    );
+  }
+
+  // Otherwise, render a "lazy" version that checks if shipments exist
+  return <GetPackageCardLazy order={order} isManager={isManager} isShiftManager={isShiftManager} />;
+}
+
+function GetPackageCardLazy({ order, isManager, isShiftManager }) {
+  const [hasShipments, setHasShipments] = React.useState(false);
+  const [checked, setChecked] = React.useState(false);
+  const orderId = order.id || order.order_number || order.external_order_number;
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const { getPackageApi } = await import("@/functions/getPackageApi");
+        const { data } = await getPackageApi({ action: "getShipmentsForOrder", order_id: orderId });
+        if (!cancelled) {
+          const shipments = data?.shipments || [];
+          setHasShipments(shipments.length > 0 && shipments.some(s => !['draft', 'cancelled', 'failed'].includes(s.status)));
+          setChecked(true);
+        }
+      } catch {
+        if (!cancelled) setChecked(true);
+      }
+    };
+    check();
+    return () => { cancelled = true; };
+  }, [orderId]);
+
+  if (!checked || !hasShipments) return null;
+
+  return (
+    <div data-getpackage-card>
+      <GetPackageOrderCard order={order} isManager={isManager} isShiftManager={isShiftManager} />
+    </div>
+  );
+}
+
 export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment, onGetPackageShipment, activeProviders = {}, isManager = false, isShiftManager = false }) {
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
@@ -152,10 +213,8 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         <TrackingSection order={order} />
       )}
 
-      {/* GetPackage Shipment Card - always shown */}
-      <div data-getpackage-card>
-        <GetPackageOrderCard order={order} isManager={isManager} isShiftManager={isShiftManager} />
-      </div>
+      {/* GetPackage Shipment Card - shown only when there's an active GP shipment or user clicked GP button */}
+      <GetPackageOrderCardWrapper order={order} isManager={isManager} isShiftManager={isShiftManager} />
 
       {/* Actions row */}
       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">

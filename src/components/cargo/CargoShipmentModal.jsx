@@ -21,7 +21,7 @@ const CARGO_STATUS_MAP = {
   51: 'בדרך לנקודת חלוקה', 52: 'נקודת חלוקה', 55: 'בנקודת חלוקה',
 };
 
-export default function CargoShipmentModal({ open, onClose, order, client, onSuccess }) {
+export default function CargoShipmentModal({ open, onClose, order, client }) {
   const [shipmentType, setShipmentType] = useState('delivery');
   const [toName, setToName] = useState('');
   const [toPhone, setToPhone] = useState('');
@@ -116,7 +116,24 @@ export default function CargoShipmentModal({ open, onClose, order, client, onSuc
       if (data.success) {
         setResult(data);
         toast.success(`משלוח קארגו נוצר בהצלחה! #${data.shipment_id}`);
-        if (onSuccess) onSuccess(data);
+        // Auto-print label after successful creation
+        if (data.shipment_id) {
+          setTimeout(async () => {
+            try {
+              const labelRes = await cargoApi({ action: 'print_label', shipment_id: data.shipment_id });
+              const labelData = labelRes.data || labelRes;
+              if (labelData.label_url) {
+                window.open(labelData.label_url, '_blank');
+              } else if (labelData.label_base64) {
+                const byteChars = atob(labelData.label_base64);
+                const byteArray = new Uint8Array(byteChars.length);
+                for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+                const blob = new Blob([byteArray], { type: 'application/pdf' });
+                window.open(URL.createObjectURL(blob), '_blank');
+              }
+            } catch (_) { /* user can still click print button manually */ }
+          }, 500);
+        }
       } else {
         setError(data.error || 'שגיאה ביצירת משלוח');
       }
@@ -185,7 +202,7 @@ export default function CargoShipmentModal({ open, onClose, order, client, onSuc
               <p className="text-sm text-green-700 mb-1">מספר מעקב קארגו</p>
               <div className="flex items-center justify-center gap-2">
                 <span className="text-2xl font-bold font-mono text-green-900">{result.shipment_id}</span>
-                <button onClick={() => { navigator.clipboard.writeText(result.shipment_id); toast.success('הועתק!'); }}>
+                <button onClick={() => { navigator.clipboard.writeText(String(result.shipment_id)); toast.success('הועתק!'); }}>
                   <Copy className="w-4 h-4 text-green-600" />
                 </button>
               </div>

@@ -749,10 +749,9 @@ export default function UnifiedOrders() {
       {cargoOrder && (
         <CargoShipmentModal
           open={!!cargoOrder}
-          onClose={() => setCargoOrder(null)}
+          onClose={() => { setCargoOrder(null); loadData(true); }}
           order={cargoOrder}
           client={{ full_name: cargoOrder.customer_name, phone: cargoOrder.customer_phone, city: cargoOrder.shipping_city || '' }}
-          onSuccess={() => loadData(true)}
         />
       )}
 
