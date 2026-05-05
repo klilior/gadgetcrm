@@ -317,6 +317,7 @@ Deno.serve(async (req) => {
         shipmentData.quote_price = typeof price === 'number' ? price : parseFloat(price) || 0;
         shipmentData.quote_currency = currency;
         shipmentData.tracking_url = trackingUrl;
+        shipmentData.quote_endpoint = usedEndpoint;
         shipmentData.status = 'quote_received';
         shipmentData.last_error = '';
 
@@ -354,32 +355,59 @@ Deno.serve(async (req) => {
       if (shipment.status !== 'quote_received') {
         return Response.json({ error: 'ניתן לאשר רק משלוח שקיבל הצעת מחיר' }, { status: 400 });
       }
-      if (!shipment.quote_id) return Response.json({ error: 'חסר מזהה הצעת מחיר' }, { status: 400 });
 
-      console.log(`[GetPackage] Accepting quote ${shipment.quote_id} for shipment ${shipmentId}`);
-      // Accept Express quote per API: PUT /v1/deliveries/express/quote/accept { quoteId: "..." }
-      const result = await gpFetch(settings, 'PUT', '/v1/deliveries/express/quote/accept', {
-        quoteId: shipment.quote_id,
-      });
+      const endpoint = shipment.quote_endpoint || (shipment.quote_id ? 'express' : 'sharedRoute');
+      console.log(`[GetPackage] Accepting shipment ${shipmentId} via ${endpoint}`);
+
+      let result;
+      if (endpoint === 'sharedRoute') {
+        // SharedRoute: create delivery via POST /v1/deliveries/sharedRoute
+        // Need to rebuild the full body with contact details
+        const pickUpPoint = buildPoint(
+          buildAddress(shipment.pickup_city, shipment.pickup_address, 'IL'),
+          shipment.pickup_name,
+          shipment.pickup_phone,
+          shipment.pickup_notes
+        );
+        const dropOffPoint = buildPoint(
+          buildAddress(shipment.dropoff_city, shipment.dropoff_address, 'IL'),
+          shipment.dropoff_name,
+          shipment.dropoff_phone,
+          shipment.dropoff_notes
+        );
+        const createBody = {
+          pickUpPoint,
+          dropOffPoint,
+          package: { size: shipment.package_size || 'SMALL' },
+        };
+        console.log(`[GetPackage] SharedRoute create body:`, JSON.stringify(createBody));
+        result = await gpFetch(settings, 'POST', '/v1/deliveries/sharedRoute', createBody);
+      } else {
+        // Express: accept quote via PUT /v1/deliveries/express/quote/accept
+        if (!shipment.quote_id) return Response.json({ error: 'חסר מזהה הצעת מחיר' }, { status: 400 });
+        result = await gpFetch(settings, 'PUT', '/v1/deliveries/express/quote/accept', {
+          quoteId: shipment.quote_id,
+        });
+      }
+
+      console.log(`[GetPackage] Accept result:`, JSON.stringify(result.data).substring(0, 500));
 
       if (result.ok && result.data) {
-        const deliveryId = result.data.deliveryId || result.data.id || shipment.quote_id;
+        const deliveryId = result.data.id || result.data.deliveryId || shipment.quote_id || '';
         const routeId = result.data.routeId || '';
         const trackingUrl = result.data.trackingUrl || shipment.tracking_url || '';
 
-        // Try to extract route info
+        // Extract route info if available
         if (result.data.routes && result.data.routes.length > 0) {
           const route = result.data.routes[0];
-          if (route.id) {
-            await sr.entities.GetPackageShipment.update(shipmentId, {
-              delivery_id: String(deliveryId),
-              route_id: String(route.id || routeId),
-              tracking_url: route.trackingUrl || trackingUrl,
-              status: 'accepted',
-              raw_accept_response: result.data,
-              last_error: '',
-            });
-          }
+          await sr.entities.GetPackageShipment.update(shipmentId, {
+            delivery_id: String(deliveryId),
+            route_id: String(route.id || routeId),
+            tracking_url: route.trackingUrl || trackingUrl,
+            status: 'accepted',
+            raw_accept_response: result.data,
+            last_error: '',
+          });
         } else {
           await sr.entities.GetPackageShipment.update(shipmentId, {
             delivery_id: String(deliveryId),
@@ -391,7 +419,7 @@ Deno.serve(async (req) => {
           });
         }
 
-        console.log(`[GetPackage] Quote accepted: delivery=${deliveryId}`);
+        console.log(`[GetPackage] Delivery created: id=${deliveryId}, tracking=${trackingUrl}`);
         return Response.json({
           success: true,
           delivery_id: deliveryId,
