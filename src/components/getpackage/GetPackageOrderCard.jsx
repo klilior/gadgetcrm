@@ -6,9 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Truck, DollarSign, RefreshCw, Send, XCircle, CheckCircle, Loader2, ExternalLink, Package, AlertTriangle } from "lucide-react";
+import { Truck, DollarSign, RefreshCw, Send, XCircle, CheckCircle, Loader2, ExternalLink, Package, AlertTriangle, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getPackageApi } from "@/functions/getPackageApi";
+import GetPackageShipmentLabel from "./GetPackageShipmentLabel";
 
 const STATUS_MAP = {
   draft: { label: "טיוטה", color: "bg-gray-100 text-gray-700" },
@@ -28,6 +29,7 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [showLabel, setShowLabel] = useState(false);
   const [packageSize, setPackageSize] = useState("SMALL");
   const [dropoffNotes, setDropoffNotes] = useState(order.notes || "");
 
@@ -294,6 +296,15 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
             </Button>
           )}
 
+          {/* Print Label */}
+          {shipment && ["accepted", "pickup_pending", "picked_up", "in_transit"].includes(shipment.status) && (
+            <Button size="sm" variant="outline" className="rounded-full text-xs border-emerald-300 text-emerald-700"
+              onClick={() => setShowLabel(true)}>
+              <Printer className="w-3 h-3 ml-1" />
+              הדפס תעודה
+            </Button>
+          )}
+
           {/* Send Tracking SMS */}
           {shipment?.tracking_url && !["cancelled", "failed"].includes(shipment.status) && (
             <Button size="sm" variant="outline" className="rounded-full text-xs border-blue-300 text-blue-700"
@@ -312,6 +323,15 @@ export default function GetPackageOrderCard({ order, isManager, isShiftManager, 
             </Button>
           )}
         </div>
+
+        {showLabel && shipment && (
+          <GetPackageShipmentLabel
+            shipment={shipment}
+            order={order}
+            open={showLabel}
+            onClose={() => setShowLabel(false)}
+          />
+        )}
       </CardContent>
     </Card>
   );
