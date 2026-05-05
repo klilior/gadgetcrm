@@ -217,14 +217,58 @@ Deno.serve(async (req) => {
       const { shipment_id } = body;
       if (!shipment_id) return Response.json({ success: false, error: 'חסר מזהה משלוח' });
 
-      // Per Cargo docs: parameter is shipment_ids (array or integer)
       const customer_code = parseInt(config.customer_code) || 7625;
-      const data = await cargoRequest(config.api_token, 'shipments/label', 'POST', { shipment_ids: [parseInt(shipment_id)], customer_code, format: 'pdf' });
+      
+      // Try the label endpoint with retries (Cargo API is intermittent)
+      let data = null;
+      const labelPayload = { shipment_ids: [parseInt(shipment_id)], customer_code, format: 'pdf' };
+      
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          data = await cargoRequest(config.api_token, 'shipments/label', 'POST', labelPayload);
+          break;
+        } catch (e) {
+          console.log(`📦 Label attempt ${attempt + 1}/3 failed: ${e.message.slice(0, 150)}`);
+          if (attempt < 2) {
+            await new Promise(r => setTimeout(r, 1500));
+          }
+        }
+      }
+      
+      // If API still fails after 3 retries, try with base64 encoding format
+      if (!data) {
+        try {
+          data = await cargoRequest(config.api_token, 'shipments/label', 'POST', { 
+            shipment_ids: [parseInt(shipment_id)], customer_code, format: 'base64', encoding: 'base64' 
+          });
+        } catch (e) {
+          console.log(`📦 Base64 label attempt also failed: ${e.message.slice(0, 150)}`);
+        }
+      }
+      
+      // Final fallback - return error with clear message
+      if (!data) {
+        return Response.json({ 
+          success: false, 
+          error: `שגיאה בהדפסת תווית מקארגו (שרת קארגו לא זמין כרגע). מספר המשלוח: ${shipment_id}. נסה שוב בעוד דקה.` 
+        });
+      }
 
-      // data might contain a url or base64 (could be nested in data.data)
+      // Cargo may return the PDF URL directly as data.data (string) or nested in an object
       const inner = data.data || data;
-      const label_url = inner.label_url || inner.url || inner.pdf_url || data.label_url || data.url || null;
-      const label_base64 = inner.label_base64 || inner.pdf || inner.base64 || data.label_base64 || data.pdf || null;
+      let label_url = null;
+      let label_base64 = null;
+      
+      if (typeof inner === 'string' && (inner.startsWith('http') || inner.endsWith('.pdf'))) {
+        // data.data is a direct URL string
+        label_url = inner;
+      } else if (typeof inner === 'object') {
+        label_url = inner.label_url || inner.url || inner.pdf_url || null;
+        label_base64 = inner.label_base64 || inner.pdf || inner.base64 || null;
+      }
+      // Also check top-level
+      if (!label_url) label_url = data.label_url || data.url || null;
+      if (!label_base64) label_base64 = data.label_base64 || data.pdf || null;
 
       return Response.json({ success: true, label_url, label_base64, raw: data });
     }

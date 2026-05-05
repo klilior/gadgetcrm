@@ -116,23 +116,25 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
       if (data.success) {
         setResult(data);
         toast.success(`משלוח קארגו נוצר בהצלחה! #${data.shipment_id}`);
-        // Auto-print label after successful creation
+        // Auto-print label after successful creation (best-effort, user can retry manually)
         if (data.shipment_id) {
           setTimeout(async () => {
             try {
               const labelRes = await cargoApi({ action: 'print_label', shipment_id: data.shipment_id });
               const labelData = labelRes.data || labelRes;
-              if (labelData.label_url) {
-                window.open(labelData.label_url, '_blank');
-              } else if (labelData.label_base64) {
-                const byteChars = atob(labelData.label_base64);
-                const byteArray = new Uint8Array(byteChars.length);
-                for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-                const blob = new Blob([byteArray], { type: 'application/pdf' });
-                window.open(URL.createObjectURL(blob), '_blank');
+              if (labelData.success !== false) {
+                if (labelData.label_url) {
+                  window.open(labelData.label_url, '_blank');
+                } else if (labelData.label_base64) {
+                  const byteChars = atob(labelData.label_base64);
+                  const byteArray = new Uint8Array(byteChars.length);
+                  for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+                  const blob = new Blob([byteArray], { type: 'application/pdf' });
+                  window.open(URL.createObjectURL(blob), '_blank');
+                }
               }
             } catch (_) { /* user can still click print button manually */ }
-          }, 500);
+          }, 1000);
         }
       } else {
         setError(data.error || 'שגיאה ביצירת משלוח');
