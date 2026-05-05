@@ -362,7 +362,7 @@ Deno.serve(async (req) => {
       let result;
       if (endpoint === 'sharedRoute') {
         // SharedRoute: create delivery via POST /v1/deliveries/sharedRoute
-        // Need to rebuild the full body with contact details
+        // Requires: pickUpPoint, dropOffPoint (with validationMethodType), package, date, timeRange
         const pickUpPoint = buildPoint(
           buildAddress(shipment.pickup_city, shipment.pickup_address, 'IL'),
           shipment.pickup_name,
@@ -375,10 +375,59 @@ Deno.serve(async (req) => {
           shipment.dropoff_phone,
           shipment.dropoff_notes
         );
+        // Drop-off requires a validation method for delivery confirmation
+        dropOffPoint.validationMethodType = 'SMS';
+
+        // Get available service times from the API
+        // POST /v1/deliveries/serviceTimes/evaluate requires package field
+        const stBody = {
+          pickUpPoint: { address: pickUpPoint.address },
+          dropOffPoint: { address: dropOffPoint.address },
+          package: { size: shipment.package_size || 'SMALL' },
+        };
+        console.log(`[GetPackage] Fetching service times...`);
+        const stResult = await gpFetch(settings, 'POST', '/v1/deliveries/serviceTimes/evaluate', stBody);
+        
+        let deliveryDate, deliveryTimeRange;
+        if (stResult.ok && stResult.data) {
+          console.log(`[GetPackage] Service times response:`, JSON.stringify(stResult.data).substring(0, 500));
+          // evaluate returns { serviceType, subServiceType, date, timeRange }
+          deliveryDate = stResult.data.date;
+          deliveryTimeRange = stResult.data.timeRange;
+          // Fallback: if response has nested serviceTimes array
+          if (!deliveryDate && stResult.data.serviceTimes && stResult.data.serviceTimes.length > 0) {
+            const st = stResult.data.serviceTimes[0];
+            deliveryDate = st.date;
+            deliveryTimeRange = st.timeRange;
+          }
+        } else {
+          console.log(`[GetPackage] Service times failed:`, JSON.stringify(stResult.data).substring(0, 300));
+          // Try the simpler /serviceTimes endpoint
+          const stResult2 = await gpFetch(settings, 'POST', '/v1/deliveries/serviceTimes', stBody);
+          if (stResult2.ok && Array.isArray(stResult2.data) && stResult2.data.length > 0) {
+            console.log(`[GetPackage] serviceTimes list:`, JSON.stringify(stResult2.data).substring(0, 500));
+            const first = stResult2.data[0];
+            deliveryDate = first.date;
+            deliveryTimeRange = first.timeRange;
+          } else {
+            console.log(`[GetPackage] serviceTimes list also failed:`, JSON.stringify(stResult2.data).substring(0, 300));
+          }
+        }
+
+        if (!deliveryDate || !deliveryTimeRange) {
+          return Response.json({
+            success: false,
+            error: 'לא נמצא חלון זמן זמין למשלוח. נסה שוב מאוחר יותר.',
+          });
+        }
+        console.log(`[GetPackage] Using date=${deliveryDate}, timeRange=${deliveryTimeRange}`);
+
         const createBody = {
           pickUpPoint,
           dropOffPoint,
           package: { size: shipment.package_size || 'SMALL' },
+          date: deliveryDate,
+          timeRange: deliveryTimeRange,
         };
         console.log(`[GetPackage] SharedRoute create body:`, JSON.stringify(createBody));
         result = await gpFetch(settings, 'POST', '/v1/deliveries/sharedRoute', createBody);
