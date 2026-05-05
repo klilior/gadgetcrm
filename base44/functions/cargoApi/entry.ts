@@ -214,39 +214,28 @@ Deno.serve(async (req) => {
     // ACTION: print_label
     if (action === 'print_label') {
       const config = await getCargoConfig();
-      const { shipment_id } = body;
+      const { shipment_id, label_format } = body;
       if (!shipment_id) return Response.json({ success: false, error: 'חסר מזהה משלוח' });
 
       const customer_code = parseInt(config.customer_code) || 7625;
+      const sid = parseInt(shipment_id);
       
-      // Try the label endpoint with retries (Cargo API is intermittent)
+      // Per Cargo docs: shipment_ids = array|integer, format = 'pdf'|'zpl'|'base64'
       let data = null;
-      const labelPayload = { shipment_ids: [parseInt(shipment_id)], customer_code, format: 'pdf' };
+      const labelPayload = { shipment_ids: [sid], customer_code, format: 'pdf' };
       
-      for (let attempt = 0; attempt < 3; attempt++) {
+      // Try up to 2 times with a pause between
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
           data = await cargoRequest(config.api_token, 'shipments/label', 'POST', labelPayload);
+          console.log(`📦 Label success on attempt ${attempt + 1}`);
           break;
         } catch (e) {
-          console.log(`📦 Label attempt ${attempt + 1}/3 failed: ${e.message.slice(0, 150)}`);
-          if (attempt < 2) {
-            await new Promise(r => setTimeout(r, 1500));
-          }
+          console.log(`📦 Label attempt ${attempt + 1}/2 failed: ${e.message.slice(0, 120)}`);
+          if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
         }
       }
       
-      // If API still fails after 3 retries, try with base64 encoding format
-      if (!data) {
-        try {
-          data = await cargoRequest(config.api_token, 'shipments/label', 'POST', { 
-            shipment_ids: [parseInt(shipment_id)], customer_code, format: 'base64', encoding: 'base64' 
-          });
-        } catch (e) {
-          console.log(`📦 Base64 label attempt also failed: ${e.message.slice(0, 150)}`);
-        }
-      }
-      
-      // Final fallback - return error with clear message
       if (!data) {
         return Response.json({ 
           success: false, 
@@ -254,23 +243,21 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Cargo may return the PDF URL directly as data.data (string) or nested in an object
+      // Cargo returns PDF URL as data.data (string URL) or nested object
       const inner = data.data || data;
       let label_url = null;
       let label_base64 = null;
       
       if (typeof inner === 'string' && (inner.startsWith('http') || inner.endsWith('.pdf'))) {
-        // data.data is a direct URL string
         label_url = inner;
       } else if (typeof inner === 'object') {
         label_url = inner.label_url || inner.url || inner.pdf_url || null;
         label_base64 = inner.label_base64 || inner.pdf || inner.base64 || null;
       }
-      // Also check top-level
       if (!label_url) label_url = data.label_url || data.url || null;
       if (!label_base64) label_base64 = data.label_base64 || data.pdf || null;
 
-      return Response.json({ success: true, label_url, label_base64, raw: data });
+      return Response.json({ success: true, label_url, label_base64 });
     }
 
     // ACTION: register_webhook
