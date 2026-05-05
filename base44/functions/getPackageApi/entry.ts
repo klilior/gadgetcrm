@@ -54,12 +54,25 @@ function errorToString(err) {
   return String(err);
 }
 
+// Helper: clean street - remove city name and country from street if embedded
+function cleanStreet(street, city) {
+  if (!street) return street;
+  // Remove ", ישראל" or ", Israel" suffixes
+  let cleaned = street.replace(/,\s*(ישראל|Israel)\s*$/i, '').trim();
+  // Remove city name if it appears after a comma at the end
+  if (city && cleaned.toLowerCase().endsWith(city.toLowerCase())) {
+    cleaned = cleaned.replace(new RegExp(',\\s*' + city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'i'), '').trim();
+  }
+  return cleaned;
+}
+
 // Helper: build address object, omitting empty/short strings (API requires minLength 2)
 function buildAddress(city, street, country) {
   const addr = {};
   if (country && country.length >= 2) addr.country = country;
   if (city && city.length >= 2) addr.city = city;
-  if (street && street.length >= 2) addr.street = street;
+  const cleanedStreet = cleanStreet(street, city);
+  if (cleanedStreet && cleanedStreet.length >= 2) addr.street = cleanedStreet;
   return addr;
 }
 
@@ -215,10 +228,14 @@ Deno.serve(async (req) => {
       console.log(`[GetPackage] Creating quote for order ${orderId}`);
       console.log(`[GetPackage] Full quote body:`, JSON.stringify(quoteBody));
       
-      // Try Shared Route quote first (simple flat body)
+      // SharedRoute quote only accepts { address } in points — no contactName/phone/instructions
+      const cleanPickUpPoint = { address: pickUpPointData.address };
+      const cleanDropOffPoint = { address: dropOffPointData.address };
+
+      // Try Shared Route quote first (simple flat body, no instructions)
       const sharedRouteBody = {
-        pickUpPoint: pickUpPointData,
-        dropOffPoint: dropOffPointData,
+        pickUpPoint: cleanPickUpPoint,
+        dropOffPoint: cleanDropOffPoint,
         package: { size: packageSize },
       };
       
@@ -229,9 +246,18 @@ Deno.serve(async (req) => {
       // If Shared Route fails, try Express
       if (!result.ok) {
         console.log(`[GetPackage] Shared Route failed (${result.status}):`, JSON.stringify(result.data).substring(0, 300));
-        console.log(`[GetPackage] Trying express body:`, JSON.stringify(quoteBody));
+        // Express body: deliveries array with stopPointsOrder
+        const expressBody = {
+          deliveries: [{
+            pickUpPoint: pickUpPointData,
+            dropOffPoint: dropOffPointData,
+            package: { size: packageSize },
+          }],
+          stopPointsOrder: [0, 1],
+        };
+        console.log(`[GetPackage] Trying express body:`, JSON.stringify(expressBody));
         usedEndpoint = 'express';
-        result = await gpFetch(settings, 'POST', '/v1/deliveries/express/quote', quoteBody);
+        result = await gpFetch(settings, 'POST', '/v1/deliveries/express/quote', expressBody);
       }
       
       console.log(`[GetPackage] Used endpoint: ${usedEndpoint}, result status: ${result.status}`);
@@ -260,17 +286,26 @@ Deno.serve(async (req) => {
       };
 
       if (result.ok && result.data) {
-        // Extract quote details - response structure: { id, routes: [{ price, ... }], trackingUrl, ... }
+        // Extract quote details - response varies by endpoint
+        // SharedRoute: { totalRate, currency, taxRate }
+        // Express: { id, routes: [{ price, ... }], trackingUrl, ... }
         const quoteId = result.data.id || result.data.quoteId || '';
         
-        // Price can be in different places depending on the response
         let price = null;
         let currency = 'ILS';
-        if (result.data.routes && result.data.routes.length > 0) {
+        
+        // SharedRoute format
+        if (result.data.totalRate !== undefined) {
+          price = result.data.totalRate;
+          currency = result.data.currency || 'ILS';
+        }
+        // Express format with routes
+        if (price === null && result.data.routes && result.data.routes.length > 0) {
           const route = result.data.routes[0];
           price = route.price?.amount || route.price || route.totalPrice?.amount || null;
           currency = route.price?.currency || route.totalPrice?.currency || 'ILS';
         }
+        // Generic fallback
         if (price === null) {
           price = result.data.price?.amount || result.data.totalPrice?.amount || result.data.price || null;
           if (result.data.price?.currency) currency = result.data.price.currency;
