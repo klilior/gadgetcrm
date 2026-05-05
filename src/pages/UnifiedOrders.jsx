@@ -82,6 +82,30 @@ export default function UnifiedOrders() {
       for (const c of rawClients) cM[c.id] = c;
     } catch (e) { /* clients will be empty */ }
 
+    // Pre-fetch shipments and GetPackage shipments for tracking enrichment
+    let shipmentsByOrder = {};
+    let gpShipmentsByOrder = {};
+    try {
+      const recentShipments = await base44.entities.Shipment.list('-created_date', 200);
+      for (const s of recentShipments) {
+        if (s.tracking_number && s.external_order_number) {
+          if (!shipmentsByOrder[s.external_order_number] || s.created_date > shipmentsByOrder[s.external_order_number].created_date) {
+            shipmentsByOrder[s.external_order_number] = s;
+          }
+        }
+      }
+    } catch (_) {}
+    try {
+      const gpShipments = await base44.entities.GetPackageShipment.list('-created_date', 200);
+      for (const s of gpShipments) {
+        if (s.order_id && s.delivery_id && !['cancelled', 'failed', 'draft', 'quote_failed'].includes(s.status)) {
+          if (!gpShipmentsByOrder[s.order_id] || s.created_date > gpShipmentsByOrder[s.order_id].created_date) {
+            gpShipmentsByOrder[s.order_id] = s;
+          }
+        }
+      }
+    } catch (_) {}
+
     // WooCommerce
     let woo = [];
     try {
@@ -97,9 +121,36 @@ export default function UnifiedOrders() {
         const pr = pM[o.id] || [];
         let billing = {};
         try { billing = JSON.parse(o.raw_data_billing || '{}'); } catch(_){}
+        // Resolve tracking: Order entity > Shipment entity > GetPackage
+        let trackNum = o.tracking_number || '';
+        let trackCarrier = o.tracking_carrier || '';
+        let trackUrl = o.tracking_url || '';
+        const extNum = o.external_order_number || '';
+        
+        // Fallback: check Shipment entity by external order number
+        if (!trackNum && shipmentsByOrder[extNum]) {
+          const sh = shipmentsByOrder[extNum];
+          trackNum = sh.tracking_number || '';
+          trackCarrier = sh.carrier || '';
+        }
+        // Fallback: check GetPackage by order ID
+        if (!trackNum && gpShipmentsByOrder[o.id]) {
+          const gp = gpShipmentsByOrder[o.id];
+          trackNum = gp.delivery_id || '';
+          trackCarrier = 'getpackage';
+          trackUrl = gp.tracking_url || '';
+        }
+        // Also check GP by "woo_" prefixed ID
+        if (!trackNum && gpShipmentsByOrder['woo_' + o.id]) {
+          const gp = gpShipmentsByOrder['woo_' + o.id];
+          trackNum = gp.delivery_id || '';
+          trackCarrier = 'getpackage';
+          trackUrl = gp.tracking_url || '';
+        }
+
         woo.push({
           id: 'woo_' + o.id, source: 'woocommerce',
-          order_number: o.external_order_number || '', order_date: o.order_date || '',
+          order_number: extNum, order_date: o.order_date || '',
           customer_name: c?.full_name || '', customer_phone: c?.phone || '',
           customer_email: billing.email || c?.email || '',
           products: pr.map(x => ({name: x.name||'', quantity: x.quantity||1, total: parseFloat(x.total)||0, meta_data: x.meta_data || ''})),
@@ -109,7 +160,10 @@ export default function UnifiedOrders() {
           shipping_city: billing.city || c?.city || '',
           shipping_street: billing.address_1 || c?.address || '',
           shipping_address_full: [billing.address_1, billing.city, billing.postcode].filter(Boolean).join(', '),
-          external_order_number: o.external_order_number || '',
+          external_order_number: extNum,
+          tracking_number: trackNum,
+          tracking_carrier: trackCarrier,
+          tracking_url: trackUrl,
         });
       }
     } catch (e) { errs.push({source: 'woocommerce', message: e.message}); }
@@ -132,7 +186,10 @@ export default function UnifiedOrders() {
           shipping_address_full: o.shipping_address_full || '',
           status: o.order_state || '', notes: o.notes || '',
           raw_id: o.id, mirakl_order_id: o.mirakl_order_id || '',
-          tracking_number: o.tracking_number || '', currency: o.currency || 'ILS',
+          tracking_number: o.tracking_number || '',
+          tracking_carrier: o.carrier_name || o.carrier_code || '',
+          tracking_url: '',
+          currency: o.currency || 'ILS',
           raw_mirakl_json: o.raw_mirakl_json || '',
           customer_first_name: o.customer_first_name || '',
           customer_last_name: o.customer_last_name || '',
@@ -294,6 +351,7 @@ export default function UnifiedOrders() {
         o.order_number?.toLowerCase().includes(search) ||
         o.customer_name?.toLowerCase().includes(search) ||
         o.customer_phone?.includes(search) ||
+        o.tracking_number?.toLowerCase().includes(search) ||
         o.products?.some(p => p.name?.toLowerCase().includes(search))
       );
     });

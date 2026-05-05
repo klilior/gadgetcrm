@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Printer, ExternalLink, Loader2, Receipt } from "lucide-react";
-import { printShipmentLabel } from "@/functions/printShipmentLabel";
+import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import GetPackageOrderCard from "../getpackage/GetPackageOrderCard";
+import TrackingSection from "./TrackingSection";
 import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusOptions, getStatusColor } from "./OrderStatusConfig";
@@ -24,43 +24,9 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
   const statusOptions = getStatusOptions(order.source);
-  const [printingLabel, setPrintingLabel] = useState(false);
   const shippingType = detectShippingType(order);
   const shippingBadge = getShippingTypeBadge(shippingType);
 
-  const handlePrintLabel = async (trackingNum) => {
-    setPrintingLabel(true);
-    try {
-      const { data } = await printShipmentLabel({ tracking_number: trackingNum, label_format: 'a4' });
-      if (data.success && data.pdf_base64) {
-        const byteChars = atob(data.pdf_base64);
-        const byteNumbers = new Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'application/pdf' });
-        const blobUrl = URL.createObjectURL(blob);
-        const htmlContent = `<!DOCTYPE html><html><head><title>שטר מטען - ${trackingNum}</title><style>html,body{margin:0;padding:0;height:100%;overflow:hidden;}iframe{width:100%;height:100%;border:none;}</style></head><body><iframe src="${blobUrl}#toolbar=1&navpanes=0"></iframe></body></html>`;
-        const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
-        const htmlUrl = URL.createObjectURL(htmlBlob);
-        const opened = window.open(htmlUrl, '_blank');
-        if (!opened) {
-          const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = `label-${trackingNum}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }
-        toast.success('שטר מטען נפתח');
-      } else {
-        toast.error(data.error || 'שגיאה בהורדת שטר מטען');
-      }
-    } catch (e) {
-      toast.error('שגיאה: ' + e.message);
-    } finally {
-      setPrintingLabel(false);
-    }
-  };
   const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
 
@@ -168,11 +134,6 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
               <span className="font-semibold">מזהה לינט:</span> {order.linet_doc_id}
             </div>
           )}
-          {order.tracking_number && (
-            <div className="text-xs text-gray-500">
-              <span className="font-semibold">מעקב:</span> {order.tracking_number}
-            </div>
-          )}
           {order.notes && (
             <div className="mt-2 bg-yellow-50 rounded-lg p-2 text-xs text-yellow-800 border border-yellow-200">
               <div className="flex items-center gap-1 font-semibold mb-0.5"><StickyNote className="w-3 h-3" /> הערת לקוח:</div>
@@ -181,6 +142,11 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           )}
         </div>
       </div>
+
+      {/* Tracking Section - shown when tracking exists */}
+      {order.tracking_number && (
+        <TrackingSection order={order} />
+      )}
 
       {/* GetPackage Shipment Card - always shown */}
       <div data-getpackage-card>
@@ -229,19 +195,6 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
             <a href={`https://wa.me/972${order.customer_phone.replace(/^0/, '')}`} target="_blank" rel="noopener noreferrer">
               💬 וואטסאפ
             </a>
-          </Button>
-        )}
-
-        {/* Tracking / Print label */}
-        {order.tracking_number && (
-          <Button
-            variant="outline"
-            className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
-            disabled={printingLabel}
-            onClick={() => handlePrintLabel(order.tracking_number)}
-          >
-            {printingLabel ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Printer className="w-4 h-4 ml-1" />}
-            📄 שטר מטען ({order.tracking_number})
           </Button>
         )}
 

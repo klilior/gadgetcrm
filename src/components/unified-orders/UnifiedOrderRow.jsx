@@ -78,6 +78,11 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
               🔥 דחוף
             </span>
           )}
+          {order.tracking_number && (
+            <span className="inline-flex items-center gap-0.5 bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+              📦 {order.tracking_number.length > 12 ? order.tracking_number.slice(0, 12) + '...' : order.tracking_number}
+            </span>
+          )}
         </div>
       </TableCell>
     </TableRow>

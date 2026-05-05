@@ -1,0 +1,123 @@
+{
+  "name": "Client",
+  "type": "object",
+  "properties": {
+    "full_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05de\u05dc\u05d0"
+    },
+    "phone": {
+      "type": "string",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df (\u05de\u05e0\u05d5\u05e8\u05de\u05dc)",
+      "index": true
+    },
+    "phone_original": {
+      "type": "string",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05de\u05e7\u05d5\u05e8\u05d9 (\u05de\u05dc\u05d9\u05e0\u05d8)"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "\u05d3\u05d5\u05d0\"\u05dc",
+      "index": true
+    },
+    "city": {
+      "type": "string",
+      "description": "\u05e2\u05d9\u05e8"
+    },
+    "full_address": {
+      "type": "string",
+      "description": "\u05db\u05ea\u05d5\u05d1\u05ea \u05de\u05dc\u05d0\u05d4"
+    },
+    "preferred_channel": {
+      "type": "string",
+      "enum": [
+        "whatsapp",
+        "phone",
+        "email",
+        "website"
+      ],
+      "description": "\u05e2\u05e8\u05d5\u05e5 \u05de\u05d5\u05e2\u05d3\u05e3"
+    },
+    "source": {
+      "type": "string",
+      "description": "\u05de\u05e7\u05d5\u05e8 \u05d4\u05dc\u05e7\u05d5\u05d7"
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    },
+    "woo_customer_id": {
+      "type": "number",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05dc\u05e7\u05d5\u05d7 \u05d1-WooCommerce",
+      "index": true,
+      "unique": true
+    },
+    "linet_account_id": {
+      "type": "number",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d7\u05e9\u05d1\u05d5\u05df \u05d1\u05dc\u05d9\u05e0\u05d8",
+      "index": true
+    },
+    "customer_score": {
+      "type": "number",
+      "description": "\u05e6\u05d9\u05d5\u05df \u05dc\u05e7\u05d5\u05d7 (0-100)",
+      "default": 0
+    },
+    "customer_tier": {
+      "type": "string",
+      "enum": [
+        "VIP",
+        "\u05d6\u05d4\u05d1",
+        "\u05db\u05e1\u05e3",
+        "\u05d1\u05e8\u05d5\u05e0\u05d6\u05d4",
+        "\u05d7\u05d3\u05e9"
+      ],
+      "default": "\u05d7\u05d3\u05e9",
+      "description": "\u05d3\u05e8\u05d2\u05ea \u05dc\u05e7\u05d5\u05d7"
+    },
+    "ai_summary": {
+      "type": "string",
+      "description": "\u05e1\u05d9\u05db\u05d5\u05dd AI \u05e9\u05dc \u05d4\u05dc\u05e7\u05d5\u05d7"
+    },
+    "ai_summary_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05e1\u05d9\u05db\u05d5\u05dd AI \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "total_spent": {
+      "type": "number",
+      "description": "\u05e1\u05d4\"\u05db \u05d4\u05d5\u05e6\u05d0\u05d5\u05ea",
+      "default": 0
+    },
+    "total_orders": {
+      "type": "number",
+      "description": "\u05e1\u05d4\"\u05db \u05d4\u05d6\u05de\u05e0\u05d5\u05ea",
+      "default": 0
+    },
+    "total_repairs": {
+      "type": "number",
+      "description": "\u05e1\u05d4\"\u05db \u05ea\u05d9\u05e7\u05d5\u05e0\u05d9\u05dd",
+      "default": 0
+    },
+    "last_interaction_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d0\u05d9\u05e0\u05d8\u05e8\u05d0\u05e7\u05e6\u05d9\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "last_tracking_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05de\u05e2\u05e7\u05d1 \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "last_tracking_carrier": {
+      "type": "string",
+      "description": "\u05d7\u05d1\u05e8\u05ea \u05de\u05e9\u05dc\u05d5\u05d7 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "last_tracking_url": {
+      "type": "string",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05de\u05e2\u05e7\u05d1 \u05d0\u05d7\u05e8\u05d5\u05df"
+    }
+  },
+  "required": [
+    "full_name"
+  ]
+}

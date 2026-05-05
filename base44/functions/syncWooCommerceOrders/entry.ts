@@ -28,6 +28,84 @@ function phoneVariants(phone) {
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// ─── Extract tracking from WooCommerce meta_data ───
+function extractTrackingFromWoo(wooOrder) {
+    const meta = wooOrder.meta_data || [];
+    let tracking_number = '';
+    let tracking_carrier = '';
+    let tracking_url = '';
+
+    // Common tracking plugins: WooCommerce Shipment Tracking, YITH, AfterShip, etc.
+    const trackingKeys = [
+        '_wc_shipment_tracking_items', 'wc_shipment_tracking_items',
+        '_tracking_number', 'tracking_number',
+        '_aftership_tracking_number', 'aftership_tracking_number',
+        '_yith_tracking_code', 'yith_tracking_code',
+        'pakkelabels_tracking_number'
+    ];
+    const carrierKeys = [
+        '_tracking_provider', 'tracking_provider',
+        '_aftership_tracking_provider', 'aftership_tracking_provider',
+        '_yith_tracking_name', 'yith_tracking_name',
+    ];
+    const urlKeys = [
+        '_tracking_link', 'tracking_link',
+        '_aftership_tracking_url', 'aftership_tracking_url',
+        '_yith_tracking_url', 'yith_tracking_url',
+    ];
+
+    // Check for shipment tracking items (array format from WooCommerce Shipment Tracking plugin)
+    for (const m of meta) {
+        if (trackingKeys.includes(m.key)) {
+            if (Array.isArray(m.value) && m.value.length > 0) {
+                const item = m.value[0]; // Take the first tracking item
+                tracking_number = item.tracking_number || item.tracking_id || '';
+                tracking_carrier = item.tracking_provider || item.custom_tracking_provider || '';
+                tracking_url = item.tracking_link || item.custom_tracking_link || '';
+            } else if (typeof m.value === 'string' && m.value.length > 2) {
+                // Try to parse JSON
+                try {
+                    const parsed = JSON.parse(m.value);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        tracking_number = parsed[0].tracking_number || '';
+                        tracking_carrier = parsed[0].tracking_provider || '';
+                        tracking_url = parsed[0].tracking_link || '';
+                    }
+                } catch (_) {
+                    // Plain string tracking number
+                    tracking_number = m.value;
+                }
+            }
+        }
+    }
+
+    // If not found yet, check individual meta keys
+    if (!tracking_number) {
+        for (const m of meta) {
+            if (!tracking_number && trackingKeys.includes(m.key) && typeof m.value === 'string') {
+                tracking_number = m.value;
+            }
+            if (!tracking_carrier && carrierKeys.includes(m.key) && typeof m.value === 'string') {
+                tracking_carrier = m.value;
+            }
+            if (!tracking_url && urlKeys.includes(m.key) && typeof m.value === 'string') {
+                tracking_url = m.value;
+            }
+        }
+    }
+
+    // Normalize carrier name
+    if (tracking_carrier) {
+        const lc = tracking_carrier.toLowerCase();
+        if (lc.includes('cargo') || lc.includes('קארגו')) tracking_carrier = 'cargo';
+        else if (lc.includes('ups')) tracking_carrier = 'ups';
+        else if (lc.includes('getpackage') || lc.includes('get package')) tracking_carrier = 'getpackage';
+        else if (lc.includes('velo')) tracking_carrier = 'velo';
+    }
+
+    return { tracking_number: tracking_number.trim(), tracking_carrier, tracking_url };
+}
+
 async function withRetry(fn, retries = 3) {
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {
@@ -208,6 +286,25 @@ Deno.serve(async (req) => {
                 if (wo.total !== existing.total) updateData.total = wo.total;
                 if (wo.customer_note && wo.customer_note !== existing.customer_note) updateData.customer_note = wo.customer_note;
                 
+                // Pull tracking info from WooCommerce meta_data
+                const trackingInfo = extractTrackingFromWoo(wo);
+                if (trackingInfo.tracking_number && trackingInfo.tracking_number !== existing.tracking_number) {
+                    updateData.tracking_number = trackingInfo.tracking_number;
+                    updateData.tracking_carrier = trackingInfo.tracking_carrier;
+                    if (trackingInfo.tracking_url) updateData.tracking_url = trackingInfo.tracking_url;
+                    console.log(`📦 Tracking found for #${wo.id}: ${trackingInfo.tracking_number} (${trackingInfo.tracking_carrier})`);
+                    // Update client tracking info
+                    if (existing.client_id) {
+                        try {
+                            await sr.Client.update(existing.client_id, {
+                                last_tracking_number: trackingInfo.tracking_number,
+                                last_tracking_carrier: trackingInfo.tracking_carrier,
+                                last_tracking_url: trackingInfo.tracking_url || '',
+                            });
+                        } catch (_) {}
+                    }
+                }
+                
                 await withRetry(() => sr.Order.update(existing.id, updateData));
                 updated++;
             } catch (err) {
@@ -238,6 +335,9 @@ Deno.serve(async (req) => {
 
                 const billingNoteMeta = (wo.meta_data || []).find(m => m.key === 'billing_note' || m.key === '_billing_note');
 
+                // Extract tracking info
+                const trackingInfo = extractTrackingFromWoo(wo);
+
                 const orderData = {
                     external_order_number: wo.id.toString(),
                     order_date: wo.date_created,
@@ -251,6 +351,12 @@ Deno.serve(async (req) => {
                     pickup_point_data: pickupPointData,
                 };
                 if (clientId) orderData.client_id = clientId;
+                if (trackingInfo.tracking_number) {
+                    orderData.tracking_number = trackingInfo.tracking_number;
+                    orderData.tracking_carrier = trackingInfo.tracking_carrier;
+                    orderData.tracking_url = trackingInfo.tracking_url;
+                    console.log(`📦 Tracking for new #${wo.id}: ${trackingInfo.tracking_number}`);
+                }
 
                 const createdOrder = await withRetry(() => sr.Order.create(orderData));
 
@@ -273,11 +379,17 @@ Deno.serve(async (req) => {
                 if (clientId) {
                     const clientOrders = await withRetry(() => sr.Order.filter({ client_id: clientId }));
                     const totalSpent = clientOrders.reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
-                    await withRetry(() => sr.Client.update(clientId, {
+                    const clientUpdate = {
                         total_spent: Math.round(totalSpent),
                         total_orders: clientOrders.length,
                         last_interaction_date: new Date().toISOString(),
-                    }));
+                    };
+                    if (trackingInfo.tracking_number) {
+                        clientUpdate.last_tracking_number = trackingInfo.tracking_number;
+                        clientUpdate.last_tracking_carrier = trackingInfo.tracking_carrier;
+                        clientUpdate.last_tracking_url = trackingInfo.tracking_url || '';
+                    }
+                    await withRetry(() => sr.Client.update(clientId, clientUpdate));
                 }
             } catch (err) {
                 failed++;
