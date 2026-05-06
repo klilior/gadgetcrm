@@ -25,6 +25,7 @@ import SPLinetInvoiceModal from "../components/superpharm/SPLinetInvoiceModal";
 import MobileOrderCard from "../components/unified-orders/MobileOrderCard";
 import OrderDetailPanel from "../components/unified-orders/OrderDetailPanel";
 import CargoShipmentModal from "../components/cargo/CargoShipmentModal";
+import PostShipmentConfirmDialog from "../components/unified-orders/PostShipmentConfirmDialog";
 
 const PAGE_SIZE = 25;
 
@@ -56,6 +57,7 @@ export default function UnifiedOrders() {
   const [invoiceOrder, setInvoiceOrder] = useState(null);
   const [upsSuccessData, setUpsSuccessData] = useState(null);
   const [cargoOrder, setCargoOrder] = useState(null);
+  const [postShipmentData, setPostShipmentData] = useState(null); // { order, trackingNumber }
 
   // Expanded row
   const [expandedId, setExpandedId] = useState(null);
@@ -705,9 +707,9 @@ export default function UnifiedOrders() {
               };
               setUpsSuccessData({ trackingNumber: tracking_number, order: spOrder });
             } else {
-              // WooCommerce / Linet - just close, no Mirakl/Linet flow needed
+              // WooCommerce / Linet - show post-shipment confirmation dialog
+              setPostShipmentData({ order: shipmentOrder, trackingNumber: tracking_number });
               setShipmentOrder(null);
-              loadData(true);
             }
           }}
         />
@@ -726,7 +728,7 @@ export default function UnifiedOrders() {
         />
       )}
 
-      {/* Non-Mirakl shipment */}
+      {/* Non-carrier-flagged shipment (WooCommerce orders via OrderDetailPanel default) */}
       {shipmentOrder && !shipmentOrder._shipCarrier && (
         <CreateShipmentModal
           open={!!shipmentOrder}
@@ -743,6 +745,12 @@ export default function UnifiedOrders() {
             phone: shipmentOrder.customer_phone,
             city: shipmentOrder.shipping_city || '',
           }}
+          onSuccess={({ tracking_number }) => {
+            if (tracking_number && (shipmentOrder.source === 'woocommerce' || shipmentOrder.source === 'mirakl')) {
+              setPostShipmentData({ order: shipmentOrder, trackingNumber: tracking_number });
+            }
+            setShipmentOrder(null);
+          }}
         />
       )}
 
@@ -750,7 +758,14 @@ export default function UnifiedOrders() {
       {cargoOrder && (
         <CargoShipmentModal
           open={!!cargoOrder}
-          onClose={() => { setCargoOrder(null); loadData(true); }}
+          onClose={(resultData) => {
+            if (resultData?.shipment_id && (cargoOrder.source === 'woocommerce' || cargoOrder.source === 'mirakl')) {
+              setPostShipmentData({ order: cargoOrder, trackingNumber: String(resultData.shipment_id) });
+            } else {
+              loadData(true);
+            }
+            setCargoOrder(null);
+          }}
           order={cargoOrder}
           client={{ full_name: cargoOrder.customer_name, phone: cargoOrder.customer_phone, city: cargoOrder.shipping_city || '' }}
         />
@@ -763,6 +778,19 @@ export default function UnifiedOrders() {
           open={!!invoiceOrder}
           onClose={() => setInvoiceOrder(null)}
           onInvoiceCreated={() => loadData(true)}
+        />
+      )}
+
+      {/* Post-Shipment Confirmation Dialog (WooCommerce/Linet status update) */}
+      {postShipmentData && (
+        <PostShipmentConfirmDialog
+          open={!!postShipmentData}
+          onClose={() => { setPostShipmentData(null); loadData(true); }}
+          order={postShipmentData.order}
+          trackingNumber={postShipmentData.trackingNumber}
+          onStatusUpdated={() => {
+            loadData(true);
+          }}
         />
       )}
     </div>

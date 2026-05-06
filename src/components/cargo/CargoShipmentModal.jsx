@@ -228,7 +228,7 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
               </div>
             )}
 
-            <Button variant="outline" onClick={onClose} className="w-full rounded-xl">סגור</Button>
+            <Button variant="outline" onClick={() => onClose(result)} className="w-full rounded-xl">סגור</Button>
           </div>
         </DialogContent>
       </Dialog>

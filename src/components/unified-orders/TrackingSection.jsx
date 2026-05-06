@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Truck, Copy, ExternalLink, Printer, Loader2, MessageCircle } from "lucide-react";
+import { Truck, Copy, ExternalLink, Printer, Loader2, MessageCircle, Clock } from "lucide-react";
 import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { sendTrackingSms } from "@/functions/sendTrackingSms";
+import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 function getTrackingUrl(carrier, trackingNumber, existingUrl) {
   if (existingUrl) return existingUrl;
@@ -33,11 +35,38 @@ function copyText(text) {
 export default function TrackingSection({ order }) {
   const [printingLabel, setPrintingLabel] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
+  const [smsSentAt, setSmsSentAt] = useState(null);
+  const [loadingSmsStatus, setLoadingSmsStatus] = useState(false);
 
   const trackingNumber = order.tracking_number;
   const trackingCarrier = order.tracking_carrier;
   const trackingUrl = getTrackingUrl(trackingCarrier, trackingNumber, order.tracking_url);
   const carrierInfo = getCarrierDisplay(trackingCarrier);
+
+  // Check if SMS was already sent for this tracking number
+  useEffect(() => {
+    if (!trackingNumber) return;
+    let cancelled = false;
+    const checkSms = async () => {
+      setLoadingSmsStatus(true);
+      try {
+        const orderId = order.raw_id || order.id || '';
+        if (!orderId) { setLoadingSmsStatus(false); return; }
+        const activities = await base44.entities.Activity.filter(
+          { order_id: orderId.replace(/^(woo_|mirakl_|linet_)/, ''), activity_type: 'הודעה' },
+          '-created_date', 10
+        );
+        if (cancelled) return;
+        const smsActivity = activities.find(a => a.summary?.includes(trackingNumber) && a.summary?.includes('SMS מעקב'));
+        if (smsActivity) {
+          setSmsSentAt(smsActivity.created_date);
+        }
+      } catch (_) {}
+      if (!cancelled) setLoadingSmsStatus(false);
+    };
+    checkSms();
+    return () => { cancelled = true; };
+  }, [trackingNumber, order.raw_id, order.id]);
 
   if (!trackingNumber) return null;
 
@@ -118,6 +147,16 @@ export default function TrackingSection({ order }) {
           </button>
         </div>
 
+        {/* SMS sent indicator */}
+        {smsSentAt && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-green-200 text-green-700 text-xs font-medium">
+            <MessageCircle className="w-3.5 h-3.5" />
+            SMS נשלח
+            <Clock className="w-3 h-3 text-green-500" />
+            {(() => { try { return format(new Date(smsSentAt), "dd/MM HH:mm"); } catch { return ''; } })()}
+          </div>
+        )}
+
         {trackingUrl && (
           <a href={trackingUrl} target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-green-200 text-green-700 hover:bg-green-50 text-sm font-medium transition-colors">
@@ -144,12 +183,12 @@ export default function TrackingSection({ order }) {
         {order.customer_phone && (
           <Button
             size="sm"
-            className="rounded-full bg-green-600 hover:bg-green-700 text-white text-xs"
+            className={`rounded-full text-xs ${smsSentAt ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-600 hover:bg-green-700'} text-white`}
             disabled={sendingSms}
             onClick={handleSendTrackingSms}
           >
             {sendingSms ? <Loader2 className="w-3.5 h-3.5 animate-spin ml-1" /> : <MessageCircle className="w-3.5 h-3.5 ml-1" />}
-            📱 שלח SMS מעקב ללקוח
+            {smsSentAt ? '📱 שלח SMS שוב' : '📱 שלח SMS מעקב ללקוח'}
           </Button>
         )}
       </div>
