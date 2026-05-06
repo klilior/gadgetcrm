@@ -56,9 +56,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // Get cargo config from ShippingProvider entity
+    // Get cargo config from ShippingProvider entity (use service role for system config)
     async function getCargoConfig() {
-      const providers = await base44.entities.ShippingProvider.filter({ provider_type: 'cargo' });
+      const providers = await base44.asServiceRole.entities.ShippingProvider.filter({ provider_type: 'cargo' });
       const cargo = providers.find(p => p.is_active);
       if (!cargo) throw new Error('ספק קארגו לא מוגדר או לא פעיל. עבור להגדרות → ספקי משלוחים.');
       const config = cargo.config || {};
