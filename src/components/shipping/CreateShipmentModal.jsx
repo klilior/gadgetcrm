@@ -93,15 +93,19 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
     // Parse pickup point from WooCommerce order
     const pp = parsePickupPointData(order);
     if (pp) {
+      // Customer already selected a pickup point - use it directly, no search needed
       setWooPickupPoint(pp);
       setTab("pickup_point");
+      // Clear any previous search results since we have the customer's choice
+      setPickupPoints([]);
+      setSelectedPoint(null);
     } else {
       setWooPickupPoint(null);
       // Auto-detect type from shipping method
       const method = order?.shipping_method || '';
       if (method.includes('נקודת') || method.includes('pickup') || method.includes('איסוף')) {
         setTab("pickup_point");
-        // Auto-search pickup points when city is available
+        // Auto-search pickup points when city is available (only if customer didn't pre-select)
         if (cityName) {
           autoSearchPickupPoints(cityName, streetName);
         }
@@ -317,7 +321,8 @@ iframe{width:100%;height:100%;border:none;}</style></head>
         <Tabs value={tab} onValueChange={(val) => {
           setTab(val);
           // Auto-search when switching to pickup_point tab and no points loaded yet
-          if (val === "pickup_point" && !wooPickupPoint && pickupPoints.length === 0 && city && !searchingPoints) {
+          // Skip if customer already selected a pickup point (wooPickupPoint)
+          if (val === "pickup_point" && !wooPickupPoint && !selectedPoint && pickupPoints.length === 0 && city && !searchingPoints) {
             autoSearchPickupPoints(city, street);
           }
         }} dir="rtl">
