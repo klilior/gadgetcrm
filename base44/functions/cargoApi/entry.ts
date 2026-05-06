@@ -192,11 +192,11 @@ Deno.serve(async (req) => {
       const customer_code = parseInt(config.customer_code) || 7625;
       const statusPayload = { shipment_id: parseInt(shipment_id), customer_code };
       
-      const data = await cargoRequest(config.api_token, 'shipments/status', 'POST', statusPayload);
+      const data = await cargoRequest(config.api_token, 'shipments/get-status', 'POST', statusPayload);
       
       console.log('📦 Status response:', JSON.stringify(data).slice(0, 500));
       const innerStatus = data.data || data;
-      const statusCode = innerStatus.status || innerStatus.shipment_status || data.status || null;
+      const statusCode = innerStatus.status_code || innerStatus.status || innerStatus.shipment_status || data.status || null;
       const statusText = CARGO_STATUS_MAP[statusCode] || `סטטוס ${statusCode || 'לא ידוע'}`;
 
       // Update Shipment entity if exists
@@ -220,48 +220,30 @@ Deno.serve(async (req) => {
       const customer_code = parseInt(config.customer_code) || 7625;
       const sid = parseInt(shipment_id);
       
-      // Try multiple known Cargo API label endpoints
-      const labelPayload = { shipment_ids: [sid], customer_code, format: 'pdf' };
-      const endpoints = ['shipments/print-label', 'shipments/print_label', 'shipments/print-label-a4', 'shipments/print_label_a4', 'shipments/sticker', 'shipments/label'];
+      // Cargo API v2 label endpoints (from official docs)
+      // Try multiple payload formats since docs aren't accessible
+      const payloadVariants = [
+        { shipment_ids: [sid], customer_code },
+        { shipment_id: sid, customer_code },
+        { shipment_ids: [sid], customer_code, format: 'pdf' },
+      ];
+      const endpoints = ['shipments/print-label', 'shipments/print-label-a4'];
       
       let data = null;
       let successEndpoint = null;
       
       for (const endpoint of endpoints) {
-        try {
-          data = await cargoRequest(config.api_token, endpoint, 'POST', labelPayload);
-          successEndpoint = endpoint;
-          console.log(`📦 Label success via ${endpoint}`);
-          break;
-        } catch (e) {
-          console.log(`📦 Label endpoint ${endpoint} failed: ${e.message.slice(0, 120)}`);
-        }
-      }
-      
-      if (!data) {
-        // Fallback: construct label URL directly (Cargo often provides label at a known URL pattern)
-        const directUrl = `https://api-v2.cargo.co.il/api/shipments/sticker/${sid}?customer_code=${customer_code}`;
-        console.log(`📦 Trying direct label URL: ${directUrl}`);
-        try {
-          const directRes = await fetch(directUrl, {
-            headers: { 'Authorization': `Bearer ${config.api_token}` }
-          });
-          if (directRes.ok) {
-            const contentType = directRes.headers.get('content-type') || '';
-            if (contentType.includes('pdf') || contentType.includes('octet')) {
-              return Response.json({ success: true, label_url: directUrl });
-            }
-            const text = await directRes.text();
-            try {
-              data = JSON.parse(text);
-              successEndpoint = 'direct-url';
-            } catch {
-              console.log(`📦 Direct URL returned non-JSON: ${text.slice(0, 200)}`);
-            }
+        for (const payload of payloadVariants) {
+          try {
+            data = await cargoRequest(config.api_token, endpoint, 'POST', payload);
+            successEndpoint = endpoint;
+            console.log(`📦 Label success via ${endpoint} with payload keys: ${Object.keys(payload).join(',')}`);
+            break;
+          } catch (e) {
+            console.log(`📦 ${endpoint} failed (${Object.keys(payload).join(',')}): ${e.message.slice(0, 150)}`);
           }
-        } catch (e) {
-          console.log(`📦 Direct URL failed: ${e.message}`);
         }
+        if (data) break;
       }
 
       if (!data) {
@@ -272,19 +254,30 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Parse response - Cargo returns PDF URL or base64
+      // Parse response - Cargo may return PDF URL, base64, or HTML
       const inner = data.data || data;
       let label_url = null;
       let label_base64 = null;
       
-      if (typeof inner === 'string' && (inner.startsWith('http') || inner.endsWith('.pdf'))) {
-        label_url = inner;
+      if (typeof inner === 'string') {
+        if (inner.startsWith('http')) {
+          label_url = inner;
+        } else if (inner.startsWith('JVBER') || inner.startsWith('/9j/')) {
+          // Base64-encoded PDF or image
+          label_base64 = inner;
+        }
       } else if (typeof inner === 'object') {
-        label_url = inner.label_url || inner.url || inner.pdf_url || inner.sticker_url || null;
-        label_base64 = inner.label_base64 || inner.pdf || inner.base64 || inner.sticker || null;
+        label_url = inner.label_url || inner.url || inner.pdf_url || inner.sticker_url || inner.link || null;
+        label_base64 = inner.label_base64 || inner.pdf || inner.base64 || inner.sticker || inner.label || null;
       }
-      if (!label_url) label_url = data.label_url || data.url || data.sticker_url || null;
-      if (!label_base64) label_base64 = data.label_base64 || data.pdf || data.sticker || null;
+      if (!label_url) label_url = data.label_url || data.url || data.sticker_url || data.link || null;
+      if (!label_base64) label_base64 = data.label_base64 || data.pdf || data.sticker || data.label || null;
+
+      // If we got data but couldn't extract url/base64, return the raw response for debugging
+      if (!label_url && !label_base64) {
+        console.log('📦 Label data received but could not extract URL/base64:', JSON.stringify(data).slice(0, 1000));
+        return Response.json({ success: true, label_url: null, label_base64: null, raw: data, endpoint_used: successEndpoint });
+      }
 
       return Response.json({ success: true, label_url, label_base64, endpoint_used: successEndpoint });
     }
