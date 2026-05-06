@@ -668,7 +668,7 @@ export default function UnifiedOrders() {
         />
       )}
 
-      {/* Mirakl UPS (pickup point) */}
+      {/* UPS (pickup point) - for Mirakl orders: show SP success screen after; for others: just close */}
       {shipmentOrder && shipmentOrder._shipCarrier === 'ups' && !upsSuccessData && (
         <CreateShipmentModal
           open={true}
@@ -684,8 +684,8 @@ export default function UnifiedOrders() {
             }),
             external_order_number: shipmentOrder.mirakl_order_id || shipmentOrder.order_number,
             shipping_method: 'איסוף מנקודת איסוף',
-            id: null,
-            client_id: null,
+            id: shipmentOrder.source === 'woocommerce' ? shipmentOrder.raw_id : null,
+            client_id: shipmentOrder.source === 'woocommerce' ? shipmentOrder.client_id : null,
           }}
           client={{
             full_name: shipmentOrder.customer_name,
@@ -693,8 +693,8 @@ export default function UnifiedOrders() {
             city: shipmentOrder.shipping_city || '',
           }}
           onSuccess={({ tracking_number }) => {
-            if (tracking_number) {
-              // Build a full SP order object for SPShipmentSuccessScreen
+            if (tracking_number && shipmentOrder.source === 'mirakl') {
+              // Only show Mirakl update + Linet invoice screen for Mirakl orders
               const spOrder = {
                 mirakl_order_id: shipmentOrder.mirakl_order_id || shipmentOrder.order_number,
                 customer_first_name: shipmentOrder.customer_first_name || shipmentOrder.customer_name?.split(' ')[0] || '',
@@ -705,6 +705,7 @@ export default function UnifiedOrders() {
               };
               setUpsSuccessData({ trackingNumber: tracking_number, order: spOrder });
             } else {
+              // WooCommerce / Linet - just close, no Mirakl/Linet flow needed
               setShipmentOrder(null);
               loadData(true);
             }
@@ -712,7 +713,7 @@ export default function UnifiedOrders() {
         />
       )}
 
-      {/* UPS Success Screen with Mirakl update + Linet invoice */}
+      {/* UPS Success Screen with Mirakl update + Linet invoice (Mirakl orders only) */}
       {upsSuccessData && (
         <SPShipmentSuccessScreen
           trackingNumber={upsSuccessData.trackingNumber}
