@@ -220,30 +220,59 @@ Deno.serve(async (req) => {
       const customer_code = parseInt(config.customer_code) || 7625;
       const sid = parseInt(shipment_id);
       
-      // Per Cargo docs: shipment_ids = array|integer, format = 'pdf'|'zpl'|'base64'
-      let data = null;
+      // Try multiple known Cargo API label endpoints
       const labelPayload = { shipment_ids: [sid], customer_code, format: 'pdf' };
+      const endpoints = ['shipments/print-label', 'shipments/print_label', 'shipments/print-label-a4', 'shipments/print_label_a4', 'shipments/sticker', 'shipments/label'];
       
-      // Try up to 2 times with a pause between
-      for (let attempt = 0; attempt < 2; attempt++) {
+      let data = null;
+      let successEndpoint = null;
+      
+      for (const endpoint of endpoints) {
         try {
-          data = await cargoRequest(config.api_token, 'shipments/label', 'POST', labelPayload);
-          console.log(`📦 Label success on attempt ${attempt + 1}`);
+          data = await cargoRequest(config.api_token, endpoint, 'POST', labelPayload);
+          successEndpoint = endpoint;
+          console.log(`📦 Label success via ${endpoint}`);
           break;
         } catch (e) {
-          console.log(`📦 Label attempt ${attempt + 1}/2 failed: ${e.message.slice(0, 120)}`);
-          if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
+          console.log(`📦 Label endpoint ${endpoint} failed: ${e.message.slice(0, 120)}`);
         }
       }
       
       if (!data) {
+        // Fallback: construct label URL directly (Cargo often provides label at a known URL pattern)
+        const directUrl = `https://api-v2.cargo.co.il/api/shipments/sticker/${sid}?customer_code=${customer_code}`;
+        console.log(`📦 Trying direct label URL: ${directUrl}`);
+        try {
+          const directRes = await fetch(directUrl, {
+            headers: { 'Authorization': `Bearer ${config.api_token}` }
+          });
+          if (directRes.ok) {
+            const contentType = directRes.headers.get('content-type') || '';
+            if (contentType.includes('pdf') || contentType.includes('octet')) {
+              return Response.json({ success: true, label_url: directUrl });
+            }
+            const text = await directRes.text();
+            try {
+              data = JSON.parse(text);
+              successEndpoint = 'direct-url';
+            } catch {
+              console.log(`📦 Direct URL returned non-JSON: ${text.slice(0, 200)}`);
+            }
+          }
+        } catch (e) {
+          console.log(`📦 Direct URL failed: ${e.message}`);
+        }
+      }
+
+      if (!data) {
         return Response.json({ 
           success: false, 
-          error: `שגיאה בהדפסת תווית מקארגו (שרת קארגו לא זמין כרגע). מספר המשלוח: ${shipment_id}. נסה שוב בעוד דקה.` 
+          error: `שגיאה בהדפסת תווית מקארגו. מספר המשלוח: ${shipment_id}. נסה להדפיס ישירות מאתר קארגו.`,
+          shipment_id: String(sid)
         });
       }
 
-      // Cargo returns PDF URL as data.data (string URL) or nested object
+      // Parse response - Cargo returns PDF URL or base64
       const inner = data.data || data;
       let label_url = null;
       let label_base64 = null;
@@ -251,13 +280,13 @@ Deno.serve(async (req) => {
       if (typeof inner === 'string' && (inner.startsWith('http') || inner.endsWith('.pdf'))) {
         label_url = inner;
       } else if (typeof inner === 'object') {
-        label_url = inner.label_url || inner.url || inner.pdf_url || null;
-        label_base64 = inner.label_base64 || inner.pdf || inner.base64 || null;
+        label_url = inner.label_url || inner.url || inner.pdf_url || inner.sticker_url || null;
+        label_base64 = inner.label_base64 || inner.pdf || inner.base64 || inner.sticker || null;
       }
-      if (!label_url) label_url = data.label_url || data.url || null;
-      if (!label_base64) label_base64 = data.label_base64 || data.pdf || null;
+      if (!label_url) label_url = data.label_url || data.url || data.sticker_url || null;
+      if (!label_base64) label_base64 = data.label_base64 || data.pdf || data.sticker || null;
 
-      return Response.json({ success: true, label_url, label_base64 });
+      return Response.json({ success: true, label_url, label_base64, endpoint_used: successEndpoint });
     }
 
     // ACTION: register_webhook
