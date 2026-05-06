@@ -10,6 +10,7 @@ import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusOptions, getStatusColor } from "./OrderStatusConfig";
 import { detectShippingType, getShippingTypeBadge } from "./ShippingTypeHelper";
+import { Store } from "lucide-react";
 import ProductMetaBadges from "./ProductMetaBadges";
 
 function copyText(text) {
@@ -100,6 +101,21 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
 
   return (
     <div dir="rtl" className={`bg-gradient-to-br ${sourceBg[order.source] || 'from-slate-50 to-white border-gray-100'} p-4 md:p-5 space-y-4 border-t`}>
+      {/* Self-pickup alert banner */}
+      {shippingType === 'self_pickup' && (
+        <div className="bg-green-100 border-2 border-green-500 rounded-2xl p-4 flex items-center gap-3 animate-pulse shadow-lg shadow-green-200">
+          <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+            <Store className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <p className="text-green-900 font-black text-lg">🏪 איסוף עצמי מהחנות!</p>
+            <p className="text-green-700 text-sm font-medium">
+              {order.shipping_method || 'הלקוח בחר איסוף עצמי — אין צורך במשלוח'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Top row - source, order number, time */}
       <div className="flex flex-wrap items-center gap-3">
         <SourceBadge source={order.source} />

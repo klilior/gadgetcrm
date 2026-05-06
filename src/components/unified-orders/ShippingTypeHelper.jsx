@@ -1,29 +1,37 @@
 /**
  * Detects the shipping type the customer chose.
- * Returns: 'cargo' | 'ups' | 'getpackage' | null
+ * Returns: 'self_pickup' | 'cargo' | 'ups' | 'getpackage' | null
  *
- * cargo (blue)       = שליח עד הבית
- * ups (brown/amber)  = נקודות איסוף / pickup
- * getpackage (red)   = משלוח מהיום להיום / express / same-day
+ * self_pickup (green) = איסוף עצמי מהחנות / מהמוכר
+ * cargo (blue)        = שליח עד הבית
+ * ups (brown/amber)   = נקודות איסוף / pickup points
+ * getpackage (red)    = משלוח מהיום להיום / express / same-day
  */
 
 export function detectShippingType(order) {
   if (!order) return null;
   const method = (order.shipping_method || '').toLowerCase();
-  const notes = (order.notes || '').toLowerCase();
 
   // Mirakl orders
   if (order.source === 'mirakl') {
     try {
       const raw = JSON.parse(order.raw_mirakl_json || '{}');
-      if (raw.shipping_type_code === 'pickup-locations') return 'ups';
+      const typeCode = raw.shipping_type_code || '';
       const label = (raw.shipping_type_label || '').toLowerCase();
-      if (label.includes('איסוף') || label.includes('pickup')) return 'ups';
+      // Self pickup from seller
+      if (typeCode === 'pickup-seller' || label.includes('איסוף עצמי') || label.includes('מהמוכר')) return 'self_pickup';
+      if (typeCode === 'pickup-locations') return 'ups';
+      if (label.includes('נקודת') || label.includes('pickup')) return 'ups';
     } catch {}
     return 'cargo'; // default for Mirakl is home delivery
   }
 
   // WooCommerce / Linet orders - detect from shipping method text
+  // IMPORTANT: Check self_pickup FIRST — "איסוף מקניון" or "איסוף עצמי" means customer picks up from store
+  // These contain "איסוף" which would otherwise match 'ups'
+  if (method.includes('איסוף מ') || method.includes('איסוף עצמי') || method.includes('self pickup') || method.includes('איסוף מהחנות')) {
+    return 'self_pickup';
+  }
   // IMPORTANT: Check getpackage BEFORE cargo — "משלוח היום" contains "משלוח" which would match cargo first
   if (method.includes('מהיום') || method.includes('משלוח היום') || method.includes('express') || method.includes('same') || method.includes('דחוף') || method.includes('getpackage')) {
     return 'getpackage';
@@ -43,6 +51,12 @@ export function detectShippingType(order) {
  */
 export function getShippingTypeBadge(type) {
   switch (type) {
+    case 'self_pickup':
+      return {
+        label: '🏪 איסוף עצמי מהחנות',
+        className: 'bg-green-200 text-green-900 border-2 border-green-500 font-bold',
+        buttonMatch: 'self_pickup',
+      };
     case 'cargo':
       return {
         label: '🚚 שליח עד הבית',

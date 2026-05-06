@@ -2,7 +2,7 @@ import React from "react";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronDown, AlertTriangle, Package, Truck } from "lucide-react";
+import { ChevronDown, AlertTriangle, Package, Truck, Store } from "lucide-react";
 import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusColor, isClosedStatus } from "./OrderStatusConfig";
@@ -67,10 +67,11 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
           <Badge className={`${statusColor} text-xs`}>{statusLabel}</Badge>
           {shippingBadge && (
             <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${shippingBadge.className}`}>
+              {shippingType === 'self_pickup' && <Store className="w-3 h-3" />}
               {shippingType === 'ups' && <Package className="w-3 h-3" />}
               {shippingType === 'cargo' && <Truck className="w-3 h-3" />}
               {shippingType === 'getpackage' && <span>⚡</span>}
-              {shippingType === 'cargo' ? 'שליח' : shippingType === 'ups' ? 'איסוף' : 'היום'}
+              {shippingType === 'self_pickup' ? '🏪 איסוף עצמי' : shippingType === 'cargo' ? 'שליח' : shippingType === 'ups' ? 'איסוף' : 'היום'}
             </span>
           )}
           {isUrgent && (
