@@ -166,8 +166,19 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
     try {
       const res = await cargoApi({ action: 'print_label', shipment_id: result.shipment_id });
       const data = res.data || res;
+      console.log('📦 Label response:', JSON.stringify(data).slice(0, 500));
+      
+      if (data.success === false) {
+        toast.error(data.error || 'שגיאה בהדפסת תווית');
+        return;
+      }
+      
       if (data.label_url) {
-        window.open(data.label_url, '_blank');
+        const w = window.open(data.label_url, '_blank');
+        if (!w) {
+          // Popup blocked - use direct navigation
+          window.location.href = data.label_url;
+        }
         toast.success('התווית נפתחה');
       } else if (data.label_base64) {
         const byteChars = atob(data.label_base64);
@@ -175,13 +186,24 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
         for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
         const blob = new Blob([byteArray], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
+        const w = window.open(url, '_blank');
+        if (!w) {
+          // Popup blocked - use download link
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `cargo-label-${result.shipment_id}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
         toast.success('התווית נפתחה');
       } else {
-        toast.error('לא התקבלה תווית מקארגו');
+        toast.error('לא התקבלה תווית מקארגו. נסה שוב בעוד רגע.');
+        console.error('📦 No label data in response:', data);
       }
     } catch (e) {
-      toast.error('שגיאה בהדפסת תווית: ' + e.message);
+      toast.error('שגיאה בהדפסת תווית: ' + (e.response?.data?.error || e.message));
+      console.error('📦 Label error:', e);
     } finally {
       setPrintingLabel(false);
     }

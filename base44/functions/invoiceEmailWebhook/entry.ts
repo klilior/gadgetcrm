@@ -37,8 +37,8 @@ Deno.serve(async (req) => {
       
       const fileField = formData.get('file');
       if (fileField && fileField instanceof File) {
-        // Upload binary file to Base44
-        const uploadResult = await base44.integrations.Core.UploadFile({ file: fileField });
+        // Upload binary file to Base44 (use service role since this is a webhook with no user session)
+        const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({ file: fileField });
         file_url = uploadResult.file_url;
         file_name = file_name || fileField.name;
         file_mime = fileField.type;
