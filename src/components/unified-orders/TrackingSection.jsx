@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Truck, Copy, ExternalLink, Printer, Loader2, MessageCircle, Clock } from "lucide-react";
 import { printShipmentLabel } from "@/functions/printShipmentLabel";
+import { cargoApi } from "@/functions/cargoApi";
 import { sendTrackingSms } from "@/functions/sendTrackingSms";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
@@ -71,17 +72,32 @@ export default function TrackingSection({ order }) {
   if (!trackingNumber) return null;
 
   const handlePrintLabel = async () => {
-    // For cargo/ups, use the existing printShipmentLabel function
     const c = (trackingCarrier || '').toLowerCase();
-    if (c === 'cargo' || c === 'ups' || c === 'velo') {
-      setPrintingLabel(true);
-      try {
+    setPrintingLabel(true);
+    try {
+      if (c === 'cargo' || c === 'קארגו') {
+        // Cargo labels go through cargoApi
+        const { data } = await cargoApi({ action: 'print_label', shipment_id: trackingNumber });
+        if (data.label_url) {
+          window.open(data.label_url, '_blank');
+          toast.success('תווית קארגו נפתחה');
+        } else if (data.label_base64) {
+          const byteChars = atob(data.label_base64);
+          const byteArray = new Uint8Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+          const blob = new Blob([byteArray], { type: 'application/pdf' });
+          window.open(URL.createObjectURL(blob), '_blank');
+          toast.success('תווית קארגו נפתחה');
+        } else {
+          toast.error(data.error || 'שגיאה בהדפסת תווית קארגו');
+        }
+      } else if (c === 'ups' || c === 'velo') {
+        // UPS/Velo labels go through printShipmentLabel (ship.co.il)
         const { data } = await printShipmentLabel({ tracking_number: trackingNumber, label_format: 'a4' });
         if (data.success && data.pdf_base64) {
           const byteChars = atob(data.pdf_base64);
-          const byteNumbers = new Array(byteChars.length);
-          for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-          const byteArray = new Uint8Array(byteNumbers);
+          const byteArray = new Uint8Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
           const blob = new Blob([byteArray], { type: 'application/pdf' });
           const blobUrl = URL.createObjectURL(blob);
           const htmlContent = `<!DOCTYPE html><html><head><title>שטר מטען - ${trackingNumber}</title><style>html,body{margin:0;padding:0;height:100%;overflow:hidden;}iframe{width:100%;height:100%;border:none;}</style></head><body><iframe src="${blobUrl}#toolbar=1&navpanes=0"></iframe></body></html>`;
@@ -91,14 +107,13 @@ export default function TrackingSection({ order }) {
         } else {
           toast.error(data.error || 'שגיאה בהורדת שטר מטען');
         }
-      } catch (e) {
-        toast.error('שגיאה: ' + e.message);
-      } finally {
-        setPrintingLabel(false);
+      } else if (c === 'getpackage' && trackingUrl) {
+        window.open(trackingUrl, '_blank');
       }
-    } else if (c === 'getpackage' && trackingUrl) {
-      // For GetPackage, open the tracking URL
-      window.open(trackingUrl, '_blank');
+    } catch (e) {
+      toast.error('שגיאה: ' + (e?.response?.data?.error || e.message));
+    } finally {
+      setPrintingLabel(false);
     }
   };
 
