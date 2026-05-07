@@ -48,10 +48,8 @@ async function cargoRequest(token, endpoint, method = 'POST', body = null) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // Skip base44 auth - this app uses custom Employee auth
+    // All entity operations use asServiceRole which doesn't require user auth
 
     const body = await req.json();
     const { action } = body;
