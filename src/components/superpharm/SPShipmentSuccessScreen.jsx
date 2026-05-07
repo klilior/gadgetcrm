@@ -74,12 +74,15 @@ iframe{width:100%;height:100%;border:none;}</style></head>
     try {
       // Step 1: Update Mirakl with tracking + mark as shipped
       setStep("מעדכן מספר מעקב ב-Mirakl...");
+      // Detect carrier from order context — default to cargo for SuperPharm
+      const orderCarrier = (order?.carrier_code || order?.tracking_carrier || '').toLowerCase();
+      const isUps = orderCarrier.includes('ups');
       const { data: miraklResult } = await updateSuperPharmOrder({
         action: "ship",
         order_id: order.mirakl_order_id,
         tracking_number: trackingNumber,
-        carrier_code: "deliv_ups",
-        carrier_name: "UPS",
+        carrier_code: isUps ? "deliv_ups" : "deliv_cargoexp",
+        carrier_name: isUps ? "UPS" : "Cargo-Ship",
       });
 
       if (!miraklResult.success) {

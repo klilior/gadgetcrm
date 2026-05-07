@@ -91,7 +91,7 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
           action: "ship",
           order_id: order.mirakl_order_id,
           tracking_number: tn,
-          carrier_code: "cargo_deliv",
+          carrier_code: "deliv_cargoexp",
           carrier_name: "Cargo-Ship",
         });
 

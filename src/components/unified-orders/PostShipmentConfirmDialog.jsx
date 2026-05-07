@@ -39,7 +39,8 @@ export default function PostShipmentConfirmDialog({ open, onClose, order, tracki
           action: 'ship',
           order_id: order.mirakl_order_id || order.order_number,
           tracking_number: trackingNumber,
-          carrier_code: carrier === 'cargo' ? 'CARGO' : 'UPS',
+          carrier_code: carrier === 'cargo' ? 'deliv_cargoexp' : 'deliv_ups',
+          carrier_name: carrier === 'cargo' ? 'Cargo-Ship' : 'UPS',
         });
         toast.success('הזמנה עודכנה ל-"נשלחה" ב-Mirakl');
       }

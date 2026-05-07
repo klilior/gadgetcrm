@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const RAW_MIRAKL_API_URL = Deno.env.get('MIRAKL_API_URL');
 const MIRAKL_API_KEY = Deno.env.get('MIRAKL_API_KEY');
@@ -54,6 +54,12 @@ Deno.serve(async (req) => {
     const sr = base44.asServiceRole.entities;
     const body = await req.json();
     const { action, order_id, tracking_number, carrier_code, carrier_name } = body;
+
+    // list_carriers doesn't need order_id
+    if (action === 'list_carriers') {
+      const data = await miraklRequest('GET', '/shipping/carriers');
+      return Response.json({ success: true, carriers: data });
+    }
 
     if (!order_id) {
       return Response.json({ error: 'חסר מזהה הזמנה' }, { status: 400 });
@@ -172,9 +178,22 @@ Deno.serve(async (req) => {
         return Response.json({ error: 'חסר מספר מעקב' }, { status: 400 });
       }
 
-      // Step 1: Set tracking info on the order
-      const finalCarrierCode = carrier_code || 'deliv_ups';
-      const finalCarrierName = carrier_name || 'UPS';
+      // Step 1: Normalize carrier code to valid Mirakl codes
+      // Valid: deliv_cargoexp (Cargo-Ship), deliv_ups (UPS), deliv_getpackage (GetPackage)
+      let finalCarrierCode = carrier_code || 'deliv_ups';
+      let finalCarrierName = carrier_name || 'UPS';
+      const codeUpper = finalCarrierCode.toUpperCase();
+      if (['CARGO', 'קארגו', 'CARGO_IL', 'CARGO_DELIV'].includes(codeUpper)) {
+        finalCarrierCode = 'deliv_cargoexp';
+        finalCarrierName = finalCarrierName || 'Cargo-Ship';
+      } else if (codeUpper === 'UPS') {
+        finalCarrierCode = 'deliv_ups';
+        finalCarrierName = finalCarrierName || 'UPS';
+      } else if (codeUpper === 'GETPACKAGE') {
+        finalCarrierCode = 'deliv_getpackage';
+        finalCarrierName = finalCarrierName || 'GetPackage';
+      }
+      // If already prefixed with "deliv_" assume it's a valid Mirakl code
       console.log(`[Mirakl Ship] Setting tracking: ${tracking_number}, carrier: ${finalCarrierCode}`);
       await miraklRequest('PUT', `/orders/${order_id}/tracking`, {
         carrier_code: finalCarrierCode,

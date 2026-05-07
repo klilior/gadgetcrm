@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const RAW_MIRAKL_API_URL = Deno.env.get('MIRAKL_API_URL');
 const MIRAKL_API_KEY = Deno.env.get('MIRAKL_API_KEY');
