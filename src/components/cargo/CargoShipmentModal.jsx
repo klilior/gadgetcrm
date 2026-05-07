@@ -197,8 +197,9 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
 
   // Success view
   if (result) {
+    const closeWithResult = () => onClose(result);
     return (
-      <Dialog open={open} onOpenChange={() => onClose()}>
+      <Dialog open={open} onOpenChange={closeWithResult}>
         <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-700">
@@ -236,7 +237,7 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
               </div>
             )}
 
-            <Button variant="outline" onClick={() => onClose(result)} className="w-full rounded-xl">סגור</Button>
+            <Button variant="outline" onClick={closeWithResult} className="w-full rounded-xl">סגור</Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -173,6 +173,19 @@ Deno.serve(async (req) => {
         cargo_shipment_type: shipment_type,
       });
 
+      // Also update the Order entity with tracking info so it shows immediately
+      if (order_id) {
+        try {
+          await base44.asServiceRole.entities.Order.update(order_id, {
+            tracking_number: String(shipment_id),
+            tracking_carrier: 'cargo',
+          });
+          console.log(`📦 Updated Order ${order_id} with tracking ${shipment_id}`);
+        } catch (e) {
+          console.log(`📦 Could not update Order ${order_id}: ${e.message}`);
+        }
+      }
+
       return Response.json({
         success: true,
         shipment_id: String(shipment_id),
