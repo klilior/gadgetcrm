@@ -116,26 +116,7 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
       if (data.success) {
         setResult(data);
         toast.success(`משלוח קארגו נוצר בהצלחה! #${data.shipment_id}`);
-        // Auto-print label after successful creation (best-effort, user can retry manually)
-        if (data.shipment_id) {
-          setTimeout(async () => {
-            try {
-              const labelRes = await cargoApi({ action: 'print_label', shipment_id: data.shipment_id });
-              const labelData = labelRes.data || labelRes;
-              if (labelData.success !== false) {
-                if (labelData.label_url) {
-                  window.open(labelData.label_url, '_blank');
-                } else if (labelData.label_base64) {
-                  const byteChars = atob(labelData.label_base64);
-                  const byteArray = new Uint8Array(byteChars.length);
-                  for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-                  const blob = new Blob([byteArray], { type: 'application/pdf' });
-                  window.open(URL.createObjectURL(blob), '_blank');
-                }
-              }
-            } catch (_) { /* user can still click print button manually */ }
-          }, 1000);
-        }
+        // User can click "Print Label" button in the success view
       } else {
         setError(data.error || 'שגיאה ביצירת משלוח');
       }
@@ -162,6 +143,8 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
 
   const handlePrintLabel = async () => {
     if (!result?.shipment_id) return;
+    // Open window immediately on user click to avoid popup blocker
+    const printWindow = window.open('about:blank', '_blank');
     setPrintingLabel(true);
     try {
       const res = await cargoApi({ action: 'print_label', shipment_id: result.shipment_id });
@@ -169,14 +152,15 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
       console.log('📦 Label response:', JSON.stringify(data).slice(0, 500));
       
       if (data.success === false) {
+        if (printWindow) printWindow.close();
         toast.error(data.error || 'שגיאה בהדפסת תווית');
         return;
       }
       
       if (data.label_url) {
-        const w = window.open(data.label_url, '_blank');
-        if (!w) {
-          // Popup blocked - use direct navigation
+        if (printWindow) {
+          printWindow.location.href = data.label_url;
+        } else {
           window.location.href = data.label_url;
         }
         toast.success('התווית נפתחה');
@@ -186,9 +170,9 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
         for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
         const blob = new Blob([byteArray], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
-        const w = window.open(url, '_blank');
-        if (!w) {
-          // Popup blocked - use download link
+        if (printWindow) {
+          printWindow.location.href = url;
+        } else {
           const a = document.createElement('a');
           a.href = url;
           a.download = `cargo-label-${result.shipment_id}.pdf`;
@@ -198,10 +182,12 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
         }
         toast.success('התווית נפתחה');
       } else {
+        if (printWindow) printWindow.close();
         toast.error('לא התקבלה תווית מקארגו. נסה שוב בעוד רגע.');
         console.error('📦 No label data in response:', data);
       }
     } catch (e) {
+      if (printWindow) printWindow.close();
       toast.error('שגיאה בהדפסת תווית: ' + (e.response?.data?.error || e.message));
       console.error('📦 Label error:', e);
     } finally {
