@@ -55,11 +55,17 @@ export default function VendorReport() {
 
   const loadData = async () => {
     setIsLoading(true);
-    const [closedRepairs, credits, payments] = await Promise.all([
-      base44.entities.Repair.filter({ repair_type: "מעבדת Gadget-Team", status: { $in: ["תיקון נסגר", "מכשיר סיים תיקון וממתין לאיסוף"] } }, "-updated_date", 500),
-      base44.entities.LabCredit.list('-created_date', 500),
-      base44.entities.LabPayment.list('-created_date', 500)
-    ]);
+    let closedRepairs = [], credits = [], payments = [];
+    try {
+      [closedRepairs, credits, payments] = await Promise.all([
+        base44.entities.Repair.filter({ repair_type: "מעבדת Gadget-Team", status: { $in: ["תיקון נסגר", "מכשיר סיים תיקון וממתין לאיסוף"] } }, "-updated_date", 500),
+        base44.entities.LabCredit.list('-created_date', 500),
+        base44.entities.LabPayment.list('-created_date', 500)
+      ]);
+    } catch (err) {
+      console.error("Error loading vendor report data:", err);
+    }
+    console.log(`📊 VendorReport loaded: ${closedRepairs.length} repairs, ${credits.length} credits, ${payments.length} payments`);
 
     if (closedRepairs.length > 0) {
       const clientIds = [...new Set(closedRepairs.map(r => r.client_id).filter(Boolean))];
@@ -253,6 +259,77 @@ export default function VendorReport() {
         />
         <StatCard title="רווח נקי (לחנות)" value={`₪${overallStats.netProfit.toLocaleString()}`} icon={TrendingUp} color="text-green-700" />
       </div>
+
+      {/* All Payments Summary */}
+      {labPayments.length > 0 && (
+        <Card className="bg-white/80 backdrop-blur-sm border-white/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Banknote className="w-5 h-5 text-green-600" />
+              תשלומים למעבדה ({labPayments.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>תאריך</TableHead>
+                    <TableHead className="text-right">סכום</TableHead>
+                    <TableHead>סוג תשלום</TableHead>
+                    <TableHead>נרשם ע״י</TableHead>
+                    <TableHead>הערות</TableHead>
+                    {canEditAll && <TableHead>פעולות</TableHead>}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {labPayments.map(payment => {
+                    const isEditing = editingPaymentId === payment.id;
+                    return (
+                      <TableRow key={payment.id} className="bg-green-50/50">
+                        <TableCell className="text-xs">{format(parseISO(payment.payment_date || payment.created_date), 'dd/MM/yy')}</TableCell>
+                        <TableCell className="text-right font-bold text-green-600">
+                          {isEditing ? (
+                            <Input type="number" value={editPaymentValues.amount} onChange={e => setEditPaymentValues({...editPaymentValues, amount: e.target.value})} className="w-24" />
+                          ) : `₪${(payment.amount || 0).toLocaleString()}`}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <Input value={editPaymentValues.payment_type} onChange={e => setEditPaymentValues({...editPaymentValues, payment_type: e.target.value})} className="w-28" />
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">{payment.payment_type}</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-gray-500">{payment.recorded_by || '—'}</TableCell>
+                        <TableCell className="text-xs text-gray-500">
+                          {isEditing ? (
+                            <Input value={editPaymentValues.notes} onChange={e => setEditPaymentValues({...editPaymentValues, notes: e.target.value})} className="w-28" />
+                          ) : (payment.notes || '—')}
+                        </TableCell>
+                        {canEditAll && (
+                          <TableCell>
+                            {isEditing ? (
+                              <div className="flex gap-1">
+                                <Button size="icon" variant="ghost" onClick={() => handleSavePayment(payment)}><Save className="w-4 h-4 text-green-600" /></Button>
+                                <Button size="icon" variant="ghost" onClick={handleCancelPayment}><X className="w-4 h-4 text-red-600" /></Button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-1">
+                                <Button size="icon" variant="ghost" onClick={() => handleEditPayment(payment)}><Edit className="w-4 h-4 text-blue-600" /></Button>
+                                <Button size="icon" variant="ghost" onClick={() => handleDeletePayment(payment.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Monthly breakdown */}
       <Card className="bg-white/80 backdrop-blur-sm border-white/40">
