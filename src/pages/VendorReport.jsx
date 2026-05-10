@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Loader2, HandCoins, TrendingUp, Wrench, Package, Edit, Save, X, PackageMinus, Plus, Trash2 } from 'lucide-react';
+import { Loader2, HandCoins, TrendingUp, Wrench, Package, Edit, Save, X, PackageMinus, Plus, Trash2, Banknote } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useUser } from '../components/UserAuth';
 import AddLabCreditModal from '../components/repairs/AddLabCreditModal';
+import AddLabPaymentModal from '../components/repairs/AddLabPaymentModal';
+import RepairDetailsModal from '../components/repairs/RepairDetailsModal';
 
 const StatCard = ({ title, value, icon: Icon, color, subtitle }) => (
   <div className="bg-white/80 backdrop-blur-sm border border-white/40 shadow-sm p-4 sm:p-6 rounded-2xl flex-1">
@@ -27,6 +29,7 @@ export default function VendorReport() {
   const { currentUser } = useUser();
   const [repairs, setRepairs] = useState([]);
   const [labCredits, setLabCredits] = useState([]);
+  const [labPayments, setLabPayments] = useState([]);
   const [clientsMap, setClientsMap] = useState({});
   const [techniciansMap, setTechniciansMap] = useState({});
   const [isLoading, setIsLoading] = useState(true);
@@ -35,6 +38,10 @@ export default function VendorReport() {
   const [editingCreditId, setEditingCreditId] = useState(null);
   const [editCreditValues, setEditCreditValues] = useState({});
   const [showAddCredit, setShowAddCredit] = useState(false);
+  const [showAddPayment, setShowAddPayment] = useState(false);
+  const [selectedRepair, setSelectedRepair] = useState(null);
+  const [editingPaymentId, setEditingPaymentId] = useState(null);
+  const [editPaymentValues, setEditPaymentValues] = useState({});
 
   const isManager = currentUser?.role === 'מנהל' || currentUser?.role === 'admin';
   const isShiftManager = currentUser?.role === 'מנהל משמרת';
@@ -48,9 +55,10 @@ export default function VendorReport() {
 
   const loadData = async () => {
     setIsLoading(true);
-    const [closedRepairs, credits] = await Promise.all([
+    const [closedRepairs, credits, payments] = await Promise.all([
       base44.entities.Repair.filter({ repair_type: "מעבדת Gadget-Team", status: { $in: ["תיקון נסגר", "מכשיר סיים תיקון וממתין לאיסוף"] } }, "-updated_date", 500),
-      base44.entities.LabCredit.list('-created_date', 500)
+      base44.entities.LabCredit.list('-created_date', 500),
+      base44.entities.LabPayment.list('-created_date', 500)
     ]);
 
     if (closedRepairs.length > 0) {
@@ -66,6 +74,7 @@ export default function VendorReport() {
 
     setRepairs(closedRepairs);
     setLabCredits(credits);
+    setLabPayments(payments);
     setIsLoading(false);
   };
 
@@ -74,24 +83,29 @@ export default function VendorReport() {
     const groups = {};
     repairs.forEach(r => {
       const monthKey = format(parseISO(r.updated_date), 'yyyy-MM');
-      if (!groups[monthKey]) groups[monthKey] = { repairs: [], credits: [] };
+      if (!groups[monthKey]) groups[monthKey] = { repairs: [], credits: [], payments: [] };
       groups[monthKey].repairs.push(r);
     });
     labCredits.forEach(c => {
       const dateStr = c.taken_date || c.created_date;
       const monthKey = format(parseISO(dateStr), 'yyyy-MM');
-      if (!groups[monthKey]) groups[monthKey] = { repairs: [], credits: [] };
+      if (!groups[monthKey]) groups[monthKey] = { repairs: [], credits: [], payments: [] };
       groups[monthKey].credits.push(c);
     });
+    labPayments.forEach(p => {
+      const monthKey = format(parseISO(p.payment_date || p.created_date), 'yyyy-MM');
+      if (!groups[monthKey]) groups[monthKey] = { repairs: [], credits: [], payments: [] };
+      groups[monthKey].payments.push(p);
+    });
     return groups;
-  }, [repairs, labCredits]);
+  }, [repairs, labCredits, labPayments]);
 
   const sortedMonths = useMemo(() => Object.keys(monthlyData).sort().reverse(), [monthlyData]);
 
   // Calculate stats per month
   const getMonthStats = (month) => {
     const data = monthlyData[month];
-    let totalRevenue = 0, totalLabPayment = 0, totalCredits = 0;
+    let totalRevenue = 0, totalLabPayment = 0, totalCredits = 0, totalPaid = 0;
     data.repairs.forEach(r => {
       const fp = r.final_price || 0;
       const pc = r.part_cost || 0;
@@ -103,13 +117,16 @@ export default function VendorReport() {
     data.credits.forEach(c => {
       totalCredits += c.amount || 0;
     });
-    const netOwed = totalLabPayment - totalCredits;
-    return { totalRevenue, totalLabPayment, totalCredits, netOwed, netProfit: totalRevenue - netOwed };
+    data.payments.forEach(p => {
+      totalPaid += p.amount || 0;
+    });
+    const netOwed = totalLabPayment - totalCredits - totalPaid;
+    return { totalRevenue, totalLabPayment, totalCredits, totalPaid, netOwed, netProfit: totalRevenue - (totalLabPayment - totalCredits) };
   };
 
   // Overall stats
   const overallStats = useMemo(() => {
-    let totalRevenue = 0, totalLabPayment = 0, totalCredits = 0;
+    let totalRevenue = 0, totalLabPayment = 0, totalCredits = 0, totalPaid = 0;
     repairs.forEach(r => {
       const fp = r.final_price || 0;
       const pc = r.part_cost || 0;
@@ -118,9 +135,10 @@ export default function VendorReport() {
       totalRevenue += fp;
     });
     labCredits.forEach(c => { totalCredits += c.amount || 0; });
-    const netOwed = totalLabPayment - totalCredits;
-    return { totalRevenue, totalLabPayment, totalCredits, netOwed, totalRepairs: repairs.length, netProfit: totalRevenue - netOwed };
-  }, [repairs, labCredits]);
+    labPayments.forEach(p => { totalPaid += p.amount || 0; });
+    const netOwed = totalLabPayment - totalCredits - totalPaid;
+    return { totalRevenue, totalLabPayment, totalCredits, totalPaid, netOwed, totalRepairs: repairs.length, netProfit: totalRevenue - (totalLabPayment - totalCredits) };
+  }, [repairs, labCredits, labPayments]);
 
   // Repair edit handlers
   const handleEdit = (repair) => {
@@ -161,6 +179,28 @@ export default function VendorReport() {
     loadData();
   };
 
+  // Payment edit handlers
+  const handleEditPayment = (p) => {
+    setEditingPaymentId(p.id);
+    setEditPaymentValues({ amount: p.amount, payment_type: p.payment_type, notes: p.notes || '' });
+  };
+  const handleSavePayment = async (p) => {
+    await base44.entities.LabPayment.update(p.id, {
+      amount: parseFloat(editPaymentValues.amount),
+      payment_type: editPaymentValues.payment_type,
+      notes: editPaymentValues.notes
+    });
+    setEditingPaymentId(null);
+    setEditPaymentValues({});
+    loadData();
+  };
+  const handleCancelPayment = () => { setEditingPaymentId(null); setEditPaymentValues({}); };
+  const handleDeletePayment = async (id) => {
+    if (!confirm('למחוק תשלום זה?')) return;
+    await base44.entities.LabPayment.delete(id);
+    loadData();
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full p-6">
@@ -177,12 +217,18 @@ export default function VendorReport() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">דוח התחשבנות מעבדת Gadget-Team</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {canAddCredit && (
-            <Button onClick={() => setShowAddCredit(true)} className="bg-orange-600 hover:bg-orange-700 gap-2">
-              <Plus className="w-4 h-4" />
-              רישום מוצר שנלקח
-            </Button>
+            <>
+              <Button onClick={() => setShowAddPayment(true)} className="bg-green-600 hover:bg-green-700 gap-2">
+                <Banknote className="w-4 h-4" />
+                רישום תשלום
+              </Button>
+              <Button onClick={() => setShowAddCredit(true)} className="bg-orange-600 hover:bg-orange-700 gap-2">
+                <Plus className="w-4 h-4" />
+                רישום מוצר שנלקח
+              </Button>
+            </>
           )}
           {!canAddCredit && (
             <Badge variant="secondary" className="text-sm px-3 py-1.5">📋 מצב צפיה בלבד</Badge>
@@ -191,18 +237,21 @@ export default function VendorReport() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <StatCard title="סה״כ הכנסות" value={`₪${overallStats.totalRevenue.toLocaleString()}`} icon={TrendingUp} color="text-blue-500" />
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <StatCard title="סה״כ הכנסות" value={`₪${overallStats.totalRevenue.toLocaleString()}`} icon={TrendingUp} color="text-blue-500" subtitle={`${overallStats.totalRepairs} תיקונים`} />
         <StatCard title="חוב למעבדה (תיקונים)" value={`₪${overallStats.totalLabPayment.toLocaleString()}`} icon={HandCoins} color="text-orange-500" />
-        <StatCard title="זיכויים (מוצרים שנלקחו)" value={`₪${overallStats.totalCredits.toLocaleString()}`} icon={PackageMinus} color="text-red-500" subtitle={`${labCredits.length} פריטים`} />
+        <StatCard title="זיכויים (מוצרים שנלקחו)" value={`-₪${overallStats.totalCredits.toLocaleString()}`} icon={PackageMinus} color="text-red-500" subtitle={`${labCredits.length} פריטים`} />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <StatCard title="תשלומים ששולמו" value={`-₪${overallStats.totalPaid.toLocaleString()}`} icon={Banknote} color="text-green-600" subtitle={`${labPayments.length} תשלומים`} />
         <StatCard
-          title="סה״כ לתשלום למעבדה"
+          title="יתרת חוב למעבדה"
           value={`₪${overallStats.netOwed.toLocaleString()}`}
           icon={HandCoins}
           color="text-purple-600"
-          subtitle="חוב תיקונים פחות זיכויים"
+          subtitle="חוב - זיכויים - תשלומים"
         />
-        <StatCard title="סה״כ תיקונים" value={overallStats.totalRepairs} icon={Package} color="text-indigo-500" />
+        <StatCard title="רווח נקי (לחנות)" value={`₪${overallStats.netProfit.toLocaleString()}`} icon={TrendingUp} color="text-green-700" />
       </div>
 
       {/* Monthly breakdown */}
@@ -227,7 +276,8 @@ export default function VendorReport() {
                           <span className="text-blue-600">הכנסות: ₪{stats.totalRevenue.toLocaleString()}</span>
                           <span className="text-orange-600">חוב תיקונים: ₪{stats.totalLabPayment.toLocaleString()}</span>
                           {stats.totalCredits > 0 && <span className="text-red-600">זיכויים: -₪{stats.totalCredits.toLocaleString()}</span>}
-                          <span className="text-purple-700 font-bold">לתשלום: ₪{stats.netOwed.toLocaleString()}</span>
+                          {stats.totalPaid > 0 && <span className="text-green-600">שולם: -₪{stats.totalPaid.toLocaleString()}</span>}
+                          <span className="text-purple-700 font-bold">יתרה: ₪{stats.netOwed.toLocaleString()}</span>
                         </div>
                       </div>
                     </AccordionTrigger>
@@ -261,16 +311,16 @@ export default function VendorReport() {
                                 const lab = (gross / 2) + pc;
                                 const net = fp - lab;
                                 return (
-                                <TableRow key={repair.id}>
-                                <TableCell className="font-mono text-xs">{repair.repair_id}</TableCell>
+                                <TableRow key={repair.id} className="cursor-pointer hover:bg-purple-50/50" onClick={() => setSelectedRepair(repair)}>
+                                <TableCell className="font-mono text-xs text-purple-700 underline">{repair.repair_id}</TableCell>
                                 <TableCell>{clientsMap[repair.client_id]?.full_name || "—"}</TableCell>
                                 <TableCell>{techniciansMap[repair.technician_id]?.employee_name || "—"}</TableCell>
-                                <TableCell className="text-right">
+                                <TableCell className="text-right" onClick={isEditing ? e => e.stopPropagation() : undefined}>
                                   {isEditing ? (
                                     <Input type="number" value={editValues.final_price} onChange={e => setEditValues({...editValues, final_price: e.target.value})} className="w-24" />
                                   ) : `₪${fp.toLocaleString()}`}
                                 </TableCell>
-                                <TableCell className="text-right">
+                                <TableCell className="text-right" onClick={isEditing ? e => e.stopPropagation() : undefined}>
                                   {isEditing ? (
                                     <Input type="number" value={editValues.part_cost} onChange={e => setEditValues({...editValues, part_cost: e.target.value})} className="w-24" />
                                   ) : `₪${pc.toLocaleString()}`}
@@ -279,7 +329,7 @@ export default function VendorReport() {
                                 <TableCell className="text-right font-bold text-orange-600">₪{lab.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</TableCell>
                                 <TableCell className="text-right font-bold text-green-600">₪{net.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</TableCell>
                                 {canEditAll && (
-                                  <TableCell>
+                                  <TableCell onClick={e => e.stopPropagation()}>
                                     {isEditing ? (
                                       <div className="flex gap-1">
                                         <Button size="icon" variant="ghost" onClick={() => handleSave(repair)}><Save className="w-4 h-4 text-green-600" /></Button>
@@ -367,6 +417,71 @@ export default function VendorReport() {
                           </div>
                         </div>
                       )}
+                      {/* Payments Table */}
+                      {data.payments.length > 0 && (
+                        <div>
+                          <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                            <Banknote className="w-4 h-4 text-green-600" /> תשלומים ({data.payments.length})
+                          </h4>
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>תאריך</TableHead>
+                                  <TableHead className="text-right">סכום</TableHead>
+                                  <TableHead>סוג תשלום</TableHead>
+                                  <TableHead>נרשם ע״י</TableHead>
+                                  <TableHead>הערות</TableHead>
+                                  {canEditAll && <TableHead>פעולות</TableHead>}
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {data.payments.map(payment => {
+                                  const isEditing = editingPaymentId === payment.id;
+                                  return (
+                                    <TableRow key={payment.id} className="bg-green-50/50">
+                                      <TableCell className="text-xs">{format(parseISO(payment.payment_date || payment.created_date), 'dd/MM/yy')}</TableCell>
+                                      <TableCell className="text-right font-bold text-green-600">
+                                        {isEditing ? (
+                                          <Input type="number" value={editPaymentValues.amount} onChange={e => setEditPaymentValues({...editPaymentValues, amount: e.target.value})} className="w-24" />
+                                        ) : `-₪${(payment.amount || 0).toLocaleString()}`}
+                                      </TableCell>
+                                      <TableCell>
+                                        {isEditing ? (
+                                          <Input value={editPaymentValues.payment_type} onChange={e => setEditPaymentValues({...editPaymentValues, payment_type: e.target.value})} className="w-28" />
+                                        ) : (
+                                          <Badge variant="secondary" className="text-xs">{payment.payment_type}</Badge>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-xs text-gray-500">{payment.recorded_by || '—'}</TableCell>
+                                      <TableCell className="text-xs text-gray-500">
+                                        {isEditing ? (
+                                          <Input value={editPaymentValues.notes} onChange={e => setEditPaymentValues({...editPaymentValues, notes: e.target.value})} className="w-28" />
+                                        ) : (payment.notes || '—')}
+                                      </TableCell>
+                                      {canEditAll && (
+                                        <TableCell>
+                                          {isEditing ? (
+                                            <div className="flex gap-1">
+                                              <Button size="icon" variant="ghost" onClick={() => handleSavePayment(payment)}><Save className="w-4 h-4 text-green-600" /></Button>
+                                              <Button size="icon" variant="ghost" onClick={handleCancelPayment}><X className="w-4 h-4 text-red-600" /></Button>
+                                            </div>
+                                          ) : (
+                                            <div className="flex gap-1">
+                                              <Button size="icon" variant="ghost" onClick={() => handleEditPayment(payment)}><Edit className="w-4 h-4 text-blue-600" /></Button>
+                                              <Button size="icon" variant="ghost" onClick={() => handleDeletePayment(payment.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                                            </div>
+                                          )}
+                                        </TableCell>
+                                      )}
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
                     </AccordionContent>
                   </AccordionItem>
                 );
@@ -377,6 +492,15 @@ export default function VendorReport() {
       </Card>
 
       <AddLabCreditModal isOpen={showAddCredit} onClose={() => setShowAddCredit(false)} onSaved={loadData} currentUser={currentUser} />
+      <AddLabPaymentModal isOpen={showAddPayment} onClose={() => setShowAddPayment(false)} onSaved={loadData} currentUser={currentUser} />
+      {selectedRepair && (
+        <RepairDetailsModal
+          isOpen={!!selectedRepair}
+          onClose={() => setSelectedRepair(null)}
+          repair={selectedRepair}
+          onUpdate={() => { setSelectedRepair(null); loadData(); }}
+        />
+      )}
     </div>
   );
 }
