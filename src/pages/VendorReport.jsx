@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Loader2, HandCoins, TrendingUp, Wrench, Package, Edit, Save, X, PackageMinus, Plus, Trash2, Banknote } from 'lucide-react';
+import VendorStatsCards from '../components/vendor-report/VendorStatsCards';
 import { format, parseISO } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -13,17 +14,6 @@ import { useUser } from '../components/UserAuth';
 import AddLabCreditModal from '../components/repairs/AddLabCreditModal';
 import AddLabPaymentModal from '../components/repairs/AddLabPaymentModal';
 import RepairDetailsModal from '../components/repairs/RepairDetailsModal';
-
-const StatCard = ({ title, value, icon: Icon, color, subtitle }) => (
-  <div className="bg-white/80 backdrop-blur-sm border border-white/40 shadow-sm p-4 sm:p-6 rounded-2xl flex-1">
-    <div className="flex justify-between items-center">
-      <h3 className="text-sm sm:text-base font-medium text-gray-600">{title}</h3>
-      <Icon className={`w-6 h-6 sm:w-8 sm:h-8 ${color}`} />
-    </div>
-    <p className="text-2xl sm:text-3xl font-bold mt-2 text-gray-900">{value}</p>
-    {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
-  </div>
-);
 
 export default function VendorReport() {
   const { currentUser } = useUser();
@@ -130,22 +120,6 @@ export default function VendorReport() {
     return { totalRevenue, totalLabPayment, totalCredits, totalPaid, netOwed, netProfit: totalRevenue - (totalLabPayment - totalCredits) };
   };
 
-  // Overall stats
-  const overallStats = useMemo(() => {
-    let totalRevenue = 0, totalLabPayment = 0, totalCredits = 0, totalPaid = 0;
-    repairs.forEach(r => {
-      const fp = r.final_price || 0;
-      const pc = r.part_cost || 0;
-      const gross = fp - pc;
-      totalLabPayment += (gross / 2) + pc;
-      totalRevenue += fp;
-    });
-    labCredits.forEach(c => { totalCredits += c.amount || 0; });
-    labPayments.forEach(p => { totalPaid += p.amount || 0; });
-    const netOwed = totalLabPayment - totalCredits - totalPaid;
-    return { totalRevenue, totalLabPayment, totalCredits, totalPaid, netOwed, totalRepairs: repairs.length, netProfit: totalRevenue - (totalLabPayment - totalCredits) };
-  }, [repairs, labCredits, labPayments]);
-
   // Repair edit handlers
   const handleEdit = (repair) => {
     setEditingRepairId(repair.id);
@@ -243,22 +217,7 @@ export default function VendorReport() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <StatCard title="סה״כ הכנסות" value={`₪${overallStats.totalRevenue.toLocaleString()}`} icon={TrendingUp} color="text-blue-500" subtitle={`${overallStats.totalRepairs} תיקונים`} />
-        <StatCard title="חוב למעבדה (תיקונים)" value={`₪${overallStats.totalLabPayment.toLocaleString()}`} icon={HandCoins} color="text-orange-500" />
-        <StatCard title="זיכויים (מוצרים שנלקחו)" value={`-₪${overallStats.totalCredits.toLocaleString()}`} icon={PackageMinus} color="text-red-500" subtitle={`${labCredits.length} פריטים`} />
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <StatCard title="תשלומים ששולמו" value={`-₪${overallStats.totalPaid.toLocaleString()}`} icon={Banknote} color="text-green-600" subtitle={`${labPayments.length} תשלומים`} />
-        <StatCard
-          title="יתרת חוב למעבדה"
-          value={`₪${overallStats.netOwed.toLocaleString()}`}
-          icon={HandCoins}
-          color="text-purple-600"
-          subtitle="חוב - זיכויים - תשלומים"
-        />
-        <StatCard title="רווח נקי (לחנות)" value={`₪${overallStats.netProfit.toLocaleString()}`} icon={TrendingUp} color="text-green-700" />
-      </div>
+      <VendorStatsCards repairs={repairs} labCredits={labCredits} labPayments={labPayments} />
 
       {/* All Payments Summary */}
       {labPayments.length > 0 && (
