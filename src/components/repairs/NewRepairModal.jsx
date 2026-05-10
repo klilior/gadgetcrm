@@ -303,7 +303,12 @@ export default function NewRepairModal({ isOpen, onClose, onRepairCreated }) {
             // Send SMS notification for new repair
             try {
                 if (selectedClient.phone) {
-                    const smsMessage = `שלום ${selectedClient.full_name}, המכשיר שלך התקבל במעבדה של Gadget-Team לתיקון (תיקון #${repairId}). מכשיר: ${selectedDevice.manufacturer} ${selectedDevice.model}. נעדכן אותך בהמשך התהליך. תודה!`;
+                    let smsMessage = `שלום ${selectedClient.full_name}, המכשיר שלך התקבל במעבדה של Gadget-Team לתיקון (תיקון #${repairId}). מכשיר: ${selectedDevice.manufacturer} ${selectedDevice.model}.`;
+                    if (repairData.repair_type === 'מעבדת יבואן') {
+                        const vendorName = allVendors.find(v => v.id === repairData.vendor_id)?.name || 'היבואן';
+                        smsMessage += ` המכשיר נמסר לטיפול אצל ${vendorName}. הטיפול יארך עד 21 ימי עסקים מיום הקבלה. במקרים חריגים ובהודעה מוקדמת, עד 30 ימי עסקים.`;
+                    }
+                    smsMessage += ` נעדכן אותך בהמשך התהליך. תודה! Gadget-Team`;
                     
                     const smsRes = await sendTextMeSMS({
                         action: "send",

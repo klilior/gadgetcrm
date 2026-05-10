@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Printer, X } from 'lucide-react';
@@ -248,6 +247,15 @@ export default function RepairReceipt({ repair, client, device, agent, isOpen, o
                                 <div className="info-label">סוג תיקון:</div>
                                 <div className="info-value">{repair.repair_type}</div>
                             </div>
+                            {repair.repair_type === 'מעבדת יבואן' && (
+                                <div style={{ background: '#FFF3CD', border: '2px solid #FFC107', padding: '10px', marginTop: '8px', borderRadius: '5px' }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: '12px', color: '#856404', marginBottom: '4px' }}>⏳ לוחות זמנים — טיפול יבואן:</div>
+                                    <div style={{ fontSize: '11px', color: '#856404', lineHeight: '1.6' }}>
+                                        המכשיר נמסר לטיפול אצל היבואן. הטיפול צפוי להימשך עד 21 ימי עסקים מיום הקבלה.
+                                        <br/>במקרים חריגים ובהודעה מוקדמת מראש, ייתכן שהתהליך יימשך עד 30 ימי עסקים.
+                                    </div>
+                                </div>
+                            )}
                             {repair.expected_price > 0 && (
                                 <div className="info-row">
                                     <div className="info-label">מחיר משוער:</div>

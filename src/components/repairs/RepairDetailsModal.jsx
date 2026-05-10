@@ -152,7 +152,12 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                         message += ` ניתן לאסוף מהמעבדה בשעות העבודה. א'-ה' 9:00-18:00, ו' 9:00-13:00. Gadget-Team`;
                         break;
                     case 'בטיפול/אבחון':
-                        message = `שלום ${client.full_name}, המכשיר שלך התקבל במעבדה לטיפול (תיקון #${repair.repair_id}). נעדכן אותך בהמשך התהליך. Gadget-Team`;
+                        message = `שלום ${client.full_name}, המכשיר שלך התקבל במעבדה לטיפול (תיקון #${repair.repair_id}).`;
+                        if (repair.repair_type === 'מעבדת יבואן') {
+                            const vName = vendor?.name || 'היבואן';
+                            message += ` המכשיר נמסר לטיפול אצל ${vName}. הטיפול יארך עד 21 ימי עסקים. במקרים חריגים ובהודעה מוקדמת, עד 30 ימי עסקים.`;
+                        }
+                        message += ` נעדכן אותך בהמשך התהליך. Gadget-Team`;
                         break;
                     case 'בטיפול החנות':
                         message = `שלום ${client.full_name}, המכשיר שלך התקבל לטיפול בחנות (תיקון #${repair.repair_id}). נעדכן אותך בהמשך התהליך. Gadget-Team`;
@@ -160,6 +165,11 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                     case 'הוזמן חלק':
                         message = `שלום ${client.full_name}, עבור תיקון #${repair.repair_id} - הוזמן חלק ספציפי. נעדכן כשהחלק יגיע למעבדה. תודה על הסבלנות! Gadget-Team`;
                         break;
+                    case 'At_Importer': {
+                        const impName = vendor?.name || 'היבואן';
+                        message = `שלום ${client.full_name}, המכשיר שלך (תיקון #${repair.repair_id}) נמסר לטיפול אצל ${impName}. הטיפול צפוי להימשך עד 21 ימי עסקים. במקרים חריגים ובהודעה מוקדמת, עד 30 ימי עסקים. נעדכן אותך כשהמכשיר יחזור. Gadget-Team`;
+                        break;
+                    }
                     case 'לא ניתן לתיקון':
                         message = `שלום ${client.full_name}, לאחר בדיקה מעמיקה, לצערנו לא ניתן לתקן את המכשיר (תיקון #${repair.repair_id}). נציג ייצור עמך קשר בקרוב. Gadget-Team`;
                         break;
@@ -332,7 +342,7 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                                 <CardContent className="space-y-4">
                                     <div>
                                         <Label className="font-semibold">סטטוס נוכחי:</Label>
-                                        <Badge className="mr-2">{repair.status}</Badge>
+                                        <Badge className="mr-2">{repair.status === 'At_Importer' ? `אצל היבואן${vendor?.name ? ` - ${vendor.name}` : ''}` : repair.status}</Badge>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>

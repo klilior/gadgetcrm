@@ -181,6 +181,13 @@ export default function RepairLabel({ repair, client, device, vendor, agent, isO
                                 {repair.repair_type === 'מעבדת יבואן' && (vendor?.name ? ` - ${vendor.name}` : '')}
                             </span>
                         </div>
+
+                        {repair.repair_type === 'מעבדת יבואן' && (
+                            <div style={{ background: '#FFF3CD', border: '2px solid #FFC107', padding: '8px', margin: '10px 0', borderRadius: '5px', fontSize: '12px', color: '#856404', fontWeight: 'bold', textAlign: 'center' }}>
+                                ⏳ טיפול יבואן — עד 21 ימי עסקים מיום הקבלה.
+                                <br/>במקרים חריגים ובהודעה מוקדמת, עד 30 ימי עסקים.
+                            </div>
+                        )}
                         
                         <div className="info-row">
                             <span className="info-label">קוד נעילה:</span>

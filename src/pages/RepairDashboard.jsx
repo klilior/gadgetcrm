@@ -347,11 +347,21 @@ export default function RepairDashboard() {
                         message += ` ניתן לאסוף מהמעבדה בשעות העבודה. א'-ה' 9:00-18:00, ו' 9:00-13:00. Gadget-Team`;
                         break;
                     case 'בטיפול/אבחון':
-                        message = `שלום ${clientData.full_name}, המכשיר שלך התקבל במעבדה לטיפול (תיקון #${shortId}). נעדכן אותך בהמשך התהליך. Gadget-Team`;
+                        message = `שלום ${clientData.full_name}, המכשיר שלך התקבל במעבדה לטיפול (תיקון #${shortId}).`;
+                        if (repair.repair_type === 'מעבדת יבואן') {
+                            const vendorName = repair.vendor?.name || 'היבואן';
+                            message += ` המכשיר נמסר לטיפול אצל ${vendorName}. הטיפול יארך עד 21 ימי עסקים. במקרים חריגים ובהודעה מוקדמת, עד 30 ימי עסקים.`;
+                        }
+                        message += ` נעדכן אותך בהמשך התהליך. Gadget-Team`;
                         break;
                     case 'הוזמן חלק':
                         message = `שלום ${clientData.full_name}, עבור תיקון #${shortId} - הוזמן חלק ספציפי. נעדכן כשהחלק יגיע למעבדה. תודה על הסבלנות! Gadget-Team`;
                         break;
+                    case 'At_Importer': {
+                        const impName = repair.vendor?.name || 'היבואן';
+                        message = `שלום ${clientData.full_name}, המכשיר שלך (תיקון #${shortId}) נמסר לטיפול אצל ${impName}. הטיפול צפוי להימשך עד 21 ימי עסקים. במקרים חריגים ובהודעה מוקדמת, עד 30 ימי עסקים. נעדכן אותך כשהמכשיר יחזור. Gadget-Team`;
+                        break;
+                    }
                     case 'לא ניתן לתיקון':
                         message = `שלום ${clientData.full_name}, לאחר בדיקה מעמיקה, לצערנו לא ניתן לתקן את המכשיר (תיקון #${shortId}). נציג ייצור עמך קשר בקרוב. Gadget-Team`;
                         break;
@@ -691,7 +701,7 @@ export default function RepairDashboard() {
                                                         <SelectTrigger className="w-auto min-w-[140px] h-8 border-0 p-0">
                                                             <Badge style={badgeStyle} className="text-xs flex items-center gap-1 w-fit cursor-pointer">
                                                                 {statusIcon}
-                                                                {repair.status}
+                                                                {repair.status === 'At_Importer' ? `אצל היבואן${repair.vendor?.name ? ` - ${repair.vendor.name}` : ''}` : repair.status}
                                                             </Badge>
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -767,7 +777,7 @@ export default function RepairDashboard() {
                                                 </div>
                                                 <Badge style={badgeStyle} className="text-xs flex items-center gap-1 w-fit">
                                                     {statusIcon}
-                                                    {repair.status}
+                                                    {repair.status === 'At_Importer' ? `אצל היבואן${repair.vendor?.name ? ` - ${repair.vendor.name}` : ''}` : repair.status}
                                                 </Badge>
                                             </div>
 
