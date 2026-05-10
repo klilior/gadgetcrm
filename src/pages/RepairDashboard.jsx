@@ -365,9 +365,7 @@ export default function RepairDashboard() {
                     case 'לא ניתן לתיקון':
                         message = `שלום ${clientData.full_name}, לאחר בדיקה מעמיקה, לצערנו לא ניתן לתקן את המכשיר (תיקון #${shortId}). נציג ייצור עמך קשר בקרוב. Gadget-Team`;
                         break;
-                    case 'תיקון נסגר':
-                        message = `שלום ${clientData.full_name}, תיקון #${shortId} הושלם בהצלחה! תודה שבחרת בנו! Gadget-Team`;
-                        break;
+                    // תיקון נסגר - אין צורך בהודעה
                 }
                 if (message) {
                     try {
