@@ -88,21 +88,23 @@ Deno.serve(async (req) => {
       send_email,
     } = body;
 
-    // === DUPLICATE CHECK + customer name enrichment from local entity ===
-    let resolvedCustomerName = customer_name || '';
+    // === Always read customer name from the local SuperPharmOrder entity ===
+    let resolvedCustomerName = '';
     let resolvedPhone = customer_phone || '';
     let resolvedEmail = customer_email || send_email || '';
 
     if (mirakl_order_id) {
-      console.log('[SP Invoice] Checking for existing invoice for mirakl_order_id:', mirakl_order_id);
+      console.log('[SP Invoice] Loading order from DB for mirakl_order_id:', mirakl_order_id);
       const existingOrders = await base44.asServiceRole.entities.SuperPharmOrder.filter(
         { mirakl_order_id: mirakl_order_id }
       );
       
       if (existingOrders.length > 0) {
         const existingOrder = existingOrders[0];
+
+        // Duplicate check
         if (existingOrder.linet_invoice_doc_id) {
-          console.log('[SP Invoice] DUPLICATE BLOCKED - Invoice already exists: doc_id=' + existingOrder.linet_invoice_doc_id + ', doc_number=' + existingOrder.linet_invoice_doc_number);
+          console.log('[SP Invoice] DUPLICATE BLOCKED - Invoice already exists: doc_id=' + existingOrder.linet_invoice_doc_id);
           return Response.json({
             success: false,
             error: `חשבונית כבר הונפקה להזמנה זו (חשבונית מס׳ ${existingOrder.linet_invoice_doc_number || existingOrder.linet_invoice_doc_id})`,
@@ -113,73 +115,20 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Enrich customer name from the local entity if the passed name looks invalid
-        const localName = `${existingOrder.customer_first_name || ''} ${existingOrder.customer_last_name || ''}`.trim();
-        const isNameInvalid = !resolvedCustomerName || resolvedCustomerName.length < 2 || /^\d+$/.test(resolvedCustomerName);
-        if (isNameInvalid && localName && localName.length >= 2 && !/^\d+$/.test(localName)) {
-          console.log('[SP Invoice] Enriched customer name from entity: "' + resolvedCustomerName + '" → "' + localName + '"');
-          resolvedCustomerName = localName;
-        }
-        // Also enrich phone if missing
-        if (!resolvedPhone && existingOrder.customer_phone) {
-          resolvedPhone = existingOrder.customer_phone;
-        }
+        // Always take customer name from the entity (synced from Mirakl)
+        resolvedCustomerName = `${existingOrder.customer_first_name || ''} ${existingOrder.customer_last_name || ''}`.trim();
+        resolvedPhone = existingOrder.customer_phone || resolvedPhone;
+        console.log('[SP Invoice] Customer from entity: "' + resolvedCustomerName + '", phone: ' + resolvedPhone);
       }
     }
 
-    // If customer name is still invalid, try to fetch fresh data from Mirakl
-    const isStillInvalid = !resolvedCustomerName || resolvedCustomerName.length < 2 || /^\d+$/.test(resolvedCustomerName);
-    if (isStillInvalid && mirakl_order_id) {
-      console.log('[SP Invoice] Customer name still invalid ("' + resolvedCustomerName + '"), fetching fresh from Mirakl...');
-      try {
-        const MIRAKL_API_URL = Deno.env.get("MIRAKL_API_URL");
-        const MIRAKL_API_KEY = Deno.env.get("MIRAKL_API_KEY");
-        if (MIRAKL_API_URL && MIRAKL_API_KEY) {
-          const cleanOrderId = mirakl_order_id.replace(/-[A-Z]$/, '');
-          const miraklRes = await fetch(
-            `${MIRAKL_API_URL}/api/orders?order_ids=${encodeURIComponent(cleanOrderId)}`,
-            { headers: { 'Authorization': MIRAKL_API_KEY, 'Accept': 'application/json' }, signal: AbortSignal.timeout(10000) }
-          );
-          if (miraklRes.ok) {
-            const miraklData = await miraklRes.json();
-            const miraklOrder = miraklData?.orders?.[0];
-            if (miraklOrder) {
-              const shipping = miraklOrder.customer?.shipping_address || {};
-              const fn = miraklOrder.customer?.firstname || shipping.firstname || '';
-              const ln = miraklOrder.customer?.lastname || shipping.lastname || '';
-              const freshName = `${fn} ${ln}`.trim();
-              if (freshName && freshName.length >= 2 && !/^\d+$/.test(freshName)) {
-                console.log('[SP Invoice] Got fresh name from Mirakl: "' + freshName + '"');
-                resolvedCustomerName = freshName;
-                if (!resolvedPhone) resolvedPhone = shipping.phone || '';
-                // Also update the local entity with the fresh data
-                const localOrders = await base44.asServiceRole.entities.SuperPharmOrder.filter({ mirakl_order_id: mirakl_order_id });
-                if (localOrders.length > 0 && (!localOrders[0].customer_first_name || localOrders[0].customer_first_name.length < 2)) {
-                  await base44.asServiceRole.entities.SuperPharmOrder.update(localOrders[0].id, {
-                    customer_first_name: fn,
-                    customer_last_name: ln,
-                    customer_phone: shipping.phone || localOrders[0].customer_phone || '',
-                  });
-                  console.log('[SP Invoice] Updated local entity with fresh customer data');
-                }
-              }
-            }
-          }
-        }
-      } catch (miraklErr) {
-        console.warn('[SP Invoice] Failed to fetch fresh Mirakl data:', miraklErr.message);
-      }
+    // Fallback to what the frontend sent only if entity had nothing
+    if (!resolvedCustomerName) {
+      resolvedCustomerName = (customer_name || '').trim();
     }
 
-    // Final validation
-    if (!resolvedCustomerName || resolvedCustomerName.length < 2 || /^\d+$/.test(resolvedCustomerName)) {
-      // Last resort: use a descriptive fallback so it's obvious in Linet
-      console.warn('[SP Invoice] Customer name invalid after all attempts: "' + resolvedCustomerName + '", using fallback');
-      resolvedCustomerName = 'לקוח סופר-פארם ' + (mirakl_order_id || 'ללא שם');
-    }
-
-    if (!product_description || !unit_price) {
-      return Response.json({ error: 'חסרים שדות חובה: תיאור מוצר, מחיר' }, { status: 400 });
+    if (!resolvedCustomerName || !product_description || !unit_price) {
+      return Response.json({ error: 'חסרים שדות חובה: שם לקוח, תיאור מוצר, מחיר' }, { status: 400 });
     }
 
     console.log('[SP Invoice] Final customer name: "' + resolvedCustomerName + '"');
