@@ -8,6 +8,7 @@ import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
 import { createSPLinetInvoice } from "@/functions/createSPLinetInvoice";
 import { toast } from "sonner";
+import { base44 } from "@/api/base44Client";
 
 export default function SPShipmentSuccessScreen({ 
   trackingNumber, 
@@ -98,13 +99,20 @@ iframe{width:100%;height:100%;border:none;}</style></head>
       if (!hasExistingInvoice) {
         setStep("יוצר חשבונית מס-קבלה בלינט...");
         
+        // Re-fetch fresh order data from DB to get latest synced customer info
+        let freshOrder = order;
+        try {
+          const freshOrders = await base44.entities.SuperPharmOrder.filter({ mirakl_order_id: order.mirakl_order_id }, null, 1);
+          if (freshOrders.length > 0) freshOrder = freshOrders[0];
+        } catch (_) {}
+
         let productDesc = "";
         let totalProductPrice = 0;
         let shippingAmount = 0;
         let qty = 1;
         
         try {
-          const lines = JSON.parse(order.order_lines_json || "[]");
+          const lines = JSON.parse(freshOrder.order_lines_json || "[]");
           if (lines.length > 0) {
             productDesc = lines.map(l => l.product_title || l.offer_sku).join(", ");
             qty = lines.reduce((sum, l) => sum + (l.quantity || 1), 0);
@@ -112,21 +120,21 @@ iframe{width:100%;height:100%;border:none;}</style></head>
           }
         } catch (_) {}
 
-        const orderTotal = order.total_price || 0;
+        const orderTotal = freshOrder.total_price || 0;
         if (orderTotal > totalProductPrice && totalProductPrice > 0) {
           shippingAmount = orderTotal - totalProductPrice;
         }
 
         try {
           const { data: invoiceData } = await createSPLinetInvoice({
-            customer_name: `${order.customer_first_name || ""} ${order.customer_last_name || ""}`.trim(),
-            customer_phone: order.customer_phone || "",
+            customer_name: `${freshOrder.customer_first_name || ""} ${freshOrder.customer_last_name || ""}`.trim(),
+            customer_phone: freshOrder.customer_phone || "",
             customer_email: sendEmail || "",
-            product_description: productDesc || `הזמנת סופר-פארם ${order.mirakl_order_id}`,
+            product_description: productDesc || `הזמנת סופר-פארם ${freshOrder.mirakl_order_id}`,
             quantity: qty,
             unit_price: totalProductPrice || orderTotal,
             shipping_amount: shippingAmount,
-            mirakl_order_id: order.mirakl_order_id,
+            mirakl_order_id: freshOrder.mirakl_order_id,
             send_email: sendEmail || undefined,
           });
 

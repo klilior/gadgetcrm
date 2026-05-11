@@ -88,11 +88,11 @@ Deno.serve(async (req) => {
       send_email,
     } = body;
 
-    if (!customer_name || !product_description || !unit_price) {
-      return Response.json({ error: 'חסרים שדות חובה: שם לקוח, תיאור מוצר, מחיר' }, { status: 400 });
-    }
+    // === DUPLICATE CHECK + customer name enrichment from local entity ===
+    let resolvedCustomerName = customer_name || '';
+    let resolvedPhone = customer_phone || '';
+    let resolvedEmail = customer_email || send_email || '';
 
-    // === DUPLICATE CHECK: look for existing invoice by mirakl_order_id ===
     if (mirakl_order_id) {
       console.log('[SP Invoice] Checking for existing invoice for mirakl_order_id:', mirakl_order_id);
       const existingOrders = await base44.asServiceRole.entities.SuperPharmOrder.filter(
@@ -112,8 +112,77 @@ Deno.serve(async (req) => {
             duplicate: true,
           });
         }
+
+        // Enrich customer name from the local entity if the passed name looks invalid
+        const localName = `${existingOrder.customer_first_name || ''} ${existingOrder.customer_last_name || ''}`.trim();
+        const isNameInvalid = !resolvedCustomerName || resolvedCustomerName.length < 2 || /^\d+$/.test(resolvedCustomerName);
+        if (isNameInvalid && localName && localName.length >= 2 && !/^\d+$/.test(localName)) {
+          console.log('[SP Invoice] Enriched customer name from entity: "' + resolvedCustomerName + '" → "' + localName + '"');
+          resolvedCustomerName = localName;
+        }
+        // Also enrich phone if missing
+        if (!resolvedPhone && existingOrder.customer_phone) {
+          resolvedPhone = existingOrder.customer_phone;
+        }
       }
     }
+
+    // If customer name is still invalid, try to fetch fresh data from Mirakl
+    const isStillInvalid = !resolvedCustomerName || resolvedCustomerName.length < 2 || /^\d+$/.test(resolvedCustomerName);
+    if (isStillInvalid && mirakl_order_id) {
+      console.log('[SP Invoice] Customer name still invalid ("' + resolvedCustomerName + '"), fetching fresh from Mirakl...');
+      try {
+        const MIRAKL_API_URL = Deno.env.get("MIRAKL_API_URL");
+        const MIRAKL_API_KEY = Deno.env.get("MIRAKL_API_KEY");
+        if (MIRAKL_API_URL && MIRAKL_API_KEY) {
+          const cleanOrderId = mirakl_order_id.replace(/-[A-Z]$/, '');
+          const miraklRes = await fetch(
+            `${MIRAKL_API_URL}/api/orders?order_ids=${encodeURIComponent(cleanOrderId)}`,
+            { headers: { 'Authorization': MIRAKL_API_KEY, 'Accept': 'application/json' }, signal: AbortSignal.timeout(10000) }
+          );
+          if (miraklRes.ok) {
+            const miraklData = await miraklRes.json();
+            const miraklOrder = miraklData?.orders?.[0];
+            if (miraklOrder) {
+              const shipping = miraklOrder.customer?.shipping_address || {};
+              const fn = miraklOrder.customer?.firstname || shipping.firstname || '';
+              const ln = miraklOrder.customer?.lastname || shipping.lastname || '';
+              const freshName = `${fn} ${ln}`.trim();
+              if (freshName && freshName.length >= 2 && !/^\d+$/.test(freshName)) {
+                console.log('[SP Invoice] Got fresh name from Mirakl: "' + freshName + '"');
+                resolvedCustomerName = freshName;
+                if (!resolvedPhone) resolvedPhone = shipping.phone || '';
+                // Also update the local entity with the fresh data
+                const localOrders = await base44.asServiceRole.entities.SuperPharmOrder.filter({ mirakl_order_id: mirakl_order_id });
+                if (localOrders.length > 0 && (!localOrders[0].customer_first_name || localOrders[0].customer_first_name.length < 2)) {
+                  await base44.asServiceRole.entities.SuperPharmOrder.update(localOrders[0].id, {
+                    customer_first_name: fn,
+                    customer_last_name: ln,
+                    customer_phone: shipping.phone || localOrders[0].customer_phone || '',
+                  });
+                  console.log('[SP Invoice] Updated local entity with fresh customer data');
+                }
+              }
+            }
+          }
+        }
+      } catch (miraklErr) {
+        console.warn('[SP Invoice] Failed to fetch fresh Mirakl data:', miraklErr.message);
+      }
+    }
+
+    // Final validation
+    if (!resolvedCustomerName || resolvedCustomerName.length < 2 || /^\d+$/.test(resolvedCustomerName)) {
+      // Last resort: use a descriptive fallback so it's obvious in Linet
+      console.warn('[SP Invoice] Customer name invalid after all attempts: "' + resolvedCustomerName + '", using fallback');
+      resolvedCustomerName = 'לקוח סופר-פארם ' + (mirakl_order_id || 'ללא שם');
+    }
+
+    if (!product_description || !unit_price) {
+      return Response.json({ error: 'חסרים שדות חובה: תיאור מוצר, מחיר' }, { status: 400 });
+    }
+
+    console.log('[SP Invoice] Final customer name: "' + resolvedCustomerName + '"');
 
     const creds = getLinetCreds();
     if (!creds.login_id || !creds.login_hash || !creds.login_company) {
@@ -122,9 +191,9 @@ Deno.serve(async (req) => {
 
     // 1. Find or create client
     const clientId = await findOrCreateClient(creds, {
-      name: customer_name,
-      phone: customer_phone || '',
-      email: customer_email || send_email || '',
+      name: resolvedCustomerName,
+      phone: resolvedPhone,
+      email: resolvedEmail,
     });
 
     // 2. Build invoice lines (docDet)
@@ -157,7 +226,7 @@ Deno.serve(async (req) => {
     const totalSum = docDet.reduce(function(sum, l) { return sum + (l.iItem * (l.qty || 1)); }, 0);
 
     // 3. Create document (type 9 = חשבונית מס-קבלה)
-    const emailTarget = send_email || customer_email || '';
+    const emailTarget = resolvedEmail;
     const docPayload = {
       ...creds,
       company: creds.login_company,
@@ -166,7 +235,7 @@ Deno.serve(async (req) => {
       account_id: String(clientId),
       currency_id: "ILS",
       refnum_ext: mirakl_order_id || '',
-      phone: customer_phone || '',
+      phone: resolvedPhone,
       email: emailTarget,
       docDet: docDet,
       docCheq: [{
