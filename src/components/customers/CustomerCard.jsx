@@ -4,11 +4,11 @@ import { loadAllCustomerData } from './CustomerDataLoader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-    X, User, Phone, Mail, MapPin, Calendar, DollarSign,
+    X, User, Phone, Mail, MapPin, DollarSign,
     TrendingUp, Package, Wrench, MessageCircle, FileText,
-    Edit, Phone as PhoneIcon, Send, PlusCircle,
+    Edit, Phone as PhoneIcon, Send, PlusCircle, Truck,
+    ShoppingBag, Receipt, Calendar, Headphones, Clock,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -27,10 +27,28 @@ import CustomerPurchasesTab from './CustomerPurchasesTab';
 import CustomerRecordingsTab from './CustomerRecordingsTab';
 import CustomerTimelineTab from './CustomerTimelineTab';
 import CustomerSmsTab from './CustomerSmsTab';
+import CustomerShippingTab from './CustomerShippingTab';
+import CustomerSPOrdersTab from './CustomerSPOrdersTab';
+
+const NAV_ITEMS = [
+    { id: 'overview', label: 'סקירה', icon: User, color: 'text-purple-600' },
+    { id: 'orders', label: 'הזמנות', icon: Package, color: 'text-blue-600' },
+    { id: 'sp-orders', label: 'סופר-פארם', icon: ShoppingBag, color: 'text-emerald-600' },
+    { id: 'shipping', label: 'משלוחים', icon: Truck, color: 'text-cyan-600' },
+    { id: 'purchases', label: 'רכישות', icon: Receipt, color: 'text-indigo-600' },
+    { id: 'invoices', label: 'חשבוניות', icon: FileText, color: 'text-amber-600' },
+    { id: 'repairs', label: 'תיקונים', icon: Wrench, color: 'text-orange-600' },
+    { id: 'tickets', label: 'פניות', icon: MessageCircle, color: 'text-teal-600' },
+    { id: 'devices', label: 'מכשירים', icon: Phone, color: 'text-pink-600' },
+    { id: 'calls', label: 'שיחות', icon: Headphones, color: 'text-green-600' },
+    { id: 'sms', label: 'SMS', icon: Send, color: 'text-sky-600' },
+    { id: 'recordings', label: 'הקלטות', icon: Clock, color: 'text-rose-600' },
+    { id: 'timeline', label: 'ציר זמן', icon: Calendar, color: 'text-violet-600' },
+];
 
 export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [customer, setCustomer] = useState(null);
-    const [stats, setStats] = useState({ totalOrders: 0, totalSpent: 0, totalTickets: 0, totalRepairs: 0, lastOrderDate: null, lastContactDate: null, smsCount: 0 });
+    const [stats, setStats] = useState({ totalOrders: 0, totalSpent: 0, totalTickets: 0, totalRepairs: 0, totalShipments: 0, spOrdersCount: 0, lastOrderDate: null, lastContactDate: null, smsCount: 0 });
     const [orders, setOrders] = useState([]);
     const [tickets, setTickets] = useState([]);
     const [repairs, setRepairs] = useState([]);
@@ -38,9 +56,12 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
     const [devices, setDevices] = useState([]);
     const [invoices, setInvoices] = useState([]);
     const [smsLogs, setSmsLogs] = useState([]);
+    const [shipments, setShipments] = useState([]);
+    const [spOrders, setSpOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [showSmsModal, setShowSmsModal] = useState(false);
+    const [activeTab, setActiveTab] = useState('overview');
     const navigate = useNavigate();
 
     const handleCreateTicket = () => {
@@ -52,17 +73,11 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
         if (!customerId) return;
         setIsLoading(true);
         setLoadError(null);
-
         try {
             const customerData = await customersService.get(customerId);
             setCustomer(customerData);
-
             const data = await loadAllCustomerData(customerId, customerData);
-            if (!data) {
-                setLoadError('לא ניתן לטעון נתוני לקוח');
-                return;
-            }
-
+            if (!data) { setLoadError('לא ניתן לטעון נתוני לקוח'); return; }
             setOrders(data.orders);
             setTickets(data.tickets);
             setRepairs(data.repairs);
@@ -70,6 +85,8 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
             setDevices(data.devices);
             setInvoices(data.invoices);
             setSmsLogs(data.smsLogs);
+            setShipments(data.shipments || []);
+            setSpOrders(data.spOrders || []);
             setStats(data.stats);
         } catch (error) {
             console.error('[CustomerCard] Critical error:', error);
@@ -81,319 +98,282 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
 
     useEffect(() => {
         if (isOpen && customerId) {
+            setActiveTab('overview');
             loadCustomerData();
         }
     }, [isOpen, customerId, loadCustomerData]);
-
-    const formatDate = (dateString) => {
-        if (!dateString) return 'אין מידע';
-        try { return format(new Date(dateString), 'dd/MM/yyyy HH:mm', { locale: he }); }
-        catch { return 'תאריך לא תקין'; }
-    };
 
     if (!isOpen) return null;
 
     const callCount = activities.filter(a => a.activity_type === 'שיחה נכנסת' || a.activity_type === 'שיחה יוצאת').length;
 
+    // Badge counts for nav
+    const counts = {
+        orders: stats.totalOrders,
+        'sp-orders': stats.spOrdersCount,
+        shipping: stats.totalShipments + (orders.filter(o => o.tracking_number).length) + spOrders.length,
+        purchases: 0, // computed inside tab
+        invoices: invoices.length,
+        repairs: stats.totalRepairs,
+        tickets: stats.totalTickets,
+        devices: devices.length,
+        calls: callCount,
+        sms: smsLogs.length,
+        recordings: 0,
+        timeline: 0,
+    };
+
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'overview': return <OverviewContent customer={customer} stats={stats} repairs={repairs} callCount={callCount} spOrders={spOrders} shipments={shipments} orders={orders} invoices={invoices} onSms={() => setShowSmsModal(true)} />;
+            case 'orders': return <CustomerOrdersTab orders={orders} customerName={customer?.full_name} />;
+            case 'sp-orders': return <CustomerSPOrdersTab spOrders={spOrders} />;
+            case 'shipping': return <CustomerShippingTab shipments={shipments} orders={orders} spOrders={spOrders} />;
+            case 'purchases': return <CustomerPurchasesTab orders={orders} invoices={invoices} customerId={customerId} />;
+            case 'invoices': return <CustomerInvoicesTab invoices={invoices} />;
+            case 'repairs': return <CustomerRepairsTab repairs={repairs} />;
+            case 'tickets': return <CustomerTicketsTab tickets={tickets} />;
+            case 'devices': return <CustomerDevicesList customerId={customerId} />;
+            case 'calls': return <CustomerCallsTab activities={activities} />;
+            case 'sms': return <CustomerSmsTab smsLogs={smsLogs} />;
+            case 'recordings': return <CustomerRecordingsTab activities={activities} />;
+            case 'timeline': return <CustomerTimelineTab orders={orders} tickets={tickets} repairs={repairs} activities={activities} smsLogs={smsLogs} invoices={invoices} shipments={shipments} spOrders={spOrders} />;
+            default: return null;
+        }
+    };
+
     return (
         <>
             <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" dir="rtl">
-                <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-6xl h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-6xl h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
                     {/* Header */}
-                    <div className="bg-gradient-to-l from-purple-600 to-blue-600 p-4 sm:p-6 text-white flex-shrink-0">
+                    <div className="bg-gradient-to-l from-purple-600 to-blue-600 p-4 sm:p-5 text-white flex-shrink-0">
                         <div className="flex justify-between items-start gap-2">
                             <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-full bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
-                                    <User className="w-6 h-6 sm:w-10 sm:h-10" />
+                                <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
+                                    <span className="text-lg sm:text-2xl font-bold">{customer?.full_name?.charAt(0) || '?'}</span>
                                 </div>
                                 <div className="min-w-0">
-                                    <h2 className="text-xl sm:text-3xl font-bold mb-1 truncate">{customer?.full_name || 'טוען...'}</h2>
-                                    <div className="flex gap-1.5 items-center flex-wrap">
-                                        <CustomerScoreBadge 
-                                            score={customer?.customer_score || 0} 
-                                            tier={customer?.customer_tier || 'חדש'} 
-                                            size="sm" 
-                                        />
-                                        <Badge variant="outline" className="bg-white/20 border-white/40 text-white text-[10px] sm:text-xs">
-                                            מ-{customer?.created_date ? format(new Date(customer.created_date), 'MM/yyyy', { locale: he }) : '...'}
-                                        </Badge>
+                                    <h2 className="text-lg sm:text-2xl font-bold truncate">{customer?.full_name || 'טוען...'}</h2>
+                                    <div className="flex gap-1.5 items-center flex-wrap mt-0.5">
+                                        <CustomerScoreBadge score={customer?.customer_score || 0} tier={customer?.customer_tier || 'חדש'} size="sm" />
+                                        {customer?.phone && (
+                                            <Badge variant="outline" className="bg-white/20 border-white/40 text-white text-[10px]">
+                                                {customer.phone}
+                                            </Badge>
+                                        )}
+                                        {customer?.city && (
+                                            <Badge variant="outline" className="bg-white/20 border-white/40 text-white text-[10px]">
+                                                <MapPin className="w-2.5 h-2.5 ml-0.5" />{customer.city}
+                                            </Badge>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                             <div className="flex gap-1 flex-shrink-0">
-                                <Button variant="ghost" size="sm" onClick={handleCreateTicket} className="text-white hover:bg-white/20 gap-2 hidden sm:flex">
-                                    <PlusCircle className="w-4 h-4" />
-                                    צור טיקט
+                                <Button variant="ghost" size="sm" onClick={handleCreateTicket} className="text-white hover:bg-white/20 gap-1 hidden sm:flex h-8 text-xs">
+                                    <PlusCircle className="w-3.5 h-3.5" />טיקט
                                 </Button>
-                                <Button variant="ghost" size="icon" onClick={handleCreateTicket} className="text-white hover:bg-white/20 sm:hidden h-8 w-8">
-                                    <PlusCircle className="w-4 h-4" />
+                                <Button variant="ghost" size="icon" onClick={() => onEdit(customer)} className="text-white hover:bg-white/20 h-8 w-8">
+                                    <Edit className="w-4 h-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" onClick={() => onEdit(customer)} className="text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10">
-                                    <Edit className="w-4 h-4 sm:w-5 sm:h-5" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10">
-                                    <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                                <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/20 h-8 w-8">
+                                    <X className="w-4 h-4" />
                                 </Button>
                             </div>
                         </div>
-
-                        {/* Quick Stats */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mt-4 sm:mt-6">
-                            <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                    <DollarSign className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
-                                    <span className="text-[10px] sm:text-sm opacity-90">סה"כ רכישות</span>
-                                </div>
-                                <p className="text-lg sm:text-2xl font-bold">₪{stats.totalSpent.toLocaleString()}</p>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                    <Package className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
-                                    <span className="text-[10px] sm:text-sm opacity-90">הזמנות</span>
-                                </div>
-                                <p className="text-lg sm:text-2xl font-bold">{stats.totalOrders}</p>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                    <Wrench className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
-                                    <span className="text-[10px] sm:text-sm opacity-90">תיקונים</span>
-                                </div>
-                                <p className="text-lg sm:text-2xl font-bold">{stats.totalRepairs}</p>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur rounded-lg p-2.5 sm:p-4">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                    <MessageCircle className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
-                                    <span className="text-[10px] sm:text-sm opacity-90">פניות / שיחות</span>
-                                </div>
-                                <p className="text-lg sm:text-2xl font-bold">{stats.totalTickets} / {callCount}</p>
-                            </div>
+                        {/* Quick Stats Row */}
+                        <div className="flex gap-3 mt-3 overflow-x-auto pb-1 scrollbar-none">
+                            <QuickStat icon={DollarSign} label="רכישות" value={`₪${Math.round(stats.totalSpent).toLocaleString()}`} />
+                            <QuickStat icon={Package} label="הזמנות" value={stats.totalOrders + stats.spOrdersCount} />
+                            <QuickStat icon={Truck} label="משלוחים" value={stats.totalShipments} />
+                            <QuickStat icon={Wrench} label="תיקונים" value={stats.totalRepairs} />
+                            <QuickStat icon={MessageCircle} label="פניות" value={stats.totalTickets} />
                         </div>
                     </div>
 
-                    {/* Content */}
-                    <div className="flex-1 overflow-y-auto p-3 sm:p-6">
-                        {isLoading ? (
-                            <div className="flex items-center justify-center py-20">
-                                <div className="text-center">
-                                    <div className="animate-spin w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-                                    <p className="text-gray-600">טוען מידע...</p>
-                                </div>
-                            </div>
-                        ) : loadError ? (
-                            <div className="text-center py-20 text-red-600">
-                                <p className="text-lg font-semibold">שגיאה</p>
-                                <p className="text-sm mt-2">{loadError}</p>
-                                <Button onClick={loadCustomerData} className="mt-4">נסה שוב</Button>
-                            </div>
-                        ) : (
-                            <Tabs defaultValue="overview" className="w-full">
-                                <TabsList className="flex w-full overflow-x-auto mb-4 sm:mb-6 gap-0">
-                                    <TabsTrigger value="overview" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">סקירה</TabsTrigger>
-                                    <TabsTrigger value="devices" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">מכשירים ({devices.length})</TabsTrigger>
-                                    <TabsTrigger value="purchases" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">🛒 רכישות</TabsTrigger>
-                                    <TabsTrigger value="orders" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">הזמנות ({stats.totalOrders})</TabsTrigger>
-                                    <TabsTrigger value="invoices" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">חשבוניות ({invoices.length})</TabsTrigger>
-                                    <TabsTrigger value="calls" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">שיחות ({callCount})</TabsTrigger>
-                                    <TabsTrigger value="tickets" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">פניות ({stats.totalTickets})</TabsTrigger>
-                                    <TabsTrigger value="repairs" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">תיקונים ({stats.totalRepairs})</TabsTrigger>
-                                    <TabsTrigger value="sms" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">SMS ({smsLogs.length})</TabsTrigger>
-                                    <TabsTrigger value="recordings" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">הקלטות</TabsTrigger>
-                                    <TabsTrigger value="timeline" className="text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">ציר זמן</TabsTrigger>
-                                </TabsList>
+                    {/* Body */}
+                    <div className="flex-1 flex overflow-hidden">
+                        {/* Desktop Sidebar Nav */}
+                        <nav className="hidden sm:flex flex-col w-40 border-l bg-gray-50/80 overflow-y-auto flex-shrink-0 py-2">
+                            {NAV_ITEMS.map(item => {
+                                const Icon = item.icon;
+                                const count = counts[item.id];
+                                const isActive = activeTab === item.id;
+                                return (
+                                    <button
+                                        key={item.id}
+                                        onClick={() => setActiveTab(item.id)}
+                                        className={`flex items-center gap-2 px-3 py-2 mx-1 rounded-lg text-xs transition-all text-right ${
+                                            isActive ? 'bg-white shadow-sm font-semibold text-gray-900' : 'text-gray-600 hover:bg-white/60'
+                                        }`}
+                                    >
+                                        <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? item.color : 'text-gray-400'}`} />
+                                        <span className="flex-1 truncate">{item.label}</span>
+                                        {count > 0 && (
+                                            <span className={`text-[9px] min-w-[18px] text-center rounded-full px-1 ${isActive ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>
+                                                {count}
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </nav>
 
-                                {/* Overview Tab */}
-                                <TabsContent value="overview" className="space-y-4 sm:space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                                        {/* Contact Info */}
-                                        <Card>
-                                            <CardHeader>
-                                                <CardTitle className="flex items-center gap-2">
-                                                    <User className="w-5 h-5 text-purple-600" />
-                                                    פרטי קשר
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-4">
-                                                {customer?.phone && (
-                                                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                                                        <Phone className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 flex-shrink-0" />
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-xs sm:text-sm text-gray-500">טלפון</p>
-                                                            <a href={`tel:${customer.phone}`} className="text-sm sm:text-lg font-semibold text-blue-600 hover:underline break-all">
-                                                                {customer.phone}
-                                                            </a>
-                                                        </div>
-                                                        <div className="flex gap-1">
-                                                            <Button size="sm" variant="outline" onClick={() => setShowSmsModal(true)} className="gap-1 text-teal-700 border-teal-300 hover:bg-teal-50 h-8 text-xs">
-                                                                <MessageCircle className="w-3.5 h-3.5" />
-                                                                <span className="hidden sm:inline">SMS</span>
-                                                            </Button>
-                                                            <Button size="sm" variant="outline" asChild className="h-8">
-                                                                <a href={`tel:${customer.phone}`}><PhoneIcon className="w-3.5 h-3.5" /></a>
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                {customer?.email && (
-                                                    <div className="flex items-center gap-2 sm:gap-3">
-                                                        <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600 flex-shrink-0" />
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-xs sm:text-sm text-gray-500">אימייל</p>
-                                                            <a href={`mailto:${customer.email}`} className="text-sm sm:text-lg font-semibold text-blue-600 hover:underline break-all">
-                                                                {customer.email}
-                                                            </a>
-                                                        </div>
-                                                        <Button size="sm" variant="outline" className="h-8">
-                                                            <Send className="w-3.5 h-3.5" />
-                                                        </Button>
-                                                    </div>
-                                                )}
-                                                {customer?.city && (
-                                                    <div className="flex items-center gap-3">
-                                                        <MapPin className="w-5 h-5 text-red-600" />
-                                                        <div>
-                                                            <p className="text-sm text-gray-500">כתובת</p>
-                                                            <p className="text-lg font-semibold">{customer.full_address || customer.city}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                {customer?.preferred_channel && (
-                                                    <div className="flex items-center gap-3">
-                                                        <MessageCircle className="w-5 h-5 text-blue-600" />
-                                                        <div>
-                                                            <p className="text-sm text-gray-500">ערוץ מועדף</p>
-                                                            <p className="text-lg font-semibold capitalize">{customer.preferred_channel}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </CardContent>
-                                        </Card>
+                        {/* Mobile Tab Bar */}
+                        <div className="sm:hidden flex overflow-x-auto border-b bg-gray-50 flex-shrink-0 absolute w-full z-10" style={{ top: 'auto' }}>
+                        </div>
 
-                                        {/* Activity Summary */}
-                                        <Card>
-                                            <CardHeader>
-                                                <CardTitle className="flex items-center gap-2">
-                                                    <TrendingUp className="w-5 h-5 text-purple-600" />
-                                                    סיכום פעילות
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-4">
-                                                <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
-                                                    <span className="text-sm text-gray-700">רכישה אחרונה</span>
-                                                    <span className="font-semibold text-gray-900">
-                                                        {stats.lastOrderDate ? format(new Date(stats.lastOrderDate), 'dd/MM/yyyy', { locale: he }) : 'אין מידע'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
-                                                    <span className="text-sm text-gray-700">יצירת קשר אחרונה</span>
-                                                    <span className="font-semibold text-gray-900">
-                                                        {stats.lastContactDate ? format(new Date(stats.lastContactDate), 'dd/MM/yyyy', { locale: he }) : 'אין מידע'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
-                                                    <span className="text-sm text-gray-700">ממוצע לרכישה</span>
-                                                    <span className="font-semibold text-gray-900">
-                                                        ₪{stats.totalOrders > 0 ? (stats.totalSpent / stats.totalOrders).toFixed(2) : '0'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg">
-                                                    <span className="text-sm text-gray-700">תיקונים פעילים</span>
-                                                    <span className="font-semibold text-gray-900">
-                                                        {repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון'].includes(r.status)).length}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between items-center p-3 bg-teal-50 rounded-lg">
-                                                    <span className="text-sm text-gray-700">שיחות</span>
-                                                    <span className="font-semibold text-gray-900">{callCount}</span>
-                                                </div>
-                                                <div className="flex justify-between items-center p-3 bg-indigo-50 rounded-lg">
-                                                    <span className="text-sm text-gray-700">הודעות SMS</span>
-                                                    <span className="font-semibold text-gray-900">{stats.smsCount}</span>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
+                        {/* Content */}
+                        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                            {/* Mobile scrollable tabs */}
+                            <div className="sm:hidden flex overflow-x-auto border-b bg-gray-50/80 flex-shrink-0 px-1 py-1 gap-0.5">
+                                {NAV_ITEMS.map(item => {
+                                    const Icon = item.icon;
+                                    const isActive = activeTab === item.id;
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => setActiveTab(item.id)}
+                                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] whitespace-nowrap transition-all flex-shrink-0 ${
+                                                isActive ? 'bg-white shadow-sm font-semibold text-gray-900' : 'text-gray-500'
+                                            }`}
+                                        >
+                                            <Icon className={`w-3 h-3 ${isActive ? item.color : 'text-gray-400'}`} />
+                                            {item.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-3 sm:p-5">
+                                {isLoading ? (
+                                    <div className="flex items-center justify-center py-20">
+                                        <div className="text-center">
+                                            <div className="animate-spin w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+                                            <p className="text-gray-500 text-sm">טוען מידע...</p>
+                                        </div>
                                     </div>
-
-                                    <CustomerAISummary 
-                                        customer={customer} 
-                                        orders={orders} 
-                                        repairs={repairs} 
-                                        tickets={tickets} 
-                                        devices={devices} 
-                                    />
-
-                                    {customer?.notes && (
-                                        <Card>
-                                            <CardHeader>
-                                                <CardTitle className="flex items-center gap-2">
-                                                    <FileText className="w-5 h-5 text-purple-600" />
-                                                    הערות
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <p className="text-gray-700 whitespace-pre-wrap">{customer.notes}</p>
-                                            </CardContent>
-                                        </Card>
-                                    )}
-                                </TabsContent>
-
-                                <TabsContent value="devices">
-                                    <CustomerDevicesList customerId={customerId} />
-                                </TabsContent>
-
-                                <TabsContent value="purchases">
-                                    <CustomerPurchasesTab orders={orders} invoices={invoices} customerId={customerId} />
-                                </TabsContent>
-
-                                <TabsContent value="orders">
-                                    <CustomerOrdersTab orders={orders} customerName={customer?.full_name} />
-                                </TabsContent>
-
-                                <TabsContent value="invoices">
-                                    <CustomerInvoicesTab invoices={invoices} />
-                                </TabsContent>
-
-                                <TabsContent value="calls">
-                                    <CustomerCallsTab activities={activities} />
-                                </TabsContent>
-
-                                <TabsContent value="tickets">
-                                    <CustomerTicketsTab tickets={tickets} />
-                                </TabsContent>
-
-                                <TabsContent value="repairs">
-                                    <CustomerRepairsTab repairs={repairs} />
-                                </TabsContent>
-
-                                <TabsContent value="sms">
-                                    <CustomerSmsTab smsLogs={smsLogs} />
-                                </TabsContent>
-
-                                <TabsContent value="recordings">
-                                    <CustomerRecordingsTab activities={activities} />
-                                </TabsContent>
-
-                                <TabsContent value="timeline">
-                                    <CustomerTimelineTab 
-                                        orders={orders} 
-                                        tickets={tickets} 
-                                        repairs={repairs} 
-                                        activities={activities} 
-                                        smsLogs={smsLogs} 
-                                        invoices={invoices} 
-                                    />
-                                </TabsContent>
-                            </Tabs>
-                        )}
+                                ) : loadError ? (
+                                    <div className="text-center py-20 text-red-600">
+                                        <p className="text-lg font-semibold">שגיאה</p>
+                                        <p className="text-sm mt-2">{loadError}</p>
+                                        <Button onClick={loadCustomerData} className="mt-4">נסה שוב</Button>
+                                    </div>
+                                ) : renderContent()}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <SendSmsModal
-                isOpen={showSmsModal}
-                onClose={() => setShowSmsModal(false)}
-                phone={customer?.phone}
-                customerName={customer?.full_name}
-            />
+            <SendSmsModal isOpen={showSmsModal} onClose={() => setShowSmsModal(false)} phone={customer?.phone} customerName={customer?.full_name} />
         </>
+    );
+}
+
+function QuickStat({ icon: Icon, label, value }) {
+    return (
+        <div className="bg-white/10 backdrop-blur rounded-lg px-3 py-2 flex-shrink-0 min-w-[80px]">
+            <div className="flex items-center gap-1 mb-0.5">
+                <Icon className="w-3 h-3 opacity-80" />
+                <span className="text-[10px] opacity-80">{label}</span>
+            </div>
+            <p className="text-base font-bold">{value}</p>
+        </div>
+    );
+}
+
+function OverviewContent({ customer, stats, repairs, callCount, spOrders, shipments, orders, invoices, onSms }) {
+    return (
+        <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Contact Info */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                            <User className="w-4 h-4 text-purple-600" />פרטי קשר
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 pt-0">
+                        {customer?.phone && (
+                            <div className="flex items-center gap-2 justify-between">
+                                <a href={`tel:${customer.phone}`} className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
+                                    <Phone className="w-4 h-4 text-green-600" />
+                                    {customer.phone}
+                                </a>
+                                <div className="flex gap-1">
+                                    <Button size="sm" variant="outline" onClick={onSms} className="h-7 text-[10px] gap-1">
+                                        <MessageCircle className="w-3 h-3" />SMS
+                                    </Button>
+                                    <Button size="sm" variant="outline" asChild className="h-7">
+                                        <a href={`tel:${customer.phone}`}><PhoneIcon className="w-3 h-3" /></a>
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                        {customer?.email && (
+                            <a href={`mailto:${customer.email}`} className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
+                                <Mail className="w-4 h-4 text-purple-600" />
+                                <span className="truncate">{customer.email}</span>
+                            </a>
+                        )}
+                        {(customer?.full_address || customer?.city) && (
+                            <div className="flex items-center gap-2 text-sm text-gray-700">
+                                <MapPin className="w-4 h-4 text-red-500" />
+                                {customer.full_address || customer.city}
+                            </div>
+                        )}
+                        {customer?.preferred_channel && (
+                            <div className="flex items-center gap-2 text-sm text-gray-700">
+                                <MessageCircle className="w-4 h-4 text-blue-500" />
+                                ערוץ מועדף: {customer.preferred_channel}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Activity Summary */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                            <TrendingUp className="w-4 h-4 text-purple-600" />סיכום פעילות
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 pt-0">
+                        <SummaryRow label="רכישה אחרונה" value={stats.lastOrderDate ? format(new Date(stats.lastOrderDate), 'dd/MM/yyyy', { locale: he }) : 'אין'} bg="bg-green-50" />
+                        <SummaryRow label="ממוצע לרכישה" value={`₪${stats.totalOrders > 0 ? Math.round(stats.totalSpent / (stats.totalOrders + stats.spOrdersCount)) : 0}`} bg="bg-purple-50" />
+                        <SummaryRow label="תיקונים פעילים" value={repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון'].includes(r.status)).length} bg="bg-orange-50" />
+                        <SummaryRow label="שיחות" value={callCount} bg="bg-teal-50" />
+                        <SummaryRow label="הזמנות סופר-פארם" value={stats.spOrdersCount} bg="bg-emerald-50" />
+                        <SummaryRow label="משלוחים" value={stats.totalShipments} bg="bg-cyan-50" />
+                    </CardContent>
+                </Card>
+            </div>
+
+            <CustomerAISummary customer={customer} orders={orders} repairs={repairs} tickets={[]} devices={[]} />
+
+            {customer?.notes && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                            <FileText className="w-4 h-4 text-purple-600" />הערות
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{customer.notes}</p>
+                    </CardContent>
+                </Card>
+            )}
+        </div>
+    );
+}
+
+function SummaryRow({ label, value, bg }) {
+    return (
+        <div className={`flex justify-between items-center px-3 py-2 ${bg} rounded-lg`}>
+            <span className="text-xs text-gray-700">{label}</span>
+            <span className="font-semibold text-sm text-gray-900">{value}</span>
+        </div>
     );
 }

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Calendar, ShoppingCart, FileText, Wrench, MessageCircle, Send } from 'lucide-react';
+import { Calendar, ShoppingCart, FileText, Wrench, MessageCircle, Send, Truck, Package } from 'lucide-react';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 
@@ -13,7 +13,7 @@ function formatDate(dateString) {
     }
 }
 
-export default function CustomerTimelineTab({ orders, tickets, repairs, activities, smsLogs, invoices }) {
+export default function CustomerTimelineTab({ orders, tickets, repairs, activities, smsLogs, invoices, shipments, spOrders }) {
     const timeline = useMemo(() => {
         const events = [];
 
@@ -83,9 +83,29 @@ export default function CustomerTimelineTab({ orders, tickets, repairs, activiti
             });
         });
 
+        // Shipments
+        (shipments || []).forEach(s => {
+            events.push({
+                type: 'shipment', date: s.created_date,
+                title: `משלוח ${s.tracking_number || '#' + (s.id?.slice(-6) || '')}`,
+                description: `${s.carrier || ''} → ${s.consignee_city || ''} • ${s.status || ''}`,
+                icon: Truck, color: 'text-cyan-600 bg-cyan-50'
+            });
+        });
+
+        // SuperPharm orders
+        (spOrders || []).forEach(sp => {
+            events.push({
+                type: 'sp-order', date: sp.created_at_mirakl,
+                title: `סופר-פארם #${sp.mirakl_order_id}`,
+                description: `₪${sp.total_price || 0} • ${sp.order_state || ''}`,
+                icon: Package, color: 'text-emerald-600 bg-emerald-50'
+            });
+        });
+
         events.sort((a, b) => new Date(b.date) - new Date(a.date));
         return events;
-    }, [orders, tickets, repairs, activities, smsLogs, invoices]);
+    }, [orders, tickets, repairs, activities, smsLogs, invoices, shipments, spOrders]);
 
     if (timeline.length === 0) {
         return (

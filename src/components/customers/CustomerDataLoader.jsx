@@ -60,16 +60,36 @@ export async function loadAllCustomerData(customerId, customerData) {
 
     await delay(300);
 
-    // === PHASE 2: Secondary data (3 parallel queries) ===
-    const [devices, smsLogs, invoicesByClient] = await Promise.all([
+    // === PHASE 2: Secondary data (4 parallel queries) ===
+    const [devices, smsLogs, invoicesByClient, shipments] = await Promise.all([
         safeQuery('Devices', () => base44.entities.RepairDevice.filter({ client_id: customerId }, '-created_date', 100)),
         phone
             ? safeQuery('SMS', () => base44.entities.NotificationLog.filter({ to_phone: phone }, '-sent_at', 50))
             : Promise.resolve([]),
         safeQuery('Invoices', () => base44.entities.SalesTransaction.filter({ client_id: customerId }, '-issue_date', 200)),
+        safeQuery('Shipments', () => base44.entities.Shipment.filter({ client_id: customerId }, '-created_date', 100)),
     ]);
 
     await delay(300);
+
+    // === PHASE 2b: SuperPharm orders (by phone or name) ===
+    let spOrders = [];
+    if (phone) {
+        spOrders = await safeQuery('SP-Orders', () => base44.entities.SuperPharmOrder.filter({ customer_phone: phone }, '-created_at_mirakl', 100));
+    }
+    if (spOrders.length === 0 && customerData?.full_name) {
+        // Try matching by first name from full_name
+        const firstName = customerData.full_name.split(' ')[0];
+        if (firstName && firstName.length >= 2) {
+            const allSP = await safeQuery('SP-Orders-name', () => base44.entities.SuperPharmOrder.list('-created_at_mirakl', 200));
+            spOrders = allSP.filter(sp => {
+                const spFullName = `${sp.customer_first_name || ''} ${sp.customer_last_name || ''}`.trim().toLowerCase();
+                return spFullName && customerData.full_name.toLowerCase() === spFullName;
+            });
+        }
+    }
+
+    await delay(200);
 
     // === PHASE 3: Additional invoices by linet + calls ===
     let invoicesByLinet = [];
@@ -121,17 +141,20 @@ export async function loadAllCustomerData(customerId, customerData) {
 
     // === Compute stats ===
     const totalSpent = orders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
+    const spTotalSpent = spOrders.reduce((sum, o) => sum + (o.total_price || 0), 0);
     const stats = {
         totalOrders: orders.length,
-        totalSpent,
+        totalSpent: totalSpent + spTotalSpent,
         totalTickets: tickets.length,
         totalRepairs: repairs.length,
-        lastOrderDate: orders.length > 0 ? orders[0].order_date : null,
+        totalShipments: shipments.length,
+        spOrdersCount: spOrders.length,
+        lastOrderDate: orders.length > 0 ? orders[0].order_date : (spOrders.length > 0 ? spOrders[0].created_at_mirakl : null),
         lastContactDate: tickets.length > 0 ? tickets[0].created_date : null,
         smsCount: smsLogs.length,
     };
 
-    console.log(`[CustomerData] 📊 ${customerData?.full_name || customerId}: orders=${orders.length}, tickets=${tickets.length}, repairs=${repairs.length}, calls=${callActivities.length}, invoices=${invoices.length}, devices=${devices.length}, sms=${smsLogs.length}`);
+    console.log(`[CustomerData] 📊 ${customerData?.full_name || customerId}: orders=${orders.length}, spOrders=${spOrders.length}, shipments=${shipments.length}, tickets=${tickets.length}, repairs=${repairs.length}, calls=${callActivities.length}, invoices=${invoices.length}, devices=${devices.length}, sms=${smsLogs.length}`);
 
-    return { orders, tickets, repairs, devices, smsLogs, invoices, activities, stats };
+    return { orders, tickets, repairs, devices, smsLogs, invoices, activities, stats, shipments, spOrders };
 }
