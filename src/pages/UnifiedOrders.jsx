@@ -57,7 +57,7 @@ export default function UnifiedOrders() {
   const [invoiceOrder, setInvoiceOrder] = useState(null);
   const [upsSuccessData, setUpsSuccessData] = useState(null);
   const [cargoOrder, setCargoOrder] = useState(null);
-  const [postShipmentData, setPostShipmentData] = useState(null); // { order, trackingNumber }
+  const [postShipmentData, setPostShipmentData] = useState(null); // { order, trackingNumber, carrierHint? }
 
   // Expanded row
   const [expandedId, setExpandedId] = useState(null);
@@ -708,7 +708,7 @@ export default function UnifiedOrders() {
               setUpsSuccessData({ trackingNumber: tracking_number, order: spOrder });
             } else {
               // WooCommerce / Linet - show post-shipment confirmation dialog
-              setPostShipmentData({ order: shipmentOrder, trackingNumber: tracking_number });
+              setPostShipmentData({ order: shipmentOrder, trackingNumber: tracking_number, carrierHint: 'ups' });
               setShipmentOrder(null);
             }
           }}
@@ -747,7 +747,7 @@ export default function UnifiedOrders() {
           }}
           onSuccess={({ tracking_number }) => {
             if (tracking_number && (shipmentOrder.source === 'woocommerce' || shipmentOrder.source === 'mirakl')) {
-              setPostShipmentData({ order: shipmentOrder, trackingNumber: tracking_number });
+              setPostShipmentData({ order: shipmentOrder, trackingNumber: tracking_number, carrierHint: 'ups' });
             }
             setShipmentOrder(null);
           }}
@@ -760,7 +760,7 @@ export default function UnifiedOrders() {
           open={!!cargoOrder}
           onClose={(resultData) => {
             if (resultData?.shipment_id && (cargoOrder.source === 'woocommerce' || cargoOrder.source === 'mirakl')) {
-              setPostShipmentData({ order: cargoOrder, trackingNumber: String(resultData.shipment_id) });
+              setPostShipmentData({ order: cargoOrder, trackingNumber: String(resultData.shipment_id), carrierHint: 'cargo' });
             } else {
               loadData(true);
             }
@@ -788,6 +788,7 @@ export default function UnifiedOrders() {
           onClose={() => { setPostShipmentData(null); loadData(true); }}
           order={postShipmentData.order}
           trackingNumber={postShipmentData.trackingNumber}
+          carrierHint={postShipmentData.carrierHint}
           onStatusUpdated={() => {
             loadData(true);
           }}

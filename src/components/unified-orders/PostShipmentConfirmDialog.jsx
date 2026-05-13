@@ -13,7 +13,7 @@ import { toast } from "sonner";
  * 2. Sends tracking SMS to the customer
  * Also allows manual retry if something fails.
  */
-export default function PostShipmentConfirmDialog({ open, onClose, order, trackingNumber, onStatusUpdated }) {
+export default function PostShipmentConfirmDialog({ open, onClose, order, trackingNumber, carrierHint, onStatusUpdated }) {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [statusDone, setStatusDone] = useState(false);
   const [statusError, setStatusError] = useState(null);
@@ -24,7 +24,16 @@ export default function PostShipmentConfirmDialog({ open, onClose, order, tracki
 
   const isWoo = order?.source === 'woocommerce';
   const isMirakl = order?.source === 'mirakl';
-  const carrier = order?.tracking_carrier || (order?.cargo_shipment_id ? 'cargo' : 'ups');
+  // Use explicit carrierHint from the caller, then fall back to order data
+  const carrier = carrierHint || order?.tracking_carrier || (order?.cargo_shipment_id ? 'cargo' : 'ups');
+
+  // Map carrier hint to Mirakl-compatible codes
+  const miraklCarrierCode = carrier === 'cargo' ? 'deliv_cargoexp'
+    : carrier === 'getpackage' ? 'deliv_getpackage'
+    : 'deliv_ups';
+  const miraklCarrierName = carrier === 'cargo' ? 'Cargo-Ship'
+    : carrier === 'getpackage' ? 'GetPackage'
+    : 'UPS';
 
   const updateStatus = async () => {
     if (!order) return;
@@ -35,19 +44,25 @@ export default function PostShipmentConfirmDialog({ open, onClose, order, tracki
         await updateWooOrderStatus({ order_id: order.raw_id, new_status: 'completed' });
         toast.success('הזמנה עודכנה ל-"הושלמה" בווקומרס');
       } else if (isMirakl) {
-        await updateSuperPharmOrder({
+        const miraklOrderId = order.mirakl_order_id || order.order_number;
+        console.log(`[PostShipment] Updating Mirakl: order=${miraklOrderId}, tracking=${trackingNumber}, carrier=${miraklCarrierCode} (hint=${carrier})`);
+        const { data: result } = await updateSuperPharmOrder({
           action: 'ship',
-          order_id: order.mirakl_order_id || order.order_number,
+          order_id: miraklOrderId,
           tracking_number: trackingNumber,
-          carrier_code: carrier === 'cargo' ? 'deliv_cargoexp' : 'deliv_ups',
-          carrier_name: carrier === 'cargo' ? 'Cargo-Ship' : 'UPS',
+          carrier_code: miraklCarrierCode,
+          carrier_name: miraklCarrierName,
         });
+        if (result?.success === false) {
+          throw new Error(result.error || 'Mirakl update failed');
+        }
         toast.success('הזמנה עודכנה ל-"נשלחה" ב-Mirakl');
       }
       setStatusDone(true);
       if (onStatusUpdated) onStatusUpdated();
     } catch (e) {
-      const msg = e?.response?.data?.error || e.message;
+      const msg = e?.response?.data?.error || e?.message || 'שגיאה לא ידועה';
+      console.error('[PostShipment] Status update error:', msg);
       setStatusError(msg);
       toast.error('שגיאה בעדכון סטטוס: ' + msg);
     } finally {
