@@ -55,8 +55,10 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
     setToName(name);
     setToPhone(phone);
     
-    // Try to extract address
-    if (order?.shipping_street) {
+    // Try to extract address - prefer order address, then client
+    if (order?.shipping_address_full) {
+      setToStreet(order.shipping_address_full);
+    } else if (order?.shipping_street) {
       setToStreet(order.shipping_street);
     } else if (client?.full_address) {
       setToStreet(client.full_address);

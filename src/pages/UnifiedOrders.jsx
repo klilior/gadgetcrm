@@ -267,10 +267,15 @@ export default function UnifiedOrders() {
           order_number: dn, order_date: meta.issue_date || '',
           customer_name: meta.customer_name || '',
           customer_phone: client?.phone || '',
+          customer_email: client?.email || '',
           products: docProducts[dn] || [],
-          total: docTotals[dn] || 0, shipping_method: '', shipping_city: '',
+          total: docTotals[dn] || 0, shipping_method: '',
+          shipping_city: client?.city || '',
+          shipping_street: client?.full_address || '',
+          shipping_address_full: [client?.full_address, client?.city].filter(Boolean).join(', '),
           status, notes: existing?.notes || '',
           raw_id: existing?.id || '', linet_doc_id: meta.linet_doc_id || '',
+          client_id: meta.client_id || '',
           sales_rep: meta.sales_rep || '', currency: 'ILS'
         });
       }
@@ -767,7 +772,7 @@ export default function UnifiedOrders() {
             setCargoOrder(null);
           }}
           order={cargoOrder}
-          client={{ full_name: cargoOrder.customer_name, phone: cargoOrder.customer_phone, city: cargoOrder.shipping_city || '' }}
+          client={{ full_name: cargoOrder.customer_name, phone: cargoOrder.customer_phone, city: cargoOrder.shipping_city || '', full_address: cargoOrder.shipping_street || cargoOrder.shipping_address_full || '' }}
         />
       )}
 
