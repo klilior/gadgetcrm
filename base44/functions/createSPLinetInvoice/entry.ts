@@ -238,6 +238,7 @@ Deno.serve(async (req) => {
       account_id: String(clientId),
       currency_id: "ILS",
       refnum_ext: mirakl_order_id || '',
+      company: resolvedCustomerName,
       phone: resolvedPhone,
       email: emailTarget,
       city: resolvedCity,
