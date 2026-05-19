@@ -36,35 +36,73 @@ async function linetPost(endpoint, payload) {
   return data;
 }
 
-async function findOrCreateClient(creds, { name, phone, email }) {
-  console.log('[Linet] Searching account: ' + name);
-  const searchResult = await linetPost('newsearch/accounts', {
-    ...creds,
-    query: { name: name },
-    limit: 5,
-    offset: 0,
-  });
+async function findOrCreateClient(creds, { name, phone, email, city, address }) {
+  let accountId = null;
 
-  const accounts = searchResult?.body || (Array.isArray(searchResult) ? searchResult : []);
-  if (Array.isArray(accounts) && accounts.length > 0) {
-    console.log('[Linet] Found existing account: ' + accounts[0].id + ' - ' + accounts[0].name);
-    return accounts[0].id;
+  // 1. Search by phone first (more reliable than name for Hebrew)
+  if (phone) {
+    console.log('[Linet] Searching account by phone: ' + phone);
+    const byPhone = await linetPost('newsearch/accounts', {
+      ...creds,
+      query: { phone: phone },
+      limit: 5,
+      offset: 0,
+    });
+    const phoneAccounts = byPhone?.body || (Array.isArray(byPhone) ? byPhone : []);
+    if (Array.isArray(phoneAccounts) && phoneAccounts.length > 0) {
+      console.log('[Linet] Found existing account by phone: ' + phoneAccounts[0].id + ' - ' + phoneAccounts[0].name);
+      accountId = phoneAccounts[0].id;
+    }
   }
 
-  console.log('[Linet] Creating new account: ' + name);
-  const newAccount = await linetPost('create/accounts', {
-    ...creds,
-    name: name,
-    phone: phone || '',
-    email: email || '',
-  });
-
-  const accountBody = newAccount?.body || newAccount;
-  const accountId = accountBody?.id;
+  // 2. Search by name
   if (!accountId) {
-    throw new Error('Failed to create Linet account: ' + JSON.stringify(newAccount));
+    console.log('[Linet] Searching account by name: ' + name);
+    const searchResult = await linetPost('newsearch/accounts', {
+      ...creds,
+      query: { name: name },
+      limit: 5,
+      offset: 0,
+    });
+    const accounts = searchResult?.body || (Array.isArray(searchResult) ? searchResult : []);
+    if (Array.isArray(accounts) && accounts.length > 0) {
+      console.log('[Linet] Found existing account: ' + accounts[0].id + ' - ' + accounts[0].name);
+      accountId = accounts[0].id;
+    }
   }
-  console.log('[Linet] Created account ID: ' + accountId);
+
+  // 3. Create new account with full details
+  if (!accountId) {
+    console.log('[Linet] Creating new account: ' + name);
+    const newAccount = await linetPost('create/accounts', {
+      ...creds,
+      name: name,
+      phone: phone || '',
+      email: email || '',
+      city: city || '',
+      address: address || '',
+    });
+    const accountBody = newAccount?.body || newAccount;
+    accountId = accountBody?.id;
+    if (!accountId) {
+      throw new Error('Failed to create Linet account: ' + JSON.stringify(newAccount));
+    }
+    console.log('[Linet] Created account ID: ' + accountId);
+  }
+
+  // 4. Update account with latest details (ensures name, email, address are current)
+  try {
+    const updateData = { ...creds, id: accountId };
+    if (name) updateData.name = name;
+    if (email) updateData.email = email;
+    if (city) updateData.city = city;
+    if (address) updateData.address = address;
+    console.log('[Linet] Updating account ' + accountId + ' with: name=' + name + ', email=' + email + ', city=' + city);
+    await linetPost('update/accounts', updateData);
+  } catch (updateErr) {
+    console.warn('[Linet] Failed to update account (non-critical): ' + updateErr.message);
+  }
+
   return accountId;
 }
 
@@ -88,10 +126,12 @@ Deno.serve(async (req) => {
       send_email,
     } = body;
 
-    // === Always read customer name from the local SuperPharmOrder entity ===
+    // === Always read customer data from the local SuperPharmOrder entity ===
     let resolvedCustomerName = '';
     let resolvedPhone = customer_phone || '';
     let resolvedEmail = customer_email || send_email || '';
+    let resolvedCity = '';
+    let resolvedAddress = '';
 
     if (mirakl_order_id) {
       console.log('[SP Invoice] Loading order from DB for mirakl_order_id:', mirakl_order_id);
@@ -118,7 +158,19 @@ Deno.serve(async (req) => {
         // Always take customer name from the entity (synced from Mirakl)
         resolvedCustomerName = `${existingOrder.customer_first_name || ''} ${existingOrder.customer_last_name || ''}`.trim();
         resolvedPhone = existingOrder.customer_phone || resolvedPhone;
-        console.log('[SP Invoice] Customer from entity: "' + resolvedCustomerName + '", phone: ' + resolvedPhone);
+        resolvedCity = existingOrder.shipping_city || '';
+        resolvedAddress = existingOrder.shipping_street || existingOrder.shipping_address_full || '';
+
+        // Extract customer email from raw Mirakl JSON if not provided
+        if (!resolvedEmail && existingOrder.raw_mirakl_json) {
+          try {
+            const rawMirakl = JSON.parse(existingOrder.raw_mirakl_json);
+            resolvedEmail = rawMirakl?.customer?.customer_id || '';
+            console.log('[SP Invoice] Email from Mirakl raw JSON: "' + resolvedEmail + '"');
+          } catch (_) {}
+        }
+
+        console.log('[SP Invoice] Customer from entity: "' + resolvedCustomerName + '", phone: ' + resolvedPhone + ', city: ' + resolvedCity + ', email: ' + resolvedEmail);
       }
     }
 
@@ -143,6 +195,8 @@ Deno.serve(async (req) => {
       name: resolvedCustomerName,
       phone: resolvedPhone,
       email: resolvedEmail,
+      city: resolvedCity,
+      address: resolvedAddress,
     });
 
     // 2. Build invoice lines (docDet)
@@ -186,6 +240,8 @@ Deno.serve(async (req) => {
       refnum_ext: mirakl_order_id || '',
       phone: resolvedPhone,
       email: emailTarget,
+      city: resolvedCity,
+      address: resolvedAddress,
       docDet: docDet,
       docCheq: [{
         type: 50,
