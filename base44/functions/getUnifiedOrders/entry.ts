@@ -34,11 +34,17 @@ Deno.serve(async (req) => {
           order_date: o.order_date || '',
           customer_name: c ? (c.full_name || '') : '',
           customer_phone: c ? (c.phone || '') : '',
+          customer_email: c ? (c.email || '') : '',
+          shipping_city: c ? (c.city || '') : '',
+          shipping_street: c ? (c.full_address || '') : '',
           products: prods.map(function(x) { return {name: x.name || '', quantity: x.quantity || 1, total: parseFloat(x.total) || 0}; }),
           total: parseFloat(o.total) || 0,
           shipping_method: o.shipping_method || '',
           status: o.status || '', notes: o.customer_note || '',
-          raw_id: o.id, client_id: o.client_id || '', currency: 'ILS'
+          raw_id: o.id, client_id: o.client_id || '', currency: 'ILS',
+          pickup_point_data: o.pickup_point_data || '',
+          tracking_number: o.tracking_number || '',
+          tracking_carrier: o.tracking_carrier || '',
         });
       }
     } catch (e1) { errs.push({source: 'woocommerce', message: e1.message}); }
@@ -58,7 +64,12 @@ Deno.serve(async (req) => {
           order_number: o.mirakl_order_id || '',
           order_date: o.created_at_mirakl || o.created_date || '',
           customer_name: ((o.customer_first_name || '') + ' ' + (o.customer_last_name || '')).trim(),
+          customer_first_name: o.customer_first_name || '',
+          customer_last_name: o.customer_last_name || '',
           customer_phone: o.customer_phone || '',
+          shipping_city: o.shipping_city || '',
+          shipping_street: o.shipping_street || '',
+          shipping_address_full: o.shipping_address_full || '',
           products: lines.map(function(l) { return {name: l.product_title || l.offer_sku || '', quantity: l.quantity || 1, total: l.price || 0}; }),
           total: o.total_price || 0, shipping_method: 'superpharm',
           status: o.order_state || '', notes: o.notes || '',

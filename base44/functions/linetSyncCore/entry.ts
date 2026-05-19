@@ -183,7 +183,9 @@ async function findOrCreateClientFromLinetDoc(sr, doc) {
       const updates = {};
       if (phone && !byLinet[0].phone) updates.phone = phone;
       if (email && !byLinet[0].email) updates.email = email;
-      if (city && !byLinet[0].city) updates.city = city;
+      // Always update address from Linet if available (Linet is the source of truth for address)
+      if (city) updates.city = city;
+      if (address) updates.full_address = address;
       if (!byLinet[0].full_name || byLinet[0].full_name === 'לקוח חדש') updates.full_name = name;
       updates.last_interaction_date = new Date().toISOString();
       if (Object.keys(updates).length > 0) await sr.Client.update(byLinet[0].id, updates);
@@ -200,6 +202,8 @@ async function findOrCreateClientFromLinetDoc(sr, doc) {
         const updates = { last_interaction_date: new Date().toISOString() };
         if (accountId && !byPhone[0].linet_account_id) updates.linet_account_id = accountId;
         if (email && !byPhone[0].email) updates.email = email;
+        if (city) updates.city = city;
+        if (address) updates.full_address = address;
         // Normalize the stored phone to our standard format
         if (byPhone[0].phone !== phone) updates.phone = phone;
         await sr.Client.update(byPhone[0].id, updates);

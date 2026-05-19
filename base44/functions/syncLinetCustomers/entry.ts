@@ -77,8 +77,9 @@ async function upsertClientFromLinetAccount(sr, account) {
         const updates = {};
         if (phone && !byLinetId[0].phone) updates.phone = phone;
         if (email && !byLinetId[0].email) updates.email = email;
-        if (city && !byLinetId[0].city) updates.city = city;
-        if (address && !byLinetId[0].full_address) updates.full_address = address;
+        // Always update address from Linet (source of truth)
+        if (city) updates.city = city;
+        if (address) updates.full_address = address;
         if (!byLinetId[0].full_name || byLinetId[0].full_name === 'לקוח חדש') updates.full_name = name;
         if (Object.keys(updates).length > 0) {
             await sr.Client.update(byLinetId[0].id, updates);
@@ -93,8 +94,8 @@ async function upsertClientFromLinetAccount(sr, account) {
         if (byPhone.length > 0) {
             const updates = { linet_account_id: accountId };
             if (email && !byPhone[0].email) updates.email = email;
-            if (city && !byPhone[0].city) updates.city = city;
-            if (address && !byPhone[0].full_address) updates.full_address = address;
+            if (city) updates.city = city;
+            if (address) updates.full_address = address;
             await sr.Client.update(byPhone[0].id, updates);
             return { action: 'linked', clientId: byPhone[0].id };
         }
@@ -106,8 +107,8 @@ async function upsertClientFromLinetAccount(sr, account) {
         if (byEmail.length > 0) {
             const updates = { linet_account_id: accountId };
             if (phone && !byEmail[0].phone) updates.phone = phone;
-            if (city && !byEmail[0].city) updates.city = city;
-            if (address && !byEmail[0].full_address) updates.full_address = address;
+            if (city) updates.city = city;
+            if (address) updates.full_address = address;
             await sr.Client.update(byEmail[0].id, updates);
             return { action: 'linked', clientId: byEmail[0].id };
         }
