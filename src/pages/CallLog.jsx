@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import CallLogItem from '../components/calls/CallLogItem';
+import CustomerCard from '../components/customers/CustomerCard';
 
 const DEDUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 
@@ -111,6 +112,7 @@ export default function CallLog() {
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('all');
     const [pageSize, setPageSize] = useState(10);
+    const [customerCardId, setCustomerCardId] = useState(null);
 
     const loadData = async () => {
         setLoading(true);
@@ -437,11 +439,19 @@ ${facts.join('\n')}`,
                                 aiTip={tip}
                                 dupCount={call._dupCount || 0}
                                 activeLeads={leads}
+                                onCustomerClick={(id) => setCustomerCardId(id)}
                             />
                         );
                     })}
                 </div>
             )}
+
+            <CustomerCard
+                customerId={customerCardId}
+                isOpen={!!customerCardId}
+                onClose={() => setCustomerCardId(null)}
+                onEdit={() => {}}
+            />
         </div>
     );
 }

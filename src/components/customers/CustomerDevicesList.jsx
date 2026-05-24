@@ -6,6 +6,14 @@ import { Smartphone, Calendar, FileText, Hash } from 'lucide-react';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 
+const ACCESSORY_KEYWORDS = ['כיסוי', 'מגן מסך', 'מטען', 'כבל', 'אוזניות', 'ספר', 'חוברת', 'נרתיק', 'סוללה', 'מתאם', 'עגינה', 'מעמד', 'חצובה', 'רצועה', 'פילם', 'סטנד', 'תחנת', 'עט', 'מקלדת', 'עכבר', 'מארז', 'תיק', 'ניקוי', 'אביזר'];
+
+function isAccessory(device) {
+    if (device.manufacturer === 'אביזר כללי') return true;
+    const model = (device.model || '').toLowerCase();
+    return ACCESSORY_KEYWORDS.some(kw => model.includes(kw));
+}
+
 export default function CustomerDevicesList({ customerId }) {
     const [devices, setDevices] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -19,7 +27,8 @@ export default function CustomerDevicesList({ customerId }) {
         setIsLoading(true);
         try {
             const deviceList = await RepairDevice.filter({ client_id: customerId }, '-created_date');
-            setDevices(deviceList || []);
+            const filtered = (deviceList || []).filter(d => !isAccessory(d));
+            setDevices(filtered);
         } catch (err) {
             console.error('Error loading devices:', err);
         } finally {

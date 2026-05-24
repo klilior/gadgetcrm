@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import moment from 'moment';
 
-export default function CallLogItem({ call, client, aiTip, dupCount, activeLeads = [] }) {
+export default function CallLogItem({ call, client, aiTip, dupCount, activeLeads = [], onCustomerClick }) {
     const content = call.content || '';
     const summary = call.summary || '';
     const isIncoming = call.activity_type === 'שיחה נכנסת';
@@ -70,13 +70,13 @@ export default function CallLogItem({ call, client, aiTip, dupCount, activeLeads
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                         {client ? (
-                            <Link
-                                to={createPageUrl('Customers') + `?openCard=${client.id}`}
+                            <button
+                                onClick={() => onCustomerClick ? onCustomerClick(client.id) : null}
                                 className="font-semibold text-gray-800 hover:text-purple-600 transition-colors flex items-center gap-1"
                             >
                                 {client.full_name}
                                 <ExternalLink className="w-3 h-3 text-gray-400" />
-                            </Link>
+                            </button>
                         ) : (
                             <span className="font-medium text-gray-600 flex items-center gap-1">
                                 <User className="w-3.5 h-3.5 text-gray-400" />
