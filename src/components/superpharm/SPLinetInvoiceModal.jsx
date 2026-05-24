@@ -38,7 +38,7 @@ export default function SPLinetInvoiceModal({ order, open, onClose, onInvoiceCre
         customer_phone: phone,
         customer_email: email,
         product_description: productName || `הזמנת סופר-פארם ${order.mirakl_order_id}`,
-        quantity: lines.reduce((sum, l) => sum + (l.quantity || 1), 0) || 1,
+        quantity: 1,
         unit_price: productTotal || Number(totalPrice),
         shipping_amount: shippingAmount,
         mirakl_order_id: order.mirakl_order_id,
