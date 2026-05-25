@@ -1,0 +1,67 @@
+{
+  "name": "PayrollSettings",
+  "type": "object",
+  "properties": {
+    "accountant_email": {
+      "type": "string",
+      "format": "email",
+      "description": "\u05d0\u05d9\u05de\u05d9\u05d9\u05dc \u05e8\u05d5\u05d0\u05d4 \u05d7\u05e9\u05d1\u05d5\u05df"
+    },
+    "pdf_template": {
+      "type": "string",
+      "description": "\u05ea\u05d1\u05e0\u05d9\u05ea PDF"
+    },
+    "csv_cols": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u05e2\u05de\u05d5\u05d3\u05d5\u05ea CSV"
+    }
+  },
+  "required": [
+    "accountant_email"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
