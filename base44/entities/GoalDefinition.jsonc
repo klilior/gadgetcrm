@@ -1,0 +1,135 @@
+{
+  "name": "GoalDefinition",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05d9\u05e2\u05d3"
+    },
+    "scope_type": {
+      "type": "string",
+      "enum": [
+        "AGENT",
+        "TEAM"
+      ],
+      "description": "\u05d8\u05d5\u05d5\u05d7 \u05d4\u05d9\u05e2\u05d3 - \u05e0\u05e6\u05d9\u05d2 \u05d0\u05d5 \u05e6\u05d5\u05d5\u05ea"
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05e0\u05e6\u05d9\u05d2 (\u05d0\u05dd scope_type=AGENT)"
+    },
+    "agent_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05e0\u05e6\u05d9\u05d2 (\u05dc\u05e0\u05d5\u05d7\u05d5\u05ea)"
+    },
+    "commission_group_code": {
+      "type": "string",
+      "enum": [
+        "DEVICES",
+        "LINES",
+        "ACCESSORIES_GROUP"
+      ],
+      "description": "\u05e7\u05d5\u05d3 \u05e7\u05d1\u05d5\u05e6\u05ea \u05d4\u05e2\u05de\u05dc\u05d5\u05ea"
+    },
+    "metric_type": {
+      "type": "string",
+      "enum": [
+        "UNITS",
+        "NET_AMOUNT",
+        "LINES_4G_UNITS",
+        "LINES_5G_UNITS"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05de\u05d3\u05d3"
+    },
+    "period_type": {
+      "type": "string",
+      "enum": [
+        "MONTHLY",
+        "WEEKLY",
+        "CUSTOM"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05ea\u05e7\u05d5\u05e4\u05d4"
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05ea\u05d7\u05dc\u05d4"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05e1\u05d9\u05d5\u05dd"
+    },
+    "target_value": {
+      "type": "number",
+      "description": "\u05e2\u05e8\u05da \u05d4\u05d9\u05e2\u05d3"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u05d4\u05d0\u05dd \u05d4\u05d9\u05e2\u05d3 \u05e4\u05e2\u05d9\u05dc"
+    }
+  },
+  "required": [
+    "name",
+    "scope_type",
+    "commission_group_code",
+    "metric_type",
+    "period_start",
+    "period_end",
+    "target_value"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "data.scope_type": "TEAM"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
