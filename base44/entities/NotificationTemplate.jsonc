@@ -1,0 +1,77 @@
+{
+  "name": "NotificationTemplate",
+  "type": "object",
+  "properties": {
+    "template_key": {
+      "type": "string",
+      "description": "\u05de\u05e4\u05ea\u05d7 \u05ea\u05d1\u05e0\u05d9\u05ea \u05d9\u05d9\u05d7\u05d5\u05d3\u05d9",
+      "unique": true,
+      "index": true
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "SMS"
+      ],
+      "default": "SMS",
+      "description": "\u05e2\u05e8\u05d5\u05e5"
+    },
+    "hebrew_template": {
+      "type": "string",
+      "description": "\u05ea\u05d1\u05e0\u05d9\u05ea \u05d4\u05d5\u05d3\u05e2\u05d4 \u05d1\u05e2\u05d1\u05e8\u05d9\u05ea"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u05ea\u05d1\u05e0\u05d9\u05ea \u05e4\u05e2\u05d9\u05dc\u05d4"
+    }
+  },
+  "required": [
+    "template_key",
+    "hebrew_template"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea",
+            "\u05e0\u05e6\u05d9\u05d2"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
