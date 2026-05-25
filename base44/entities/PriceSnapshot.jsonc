@@ -1,0 +1,200 @@
+{
+  "name": "PriceSnapshot",
+  "type": "object",
+  "properties": {
+    "linked_product": {
+      "type": "string",
+      "description": "\u05de\u05d5\u05e6\u05e8 \u05de\u05e7\u05d5\u05e9\u05e8",
+      "index": true
+    },
+    "check_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05d6\u05de\u05df \u05d1\u05d3\u05d9\u05e7\u05d4"
+    },
+    "my_position": {
+      "type": "number",
+      "description": "\u05d4\u05de\u05d9\u05e7\u05d5\u05dd \u05e9\u05dc\u05e0\u05d5"
+    },
+    "my_price_on_site": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e9\u05dc\u05e0\u05d5 \u05d1\u05d0\u05ea\u05e8 (\u20aa)"
+    },
+    "my_price_on_zap": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e9\u05dc\u05e0\u05d5 \u05d1-Zap (\u20aa)"
+    },
+    "cost_price_snapshot": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e2\u05dc\u05d5\u05ea (\u20aa)"
+    },
+    "desired_position_snapshot": {
+      "type": "number",
+      "description": "\u05de\u05d9\u05e7\u05d5\u05dd \u05e8\u05e6\u05d5\u05d9"
+    },
+    "position_above_me_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05de\u05e7\u05d5\u05dd \u05de\u05e2\u05dc\u05d9\u05e0\u05d5 (\u20aa)"
+    },
+    "position_above_me_store": {
+      "type": "string",
+      "description": "\u05d7\u05e0\u05d5\u05ea \u05de\u05e2\u05dc\u05d9\u05e0\u05d5"
+    },
+    "position_below_me_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05de\u05e7\u05d5\u05dd \u05de\u05ea\u05d7\u05ea\u05d9\u05e0\u05d5 (\u20aa)"
+    },
+    "position_below_me_store": {
+      "type": "string",
+      "description": "\u05d7\u05e0\u05d5\u05ea \u05de\u05ea\u05d7\u05ea\u05d9\u05e0\u05d5"
+    },
+    "desired_position_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05d1\u05de\u05d9\u05e7\u05d5\u05dd \u05e8\u05e6\u05d5\u05d9 (\u20aa)"
+    },
+    "desired_position_store": {
+      "type": "string",
+      "description": "\u05d7\u05e0\u05d5\u05ea \u05d1\u05de\u05d9\u05e7\u05d5\u05dd \u05e8\u05e6\u05d5\u05d9"
+    },
+    "first_place_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05de\u05e7\u05d5\u05dd 1 (\u20aa)"
+    },
+    "first_place_store": {
+      "type": "string",
+      "description": "\u05d7\u05e0\u05d5\u05ea \u05de\u05e7\u05d5\u05dd 1"
+    },
+    "second_place_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05de\u05e7\u05d5\u05dd 2 (\u20aa)"
+    },
+    "second_place_store": {
+      "type": "string",
+      "description": "\u05d7\u05e0\u05d5\u05ea \u05de\u05e7\u05d5\u05dd 2"
+    },
+    "third_place_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05de\u05e7\u05d5\u05dd 3 (\u20aa)"
+    },
+    "third_place_store": {
+      "type": "string",
+      "description": "\u05d7\u05e0\u05d5\u05ea \u05de\u05e7\u05d5\u05dd 3"
+    },
+    "total_competitors": {
+      "type": "number",
+      "description": "\u05e1\u05d4\u05f4\u05db \u05de\u05ea\u05d7\u05e8\u05d9\u05dd"
+    },
+    "competitors_json": {
+      "type": "string",
+      "description": "JSON \u05de\u05ea\u05d7\u05e8\u05d9\u05dd"
+    },
+    "markup_percent": {
+      "type": "number",
+      "description": "\u05d0\u05d7\u05d5\u05d6 \u05ea\u05d5\u05e1\u05e4\u05ea (%)"
+    },
+    "gross_margin_percent": {
+      "type": "number",
+      "description": "\u05d0\u05d7\u05d5\u05d6 \u05e8\u05d5\u05d5\u05d7 \u05d2\u05d5\u05dc\u05de\u05d9 (%)"
+    },
+    "gap_to_first_place": {
+      "type": "number",
+      "description": "\u05e4\u05e2\u05e8 \u05de\u05de\u05e7\u05d5\u05dd 1 (\u20aa)"
+    },
+    "prev_snapshot": {
+      "type": "string",
+      "description": "\u05d1\u05d3\u05d9\u05e7\u05d4 \u05e7\u05d5\u05d3\u05de\u05ea (\u05de\u05d6\u05d4\u05d4)",
+      "index": true
+    },
+    "position_delta": {
+      "type": "number",
+      "description": "\u05e9\u05d9\u05e0\u05d5\u05d9 \u05de\u05d9\u05e7\u05d5\u05dd"
+    },
+    "price_site_delta": {
+      "type": "number",
+      "description": "\u05e9\u05d9\u05e0\u05d5\u05d9 \u05de\u05d7\u05d9\u05e8 \u05d1\u05d0\u05ea\u05e8 (\u20aa)"
+    },
+    "price_zap_delta": {
+      "type": "number",
+      "description": "\u05e9\u05d9\u05e0\u05d5\u05d9 \u05de\u05d7\u05d9\u05e8 \u05d1\u05d6\u05d0\u05e4 (\u20aa)"
+    },
+    "above_price_delta": {
+      "type": "number",
+      "description": "\u05e9\u05d9\u05e0\u05d5\u05d9 \u05de\u05d7\u05d9\u05e8 \u05de\u05ea\u05d7\u05e8\u05d4 \u05de\u05e2\u05dc (\u20aa)"
+    },
+    "below_price_delta": {
+      "type": "number",
+      "description": "\u05e9\u05d9\u05e0\u05d5\u05d9 \u05de\u05d7\u05d9\u05e8 \u05de\u05ea\u05d7\u05e8\u05d4 \u05de\u05ea\u05d7\u05ea (\u20aa)"
+    },
+    "debug_wc_source": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: \u05d0\u05e1\u05d8\u05e8\u05d8\u05d2\u05d9\u05d9\u05ea \u05de\u05d7\u05d9\u05e8 WC"
+    },
+    "debug_wc_candidates": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: \u05de\u05d5\u05e2\u05de\u05d3\u05d9 \u05de\u05d7\u05d9\u05e8 WC (JSON)"
+    },
+    "debug_wc_html_sample": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: \u05d3\u05d5\u05d2\u05de\u05ea HTML"
+    },
+    "debug_zap_found_store_name": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: \u05e9\u05dd \u05d7\u05e0\u05d5\u05ea \u05e9\u05e0\u05de\u05e6\u05d0 \u05d1\u05d6\u05d0\u05e4"
+    },
+    "debug_zap_my_price": {
+      "type": "number",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: \u05de\u05d7\u05d9\u05e8 \u05e9\u05dc\u05e0\u05d5 \u05d1\u05d6\u05d0\u05e4"
+    },
+    "debug_zap_top5": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: Top 5 \u05d7\u05e0\u05d5\u05d9\u05d5\u05ea \u05d1\u05d6\u05d0\u05e4 (JSON)"
+    }
+  },
+  "required": [
+    "linked_product",
+    "check_timestamp"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
