@@ -1,0 +1,154 @@
+{
+  "name": "Invoices",
+  "type": "object",
+  "properties": {
+    "supplier": {
+      "type": "string",
+      "description": "\u05e1\u05e4\u05e7",
+      "index": true
+    },
+    "doc_type": {
+      "type": "string",
+      "enum": [
+        "\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05de\u05e1",
+        "\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05d6\u05d9\u05db\u05d5\u05d9"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05de\u05e1\u05de\u05da"
+    },
+    "doc_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05de\u05e1\u05de\u05da"
+    },
+    "doc_date": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05de\u05e1\u05de\u05da"
+    },
+    "currency": {
+      "type": "string",
+      "enum": [
+        "ILS",
+        "USD",
+        "EUR"
+      ],
+      "description": "\u05de\u05d8\u05d1\u05e2"
+    },
+    "subtotal_before_vat": {
+      "type": "number",
+      "description": "\u05e1\u05d4\u05f4\u05db \u05dc\u05e4\u05e0\u05d9 \u05de\u05e2\u05f4\u05de"
+    },
+    "vat_amount": {
+      "type": "number",
+      "description": "\u05de\u05e2\u05f4\u05de"
+    },
+    "total_with_vat": {
+      "type": "number",
+      "description": "\u05e1\u05d4\u05f4\u05db \u05db\u05d5\u05dc\u05dc \u05de\u05e2\u05f4\u05de"
+    },
+    "confidence_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "\u05e6\u05d9\u05d5\u05df \u05d5\u05d3\u05d0\u05d5\u05ea (0-100)"
+    },
+    "extraction_status": {
+      "type": "string",
+      "enum": [
+        "\u05e0\u05e7\u05e8\u05d0 \u05d1\u05d4\u05e6\u05dc\u05d7\u05d4",
+        "\u05de\u05de\u05ea\u05d9\u05df \u05dc\u05d0\u05d9\u05de\u05d5\u05ea",
+        "\u05d0\u05d5\u05e9\u05e8",
+        "\u05e0\u05d3\u05d7\u05d4"
+      ],
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05e0\u05d9\u05ea\u05d5\u05d7"
+    },
+    "reviewed_by": {
+      "type": "string",
+      "description": "\u05d0\u05d5\u05e9\u05e8 \u05e2\u05dc \u05d9\u05d3\u05d9"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d0\u05d9\u05de\u05d5\u05ea"
+    },
+    "source_intake": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05de\u05da \u05de\u05e7\u05d5\u05e8",
+      "index": true
+    },
+    "duplicate_key": {
+      "type": "string",
+      "description": "\u05de\u05e4\u05ea\u05d7 \u05db\u05e4\u05d9\u05dc\u05d5\u05ea",
+      "index": true
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    },
+    "ai_debug_last_extraction_json": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: JSON \u05d7\u05d9\u05dc\u05d5\u05e5 \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "ai_debug_last_validation_json": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: JSON \u05d5\u05dc\u05d9\u05d3\u05e6\u05d9\u05d4 \u05d0\u05d7\u05e8\u05d5\u05df"
+    }
+  },
+  "required": [],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
