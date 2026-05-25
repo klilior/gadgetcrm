@@ -1,0 +1,108 @@
+{
+  "name": "ContractNote",
+  "type": "object",
+  "properties": {
+    "line_contract_id": {
+      "type": "string",
+      "description": "LineContract reference",
+      "index": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent who created the note",
+      "index": true
+    },
+    "agent_name": {
+      "type": "string",
+      "description": "Agent name (cached)"
+    },
+    "note_text": {
+      "type": "string",
+      "description": "Note content"
+    },
+    "note_type": {
+      "type": "string",
+      "enum": [
+        "CALL",
+        "FOLLOWUP",
+        "REMINDER",
+        "OTHER"
+      ],
+      "default": "OTHER",
+      "description": "Type of note"
+    }
+  },
+  "required": [
+    "line_contract_id",
+    "agent_id",
+    "note_text"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea",
+                "\u05e0\u05e6\u05d9\u05d2"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea",
+                "\u05e0\u05e6\u05d9\u05d2"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
