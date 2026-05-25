@@ -1,0 +1,97 @@
+{
+  "name": "LineImportBatch",
+  "type": "object",
+  "properties": {
+    "uploaded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05e2\u05dc\u05d0\u05d4"
+    },
+    "uploaded_by": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05ea\u05de\u05e9 \u05e9\u05d4\u05e2\u05dc\u05d4",
+      "index": true
+    },
+    "file_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05e7\u05d5\u05d1\u05e5 \u05d4\u05de\u05e7\u05d5\u05e8\u05d9"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "UPLOADED",
+        "PROCESSING",
+        "PROCESSED",
+        "FAILED"
+      ],
+      "default": "UPLOADED",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05d9\u05d9\u05d1\u05d5\u05d0",
+      "index": true
+    },
+    "total_rows": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05e1\u05da \u05d4\u05e9\u05d5\u05e8\u05d5\u05ea \u05e9\u05e0\u05e7\u05e8\u05d0\u05d5"
+    },
+    "processed_rows": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05db\u05de\u05d4 \u05e9\u05d5\u05e8\u05d5\u05ea \u05e2\u05d5\u05d1\u05d3\u05d5 \u05dc-LineContract"
+    },
+    "error_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05e9\u05d2\u05d9\u05d0\u05d5\u05ea"
+    },
+    "error_log": {
+      "type": "string",
+      "description": "\u05dc\u05d5\u05d2 \u05e9\u05d2\u05d9\u05d0\u05d5\u05ea"
+    }
+  },
+  "required": [
+    "uploaded_by",
+    "file_name"
+  ],
+  "rls": {
+    "create": {
+      "data.uploaded_by": "{{user.id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.uploaded_by": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
