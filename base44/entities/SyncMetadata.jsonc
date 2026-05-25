@@ -1,0 +1,86 @@
+{
+  "name": "SyncMetadata",
+  "type": "object",
+  "properties": {
+    "sync_key": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d9\u05d9\u05d7\u05d5\u05d3\u05d9 \u05dc\u05ea\u05d4\u05dc\u05d9\u05da \u05d4\u05e1\u05e0\u05db\u05e8\u05d5\u05df (\u05dc\u05d3\u05d5\u05d2\u05de\u05d4: linet_main_sync)",
+      "unique": true,
+      "index": true
+    },
+    "last_successful_sync": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d5\u05e9\u05e2\u05d4 \u05e9\u05dc \u05e1\u05e0\u05db\u05e8\u05d5\u05df \u05de\u05d5\u05e6\u05dc\u05d7 \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "last_attempt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d5\u05e9\u05e2\u05d4 \u05e9\u05dc \u05e0\u05d9\u05e1\u05d9\u05d5\u05df \u05e1\u05e0\u05db\u05e8\u05d5\u05df \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "SUCCESS",
+        "FAILED",
+        "PARTIAL",
+        "RUNNING"
+      ],
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05e1\u05e0\u05db\u05e8\u05d5\u05df \u05d4\u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "last_error_message": {
+      "type": "string",
+      "description": "\u05d4\u05d5\u05d3\u05e2\u05ea \u05e9\u05d2\u05d9\u05d0\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4 (\u05d0\u05dd \u05d9\u05e9)"
+    },
+    "consecutive_failures": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05db\u05d9\u05e9\u05dc\u05d5\u05e0\u05d5\u05ea \u05e8\u05e6\u05d5\u05e4\u05d9\u05dd"
+    }
+  },
+  "required": [
+    "sync_key"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
