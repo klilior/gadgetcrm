@@ -198,15 +198,23 @@ Deno.serve(async (req) => {
                 if (!externalPhone) { stats.skipped++; continue; }
 
                 // Check if we already have a Drive link for this call
-                const [recentIn, recentOut] = await Promise.all([
-                    sr.Activity.filter({ activity_type: 'שיחה נכנסת' }, '-created_date', 100),
-                    sr.Activity.filter({ activity_type: 'שיחה יוצאת' }, '-created_date', 100),
-                ]);
-                const allRecent = [...recentIn, ...recentOut];
-                const matchingActivity = allRecent.find(a =>
-                    (callId && a.content?.includes(callId)) ||
-                    (a.content?.includes(externalPhone) && a.content?.includes(dateStr?.replace(/-/g, '')))
-                ) || allRecent.find(a => a.content?.includes(externalPhone) && !a.recording_url);
+                // Search by phone instead of fetching 100 recent
+                let matchingActivity = null;
+                const phonesToSearch = phoneSearchVariants(externalPhone);
+                for (const pv of phonesToSearch) {
+                    const byType = isIncoming ? 'שיחה נכנסת' : 'שיחה יוצאת';
+                    const found = await sr.Activity.filter({ activity_type: byType }, '-created_date', 20);
+                    const match = found.find(a => a.content?.includes(pv) && ((callId && a.content?.includes(callId)) || !a.recording_url));
+                    if (match) { matchingActivity = match; break; }
+                }
+                if (!matchingActivity && callId) {
+                    // Fallback: search both types for callId
+                    const [ri, ro] = await Promise.all([
+                        sr.Activity.filter({ activity_type: 'שיחה נכנסת' }, '-created_date', 20),
+                        sr.Activity.filter({ activity_type: 'שיחה יוצאת' }, '-created_date', 20),
+                    ]);
+                    matchingActivity = [...ri, ...ro].find(a => a.content?.includes(callId));
+                }
 
                 // Skip if already has a Google Drive link
                 if (matchingActivity?.recording_url?.includes('drive.google.com')) {

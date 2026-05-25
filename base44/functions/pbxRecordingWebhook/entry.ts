@@ -414,13 +414,31 @@ Deno.serve(async (req) => {
             });
             console.log(`✅ [Recording] Updated activity ${matchedActivity.id} with recording`);
         } else {
-            const activity = await sr.Activity.create({
+            const activityData = {
                 activity_type: isIncoming ? 'שיחה נכנסת' : 'שיחה יוצאת',
                 summary: customer ? `הקלטת שיחה - ${customer.full_name}` : `הקלטת שיחה - ${normalizedPhone || 'לא ידוע'}`,
                 content: `מספר: ${normalizedPhone || externalNumber} | שלוחה: ${extension} | משך: ${duration} שניות | callId: ${callId}`,
                 recording_url: finalRecordingUrl || undefined,
-            });
+            };
+            if (customer) {
+                activityData.order_id = customer.id;
+            }
+            const activity = await sr.Activity.create(activityData);
             console.log(`✅ [Recording] Created new activity ${activity.id}`);
+
+            // If no customer was found, try searching by phone variants
+            if (!customer && normalizedPhone) {
+                const variants = phoneSearchVariants(externalNumber);
+                let foundClient = null;
+                for (const variant of variants) {
+                    const byPhone = await sr.Client.filter({ phone: variant }, null, 1);
+                    if (byPhone.length > 0) { foundClient = byPhone[0]; break; }
+                }
+                if (foundClient) {
+                    await sr.Activity.update(activity.id, { order_id: foundClient.id });
+                    console.log(`✅ [Recording] Linked activity to client ${foundClient.full_name} (${foundClient.id}) via phone search`);
+                }
+            }
         }
 
         // ═══════ Save to SyncLog ═══════
