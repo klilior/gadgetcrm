@@ -1,0 +1,105 @@
+{
+  "name": "Target",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05ea\u05de\u05e9",
+      "index": true
+    },
+    "user_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05de\u05e9\u05ea\u05de\u05e9"
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d7\u05d9\u05dc\u05ea \u05ea\u05e7\u05d5\u05e4\u05d4"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05e1\u05d5\u05e3 \u05ea\u05e7\u05d5\u05e4\u05d4"
+    },
+    "target_type": {
+      "type": "string",
+      "enum": [
+        "Devices",
+        "AccessoriesRevenue",
+        "Lines4G",
+        "Lines5G",
+        "TotalSalesRevenue"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d9\u05e2\u05d3"
+    },
+    "target_value": {
+      "type": "number",
+      "description": "\u05e2\u05e8\u05da \u05d9\u05e2\u05d3"
+    },
+    "employee_id": {
+      "type": "string",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05e2\u05d5\u05d1\u05d3 (Employee)",
+      "index": true
+    }
+  },
+  "required": [
+    "user_id",
+    "period_start",
+    "period_end",
+    "target_type",
+    "target_value"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.user_id": "{{user.id}}"
+        },
+        {
+          "data.employee_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
