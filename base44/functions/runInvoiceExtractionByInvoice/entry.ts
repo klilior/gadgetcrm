@@ -443,6 +443,12 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Unwrap if LLM wrapped response in a 'response' key (happens with some models like Claude)
+    if (extraction && typeof extraction === 'object' && extraction.response && typeof extraction.response === 'object' && extraction.response.classification) {
+      console.log('Unwrapping nested response object from LLM');
+      extraction = extraction.response;
+    }
+
     if (!extraction || typeof extraction !== 'object') {
       const errMsg = 'תגובת AI לא תקינה או ריקה';
       await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_error_he: errMsg });
