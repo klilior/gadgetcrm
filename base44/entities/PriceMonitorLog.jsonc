@@ -1,0 +1,88 @@
+{
+  "name": "PriceMonitorLog",
+  "type": "object",
+  "properties": {
+    "run_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05d6\u05de\u05df \u05e8\u05d9\u05e6\u05d4"
+    },
+    "run_mode": {
+      "type": "string",
+      "enum": [
+        "\u05d9\u05d3\u05e0\u05d9",
+        "\u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9"
+      ],
+      "description": "\u05de\u05e6\u05d1 \u05e8\u05d9\u05e6\u05d4"
+    },
+    "products_checked": {
+      "type": "number",
+      "description": "\u05de\u05d5\u05e6\u05e8\u05d9\u05dd \u05e9\u05e0\u05d1\u05d3\u05e7\u05d5"
+    },
+    "successes": {
+      "type": "number",
+      "description": "\u05d4\u05e6\u05dc\u05d7\u05d5\u05ea"
+    },
+    "failures": {
+      "type": "number",
+      "description": "\u05db\u05d9\u05e9\u05dc\u05d5\u05e0\u05d5\u05ea"
+    },
+    "alerts_created": {
+      "type": "number",
+      "description": "\u05d4\u05ea\u05e8\u05d0\u05d5\u05ea \u05e9\u05e0\u05d5\u05e6\u05e8\u05d5"
+    },
+    "duration_sec": {
+      "type": "number",
+      "description": "\u05de\u05e9\u05da (\u05e9\u05e0\u05d9\u05d5\u05ea)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    }
+  },
+  "required": [
+    "run_time"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
