@@ -1,0 +1,114 @@
+{
+  "name": "SupplierProductPrice",
+  "type": "object",
+  "properties": {
+    "supplier_id": {
+      "type": "string",
+      "description": "\u05e1\u05e4\u05e7",
+      "index": true
+    },
+    "sku": {
+      "type": "string",
+      "description": "\u05de\u05e7\"\u05d8",
+      "index": true
+    },
+    "product_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05de\u05d5\u05e6\u05e8"
+    },
+    "last_price_before_vat": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05d0\u05d7\u05e8\u05d5\u05df \u05dc\u05e4\u05e0\u05d9 \u05de\u05e2\"\u05de"
+    },
+    "previous_price_before_vat": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e7\u05d5\u05d3\u05dd \u05dc\u05e4\u05e0\u05d9 \u05de\u05e2\"\u05de"
+    },
+    "min_price_before_vat": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05de\u05d9\u05e0\u05d9\u05de\u05d5\u05dd \u05dc\u05e4\u05e0\u05d9 \u05de\u05e2\"\u05de"
+    },
+    "max_price_before_vat": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05de\u05e7\u05e1\u05d9\u05de\u05d5\u05dd \u05dc\u05e4\u05e0\u05d9 \u05de\u05e2\"\u05de"
+    },
+    "price_change_percent": {
+      "type": "number",
+      "description": "\u05e9\u05d9\u05e0\u05d5\u05d9 \u05de\u05d7\u05d9\u05e8 \u05d1\u05d0\u05d7\u05d5\u05d6\u05d9\u05dd"
+    },
+    "price_change_direction": {
+      "type": "string",
+      "enum": [
+        "\u05e2\u05dc\u05d4",
+        "\u05d9\u05e8\u05d3",
+        "\u05dc\u05dc\u05d0 \u05e9\u05d9\u05e0\u05d5\u05d9"
+      ],
+      "description": "\u05db\u05d9\u05d5\u05d5\u05df \u05e9\u05d9\u05e0\u05d5\u05d9"
+    },
+    "last_invoice_id": {
+      "type": "string",
+      "description": "\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "last_invoice_date": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "first_seen_date": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d6\u05d9\u05d4\u05d5\u05d9 \u05e8\u05d0\u05e9\u05d5\u05df"
+    },
+    "purchase_count": {
+      "type": "number",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05e8\u05db\u05d9\u05e9\u05d5\u05ea"
+    }
+  },
+  "required": [
+    "supplier_id",
+    "sku",
+    "product_name"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
