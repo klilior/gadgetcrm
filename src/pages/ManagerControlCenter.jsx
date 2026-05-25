@@ -73,9 +73,8 @@ export default function ManagerControlCenter() {
       base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000).catch(() => []),
       base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200).catch(() => []),
       base44.entities.Lead.filter({ status: { $ne: 'Deleted' } }).catch(() => []),
-      base44.entities.SyncLog.filter({ sync_key: 'linetHourlySync' }, '-run_started_at', 1).catch(() => []),
+      base44.entities.SyncLog.filter({ sync_key: 'linet_main_sync' }, '-run_started_at', 1).catch(() => []),
       base44.entities.Activity.filter({
-        created_date: { $gte: dateFrom + 'T00:00:00', $lte: dateTo + 'T23:59:59' },
         activity_type: { $in: ['שיחה נכנסת', 'שיחה יוצאת'] }
       }, '-created_date', 2000).catch(() => [])
     ]);
@@ -87,9 +86,14 @@ export default function ManagerControlCenter() {
     // Last sync
     if (syncLogs.length > 0) setLastSync(syncLogs[0]);
 
-    // Call stats
-    const incoming = activities.filter(a => a.activity_type === 'שיחה נכנסת').length;
-    const missed = activities.filter(a => a.activity_type === 'שיחה נכנסת' && (!a.content || a.content.includes('לא נענתה') || a.content.includes('missed'))).length;
+    // Call stats - filter by date range in JS (created_date is a datetime field)
+    const callsInRange = activities.filter(a => {
+      if (!a.created_date) return false;
+      const d = a.created_date.split('T')[0];
+      return d >= dateFrom && d <= dateTo;
+    });
+    const incoming = callsInRange.filter(a => a.activity_type === 'שיחה נכנסת').length;
+    const missed = callsInRange.filter(a => a.activity_type === 'שיחה נכנסת' && a.content && (a.content.includes('לא נענתה') || a.content.includes('missed') || a.content.includes('משך: 0 שניות'))).length;
     setCallStats({ incoming, missed });
 
     // Pending invoices
@@ -176,12 +180,12 @@ export default function ManagerControlCenter() {
     const purchasesTotal = purchasesInvoices.reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
     const ratio = grossSales > 0 ? (purchasesTotal / grossSales) * 100 : 0;
 
-    // Today's sales
+    // Today's sales (gross with VAT)
     const todayStr = format(new Date(), 'yyyy-MM-dd');
     const todaySales = uniqueSales.filter(s => s.issue_date === todayStr);
-    const todayNet = todaySales.reduce((acc, s) => {
-      const net = s.price_ex_vat || 0;
-      return acc + ((s.doc_type?.includes('זיכוי') || s.doc_type === '3') ? -Math.abs(net) : net);
+    const todayGross = todaySales.reduce((acc, s) => {
+      const gross = s.total_row_amount || 0;
+      return acc + ((s.doc_type?.includes('זיכוי') || s.doc_type === '3') ? -Math.abs(gross) : gross);
     }, 0);
 
     return {
@@ -192,7 +196,7 @@ export default function ManagerControlCenter() {
       accessoriesNet: Math.round(accessoriesNet),
       purchasesTotal: Math.round(purchasesTotal),
       ratio: ratio.toFixed(1),
-      todayNet: Math.round(todayNet)
+      todayGross: Math.round(todayGross)
     };
   }, [uniqueSales, invoices, mappings]);
 
@@ -373,18 +377,18 @@ export default function ManagerControlCenter() {
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-1">
               <DollarSign className="w-4 h-4 text-cyan-200" />
-              <span className="text-xs text-cyan-100">ביצוע יומי (היום)</span>
+              <span className="text-xs text-cyan-100">ביצוע יומי כולל מע״מ</span>
             </div>
-            <p className="text-xl font-bold">₪{kpiData.todayNet.toLocaleString()}</p>
+            <p className="text-xl font-bold">₪{kpiData.todayGross.toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-600 to-emerald-500 text-white">
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="w-4 h-4 text-emerald-200" />
-              <span className="text-xs text-emerald-100">ביצוע בתקופה (נטו)</span>
+              <span className="text-xs text-emerald-100">ביצוע בתקופה כולל מע״מ</span>
             </div>
-            <p className="text-xl font-bold">₪{kpiData.netSales.toLocaleString()}</p>
+            <p className="text-xl font-bold">₪{kpiData.grossSales.toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-lg bg-gradient-to-br from-orange-600 to-orange-500 text-white">
