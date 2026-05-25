@@ -1,0 +1,169 @@
+{
+  "name": "ProductsMonitor",
+  "type": "object",
+  "properties": {
+    "product_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05de\u05d5\u05e6\u05e8"
+    },
+    "my_woocommerce_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 WooCommerce"
+    },
+    "zap_comparison_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05d4\u05e9\u05d5\u05d5\u05d0\u05ea \u05de\u05d7\u05d9\u05e8\u05d9\u05dd \u05d1-Zap"
+    },
+    "cost_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e2\u05dc\u05d5\u05ea (\u20aa)"
+    },
+    "my_current_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e0\u05d5\u05db\u05d7\u05d9 \u05e9\u05dc\u05e0\u05d5 (\u20aa)"
+    },
+    "desired_position": {
+      "type": "number",
+      "description": "\u05de\u05d9\u05e7\u05d5\u05dd \u05e8\u05e6\u05d5\u05d9"
+    },
+    "min_profit_margin": {
+      "type": "number",
+      "default": 15,
+      "description": "\u05d0\u05d7\u05d5\u05d6 \u05e8\u05d5\u05d5\u05d7 \u05de\u05d9\u05e0\u05d9\u05de\u05dc\u05d9 (%)"
+    },
+    "last_check_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05d1\u05d3\u05d9\u05e7\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "last_success_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05d1\u05d3\u05d9\u05e7\u05d4 \u05de\u05d5\u05e6\u05dc\u05d7\u05ea \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "consecutive_failures": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05db\u05d9\u05e9\u05dc\u05d5\u05e0\u05d5\u05ea \u05e8\u05e6\u05d5\u05e4\u05d9\u05dd"
+    },
+    "last_run_mode": {
+      "type": "string",
+      "enum": [
+        "\u05d9\u05d3\u05e0\u05d9",
+        "\u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9"
+      ],
+      "description": "\u05de\u05e6\u05d1 \u05e8\u05d9\u05e6\u05d4 \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u05e4\u05e2\u05d9\u05dc"
+    },
+    "status_code": {
+      "type": "string",
+      "enum": [
+        "\ud83d\udfe2 \u05ea\u05e7\u05d9\u05df",
+        "\ud83d\udfe1 \u05e7\u05e8\u05d5\u05d1 \u05dc\u05d9\u05e2\u05d3",
+        "\ud83d\udd34 \u05e8\u05d7\u05d5\u05e7 \u05de\u05d4\u05d9\u05e2\u05d3",
+        "\u26a0\ufe0f \u05e8\u05d5\u05d5\u05d7 \u05e0\u05de\u05d5\u05da"
+      ],
+      "default": "\ud83d\udfe1 \u05e7\u05e8\u05d5\u05d1 \u05dc\u05d9\u05e2\u05d3",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1"
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    },
+    "my_store_aliases": {
+      "type": "string",
+      "description": "\u05db\u05d9\u05e0\u05d5\u05d9\u05d9 \u05d7\u05e0\u05d5\u05ea (\u05dc\u05e9\u05d9\u05de\u05d5\u05e9 \u05e2\u05ea\u05d9\u05d3\u05d9)"
+    },
+    "my_store_name_zap": {
+      "type": "string",
+      "default": "GADGET TEAM",
+      "description": "\u05e9\u05dd \u05d4\u05d7\u05e0\u05d5\u05ea \u05e9\u05dc\u05e0\u05d5 \u05d1-Zap"
+    },
+    "last_error": {
+      "type": "string",
+      "description": "\u05e9\u05d2\u05d9\u05d0\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "needs_attention": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d3\u05d5\u05e8\u05e9 \u05ea\u05e9\u05d5\u05de\u05ea \u05dc\u05d1"
+    },
+    "current_position": {
+      "type": "number",
+      "description": "\u05de\u05d9\u05e7\u05d5\u05dd \u05e0\u05d5\u05db\u05d7\u05d9"
+    },
+    "last_recommendation_short": {
+      "type": "string",
+      "description": "\u05d4\u05de\u05dc\u05e6\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4 (\u05e7\u05e6\u05e8)"
+    },
+    "last_snapshot": {
+      "type": "string",
+      "description": "\u05d1\u05d3\u05d9\u05e7\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4 (\u05de\u05d6\u05d4\u05d4)",
+      "index": true
+    },
+    "last_recommendation": {
+      "type": "string",
+      "description": "\u05d4\u05de\u05dc\u05e6\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4 (\u05de\u05d6\u05d4\u05d4)",
+      "index": true
+    },
+    "debug_last_wc_error": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: \u05e9\u05d2\u05d9\u05d0\u05ea WC \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    }
+  },
+  "required": [
+    "product_name",
+    "zap_comparison_url",
+    "cost_price",
+    "desired_position"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
