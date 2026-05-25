@@ -1,0 +1,107 @@
+{
+  "name": "LinetCustomer",
+  "type": "object",
+  "properties": {
+    "linet_account_id": {
+      "type": "integer",
+      "description": "Linet account ID (unique)",
+      "unique": true,
+      "index": true
+    },
+    "linet_account_uuid": {
+      "type": "string",
+      "description": "Linet account UUID"
+    },
+    "name": {
+      "type": "string",
+      "description": "Customer/Company name",
+      "index": true
+    },
+    "phone_1": {
+      "type": "string",
+      "description": "Primary phone number"
+    },
+    "phone_2": {
+      "type": "string",
+      "description": "Secondary phone number"
+    },
+    "mobile": {
+      "type": "string",
+      "description": "Mobile phone"
+    },
+    "email": {
+      "type": "string",
+      "description": "Email address"
+    },
+    "city": {
+      "type": "string",
+      "description": "City"
+    },
+    "address": {
+      "type": "string",
+      "description": "Full address"
+    },
+    "id_number": {
+      "type": "string",
+      "description": "Customer ID number (\u05ea.\u05d6. \u05d0\u05d5 \u05d7.\u05e4.)",
+      "index": true
+    },
+    "last_synced_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last sync timestamp",
+      "index": true
+    },
+    "sync_error": {
+      "type": "string",
+      "description": "Last sync error (if any)"
+    }
+  },
+  "required": [
+    "linet_account_id",
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
