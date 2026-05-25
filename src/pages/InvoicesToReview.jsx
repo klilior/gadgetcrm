@@ -118,28 +118,39 @@ export default function InvoicesToReview() {
       };
       await base44.entities.Invoices.update(selected.id, updatePayload);
       
-      // Learn supplier pattern if supplier was manually set
+      // Learn from corrections: save supplier name pattern and original extracted name
       if (selected.supplier && selected.ai_debug_last_extraction_json) {
         try {
           const extraction = JSON.parse(selected.ai_debug_last_extraction_json);
+          const extractedName = extraction.supplier_name?.trim();
           const normalizedName = extraction.supplier_name_normalized?.trim();
-          if (normalizedName) {
+          
+          // Save both the original extracted name and normalized name as patterns
+          const namesToLearn = [extractedName, normalizedName].filter(Boolean);
+          for (const nameToLearn of namesToLearn) {
             const existingPatterns = await base44.entities.SupplierPattern.filter({
               pattern_type: 'name_pattern',
-              pattern_value: normalizedName
+              pattern_value: nameToLearn
             });
             if (!existingPatterns || existingPatterns.length === 0) {
               await base44.entities.SupplierPattern.create({
                 supplier_id: selected.supplier,
                 pattern_type: 'name_pattern',
-                pattern_value: normalizedName,
+                pattern_value: nameToLearn,
                 confidence: 100,
                 learned_from_invoice: selected.id,
                 is_active: true
               });
-              toast.info("המערכת למדה את הספק לזיהוי עתידי");
+            } else if (existingPatterns[0].supplier_id !== selected.supplier) {
+              // User corrected to different supplier - update the pattern
+              await base44.entities.SupplierPattern.update(existingPatterns[0].id, {
+                supplier_id: selected.supplier,
+                confidence: 100,
+                learned_from_invoice: selected.id
+              });
             }
           }
+          toast.info("המערכת למדה את הספק לזיהוי עתידי");
         } catch (_) {}
       }
       
@@ -575,7 +586,12 @@ export default function InvoicesToReview() {
                       if (lineItems.length > 0) {
                         return (
                           <div className="border-t pt-3 mt-3">
-                            <Label className="text-xs text-gray-500 mb-2 block">פריטים ({lineItems.length})</Label>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Label className="text-xs text-gray-500">פריטים ({lineItems.length})</Label>
+                              {extraction.prices_include_vat && (
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">מחירים כוללים מע״מ</Badge>
+                              )}
+                            </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {lineItems.map((item, idx) => {
                                 // Calculate prices - if one is missing, derive from the other using VAT
@@ -616,7 +632,10 @@ export default function InvoicesToReview() {
                                     </div>
                                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-gray-600">
                                       <div>כמות: <span className="font-medium">{qty}</span></div>
-                                      <div>מחיר/יח׳ (לפני): <span className="font-medium">{unitPriceBeforeVat ? `₪${unitPriceBeforeVat.toFixed(2)}` : '-'}</span></div>
+                                      <div>מחיר/יח׳ (לפני מע״מ): <span className="font-medium">{unitPriceBeforeVat ? `₪${unitPriceBeforeVat.toFixed(2)}` : '-'}</span></div>
+                                      {item.unit_price_with_vat && (
+                                        <div>מחיר/יח׳ (כולל מע״מ): <span className="font-medium text-blue-600">{`₪${item.unit_price_with_vat.toFixed(2)}`}</span></div>
+                                      )}
                                       <div>סה״כ לפני מע״מ: <span className="font-medium">{lineTotalBeforeVat ? `₪${lineTotalBeforeVat.toFixed(2)}` : '-'}</span></div>
                                       <div>סה״כ כולל מע״מ: <span className="font-medium text-green-700">{lineTotalWithVat ? `₪${lineTotalWithVat.toFixed(2)}` : '-'}</span></div>
                                     </div>

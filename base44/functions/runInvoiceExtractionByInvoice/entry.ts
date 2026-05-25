@@ -2,7 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 const EXTRACT_PROMPT = `SYSTEM / INSTRUCTION
 
-You are an EXTREMELY PRECISE invoice data extraction engine. Your job is to read the EXACT text from the document — never guess, never approximate, never hallucinate.
+You are an EXTREMELY PRECISE Israeli invoice data extraction engine. Your job is to read the EXACT text from the document — never guess, never approximate, never hallucinate.
 
 INPUT
 You will receive ONE document file (PDF/JPG/PNG) attached to this request.
@@ -22,11 +22,24 @@ Anything else must be classified as OTHER and skipped.
 ABSOLUTE PRECISION RULES — READ CAREFULLY
 ═══════════════════════════════════════
 
-*** DATE EXTRACTION — MOST CRITICAL ***
+*** SUPPLIER NAME — MOST CRITICAL ***
+1. Read the supplier name EXACTLY as printed. Do NOT "correct" or guess spelling.
+2. Hebrew OCR pitfalls: carefully distinguish between similar letters:
+   - א vs ע (alef vs ayin)
+   - ו vs ן (vav vs final-nun)
+   - כ vs ב (kaf vs bet)
+   - ד vs ר (dalet vs resh)
+   - ם vs ס vs מ (final-mem vs samech vs mem)
+3. If the invoice has a LOGO with the company name, prefer the printed text version over the logo.
+4. Look for the supplier name near the top of the invoice, often with their address and VAT ID.
+5. supplier_name_normalized: remove punctuation and legal suffixes (בע"מ, ltd, etc.) but keep the EXACT spelling.
+6. Common Israeli supplier examples: "אולפון", "ניופאן", "פלאפון", "סלקום" — do NOT confuse similar names.
+
+*** DATE EXTRACTION — CRITICAL ***
 1. The document date (doc_date) MUST be read EXACTLY as printed on the invoice.
 2. Look for labels like "תאריך חשבונית:", "תאריך:", "Date:" — read the date next to them.
 3. Israeli date formats: DD/MM/YY or DD/MM/YYYY. Convert to ISO: YYYY-MM-DD.
-   - "28/04/26" means 2026-04-28 (NOT 2023!)
+   - "28/04/26" means 2026-04-28
    - "28/04/2026" means 2026-04-28
    - "15/01/25" means 2025-01-15
    - Two-digit years: 20-29 = 2020-2029, 30-99 = 2030-2099
@@ -38,16 +51,29 @@ ABSOLUTE PRECISION RULES — READ CAREFULLY
 2. Look for the FINAL totals section at the bottom of the invoice:
    - "מחיר כולל" or "סה"כ לפני מע"מ" = subtotal_before_vat
    - "מע"מ" or "מע״מ (18%)" = vat_amount
-   - "סה"כ כולל מע"מ" or "סה״כ מחיר" = total_with_vat
+   - "סה"כ כולל מע"מ" or "סה״כ מחיר" or "סה״כ לתשלום" = total_with_vat
 3. The total_with_vat is the FINAL number the customer pays (the largest amount).
 4. Verify: subtotal + VAT should approximately equal total. If not, re-read the numbers.
 5. Israeli number format: commas for thousands (17,987.34), period for decimals.
 
-*** LINE ITEMS — CRITICAL ***
+*** LINE ITEMS — CRITICAL (VAT AWARENESS) ***
 1. Read EVERY row in the products table exactly as written.
-2. For each line: read the SKU/מק"ט, product name, quantity, unit price, and line total.
-3. The unit price (מחיר ליח') is BEFORE VAT (לפני מע"מ), not the final price.
-4. quantity × unit_price_before_vat should approximately equal line_total_before_vat.
+2. IMPORTANT: Check the column headers carefully!
+   - If header says "מחיר ליח' כולל מע"מ" or "מחיר כולל מעמ" or "כולל מע"מ" → prices are WITH VAT
+   - If header says "מחיר ליח'" or "מחיר ליחידה" or "לפני מע"מ" → prices are BEFORE VAT
+   - Set prices_include_vat = true if the column headers indicate VAT-inclusive pricing
+3. For each line item:
+   - Read sku, product_name, quantity as-is
+   - If prices_include_vat is TRUE:
+     - unit_price_with_vat = the price as printed
+     - unit_price_before_vat = unit_price_with_vat / 1.18 (calculate)
+     - line_total_with_vat = the line total as printed
+     - line_total_before_vat = line_total_with_vat / 1.18 (calculate)
+   - If prices_include_vat is FALSE:
+     - unit_price_before_vat = the price as printed
+     - unit_price_with_vat = null
+     - line_total_before_vat = the line total as printed
+     - line_total_with_vat = null
 
 *** SUPPLIER IDENTIFICATION ***
 1. The supplier name is the COMPANY that ISSUED the invoice (the seller), NOT the customer/buyer.
@@ -84,16 +110,6 @@ If you had to guess or approximate ANY value, set overall_confidence below 80.
 CRITICAL FIELDS
 supplier_name, doc_number, doc_date, total_with_vat, doc_type_he
 
-ADDITIONAL: EXTRACT LINE ITEMS
-You MUST also extract ALL line items (products/services) from the invoice.
-Each line item should include:
-- line_number: sequential number (1, 2, 3...)
-- sku: product code/SKU/מק"ט (exactly as appears on document, including barcode numbers)
-- product_name: product description/name (exactly as written)
-- quantity: number of units
-- unit_price_before_vat: price per unit before VAT (number)
-- line_total_before_vat: total for this line before VAT (number)
-
 OUTPUT SCHEMA (EXACT)
 {
   "classification": "TAX_INVOICE" | "CREDIT_NOTE" | "OTHER",
@@ -114,6 +130,7 @@ OUTPUT SCHEMA (EXACT)
   "total_with_vat": number | null,
 
   "credit_sign": "NEGATIVE" | "POSITIVE" | null,
+  "prices_include_vat": boolean,
 
   "line_items": [
     {
@@ -122,7 +139,9 @@ OUTPUT SCHEMA (EXACT)
       "product_name": string,
       "quantity": number,
       "unit_price_before_vat": number,
-      "line_total_before_vat": number
+      "unit_price_with_vat": number | null,
+      "line_total_before_vat": number,
+      "line_total_with_vat": number | null
     }
   ],
 
@@ -175,6 +194,7 @@ const EXTRACT_SCHEMA = {
     vat_amount: { type: 'number' },
     total_with_vat: { type: 'number' },
     credit_sign: { type: 'string', enum: ['NEGATIVE', 'POSITIVE'] },
+    prices_include_vat: { type: 'boolean' },
     line_items: {
       type: 'array',
       items: {
@@ -185,7 +205,9 @@ const EXTRACT_SCHEMA = {
           product_name: { type: 'string' },
           quantity: { type: 'number' },
           unit_price_before_vat: { type: 'number' },
-          line_total_before_vat: { type: 'number' }
+          unit_price_with_vat: { type: 'number' },
+          line_total_before_vat: { type: 'number' },
+          line_total_with_vat: { type: 'number' }
         },
         required: ['line_number', 'sku', 'product_name', 'quantity']
       }
@@ -363,7 +385,7 @@ Deno.serve(async (req) => {
         add_context_from_internet: false,
         response_json_schema: EXTRACT_SCHEMA,
         file_urls: [fileUrlToUse],
-        model: 'gpt_5_4'
+        model: 'claude_sonnet_4_6'
       });
     } catch (llmErr) {
       const errMsg = llmErr?.message || String(llmErr);
@@ -381,7 +403,7 @@ Deno.serve(async (req) => {
               add_context_from_internet: false,
               response_json_schema: EXTRACT_SCHEMA,
               file_urls: [correctedUrl],
-              model: 'gpt_5_4'
+              model: 'claude_sonnet_4_6'
             });
             console.log('PDF extraction succeeded after re-upload');
           } catch (retryErr) {
