@@ -1,0 +1,226 @@
+{
+  "name": "LineContract",
+  "type": "object",
+  "properties": {
+    "customer_id": {
+      "type": "string",
+      "description": "Client ID reference",
+      "index": true
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "Customer name (cached for display)"
+    },
+    "customer_phone": {
+      "type": "string",
+      "description": "Customer contact phone"
+    },
+    "customer_id_number": {
+      "type": "string",
+      "description": "Customer ID number for search",
+      "index": true
+    },
+    "linet_account_id": {
+      "type": "integer",
+      "description": "Linet account ID for customer lookup",
+      "index": true
+    },
+    "msisdn": {
+      "type": "string",
+      "description": "Line phone number",
+      "index": true
+    },
+    "carrier_code": {
+      "type": "string",
+      "description": "Carrier code",
+      "index": true
+    },
+    "carrier_name": {
+      "type": "string",
+      "description": "Carrier display name (cached)"
+    },
+    "activation_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Line activation date",
+      "index": true
+    },
+    "original_invoice_id": {
+      "type": "string",
+      "description": "Original Linet invoice/transaction ID"
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent who sold this specific line",
+      "index": true
+    },
+    "agent_name": {
+      "type": "string",
+      "description": "Agent name (cached)"
+    },
+    "account_owner_id": {
+      "type": "string",
+      "description": "Current portfolio owner of this customer",
+      "index": true
+    },
+    "account_owner_name": {
+      "type": "string",
+      "description": "Portfolio owner name (cached)"
+    },
+    "safe_retarget_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date when retargeting becomes safe",
+      "index": true
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "LOCKED",
+        "ELIGIBLE",
+        "IN_PROGRESS",
+        "RETAINED",
+        "LOST"
+      ],
+      "default": "LOCKED",
+      "description": "Current contract status",
+      "index": true
+    },
+    "snooze_until": {
+      "type": "string",
+      "format": "date-time",
+      "description": "If snoozed, hide until this datetime"
+    },
+    "next_followup_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Planned follow-up date"
+    },
+    "last_action_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last interaction/action timestamp",
+      "index": true
+    },
+    "last_action_type": {
+      "type": "string",
+      "description": "Type of last action (e.g., NO_ANSWER, CALLED, RETAINED)"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Free text notes from agents"
+    },
+    "retention_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date when marked as RETAINED"
+    },
+    "retention_invoice_id": {
+      "type": "string",
+      "description": "Invoice ID if customer was retained/renewed"
+    },
+    "import_source": {
+      "type": "string",
+      "description": "Source of import (e.g., LINET_IMPORT)",
+      "index": true
+    },
+    "import_batch_id": {
+      "type": "string",
+      "description": "Batch ID if imported from raw import",
+      "index": true
+    },
+    "import_doc_number": {
+      "type": "string",
+      "description": "Document number from import source",
+      "index": true
+    },
+    "import_sku": {
+      "type": "string",
+      "description": "SKU from import source"
+    }
+  },
+  "required": [
+    "customer_id",
+    "carrier_code",
+    "activation_date",
+    "agent_id",
+    "account_owner_id"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "data.account_owner_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05e0\u05e6\u05d9\u05d2",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "data.account_owner_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05e0\u05e6\u05d9\u05d2",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "data.account_owner_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
