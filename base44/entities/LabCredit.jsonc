@@ -1,0 +1,80 @@
+{
+  "name": "LabCredit",
+  "type": "object",
+  "properties": {
+    "taken_by": {
+      "type": "string",
+      "description": "\u05de\u05d9 \u05dc\u05e7\u05d7"
+    },
+    "product_description": {
+      "type": "string",
+      "description": "\u05de\u05d5\u05e6\u05e8 \u05e9\u05e0\u05dc\u05e7\u05d7"
+    },
+    "amount": {
+      "type": "number",
+      "description": "\u05e9\u05d5\u05d5\u05d9 \u05d1\u05e9\u05f4\u05d7"
+    },
+    "taken_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d5\u05e9\u05e2\u05d4"
+    },
+    "recorded_by": {
+      "type": "string",
+      "description": "\u05e0\u05e8\u05e9\u05dd \u05e2\u05f4\u05d9 (\u05e9\u05dd \u05d4\u05e2\u05d5\u05d1\u05d3)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    }
+  },
+  "required": [
+    "taken_by",
+    "product_description",
+    "amount"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
