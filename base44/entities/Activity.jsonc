@@ -1,0 +1,167 @@
+{
+  "name": "Activity",
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "\u05ea\u05e7\u05e6\u05d9\u05e8"
+    },
+    "ticket_id": {
+      "type": "string",
+      "description": "\u05d8\u05d9\u05e7\u05d8"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "\u05d4\u05d6\u05de\u05e0\u05d4"
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "\u05e0\u05e6\u05d9\u05d2"
+    },
+    "activity_type": {
+      "type": "string",
+      "enum": [
+        "\u05d5\u05d5\u05d0\u05d8\u05e1\u05d0\u05e4 \u05e0\u05db\u05e0\u05e1",
+        "\u05d5\u05d5\u05d0\u05d8\u05e1\u05d0\u05e4 \u05d9\u05d5\u05e6\u05d0",
+        "\u05de\u05d9\u05d9\u05dc \u05e0\u05db\u05e0\u05e1",
+        "\u05de\u05d9\u05d9\u05dc \u05d9\u05d5\u05e6\u05d0",
+        "\u05e9\u05d9\u05d7\u05d4 \u05e0\u05db\u05e0\u05e1\u05ea",
+        "\u05e9\u05d9\u05d7\u05d4 \u05d9\u05d5\u05e6\u05d0\u05ea",
+        "\u05d4\u05e2\u05e8\u05d4",
+        "\u05ea\u05d6\u05db\u05d5\u05e8\u05ea",
+        "\u05d4\u05e2\u05d1\u05e8\u05ea \u05d8\u05d9\u05e4\u05d5\u05dc",
+        "\u05d4\u05e1\u05dc\u05de\u05d4 \u05d3\u05d7\u05d5\u05e4\u05d4",
+        "\u05e9\u05d9\u05e0\u05d5\u05d9 \u05e1\u05d8\u05d8\u05d5\u05e1",
+        "\u05e9\u05d9\u05e0\u05d5\u05d9 \u05e2\u05d3\u05d9\u05e4\u05d5\u05ea",
+        "\u05d4\u05ea\u05e8\u05d0\u05ea \u05d4\u05e1\u05dc\u05de\u05d4"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05e4\u05e2\u05d9\u05dc\u05d5\u05ea"
+    },
+    "content": {
+      "type": "string",
+      "description": "\u05ea\u05d5\u05db\u05df"
+    },
+    "thread_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e9\u05e8\u05e9\u05d5\u05e8/\u05e9\u05d9\u05d7\u05d4"
+    },
+    "email_message_id": {
+      "type": "string",
+      "description": "Message-ID \u05e9\u05dc \u05d4\u05de\u05d9\u05d9\u05dc"
+    },
+    "recording_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05d4\u05e7\u05dc\u05d8\u05d4"
+    },
+    "email_subject": {
+      "type": "string",
+      "description": "\u05e0\u05d5\u05e9\u05d0 \u05de\u05d9\u05d9\u05dc"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u05e7\u05d1\u05e6\u05d9\u05dd \u05de\u05e6\u05d5\u05e8\u05e4\u05d9\u05dd"
+    },
+    "read_by": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u05de\u05d6\u05d4\u05d9 \u05de\u05e9\u05ea\u05de\u05e9\u05d9\u05dd \u05e9\u05e7\u05e8\u05d0\u05d5 \u05d0\u05ea \u05d4\u05d4\u05d5\u05d3\u05e2\u05d4"
+    }
+  },
+  "required": [
+    "summary",
+    "activity_type"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.order_id": "{{user.id}}"
+        },
+        {
+          "data.ticket_id": "{{user.id}}"
+        },
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea",
+                "\u05d8\u05db\u05e0\u05d0\u05d9"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.order_id": "{{user.id}}"
+        },
+        {
+          "data.ticket_id": {
+            "$in": [
+              "{{user.ticket_ids}}"
+            ]
+          }
+        },
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea",
+                "\u05d8\u05db\u05e0\u05d0\u05d9"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
