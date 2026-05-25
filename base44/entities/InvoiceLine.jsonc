@@ -1,0 +1,105 @@
+{
+  "name": "InvoiceLine",
+  "type": "object",
+  "properties": {
+    "invoice_id": {
+      "type": "string",
+      "description": "\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea",
+      "index": true
+    },
+    "line_number": {
+      "type": "number",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05e9\u05d5\u05e8\u05d4"
+    },
+    "sku": {
+      "type": "string",
+      "description": "\u05de\u05e7\u05f4\u05d8",
+      "index": true
+    },
+    "product_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05de\u05d5\u05e6\u05e8"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "\u05db\u05de\u05d5\u05ea"
+    },
+    "unit_price_before_vat": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05d9\u05d7\u05d9\u05d3\u05d4 \u05dc\u05e4\u05e0\u05d9 \u05de\u05e2\u05f4\u05de"
+    },
+    "line_total_before_vat": {
+      "type": "number",
+      "description": "\u05e1\u05d4\u05f4\u05db \u05e9\u05d5\u05e8\u05d4 \u05dc\u05e4\u05e0\u05d9 \u05de\u05e2\u05f4\u05de"
+    },
+    "line_total_with_vat": {
+      "type": "number",
+      "description": "\u05e1\u05d4\u05f4\u05db \u05e9\u05d5\u05e8\u05d4 \u05db\u05d5\u05dc\u05dc \u05de\u05e2\u05f4\u05de"
+    },
+    "supplier_id": {
+      "type": "string",
+      "description": "\u05e1\u05e4\u05e7",
+      "index": true
+    }
+  },
+  "required": [
+    "invoice_id",
+    "sku",
+    "product_name",
+    "quantity"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.invoice_id": {
+            "$in": [
+              "{{user.invoice_ids}}"
+            ]
+          }
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
