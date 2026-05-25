@@ -1,0 +1,97 @@
+{
+  "name": "OrderProduct",
+  "type": "object",
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d6\u05de\u05e0\u05d4 (\u05de\u05e7\u05d5\u05de\u05d9)",
+      "index": true
+    },
+    "external_order_id": {
+      "type": "number",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d6\u05de\u05e0\u05d4 \u05d1-WooCommerce"
+    },
+    "product_id": {
+      "type": "number",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05d5\u05e6\u05e8 \u05d1-WooCommerce"
+    },
+    "name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05de\u05d5\u05e6\u05e8"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "\u05db\u05de\u05d5\u05ea"
+    },
+    "total": {
+      "type": "string",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05db\u05d5\u05dc\u05dc \u05dc\u05e4\u05e8\u05d9\u05d8"
+    },
+    "meta_data": {
+      "type": "string",
+      "description": "\u05ea\u05d5\u05e1\u05e4\u05d5\u05ea \u05d5\u05d0\u05e4\u05e9\u05e8\u05d5\u05d9\u05d5\u05ea \u05de\u05d5\u05e6\u05e8 (JSON stringified)"
+    }
+  },
+  "required": [
+    "order_id",
+    "external_order_id",
+    "name",
+    "quantity",
+    "total"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.order_id": {
+            "$in": [
+              "{{user.order_ids}}"
+            ]
+          }
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
