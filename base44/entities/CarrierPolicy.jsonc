@@ -1,0 +1,85 @@
+{
+  "name": "CarrierPolicy",
+  "type": "object",
+  "properties": {
+    "carrier_code": {
+      "type": "string",
+      "description": "Unique carrier code (e.g., PELEPHONE, PARTNER, HOT, CELLCOM)",
+      "unique": true,
+      "index": true
+    },
+    "carrier_name": {
+      "type": "string",
+      "description": "Display name in Hebrew"
+    },
+    "churn_window_months": {
+      "type": "number",
+      "description": "Minimum months before churn eligibility",
+      "default": 12
+    },
+    "safety_buffer_days": {
+      "type": "number",
+      "description": "Additional safety buffer days",
+      "default": 30
+    },
+    "is_active": {
+      "type": "boolean",
+      "description": "Is this carrier active",
+      "default": true
+    }
+  },
+  "required": [
+    "carrier_code",
+    "carrier_name"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.is_active": true
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
