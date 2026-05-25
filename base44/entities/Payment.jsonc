@@ -1,0 +1,185 @@
+{
+  "name": "Payment",
+  "type": "object",
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d6\u05de\u05e0\u05d4 \u05de\u05e7\u05d5\u05e9\u05e8",
+      "index": true
+    },
+    "customer_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05dc\u05e7\u05d5\u05d7",
+      "index": true
+    },
+    "amount": {
+      "type": "number",
+      "description": "\u05e1\u05db\u05d5\u05dd \u05d4\u05ea\u05e9\u05dc\u05d5\u05dd"
+    },
+    "currency": {
+      "type": "string",
+      "default": "ILS",
+      "description": "\u05de\u05d8\u05d1\u05e2"
+    },
+    "flow": {
+      "type": "string",
+      "enum": [
+        "webcheckout",
+        "gateway"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d6\u05e8\u05d9\u05de\u05ea \u05ea\u05e9\u05dc\u05d5\u05dd"
+    },
+    "transaction_unique_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d9\u05d9\u05d7\u05d5\u05d3\u05d9 \u05dc\u05e2\u05e1\u05e7\u05d4",
+      "index": true,
+      "unique": true
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "waiting_approval",
+        "approved",
+        "failed",
+        "cancelled"
+      ],
+      "default": "pending",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05ea\u05e9\u05dc\u05d5\u05dd",
+      "index": true
+    },
+    "zcredit_reference_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d0\u05e1\u05de\u05db\u05ea\u05d0 \u05e9\u05dc Z-Credit"
+    },
+    "zcredit_token": {
+      "type": "string",
+      "description": "\u05d8\u05d5\u05e7\u05df \u05de-Z-Credit"
+    },
+    "is_tel_approval_needed": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d4\u05d0\u05dd \u05e0\u05d3\u05e8\u05e9 \u05d0\u05d9\u05e9\u05d5\u05e8 \u05d8\u05dc\u05e4\u05d5\u05e0\u05d9"
+    },
+    "return_message": {
+      "type": "string",
+      "description": "\u05d4\u05d5\u05d3\u05e2\u05d4 \u05de\u05d4\u05e9\u05e8\u05ea"
+    },
+    "auth_num": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d0\u05d9\u05e9\u05d5\u05e8 \u05dc\u05d0\u05d9\u05de\u05d5\u05ea \u05d8\u05dc\u05e4\u05d5\u05e0\u05d9"
+    },
+    "raw_request": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "\u05d4\u05d1\u05e7\u05e9\u05d4 \u05d4\u05de\u05e7\u05d5\u05e8\u05d9\u05ea \u05dc-Z-Credit"
+    },
+    "raw_response": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "\u05d4\u05ea\u05e9\u05d5\u05d1\u05d4 \u05d4\u05de\u05e7\u05d5\u05e8\u05d9\u05ea \u05de-Z-Credit"
+    },
+    "mode_snapshot": {
+      "type": "string",
+      "enum": [
+        "sandbox",
+        "live"
+      ],
+      "description": "\u05de\u05e6\u05d1 \u05d1\u05d6\u05de\u05df \u05d4\u05e2\u05e1\u05e7\u05d4"
+    },
+    "payment_url": {
+      "type": "string",
+      "description": "URL \u05dc\u05d3\u05e3 \u05ea\u05e9\u05dc\u05d5\u05dd (WebCheckout)"
+    },
+    "installments": {
+      "type": "integer",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05ea\u05e9\u05dc\u05d5\u05de\u05d9\u05dd"
+    },
+    "linet_document_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e1\u05de\u05da \u05d1\u05dc\u05d9\u05e0\u05d8"
+    },
+    "linet_document_url": {
+      "type": "string",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05de\u05e1\u05de\u05da \u05d1\u05dc\u05d9\u05e0\u05d8"
+    },
+    "invoice_issued": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d4\u05d0\u05dd \u05d4\u05d5\u05e4\u05e7\u05d4 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea"
+    }
+  },
+  "required": [
+    "amount",
+    "flow",
+    "transaction_unique_id"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.customer_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05e0\u05e6\u05d9\u05d2",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.customer_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05e0\u05e6\u05d9\u05d2",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.customer_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
