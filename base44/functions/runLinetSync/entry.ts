@@ -93,7 +93,8 @@ async function fetchDocuments(credentials, dateFrom, dateTo, limit, offset) {
     throw new Error(`Linet API Error ${response.status}: ${errorText}`);
   }
   const apiResponse = await response.json();
-  if (apiResponse.errorCode && apiResponse.errorCode !== 0) throw new Error(`Linet Error ${apiResponse.errorCode}: ${apiResponse.text || 'Unknown error'}`);
+  // Linet uses errorCode 1000 for success ("OK"), 0 also means success
+  if (apiResponse.errorCode && apiResponse.errorCode !== 0 && apiResponse.errorCode !== 1000) throw new Error(`Linet Error ${apiResponse.errorCode}: ${apiResponse.text || 'Unknown error'}`);
   return apiResponse.body || [];
 }
 
