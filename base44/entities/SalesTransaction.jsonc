@@ -1,0 +1,126 @@
+{
+  "name": "SalesTransaction",
+  "type": "object",
+  "properties": {
+    "linet_doc_id": {
+      "type": "string",
+      "description": "Unique ID from Linet"
+    },
+    "doc_number": {
+      "type": "string",
+      "description": "Visual invoice number"
+    },
+    "doc_type": {
+      "type": "string",
+      "description": "3 (Credit) or 9 (Invoice)"
+    },
+    "issue_date": {
+      "type": "string",
+      "format": "date",
+      "description": "For filtering"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "Customer Name (Company)"
+    },
+    "linet_account_id": {
+      "type": "integer",
+      "description": "Linet account ID",
+      "index": true
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Linked Client record ID",
+      "index": true
+    },
+    "sales_rep": {
+      "type": "string",
+      "description": "Owner name"
+    },
+    "sku": {
+      "type": "string",
+      "description": "Product identifier"
+    },
+    "product_name": {
+      "type": "string",
+      "description": "Product Name"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Quantity"
+    },
+    "unit_price": {
+      "type": "number",
+      "description": "Price per unit (Inc VAT)"
+    },
+    "price_ex_vat": {
+      "type": "number",
+      "description": "Line Total Ex VAT"
+    },
+    "total_row_amount": {
+      "type": "number",
+      "description": "Line Total Inc VAT"
+    },
+    "category": {
+      "type": "string",
+      "description": "Enriched Category"
+    },
+    "sync_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Sync Timestamp"
+    },
+    "employee_id": {
+      "type": "string",
+      "description": "Linked Employee record ID",
+      "index": true
+    }
+  },
+  "required": [
+    "linet_doc_id",
+    "doc_number"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
