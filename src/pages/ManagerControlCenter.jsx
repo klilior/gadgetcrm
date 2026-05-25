@@ -371,20 +371,18 @@ export default function ManagerControlCenter() {
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-1">
               <CreditCard className="w-4 h-4 text-cyan-200" />
-              <span className="text-xs text-cyan-100">תקבולים היום (כולל מע״מ)</span>
+              <span className="text-xs text-cyan-100">מכירות היום (כולל מע״מ)</span>
             </div>
             <p className="text-xl font-bold">₪{kpiData.todayGross.toLocaleString()}</p>
-            <p className="text-xs text-cyan-200 mt-0.5">הכנסות: ₪{(kpiData.todayNet || 0).toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-600 to-emerald-500 text-white">
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="w-4 h-4 text-emerald-200" />
-              <span className="text-xs text-emerald-100">תקבולים בתקופה (כולל מע״מ)</span>
+              <span className="text-xs text-emerald-100">מכירות בתקופה (כולל מע״מ)</span>
             </div>
             <p className="text-xl font-bold">₪{kpiData.grossSales.toLocaleString()}</p>
-            <p className="text-xs text-emerald-200 mt-0.5">הכנסות: ₪{kpiData.netSales.toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-lg bg-gradient-to-br from-orange-600 to-orange-500 text-white">
