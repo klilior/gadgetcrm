@@ -1,0 +1,123 @@
+{
+  "name": "SalesGoal",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05d9\u05e2\u05d3"
+    },
+    "goal_type": {
+      "type": "string",
+      "enum": [
+        "AGENT",
+        "TEAM"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05d9\u05e2\u05d3 - \u05dc\u05e0\u05e6\u05d9\u05d2 \u05d0\u05d5 \u05dc\u05e6\u05d5\u05d5\u05ea"
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05e0\u05e6\u05d9\u05d2 (\u05d0\u05dd goal_type=AGENT)"
+    },
+    "agent_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05e0\u05e6\u05d9\u05d2 (\u05dc\u05e0\u05d5\u05d7\u05d5\u05ea)"
+    },
+    "metric_type": {
+      "type": "string",
+      "enum": [
+        "DEVICES_UNITS",
+        "LINES_UNITS",
+        "LINES_4G_UNITS",
+        "LINES_5G_UNITS",
+        "ACCESSORIES_NET"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05de\u05d3\u05d3"
+    },
+    "target_value": {
+      "type": "number",
+      "description": "\u05e2\u05e8\u05da \u05d4\u05d9\u05e2\u05d3 (\u05db\u05de\u05d5\u05ea \u05d0\u05d5 \u05e1\u05db\u05d5\u05dd)"
+    },
+    "period_type": {
+      "type": "string",
+      "enum": [
+        "MONTHLY",
+        "WEEKLY",
+        "CUSTOM"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05ea\u05e7\u05d5\u05e4\u05d4"
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d7\u05d9\u05dc\u05ea \u05d4\u05ea\u05e7\u05d5\u05e4\u05d4"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05e1\u05d9\u05d5\u05dd \u05d4\u05ea\u05e7\u05d5\u05e4\u05d4"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u05d4\u05d0\u05dd \u05d4\u05d9\u05e2\u05d3 \u05e4\u05e2\u05d9\u05dc"
+    }
+  },
+  "required": [
+    "name",
+    "goal_type",
+    "metric_type",
+    "target_value",
+    "period_start",
+    "period_end"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
