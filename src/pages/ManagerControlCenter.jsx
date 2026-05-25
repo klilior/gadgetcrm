@@ -137,66 +137,60 @@ export default function ManagerControlCenter() {
     return null;
   };
 
-  // Deduplicated sales
+  // Deduplicated sales — use linet_doc_id + sku as unique key (matches Linet's internal structure)
   const uniqueSales = useMemo(() => {
     const seen = new Set();
     return sales.filter(s => {
-      const key = `${s.doc_number || ''}_${s.sku || ''}_${s.product_name || ''}`;
+      const key = `${s.linet_doc_id || s.id}_${s.sku || ''}_${s.product_name || ''}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
   }, [sales]);
 
-  // KPI calculations
+  // KPI calculations — amounts from Linet are already signed (credits are negative)
   const kpiData = useMemo(() => {
-    const isCredit = (s) => s.doc_type?.includes('זיכוי') || s.doc_type === '3';
     let grossSales = 0, netSales = 0, creditsTotal = 0;
     let devicesUnits = 0, linesUnits = 0, accessoriesNet = 0;
     let devicesNet = 0, linesNet = 0;
+    const isCredit = (s) => s.doc_type?.includes('זיכוי') || s.doc_type === '3';
 
     uniqueSales.forEach(s => {
       const gross = s.total_row_amount || 0;
       const net = s.price_ex_vat || 0;
-      const qty = Math.abs(s.quantity || 0);
+      const qty = s.quantity || 0; // already signed from Linet
       const group = getCommissionGroup(s);
 
-      if (isCredit(s)) {
-        creditsTotal += Math.abs(gross);
-        netSales -= Math.abs(net);
-        grossSales -= Math.abs(gross);
-      } else {
-        grossSales += gross;
-        netSales += net;
-      }
+      // Amounts are already signed: positive for sales, negative for credits
+      grossSales += gross;
+      netSales += net;
+      if (isCredit(s)) creditsTotal += Math.abs(gross);
 
-      const signedNet = isCredit(s) ? -Math.abs(net) : net;
-      if (group === 'DEVICES') { devicesUnits += qty; devicesNet += signedNet; }
-      else if (group === 'LINES') { linesUnits += qty; linesNet += signedNet; }
-      else if (group === 'ACCESSORIES_GROUP') { accessoriesNet += signedNet; }
+      if (group === 'DEVICES') { devicesUnits += Math.abs(qty); devicesNet += net; }
+      else if (group === 'LINES') { linesUnits += Math.abs(qty); linesNet += net; }
+      else if (group === 'ACCESSORIES_GROUP') { accessoriesNet += net; }
     });
 
     const purchasesInvoices = invoices.filter(i => i.doc_type === 'חשבונית מס');
     const purchasesTotal = purchasesInvoices.reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
     const ratio = grossSales > 0 ? (purchasesTotal / grossSales) * 100 : 0;
 
-    // Today's sales (gross with VAT)
+    // Today's sales (gross with VAT) — already signed
     const todayStr = format(new Date(), 'yyyy-MM-dd');
     const todaySales = uniqueSales.filter(s => s.issue_date === todayStr);
-    const todayGross = todaySales.reduce((acc, s) => {
-      const gross = s.total_row_amount || 0;
-      return acc + ((s.doc_type?.includes('זיכוי') || s.doc_type === '3') ? -Math.abs(gross) : gross);
-    }, 0);
+    const todayGross = todaySales.reduce((acc, s) => acc + (s.total_row_amount || 0), 0);
+    const todayNet = todaySales.reduce((acc, s) => acc + (s.price_ex_vat || 0), 0);
 
     return {
-      netSales: Math.round(netSales), grossSales: Math.round(grossSales),
-      creditsTotal: Math.round(creditsTotal),
+      netSales: Math.round(netSales * 100) / 100, grossSales: Math.round(grossSales * 100) / 100,
+      creditsTotal: Math.round(creditsTotal * 100) / 100,
       devicesUnits, linesUnits,
       devicesNet: Math.round(devicesNet), linesNet: Math.round(linesNet),
       accessoriesNet: Math.round(accessoriesNet),
       purchasesTotal: Math.round(purchasesTotal),
       ratio: ratio.toFixed(1),
-      todayGross: Math.round(todayGross)
+      todayGross: Math.round(todayGross * 100) / 100,
+      todayNet: Math.round(todayNet * 100) / 100
     };
   }, [uniqueSales, invoices, mappings]);
 
@@ -376,19 +370,21 @@ export default function ManagerControlCenter() {
         <Card className="border-0 shadow-lg bg-gradient-to-br from-cyan-600 to-cyan-500 text-white">
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-1">
-              <DollarSign className="w-4 h-4 text-cyan-200" />
-              <span className="text-xs text-cyan-100">ביצוע יומי כולל מע״מ</span>
+              <CreditCard className="w-4 h-4 text-cyan-200" />
+              <span className="text-xs text-cyan-100">תקבולים היום (כולל מע״מ)</span>
             </div>
             <p className="text-xl font-bold">₪{kpiData.todayGross.toLocaleString()}</p>
+            <p className="text-xs text-cyan-200 mt-0.5">הכנסות: ₪{(kpiData.todayNet || 0).toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-600 to-emerald-500 text-white">
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="w-4 h-4 text-emerald-200" />
-              <span className="text-xs text-emerald-100">ביצוע בתקופה כולל מע״מ</span>
+              <span className="text-xs text-emerald-100">תקבולים בתקופה (כולל מע״מ)</span>
             </div>
             <p className="text-xl font-bold">₪{kpiData.grossSales.toLocaleString()}</p>
+            <p className="text-xs text-emerald-200 mt-0.5">הכנסות: ₪{kpiData.netSales.toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-lg bg-gradient-to-br from-orange-600 to-orange-500 text-white">
