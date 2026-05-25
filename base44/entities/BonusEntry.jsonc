@@ -1,0 +1,109 @@
+{
+  "name": "BonusEntry",
+  "type": "object",
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05e0\u05e6\u05d9\u05d2",
+      "index": true
+    },
+    "agent_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05e0\u05e6\u05d9\u05d2"
+    },
+    "bonus_type": {
+      "type": "string",
+      "enum": [
+        "TARGET",
+        "SHIFT",
+        "MANUAL"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05d1\u05d5\u05e0\u05d5\u05e1"
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d7\u05d9\u05dc\u05ea \u05d4\u05ea\u05e7\u05d5\u05e4\u05d4",
+      "index": true
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05e1\u05d5\u05e3 \u05d4\u05ea\u05e7\u05d5\u05e4\u05d4"
+    },
+    "goal_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d9\u05e2\u05d3 (\u05d0\u05dd bonus_type=TARGET)"
+    },
+    "goal_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05d9\u05e2\u05d3"
+    },
+    "meta_json": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "\u05de\u05d9\u05d3\u05e2 \u05e0\u05d5\u05e1\u05e3"
+    },
+    "bonus_amount": {
+      "type": "number",
+      "description": "\u05e1\u05db\u05d5\u05dd \u05d4\u05d1\u05d5\u05e0\u05d5\u05e1 \u05d1\u05e9\"\u05d7"
+    }
+  },
+  "required": [
+    "agent_id",
+    "bonus_type",
+    "period_start",
+    "period_end",
+    "bonus_amount"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.agent_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
