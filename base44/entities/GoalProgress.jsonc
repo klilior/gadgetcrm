@@ -1,0 +1,92 @@
+{
+  "name": "GoalProgress",
+  "type": "object",
+  "properties": {
+    "goal_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d9\u05e2\u05d3",
+      "index": true
+    },
+    "goal_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05d9\u05e2\u05d3 (\u05dc\u05e0\u05d5\u05d7\u05d5\u05ea)"
+    },
+    "current_value": {
+      "type": "number",
+      "description": "\u05e2\u05e8\u05da \u05e0\u05d5\u05db\u05d7\u05d9"
+    },
+    "target_value": {
+      "type": "number",
+      "description": "\u05e2\u05e8\u05da \u05d9\u05e2\u05d3"
+    },
+    "progress_percent": {
+      "type": "number",
+      "description": "\u05d0\u05d7\u05d5\u05d6 \u05d4\u05ea\u05e7\u05d3\u05de\u05d5\u05ea"
+    },
+    "last_calculated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d7\u05d9\u05e9\u05d5\u05d1 \u05d0\u05d7\u05e8\u05d5\u05df"
+    }
+  },
+  "required": [
+    "goal_id",
+    "current_value",
+    "target_value",
+    "progress_percent"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.goal_id": {
+            "$in": [
+              "{{user.goals_ids}}"
+            ]
+          }
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
