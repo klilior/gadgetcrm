@@ -1,0 +1,86 @@
+{
+  "name": "CarrierProductMapping",
+  "type": "object",
+  "properties": {
+    "carrier_code": {
+      "type": "string",
+      "description": "Carrier code this mapping belongs to",
+      "index": true
+    },
+    "product_sku_exact": {
+      "type": "string",
+      "description": "Exact SKU match"
+    },
+    "product_sku_prefix": {
+      "type": "string",
+      "description": "SKU prefix match"
+    },
+    "name_contains": {
+      "type": "string",
+      "description": "Product name contains text"
+    },
+    "priority": {
+      "type": "number",
+      "description": "Matching priority (higher = checked first)",
+      "default": 0
+    },
+    "is_active": {
+      "type": "boolean",
+      "description": "Is this mapping active",
+      "default": true
+    }
+  },
+  "required": [
+    "carrier_code"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.is_active": true
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
