@@ -1,0 +1,113 @@
+{
+  "name": "LineImportRow",
+  "type": "object",
+  "properties": {
+    "batch_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d1\u05d0\u05e6'",
+      "index": true
+    },
+    "doc_type": {
+      "type": "string",
+      "description": "\u05e1\u05d5\u05d2 \u05de\u05e1\u05de\u05da (3/9)"
+    },
+    "doc_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05de\u05e1\u05de\u05da"
+    },
+    "issue_date": {
+      "type": "string",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05e4\u05e7\u05d4 (\u05d8\u05e7\u05e1\u05d8)"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05dc\u05e7\u05d5\u05d7"
+    },
+    "customer_id_external": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05dc\u05e7\u05d5\u05d7 \u05d7\u05d9\u05e6\u05d5\u05e0\u05d9"
+    },
+    "item_sku": {
+      "type": "string",
+      "description": "\u05de\u05e7\u05f4\u05d8 \u05e4\u05e8\u05d9\u05d8",
+      "index": true
+    },
+    "item_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05e4\u05e8\u05d9\u05d8"
+    },
+    "quantity": {
+      "type": "string",
+      "description": "\u05db\u05de\u05d5\u05ea (\u05d8\u05e7\u05e1\u05d8)"
+    },
+    "owner_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05de\u05d5\u05db\u05e8",
+      "index": true
+    },
+    "category_name": {
+      "type": "string",
+      "description": "\u05e7\u05d8\u05d2\u05d5\u05e8\u05d9\u05d4 (\u05dc\u05de\u05e9\u05dc: \u05e7\u05d5\u05d5\u05d9\u05dd)",
+      "index": true
+    },
+    "raw_json": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "\u05d4\u05e9\u05d5\u05e8\u05d4 \u05d4\u05de\u05dc\u05d0\u05d4 \u05db-JSON"
+    },
+    "is_valid": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u05d4\u05d0\u05dd \u05d4\u05e9\u05d5\u05e8\u05d4 \u05ea\u05e7\u05d9\u05e0\u05d4"
+    },
+    "validation_error": {
+      "type": "string",
+      "description": "\u05d4\u05d5\u05d3\u05e2\u05ea \u05e9\u05d2\u05d9\u05d0\u05d4"
+    }
+  },
+  "required": [
+    "batch_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
