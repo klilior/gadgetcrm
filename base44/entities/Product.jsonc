@@ -1,0 +1,241 @@
+{
+  "name": "Product",
+  "type": "object",
+  "properties": {
+    "woo_product_id": {
+      "type": "number",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05d5\u05e6\u05e8 \u05d1-WooCommerce",
+      "index": true,
+      "unique": true
+    },
+    "name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05de\u05d5\u05e6\u05e8",
+      "index": true
+    },
+    "slug": {
+      "type": "string",
+      "description": "Slug \u05e9\u05dc \u05d4\u05de\u05d5\u05e6\u05e8"
+    },
+    "permalink": {
+      "type": "string",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05de\u05d5\u05e6\u05e8 \u05d1\u05d0\u05ea\u05e8"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "simple",
+        "variable",
+        "grouped",
+        "external"
+      ],
+      "default": "simple",
+      "description": "\u05e1\u05d5\u05d2 \u05de\u05d5\u05e6\u05e8"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "pending",
+        "private",
+        "publish"
+      ],
+      "default": "draft",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05e4\u05e8\u05e1\u05d5\u05dd"
+    },
+    "featured": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05de\u05d5\u05e6\u05e8 \u05de\u05d5\u05de\u05dc\u05e5"
+    },
+    "description": {
+      "type": "string",
+      "description": "\u05ea\u05d9\u05d0\u05d5\u05e8 \u05de\u05dc\u05d0"
+    },
+    "short_description": {
+      "type": "string",
+      "description": "\u05ea\u05d9\u05d0\u05d5\u05e8 \u05e7\u05e6\u05e8"
+    },
+    "sku": {
+      "type": "string",
+      "description": "\u05de\u05e7\"\u05d8",
+      "index": true
+    },
+    "price": {
+      "type": "string",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e0\u05d5\u05db\u05d7\u05d9"
+    },
+    "regular_price": {
+      "type": "string",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e8\u05d2\u05d9\u05dc"
+    },
+    "sale_price": {
+      "type": "string",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05de\u05d1\u05e6\u05e2"
+    },
+    "cost_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e2\u05dc\u05d5\u05ea (\u05dc\u05e4\u05e0\u05d9 \u05de\u05e2\"\u05de)"
+    },
+    "cost_price_vat": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e2\u05dc\u05d5\u05ea (\u05d0\u05d7\u05e8\u05d9 \u05de\u05e2\"\u05de)"
+    },
+    "on_sale": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d1\u05de\u05d1\u05e6\u05e2"
+    },
+    "manage_stock": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05e0\u05d9\u05d4\u05d5\u05dc \u05de\u05dc\u05d0\u05d9"
+    },
+    "stock_quantity": {
+      "type": "number",
+      "description": "\u05db\u05de\u05d5\u05ea \u05d1\u05de\u05dc\u05d0\u05d9"
+    },
+    "stock_status": {
+      "type": "string",
+      "enum": [
+        "instock",
+        "outofstock",
+        "onbackorder"
+      ],
+      "default": "instock",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05de\u05dc\u05d0\u05d9"
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "\u05e7\u05d8\u05d2\u05d5\u05e8\u05d9\u05d5\u05ea"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "\u05ea\u05d2\u05d9\u05d5\u05ea"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "src": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "alt": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "\u05ea\u05de\u05d5\u05e0\u05d5\u05ea"
+    },
+    "attributes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "\u05de\u05d0\u05e4\u05d9\u05d9\u05e0\u05d9\u05dd"
+    },
+    "brands": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u05de\u05d5\u05ea\u05d2\u05d9\u05dd"
+    },
+    "date_created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d9\u05e6\u05d9\u05e8\u05d4"
+    },
+    "date_modified": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05e2\u05d3\u05db\u05d5\u05df \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "raw_data": {
+      "type": "string",
+      "description": "\u05e0\u05ea\u05d5\u05e0\u05d9\u05dd \u05d2\u05d5\u05dc\u05de\u05d9\u05d9\u05dd \u05de-WooCommerce (JSON)"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05e0\u05e6\u05d9\u05d2",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
