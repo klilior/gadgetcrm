@@ -1,0 +1,86 @@
+{
+  "name": "SupplierPattern",
+  "type": "object",
+  "properties": {
+    "supplier_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e1\u05e4\u05e7",
+      "index": true
+    },
+    "pattern_type": {
+      "type": "string",
+      "enum": [
+        "vat_id",
+        "name_pattern",
+        "email_domain"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05ea\u05d1\u05e0\u05d9\u05ea"
+    },
+    "pattern_value": {
+      "type": "string",
+      "description": "\u05e2\u05e8\u05da \u05d4\u05ea\u05d1\u05e0\u05d9\u05ea",
+      "index": true
+    },
+    "confidence": {
+      "type": "number",
+      "description": "\u05e8\u05de\u05ea \u05d5\u05d3\u05d0\u05d5\u05ea (0-100)",
+      "default": 100
+    },
+    "learned_from_invoice": {
+      "type": "string",
+      "description": "\u05e0\u05dc\u05de\u05d3 \u05de\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u05e4\u05e2\u05d9\u05dc"
+    }
+  },
+  "required": [
+    "supplier_id",
+    "pattern_type",
+    "pattern_value"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
