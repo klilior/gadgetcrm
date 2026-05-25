@@ -1,0 +1,80 @@
+{
+  "name": "ShippingSettings",
+  "type": "object",
+  "properties": {
+    "setting_key": {
+      "type": "string",
+      "description": "\u05de\u05e4\u05ea\u05d7 \u05d4\u05d2\u05d3\u05e8\u05d4",
+      "index": true,
+      "unique": true
+    },
+    "setting_value": {
+      "type": "string",
+      "description": "\u05e2\u05e8\u05da \u05d4\u05d4\u05d2\u05d3\u05e8\u05d4"
+    },
+    "setting_group": {
+      "type": "string",
+      "enum": [
+        "velo",
+        "general"
+      ],
+      "description": "\u05e7\u05d1\u05d5\u05e6\u05ea \u05d4\u05d2\u05d3\u05e8\u05d5\u05ea"
+    },
+    "is_encrypted": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d4\u05d0\u05dd \u05d4\u05d4\u05d2\u05d3\u05e8\u05d4 \u05de\u05d5\u05e6\u05e4\u05e0\u05ea"
+    },
+    "description": {
+      "type": "string",
+      "description": "\u05ea\u05d9\u05d0\u05d5\u05e8 \u05d4\u05d4\u05d2\u05d3\u05e8\u05d4"
+    }
+  },
+  "required": [
+    "setting_key",
+    "setting_value",
+    "setting_group"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
