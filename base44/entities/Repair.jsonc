@@ -1,0 +1,196 @@
+{
+  "name": "Repair",
+  "type": "object",
+  "properties": {
+    "repair_id": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05ea\u05d9\u05e7\u05d5\u05df",
+      "index": true
+    },
+    "client_id": {
+      "type": "string",
+      "description": "\u05dc\u05e7\u05d5\u05d7",
+      "index": true
+    },
+    "device_id": {
+      "type": "string",
+      "description": "\u05de\u05db\u05e9\u05d9\u05e8"
+    },
+    "technician_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d8\u05db\u05e0\u05d0\u05d9 \u05de\u05d8\u05e4\u05dc",
+      "index": true
+    },
+    "repair_type": {
+      "type": "string",
+      "enum": [
+        "\u05d1\u05d8\u05d9\u05e4\u05d5\u05dc \u05d4\u05d7\u05e0\u05d5\u05ea",
+        "\u05de\u05e2\u05d1\u05d3\u05ea Gadget-Team",
+        "\u05de\u05e2\u05d1\u05d3\u05ea \u05d9\u05d1\u05d5\u05d0\u05df"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05ea\u05d9\u05e7\u05d5\u05df"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "\u05d9\u05d1\u05d5\u05d0\u05df/\u05de\u05e2\u05d1\u05d3\u05d4 \u05d7\u05d9\u05e6\u05d5\u05e0\u05d9\u05ea"
+    },
+    "lock_code": {
+      "type": "string",
+      "description": "\u05e7\u05d5\u05d3 \u05e0\u05e2\u05d9\u05dc\u05d4"
+    },
+    "issue_category": {
+      "type": "string",
+      "enum": [
+        "\u05de\u05e1\u05da",
+        "\u05e1\u05d5\u05dc\u05dc\u05d4/\u05d4\u05ea\u05d7\u05de\u05de\u05d5\u05ea",
+        "\u05d2\u05d1 \u05d0\u05d7\u05d5\u05e8\u05d9",
+        "\u05e9\u05e7\u05e2 \u05d8\u05e2\u05d9\u05e0\u05d4",
+        "\u05ea\u05d5\u05db\u05e0\u05d4/\u05d5\u05d9\u05e8\u05d5\u05e1",
+        "\u05e7\u05dc\u05d9\u05d8\u05d4",
+        "\u05e9\u05de\u05e2",
+        "\u05de\u05e6\u05dc\u05de\u05d4",
+        "\u05dc\u05d0 \u05e0\u05d3\u05dc\u05e7",
+        "\u05d0\u05d7\u05e8"
+      ],
+      "description": "\u05e0\u05d5\u05e9\u05d0 \u05d4\u05ea\u05e7\u05dc\u05d4"
+    },
+    "issue_description": {
+      "type": "string",
+      "description": "\u05ea\u05d9\u05d0\u05d5\u05e8 \u05d4\u05ea\u05e7\u05dc\u05d4"
+    },
+    "existing_damage": {
+      "type": "string",
+      "description": "\u05e0\u05d6\u05e7 \u05e7\u05d9\u05d9\u05dd"
+    },
+    "intake_photos": {
+      "type": "string",
+      "description": "\u05ea\u05de\u05d5\u05e0\u05d5\u05ea \u05e7\u05dc\u05d9\u05d8\u05d4 (URLs)"
+    },
+    "expected_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e6\u05e4\u05d5\u05d9"
+    },
+    "final_price": {
+      "type": "number",
+      "description": "\u05de\u05d7\u05d9\u05e8 \u05e1\u05d5\u05e4\u05d9"
+    },
+    "part_cost": {
+      "type": "number",
+      "description": "\u05e2\u05dc\u05d5\u05ea \u05d7\u05dc\u05e7\u05d9\u05dd"
+    },
+    "quote_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d4\u05d0\u05dd \u05e0\u05d3\u05e8\u05e9\u05ea \u05d4\u05e6\u05e2\u05ea \u05de\u05d7\u05d9\u05e8 \u05dc\u05e4\u05e0\u05d9 \u05ea\u05d9\u05e7\u05d5\u05df"
+    },
+    "quote_approved": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d4\u05d0\u05dd \u05d4\u05e6\u05e2\u05ea \u05d4\u05de\u05d7\u05d9\u05e8 \u05d0\u05d5\u05e9\u05e8\u05d4"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "\u05d1\u05d8\u05d9\u05e4\u05d5\u05dc/\u05d0\u05d1\u05d7\u05d5\u05df",
+        "\u05d1\u05d8\u05d9\u05e4\u05d5\u05dc \u05d4\u05d7\u05e0\u05d5\u05ea",
+        "\u05d4\u05d5\u05d6\u05de\u05df \u05d7\u05dc\u05e7",
+        "\u05de\u05db\u05e9\u05d9\u05e8 \u05e1\u05d9\u05d9\u05dd \u05ea\u05d9\u05e7\u05d5\u05df \u05d5\u05de\u05de\u05ea\u05d9\u05df \u05dc\u05d0\u05d9\u05e1\u05d5\u05e3",
+        "\u05dc\u05d0 \u05e0\u05d9\u05ea\u05df \u05dc\u05ea\u05d9\u05e7\u05d5\u05df",
+        "\u05ea\u05d9\u05e7\u05d5\u05df \u05e0\u05e1\u05d2\u05e8",
+        "At_Importer",
+        "Back_From_Importer"
+      ],
+      "default": "\u05d1\u05d8\u05d9\u05e4\u05d5\u05dc/\u05d0\u05d1\u05d7\u05d5\u05df",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05ea\u05d9\u05e7\u05d5\u05df",
+      "index": true
+    },
+    "sla_due": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d9\u05e2\u05d3 SLA"
+    },
+    "part_ordered_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05d6\u05de\u05e0\u05ea \u05d7\u05dc\u05e7"
+    }
+  },
+  "required": [
+    "device_id",
+    "repair_type",
+    "lock_code",
+    "issue_category",
+    "issue_description"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.technician_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05d8\u05db\u05e0\u05d0\u05d9"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.technician_id": "{{user.id}}"
+        },
+        {
+          "data.client_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05d8\u05db\u05e0\u05d0\u05d9",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.technician_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05d8\u05db\u05e0\u05d0\u05d9",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
