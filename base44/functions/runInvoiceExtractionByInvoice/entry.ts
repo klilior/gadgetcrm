@@ -449,7 +449,44 @@ Deno.serve(async (req) => {
       throw new Error('Invalid extraction response');
     }
 
-    // DEBUG: Save raw extraction JSON
+    // Post-process: if prices_include_vat is true, ensure line item prices are correctly split
+    // The AI sometimes puts the VAT-inclusive price into unit_price_before_vat even when it knows prices include VAT
+    const VAT_RATE = 0.18;
+    if (extraction.prices_include_vat === true) {
+      console.log('prices_include_vat=true detected, post-processing line items...');
+      const items = extraction.line_items || [];
+      for (const item of items) {
+        // If unit_price_with_vat is set, use it as the source of truth
+        if (item.unit_price_with_vat && item.unit_price_with_vat > 0) {
+          item.unit_price_before_vat = Math.round((item.unit_price_with_vat / (1 + VAT_RATE)) * 100) / 100;
+        } else if (item.unit_price_before_vat && item.unit_price_before_vat > 0) {
+          // AI likely put the VAT-inclusive price in unit_price_before_vat — fix it
+          item.unit_price_with_vat = item.unit_price_before_vat;
+          item.unit_price_before_vat = Math.round((item.unit_price_with_vat / (1 + VAT_RATE)) * 100) / 100;
+        }
+        // Same for line totals
+        if (item.line_total_with_vat && item.line_total_with_vat > 0) {
+          item.line_total_before_vat = Math.round((item.line_total_with_vat / (1 + VAT_RATE)) * 100) / 100;
+        } else if (item.line_total_before_vat && item.line_total_before_vat > 0) {
+          item.line_total_with_vat = item.line_total_before_vat;
+          item.line_total_before_vat = Math.round((item.line_total_with_vat / (1 + VAT_RATE)) * 100) / 100;
+        }
+      }
+      
+      // Also verify header amounts: if subtotal ≈ total (no VAT gap), the AI probably put total in subtotal
+      if (typeof extraction.subtotal_before_vat === 'number' && typeof extraction.total_with_vat === 'number') {
+        const ratio = extraction.subtotal_before_vat / extraction.total_with_vat;
+        // If subtotal is very close to total (within 5%), it means subtotal was actually the total
+        if (ratio > 0.95 && ratio <= 1.05) {
+          console.log(`Header amounts look like both are VAT-inclusive (ratio=${ratio.toFixed(3)}). Recalculating subtotal.`);
+          extraction.subtotal_before_vat = Math.round((extraction.total_with_vat / (1 + VAT_RATE)) * 100) / 100;
+          extraction.vat_amount = Math.round((extraction.total_with_vat - extraction.subtotal_before_vat) * 100) / 100;
+        }
+      }
+      console.log('Post-processing complete.');
+    }
+
+    // DEBUG: Save raw extraction JSON (after post-processing)
     const extractionJson = JSON.stringify(extraction);
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_extraction_json: extractionJson });
     await base44.asServiceRole.entities.Invoices.update(invoice.id, { ai_debug_last_extraction_json: extractionJson });
