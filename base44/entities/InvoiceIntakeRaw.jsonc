@@ -1,0 +1,147 @@
+{
+  "name": "InvoiceIntakeRaw",
+  "type": "object",
+  "properties": {
+    "source": {
+      "type": "string",
+      "enum": [
+        "GMAIL",
+        "MOBILE"
+      ],
+      "description": "\u05de\u05e7\u05d5\u05e8"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05e7\u05dc\u05d9\u05d8\u05d4"
+    },
+    "uploaded_by": {
+      "type": "string",
+      "description": "\u05d4\u05d5\u05e2\u05dc\u05d4 \u05e2\u05dc \u05d9\u05d3\u05d9"
+    },
+    "file": {
+      "type": "string",
+      "description": "\u05e7\u05d5\u05d1\u05e5 \u05de\u05e1\u05de\u05da"
+    },
+    "file_hash": {
+      "type": "string",
+      "description": "\u05d7\u05ea\u05d9\u05de\u05ea \u05e7\u05d5\u05d1\u05e5 (Hash)"
+    },
+    "file_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05e7\u05d5\u05d1\u05e5"
+    },
+    "file_mime": {
+      "type": "string",
+      "description": "\u05e1\u05d5\u05d2 \u05e7\u05d5\u05d1\u05e5"
+    },
+    "gmail_message_id": {
+      "type": "string",
+      "description": "Gmail Message ID"
+    },
+    "gmail_from": {
+      "type": "string",
+      "description": "\u05e9\u05d5\u05dc\u05d7 (Gmail)"
+    },
+    "gmail_subject": {
+      "type": "string",
+      "description": "\u05e0\u05d5\u05e9\u05d0 (Gmail)"
+    },
+    "gmail_date": {
+      "type": "string",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05de\u05d9\u05d9\u05dc (Gmail)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "\u05d7\u05d3\u05e9",
+        "\u05de\u05d5\u05db\u05df \u05dc\u05e0\u05d9\u05ea\u05d5\u05d7",
+        "\u05db\u05e4\u05d9\u05dc\u05d5\u05ea",
+        "\u05d3\u05d5\u05dc\u05d2",
+        "\u05e2\u05d5\u05d1\u05d3"
+      ],
+      "default": "\u05d7\u05d3\u05e9",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05e7\u05dc\u05d9\u05d8\u05d4"
+    },
+    "status_reason": {
+      "type": "string",
+      "description": "\u05e1\u05d9\u05d1\u05ea \u05e1\u05d8\u05d8\u05d5\u05e1"
+    },
+    "linked_invoice": {
+      "type": "string",
+      "description": "\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05de\u05e7\u05d5\u05e9\u05e8\u05ea",
+      "index": true
+    },
+    "ai_debug_last_input_file_present": {
+      "type": "boolean",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: \u05d4\u05d0\u05dd \u05e7\u05d5\u05d1\u05e5 \u05e7\u05d9\u05d9\u05dd \u05d1\u05e7\u05dc\u05d8 AI"
+    },
+    "ai_debug_last_error_he": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: \u05e9\u05d2\u05d9\u05d0\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4 (\u05e2\u05d1\u05e8\u05d9\u05ea)"
+    },
+    "ai_debug_last_extraction_json": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05d1\u05d0\u05d2: JSON \u05d7\u05d9\u05dc\u05d5\u05e5 \u05d0\u05d7\u05e8\u05d5\u05df"
+    }
+  },
+  "required": [],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.uploaded_by": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.uploaded_by": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
