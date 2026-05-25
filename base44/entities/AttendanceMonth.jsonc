@@ -1,0 +1,101 @@
+{
+  "name": "AttendanceMonth",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05e2\u05d5\u05d1\u05d3",
+      "index": true
+    },
+    "month": {
+      "type": "string",
+      "description": "\u05d7\u05d5\u05d3\u05e9 (YYYY-MM)",
+      "index": true
+    },
+    "work_minutes": {
+      "type": "integer",
+      "default": 0,
+      "description": "\u05e1\u05da \u05d3\u05e7\u05d5\u05ea \u05e2\u05d1\u05d5\u05d3\u05d4"
+    },
+    "overtime125_minutes": {
+      "type": "integer",
+      "default": 0,
+      "description": "\u05e1\u05da \u05e9\u05e2\u05d5\u05ea \u05e0\u05d5\u05e1\u05e4\u05d5\u05ea 125%"
+    },
+    "overtime150_minutes": {
+      "type": "integer",
+      "default": 0,
+      "description": "\u05e1\u05da \u05e9\u05e2\u05d5\u05ea \u05e0\u05d5\u05e1\u05e4\u05d5\u05ea 150%"
+    },
+    "total_pay_units": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05e1\u05da \u05d9\u05d7\u05d9\u05d3\u05d5\u05ea \u05e9\u05db\u05e8"
+    },
+    "exported": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d4\u05d0\u05dd \u05d9\u05d5\u05e6\u05d0"
+    },
+    "export_url": {
+      "type": "string",
+      "description": "\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05e7\u05d5\u05d1\u05e5 \u05de\u05d9\u05d5\u05e6\u05d0"
+    }
+  },
+  "required": [
+    "user_id",
+    "month"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.user_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
