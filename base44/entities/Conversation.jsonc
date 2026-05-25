@@ -1,0 +1,134 @@
+{
+  "name": "Conversation",
+  "type": "object",
+  "properties": {
+    "customer_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05dc\u05e7\u05d5\u05d7",
+      "index": true
+    },
+    "last_message": {
+      "type": "string",
+      "description": "\u05ea\u05d5\u05db\u05df \u05d4\u05d4\u05d5\u05d3\u05e2\u05d4 \u05d4\u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "last_message_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05d5\u05d3\u05e2\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "last_channel": {
+      "type": "string",
+      "enum": [
+        "whatsapp",
+        "phone",
+        "email",
+        "website"
+      ],
+      "description": "\u05e2\u05e8\u05d5\u05e5 \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "unread_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d4\u05d5\u05d3\u05e2\u05d5\u05ea \u05e9\u05dc\u05d0 \u05e0\u05e7\u05e8\u05d0\u05d5"
+    },
+    "assigned_to": {
+      "type": "string",
+      "description": "\u05de\u05d5\u05e7\u05e6\u05d4 \u05dc\u05e0\u05e6\u05d9\u05d2"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "\u05e4\u05ea\u05d5\u05d7",
+        "\u05d1\u05d8\u05d9\u05e4\u05d5\u05dc",
+        "\u05de\u05de\u05ea\u05d9\u05df",
+        "\u05e1\u05d2\u05d5\u05e8"
+      ],
+      "default": "\u05e4\u05ea\u05d5\u05d7",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05e9\u05d9\u05d7\u05d4"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u05ea\u05d2\u05d9\u05d5\u05ea"
+    }
+  },
+  "required": [
+    "customer_id"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.customer_id": "{{user.id}}"
+        },
+        {
+          "data.assigned_to": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05e0\u05e6\u05d9\u05d2",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.customer_id": "{{user.id}}"
+        },
+        {
+          "data.assigned_to": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05e0\u05e6\u05d9\u05d2",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.assigned_to": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
