@@ -1,0 +1,71 @@
+{
+  "name": "LinetProductMap",
+  "type": "object",
+  "properties": {
+    "sku": {
+      "type": "string",
+      "description": "Primary/Unique Field",
+      "unique": true,
+      "index": true
+    },
+    "linet_category_name": {
+      "type": "string",
+      "description": "Category fetched from Linet"
+    },
+    "manual_override": {
+      "type": "string",
+      "description": "Manual Category Override"
+    },
+    "last_checked": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last verified with API"
+    }
+  },
+  "required": [
+    "sku"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc"
+          ]
+        }
+      }
+    }
+  }
+}
