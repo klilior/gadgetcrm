@@ -7,19 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { 
-  BarChart3, RefreshCw, Users, Smartphone, Radio, 
-  ShoppingBag, TrendingUp, Download,
-  DollarSign, CreditCard, Package, Percent, FileText, AlertCircle, RotateCcw
+import {
+  BarChart3, RefreshCw, Smartphone, Radio, ShoppingBag,
+  TrendingUp, DollarSign, CreditCard, Package, Percent,
+  FileText, AlertCircle, RotateCcw, Phone, PhoneMissed,
+  Download, Clock, CheckCircle2
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subMonths, subDays } from "date-fns";
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfYear, subDays, subMonths } from "date-fns";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Legend } from 'recharts';
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import useSuppliers from "../components/hooks/useSuppliers";
 import UndeliveredOrdersWidget from "../components/dashboard/UndeliveredOrdersWidget";
 import QuickLeadsToComplete from "../components/dashboard/QuickLeadsToComplete";
-import ZapPriceMonitorWidget from "../components/dashboard/ZapPriceMonitorWidget";
+import RepSalesDrilldown from "../components/dashboard/RepSalesDrilldown";
 
 const RATIO_THRESHOLDS = { good: 40, warning: 60 };
 
@@ -34,25 +35,15 @@ export default function ManagerControlCenter() {
   const { suppliersMap, suppliersList } = useSuppliers();
   const [isLoading, setIsLoading] = useState(true);
   const [quickLeads, setQuickLeads] = useState([]);
+  const [lastSync, setLastSync] = useState(null);
+  const [callStats, setCallStats] = useState({ incoming: 0, missed: 0 });
 
   const [datePreset, setDatePreset] = useState("thisMonth");
   const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-  const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
-  const [selectedRep, setSelectedRep] = useState("all");
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedSupplier, setSelectedSupplier] = useState("all");
-  const [availableReps, setAvailableReps] = useState([]);
-  const [availableCategories, setAvailableCategories] = useState([]);
+  const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'));
 
-  const [repSearch, setRepSearch] = useState("");
-  const [repSortField, setRepSortField] = useState("total_net");
-  const [repSortDir, setRepSortDir] = useState("desc");
-  const [supplierSearch, setSupplierSearch] = useState("");
-
-  useEffect(() => {
-    if (!isManager) return;
-    loadAllData();
-  }, [dateFrom, dateTo, selectedRep, selectedCategory, selectedSupplier, isManager]);
+  // Drilldown state
+  const [drilldown, setDrilldown] = useState({ open: false, rep: null, group: null, label: '' });
 
   const checkFilters = (sale, filters) => {
     if (!filters) return false;
@@ -66,75 +57,54 @@ export default function ManagerControlCenter() {
     return true;
   };
 
+  useEffect(() => {
+    if (!isManager) return;
+    loadAllData();
+  }, [dateFrom, dateTo, isManager]);
+
   const loadAllData = async () => {
-    const start = Date.now();
-    console.log('🔄 [ManagerControlCenter] Starting data load...');
     setIsLoading(true);
+    const salesQuery = { issue_date: { $gte: dateFrom, $lte: dateTo } };
+    const invoiceQuery = { doc_date: { $gte: dateFrom, $lte: dateTo }, extraction_status: 'אושר' };
 
-    let salesQuery = { issue_date: { $gte: dateFrom, $lte: dateTo } };
-    if (selectedRep !== "all") salesQuery.sales_rep = selectedRep;
-
-    let invoiceQuery = { 
-      doc_date: { $gte: dateFrom, $lte: dateTo },
-      extraction_status: 'אושר'
-    };
-    if (selectedSupplier !== "all") invoiceQuery.supplier = selectedSupplier;
-
-    const [salesData, mappingsData] = await Promise.all([
+    const [salesData, mappingsData, invoicesData, pendingInvoices, allLeads, syncLogs, activities] = await Promise.all([
       base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 2000).catch(() => []),
       mappings.length > 0 ? Promise.resolve(mappings) : base44.entities.CommissionGroupMapping.filter({ is_active: true }).catch(() => []),
+      base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000).catch(() => []),
+      base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200).catch(() => []),
+      base44.entities.Lead.filter({ status: { $ne: 'Deleted' } }).catch(() => []),
+      base44.entities.SyncLog.filter({ sync_key: 'linetHourlySync' }, '-run_started_at', 1).catch(() => []),
+      base44.entities.Activity.filter({
+        created_date: { $gte: dateFrom + 'T00:00:00', $lte: dateTo + 'T23:59:59' },
+        activity_type: { $in: ['שיחה נכנסת', 'שיחה יוצאת'] }
+      }, '-created_date', 2000).catch(() => [])
     ]);
 
     if (mappings.length === 0 && mappingsData.length > 0) setMappings(mappingsData);
-    const currentMappings = mappings.length > 0 ? mappings : mappingsData;
-    let filteredSales = salesData;
-    if (selectedCategory !== "all" && currentMappings.length > 0) {
-      const categoryMapping = { 'devices': 'DEVICES', 'lines': 'LINES', 'accessories': 'ACCESSORIES_GROUP' };
-      const getGroup = (sale) => {
-        for (const mapping of [...currentMappings].sort((a, b) => (b.priority || 0) - (a.priority || 0))) {
-          if (checkFilters(sale, mapping.filters_json)) return mapping.commission_group_code;
-        }
-        return null;
-      };
-      filteredSales = salesData.filter(s => getGroup(s) === categoryMapping[selectedCategory]);
-    }
-    setSales(filteredSales);
-    const reps = [...new Set(salesData.map(s => s.sales_rep).filter(Boolean))].sort();
-    setAvailableReps(reps);
-    const cats = [...new Set(salesData.map(s => s.category).filter(Boolean))].sort();
-    setAvailableCategories(cats);
-    console.log(`⏱️ [ManagerControlCenter] Phase 1 done in ${Date.now() - start}ms — ${filteredSales.length} sales`);
-    setIsLoading(false);
+    setSales(salesData);
+    setInvoices(invoicesData);
 
-    const [invoicesData, pendingInvoices, allLeads] = await Promise.all([
-      base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000).catch(() => []),
-      base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200).catch(() => []),
-      base44.entities.Lead.filter({ status: { $ne: 'Deleted' } }).catch(() => [])
-    ]);
+    // Last sync
+    if (syncLogs.length > 0) setLastSync(syncLogs[0]);
 
-    const filtered = (pendingInvoices || []).filter(inv => 
+    // Call stats
+    const incoming = activities.filter(a => a.activity_type === 'שיחה נכנסת').length;
+    const missed = activities.filter(a => a.activity_type === 'שיחה נכנסת' && (!a.content || a.content.includes('לא נענתה') || a.content.includes('missed'))).length;
+    setCallStats({ incoming, missed });
+
+    // Pending invoices
+    const filtered = (pendingInvoices || []).filter(inv =>
       inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
     );
     setPendingInvoicesCount(filtered.length);
-    setInvoices(invoicesData);
 
+    // Quick leads
     const quickIncomplete = (allLeads || [])
       .filter(l => (l.capture_type === 'Quick' || l.quick_incomplete === true) && l.status !== 'Closed')
       .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-    const norm = (s) => (s || '').toString().toLowerCase();
-    const matchLegacy = (l) => {
-      const t = norm(l.topic);
-      const n = norm(l.notes);
-      const legacyA17 = (t.includes('בייסיק') || n.includes('בייסיק')) && (t.includes('a17') || n.includes('a17'));
-      const legacyCable = (t.includes('כבל') || n.includes('כבל')) && (t.includes('אייפון') || n.includes('אייפון')) && (t.includes('ישן') || n.includes('ישן') || t.includes(' 4') || n.includes(' 4'));
-      return legacyA17 || legacyCable;
-    };
-    const legacyNotes = (allLeads || []).filter(l => l.status !== 'Deleted' && matchLegacy(l));
-    const merged = [...quickIncomplete, ...legacyNotes].reduce((acc, item) => {
-      if (!acc.some(x => x.id === item.id)) acc.push(item);
-      return acc;
-    }, []);
-    setQuickLeads(merged);
+    setQuickLeads(quickIncomplete);
+
+    setIsLoading(false);
   };
 
   const handleDatePreset = (preset) => {
@@ -142,57 +112,44 @@ export default function ManagerControlCenter() {
     const today = new Date();
     let from, to;
     switch (preset) {
-      case 'today':
-        from = today; to = today; break;
-      case 'yesterday':
-        from = subDays(today, 1); to = subDays(today, 1); break;
-      case 'last7days':
-        from = subDays(today, 6); to = today; break;
-      case 'thisMonth':
-        from = startOfMonth(today); to = endOfMonth(today); break;
-      case 'lastMonth':
-        from = startOfMonth(subMonths(today, 1)); to = endOfMonth(subMonths(today, 1)); break;
-      case 'custom':
-        return;
-      default:
-        return;
+      case 'today': from = today; to = today; break;
+      case 'yesterday': from = subDays(today, 1); to = subDays(today, 1); break;
+      case 'thisWeek': from = startOfWeek(today, { weekStartsOn: 0 }); to = today; break;
+      case 'thisMonth': from = startOfMonth(today); to = today; break;
+      case 'lastMonth': from = startOfMonth(subMonths(today, 1)); to = endOfMonth(subMonths(today, 1)); break;
+      case 'thisYear': from = startOfYear(today); to = today; break;
+      case 'custom': return;
+      default: return;
     }
     setDateFrom(format(from, 'yyyy-MM-dd'));
     setDateTo(format(to, 'yyyy-MM-dd'));
   };
 
-  const resetFilters = () => {
-    handleDatePreset('thisMonth');
-    setSelectedRep("all");
-    setSelectedCategory("all");
-    setSelectedSupplier("all");
-    setRepSearch("");
-    setSupplierSearch("");
-  };
-
   const getCommissionGroup = (sale) => {
-    for (const mapping of [...mappings].sort((a, b) => (b.priority || 0) - (a.priority || 0))) {
-      if (checkFilters(sale, mapping.filters_json)) {
-        return mapping.commission_group_code;
-      }
+    const sorted = [...mappings].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+    for (const mapping of sorted) {
+      if (checkFilters(sale, mapping.filters_json)) return mapping.commission_group_code;
     }
     return null;
   };
 
-  const kpiData = useMemo(() => {
-    const uniqueSales = [];
-    const seenKeys = new Set();
-    for (const sale of sales) {
-      const key = `${sale.doc_number || ''}_${sale.sku || ''}_${sale.product_name || ''}`;
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        uniqueSales.push(sale);
-      }
-    }
+  // Deduplicated sales
+  const uniqueSales = useMemo(() => {
+    const seen = new Set();
+    return sales.filter(s => {
+      const key = `${s.doc_number || ''}_${s.sku || ''}_${s.product_name || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [sales]);
 
+  // KPI calculations
+  const kpiData = useMemo(() => {
     const isCredit = (s) => s.doc_type?.includes('זיכוי') || s.doc_type === '3';
     let grossSales = 0, netSales = 0, creditsTotal = 0;
     let devicesUnits = 0, linesUnits = 0, accessoriesNet = 0;
+    let devicesNet = 0, linesNet = 0;
 
     uniqueSales.forEach(s => {
       const gross = s.total_row_amount || 0;
@@ -209,74 +166,64 @@ export default function ManagerControlCenter() {
         netSales += net;
       }
 
-      if (group === 'DEVICES') devicesUnits += qty;
-      else if (group === 'LINES') linesUnits += qty;
-      else if (group === 'ACCESSORIES_GROUP') accessoriesNet += net;
+      const signedNet = isCredit(s) ? -Math.abs(net) : net;
+      if (group === 'DEVICES') { devicesUnits += qty; devicesNet += signedNet; }
+      else if (group === 'LINES') { linesUnits += qty; linesNet += signedNet; }
+      else if (group === 'ACCESSORIES_GROUP') { accessoriesNet += signedNet; }
     });
 
     const purchasesInvoices = invoices.filter(i => i.doc_type === 'חשבונית מס');
     const purchasesTotal = purchasesInvoices.reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
     const ratio = grossSales > 0 ? (purchasesTotal / grossSales) * 100 : 0;
 
+    // Today's sales
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const todaySales = uniqueSales.filter(s => s.issue_date === todayStr);
+    const todayNet = todaySales.reduce((acc, s) => {
+      const net = s.price_ex_vat || 0;
+      return acc + ((s.doc_type?.includes('זיכוי') || s.doc_type === '3') ? -Math.abs(net) : net);
+    }, 0);
+
     return {
-      netSales: Math.round(netSales),
-      grossSales: Math.round(grossSales),
+      netSales: Math.round(netSales), grossSales: Math.round(grossSales),
       creditsTotal: Math.round(creditsTotal),
-      devicesUnits,
-      linesUnits,
+      devicesUnits, linesUnits,
+      devicesNet: Math.round(devicesNet), linesNet: Math.round(linesNet),
       accessoriesNet: Math.round(accessoriesNet),
       purchasesTotal: Math.round(purchasesTotal),
-      ratio: ratio.toFixed(1)
+      ratio: ratio.toFixed(1),
+      todayNet: Math.round(todayNet)
     };
-  }, [sales, invoices, mappings]);
+  }, [uniqueSales, invoices, mappings]);
 
+  // Rep performance
   const repPerformance = useMemo(() => {
-    const uniqueSales = [];
-    const seenKeys = new Set();
-    for (const sale of sales) {
-      const key = `${sale.doc_number || ''}_${sale.sku || ''}_${sale.product_name || ''}`;
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        uniqueSales.push(sale);
-      }
-    }
-
     const perfMap = {};
+    const isCredit = (s) => s.doc_type?.includes('זיכוי') || s.doc_type === '3';
     uniqueSales.forEach(s => {
       const rep = s.sales_rep || 'לא משויך';
-      if (!perfMap[rep]) {
-        perfMap[rep] = { rep_name: rep, total_net: 0, devices_units: 0, lines_units: 0, accessories_net: 0 };
-      }
+      if (!perfMap[rep]) perfMap[rep] = { rep_name: rep, total_net: 0, devices_units: 0, lines_units: 0, accessories_net: 0, devices_sales: [], lines_sales: [], accessories_sales: [] };
       const net = s.price_ex_vat || 0;
       const qty = Math.abs(s.quantity || 0);
       const group = getCommissionGroup(s);
-      const isCredit = s.doc_type?.includes('זיכוי') || s.doc_type === '3';
-      perfMap[rep].total_net += isCredit ? -Math.abs(net) : net;
+      const signed = isCredit(s) ? -Math.abs(net) : net;
+      perfMap[rep].total_net += signed;
       if (group === 'DEVICES') perfMap[rep].devices_units += qty;
       else if (group === 'LINES') perfMap[rep].lines_units += qty;
-      else if (group === 'ACCESSORIES_GROUP') perfMap[rep].accessories_net += isCredit ? -Math.abs(net) : net;
+      else if (group === 'ACCESSORIES_GROUP') perfMap[rep].accessories_net += signed;
     });
+    return Object.values(perfMap).sort((a, b) => b.total_net - a.total_net);
+  }, [uniqueSales, mappings]);
 
-    let result = Object.values(perfMap);
-    if (repSearch) {
-      result = result.filter(r => r.rep_name.toLowerCase().includes(repSearch.toLowerCase()));
-    }
-    result.sort((a, b) => {
-      const aVal = a[repSortField] || 0;
-      const bVal = b[repSortField] || 0;
-      return repSortDir === 'desc' ? bVal - aVal : aVal - bVal;
-    });
-    return result;
-  }, [sales, mappings, repSearch, repSortField, repSortDir]);
-
+  // Daily chart
   const dailyChartData = useMemo(() => {
     const dayMap = {};
-    sales.forEach(s => {
+    const isCredit = (s) => s.doc_type?.includes('זיכוי') || s.doc_type === '3';
+    uniqueSales.forEach(s => {
       if (!s.issue_date) return;
       const day = format(new Date(s.issue_date), 'dd/MM');
       if (!dayMap[day]) dayMap[day] = { name: day, sales: 0, purchases: 0 };
-      const isCredit = s.doc_type?.includes('זיכוי') || s.doc_type === '3';
-      dayMap[day].sales += isCredit ? -Math.abs(s.price_ex_vat || 0) : (s.price_ex_vat || 0);
+      dayMap[day].sales += isCredit(s) ? -Math.abs(s.price_ex_vat || 0) : (s.price_ex_vat || 0);
     });
     invoices.filter(i => i.doc_type === 'חשבונית מס').forEach(inv => {
       if (!inv.doc_date) return;
@@ -285,45 +232,23 @@ export default function ManagerControlCenter() {
       dayMap[day].purchases += Number(inv.total_with_vat) || 0;
     });
     return Object.values(dayMap).sort((a, b) => {
-      const [dayA, monthA] = a.name.split('/').map(Number);
-      const [dayB, monthB] = b.name.split('/').map(Number);
-      return monthA !== monthB ? monthA - monthB : dayA - dayB;
+      const [dA, mA] = a.name.split('/').map(Number);
+      const [dB, mB] = b.name.split('/').map(Number);
+      return mA !== mB ? mA - mB : dA - dB;
     });
-  }, [sales, invoices]);
+  }, [uniqueSales, invoices]);
 
+  // Top suppliers
   const topSuppliers = useMemo(() => {
-    const supplierMap = {};
-    const total = invoices.filter(i => i.doc_type === 'חשבונית מס')
-      .reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
+    const map = {};
+    const total = invoices.filter(i => i.doc_type === 'חשבונית מס').reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
     invoices.filter(i => i.doc_type === 'חשבונית מס').forEach(inv => {
-      const supplierId = inv.supplier || 'unknown';
-      if (!supplierMap[supplierId]) {
-        supplierMap[supplierId] = { id: supplierId, name: suppliersMap[supplierId]?.name || supplierId, total: 0 };
-      }
-      supplierMap[supplierId].total += Number(inv.total_with_vat) || 0;
+      const sid = inv.supplier || 'unknown';
+      if (!map[sid]) map[sid] = { id: sid, name: suppliersMap[sid]?.name || sid, total: 0 };
+      map[sid].total += Number(inv.total_with_vat) || 0;
     });
-    let result = Object.values(supplierMap)
-      .map(s => ({ ...s, percent: total > 0 ? ((s.total / total) * 100).toFixed(1) : 0 }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
-    if (supplierSearch) {
-      result = result.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
-    }
-    return result;
-  }, [invoices, suppliersMap, supplierSearch]);
-
-  const exportCsv = (data, filename, columns) => {
-    const header = columns.map(c => c.label).join(',');
-    const rows = data.map(row => columns.map(c => row[c.key] ?? '').join(','));
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+    return Object.values(map).map(s => ({ ...s, percent: total > 0 ? ((s.total / total) * 100).toFixed(1) : 0 })).sort((a, b) => b.total - a.total).slice(0, 10);
+  }, [invoices, suppliersMap]);
 
   const getRatioColor = (ratio) => {
     const val = parseFloat(ratio);
@@ -332,39 +257,20 @@ export default function ManagerControlCenter() {
     return 'text-red-600 bg-red-100';
   };
 
-  const handleRepSort = (field) => {
-    if (repSortField === field) {
-      setRepSortDir(d => d === 'desc' ? 'asc' : 'desc');
-    } else {
-      setRepSortField(field);
-      setRepSortDir('desc');
-    }
-  };
-
-  const navigateToSalesReport = () => {
-    window.location.href = createPageUrl("SalesDashboard");
-  };
-
-  const navigateToPurchases = () => {
-    window.location.href = createPageUrl("PurchasesDashboard");
-  };
-
   const handleLeadStatusChange = async (leadId, newStatus) => {
-    try {
-      const lead = (quickLeads || []).find(l => l.id === leadId);
-      const updateData = { status: newStatus };
-      if (newStatus === 'Deleted') {
-        updateData.deleted_at = new Date().toISOString();
-      }
-      if ((newStatus === 'InProgress' || newStatus === 'Closed') && lead?.quick_incomplete) {
-        updateData.quick_incomplete = false;
-        updateData.capture_type = 'Full';
-      }
-      await base44.entities.Lead.update(leadId, updateData);
-      await loadAllData();
-    } catch (e) {
-      console.error('Error updating lead status:', e);
+    const lead = quickLeads.find(l => l.id === leadId);
+    const updateData = { status: newStatus };
+    if (newStatus === 'Deleted') updateData.deleted_at = new Date().toISOString();
+    if ((newStatus === 'InProgress' || newStatus === 'Closed') && lead?.quick_incomplete) {
+      updateData.quick_incomplete = false;
+      updateData.capture_type = 'Full';
     }
+    await base44.entities.Lead.update(leadId, updateData);
+    loadAllData();
+  };
+
+  const openDrilldown = (rep, groupCode, label) => {
+    setDrilldown({ open: true, rep, group: groupCode, label });
   };
 
   if (!isManager) {
@@ -376,15 +282,27 @@ export default function ManagerControlCenter() {
     );
   }
 
+  const syncTime = lastSync?.run_finished_at ? format(new Date(lastSync.run_finished_at), 'dd/MM HH:mm') : null;
+  const syncOk = lastSync?.status === 'SUCCESS';
+
   return (
     <div className="p-3 md:p-6 space-y-4" style={{ background: 'linear-gradient(135deg, #F8F9FB 0%, #E8ECFF 100%)', minHeight: '100vh' }}>
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
             <BarChart3 className="w-7 h-7 text-indigo-600" />
             מרכז בקרה למנהל
           </h1>
-          <p className="text-gray-600 text-sm mt-1">סקירה כוללת: מכירות, ביצועי נציגים ורכישות</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-gray-600 text-sm">סקירה כוללת: מכירות, ביצועי נציגים ורכישות</p>
+            {syncTime && (
+              <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${syncOk ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {syncOk ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                סנכרון לינט: {syncTime}
+              </div>
+            )}
+          </div>
         </div>
         <Button onClick={loadAllData} disabled={isLoading} variant="outline" size="sm">
           <RefreshCw className={`w-4 h-4 ml-2 ${isLoading ? 'animate-spin' : ''}`} />
@@ -392,121 +310,210 @@ export default function ManagerControlCenter() {
         </Button>
       </div>
 
+      {/* Date Filters */}
       <Card className="glass-card border-0 sticky top-0 z-30 shadow-md">
         <CardContent className="p-3 md:p-4">
           <div className="flex flex-wrap gap-3 items-end">
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">תקופה</label>
               <Select value={datePreset} onValueChange={handleDatePreset}>
-                <SelectTrigger className="w-[130px] bg-white text-sm h-9">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="w-[130px] bg-white text-sm h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="today">היום</SelectItem>
                   <SelectItem value="yesterday">אתמול</SelectItem>
-                  <SelectItem value="last7days">7 ימים</SelectItem>
+                  <SelectItem value="thisWeek">השבוע</SelectItem>
                   <SelectItem value="thisMonth">החודש</SelectItem>
                   <SelectItem value="lastMonth">חודש שעבר</SelectItem>
-                  <SelectItem value="custom">מותאם</SelectItem>
+                  <SelectItem value="thisYear">השנה</SelectItem>
+                  <SelectItem value="custom">תאריך חופשי</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-
             {datePreset === 'custom' && (
               <>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-600">מ-</label>
-                  <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-32 h-9 text-sm" />
+                  <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-36 h-9 text-sm" />
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-600">עד</label>
-                  <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-32 h-9 text-sm" />
+                  <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-36 h-9 text-sm" />
                 </div>
               </>
             )}
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">נציג</label>
-              <Select value={selectedRep} onValueChange={setSelectedRep}>
-                <SelectTrigger className="w-[140px] bg-white text-sm h-9">
-                  <SelectValue placeholder="כל הנציגים" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">כל הנציגים</SelectItem>
-                  {availableReps.map(rep => (
-                    <SelectItem key={rep} value={rep}>{rep}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">קבוצה</label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-[120px] bg-white text-sm h-9">
-                  <SelectValue placeholder="הכל" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">הכל</SelectItem>
-                  <SelectItem value="devices">מכשירים</SelectItem>
-                  <SelectItem value="lines">קווים</SelectItem>
-                  <SelectItem value="accessories">אביזרים</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">ספק (רכישות)</label>
-              <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
-                <SelectTrigger className="w-[150px] bg-white text-sm h-9">
-                  <SelectValue placeholder="כל הספקים" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">כל הספקים</SelectItem>
-                  {suppliersList.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button variant="ghost" size="sm" onClick={resetFilters} className="h-9">
-              <RotateCcw className="w-4 h-4 ml-1" />
-              איפוס
+            <Button variant="ghost" size="sm" onClick={() => handleDatePreset('thisMonth')} className="h-9">
+              <RotateCcw className="w-4 h-4 ml-1" />איפוס
             </Button>
+            <div className="text-xs text-gray-500 self-center">{dateFrom} → {dateTo}</div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Pending invoices alert */}
       {pendingInvoicesCount > 0 && (
         <Link to={createPageUrl("InvoicesToReview")}>
           <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 transition-all cursor-pointer">
             <CardContent className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="bg-white/20 rounded-full p-2">
-                  <AlertCircle className="w-6 h-6" />
-                </div>
+                <div className="bg-white/20 rounded-full p-2"><AlertCircle className="w-6 h-6" /></div>
                 <div>
                   <p className="font-bold text-lg">{pendingInvoicesCount} חשבוניות ממתינות לאימות</p>
-                  <p className="text-white/80 text-sm">לחץ כאן לעבור לרשימת החשבוניות</p>
+                  <p className="text-white/80 text-sm">לחץ לעבור לאימות</p>
                 </div>
               </div>
-              <Button variant="secondary" size="sm" className="bg-white text-orange-600 hover:bg-white/90">
-                עבור לאימות →
-              </Button>
+              <Button variant="secondary" size="sm" className="bg-white text-orange-600 hover:bg-white/90">עבור לאימות →</Button>
             </CardContent>
           </Card>
         </Link>
       )}
 
-      <UndeliveredOrdersWidget 
-        currentUser={currentUser}
-        isManager={true}
-        employees={[]}
-        compact={false}
-      />
+      {/* Top KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-cyan-600 to-cyan-500 text-white">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign className="w-4 h-4 text-cyan-200" />
+              <span className="text-xs text-cyan-100">ביצוע יומי (היום)</span>
+            </div>
+            <p className="text-xl font-bold">₪{kpiData.todayNet.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-600 to-emerald-500 text-white">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="w-4 h-4 text-emerald-200" />
+              <span className="text-xs text-emerald-100">ביצוע בתקופה (נטו)</span>
+            </div>
+            <p className="text-xl font-bold">₪{kpiData.netSales.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-orange-600 to-orange-500 text-white">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Package className="w-4 h-4 text-orange-200" />
+              <span className="text-xs text-orange-100">הוצאות שנקלטו</span>
+            </div>
+            <p className="text-xl font-bold">₪{kpiData.purchasesTotal.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg bg-white">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Percent className="w-4 h-4 text-gray-500" />
+              <span className="text-xs text-gray-500">הוצאות % מהמכירות</span>
+            </div>
+            <p className={`text-xl font-bold rounded px-2 py-0.5 inline-block ${getRatioColor(kpiData.ratio)}`}>{kpiData.ratio}%</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-violet-600 to-violet-500 text-white">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Phone className="w-4 h-4 text-violet-200" />
+              <span className="text-xs text-violet-100">שיחות נכנסות</span>
+            </div>
+            <p className="text-xl font-bold">{callStats.incoming}</p>
+            {callStats.missed > 0 && (
+              <div className="flex items-center gap-1 mt-1">
+                <PhoneMissed className="w-3 h-3 text-red-300" />
+                <span className="text-xs text-red-200">{callStats.missed} לא נענו</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-      <ZapPriceMonitorWidget />
+      {/* Sales by type */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-indigo-600 to-indigo-500 text-white">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Smartphone className="w-4 h-4 text-indigo-200" />
+              <span className="text-xs text-indigo-100">מכשירים</span>
+            </div>
+            <p className="text-xl font-bold">{kpiData.devicesUnits} <span className="text-sm font-normal">יח׳</span></p>
+            <p className="text-xs text-indigo-200 mt-0.5">₪{kpiData.devicesNet.toLocaleString()} נטו</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-600 to-purple-500 text-white">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <ShoppingBag className="w-4 h-4 text-purple-200" />
+              <span className="text-xs text-purple-100">אביזרים</span>
+            </div>
+            <p className="text-xl font-bold">₪{kpiData.accessoriesNet.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-green-600 to-green-500 text-white">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Radio className="w-4 h-4 text-green-200" />
+              <span className="text-xs text-green-100">קווים</span>
+            </div>
+            <p className="text-xl font-bold">{kpiData.linesUnits} <span className="text-sm font-normal">קווים</span></p>
+            <p className="text-xs text-green-200 mt-0.5">₪{kpiData.linesNet.toLocaleString()} נטו</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Rep Performance Table */}
+      <Card className="glass-card border-0">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-indigo-600" />
+            ביצועי נציגים — לחץ על מספר לפירוט מלא
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">נציג</TableHead>
+                  <TableHead className="text-xs text-center"><Smartphone className="w-3 h-3 inline ml-1" />מכשירים</TableHead>
+                  <TableHead className="text-xs text-center"><ShoppingBag className="w-3 h-3 inline ml-1" />אביזרים ₪</TableHead>
+                  <TableHead className="text-xs text-center"><Radio className="w-3 h-3 inline ml-1" />קווים</TableHead>
+                  <TableHead className="text-xs text-left font-bold">סה״כ נטו ₪</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {repPerformance.map(r => (
+                  <TableRow key={r.rep_name} className="hover:bg-indigo-50">
+                    <TableCell className="text-xs font-medium">{r.rep_name}</TableCell>
+                    <TableCell className="text-center">
+                      <button onClick={() => openDrilldown(r.rep_name, 'DEVICES', 'מכשירים')} className="text-xs font-bold text-blue-600 hover:underline cursor-pointer">
+                        {r.devices_units}
+                      </button>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <button onClick={() => openDrilldown(r.rep_name, 'ACCESSORIES_GROUP', 'אביזרים')} className="text-xs font-bold text-purple-600 hover:underline cursor-pointer">
+                        ₪{r.accessories_net.toLocaleString()}
+                      </button>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <button onClick={() => openDrilldown(r.rep_name, 'LINES', 'קווים')} className="text-xs font-bold text-green-600 hover:underline cursor-pointer">
+                        {r.lines_units}
+                      </button>
+                    </TableCell>
+                    <TableCell className="text-xs text-left font-bold">₪{Math.round(r.total_net).toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+                {repPerformance.length > 0 && (
+                  <TableRow className="bg-indigo-50 font-bold">
+                    <TableCell className="text-xs">סה״כ</TableCell>
+                    <TableCell className="text-xs text-center text-blue-700">{repPerformance.reduce((a, r) => a + r.devices_units, 0)}</TableCell>
+                    <TableCell className="text-xs text-center text-purple-700">₪{repPerformance.reduce((a, r) => a + r.accessories_net, 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-xs text-center text-green-700">{repPerformance.reduce((a, r) => a + r.lines_units, 0)}</TableCell>
+                    <TableCell className="text-xs text-left text-indigo-700">₪{Math.round(repPerformance.reduce((a, r) => a + r.total_net, 0)).toLocaleString()}</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Undelivered orders + Quick notes */}
+      <UndeliveredOrdersWidget currentUser={currentUser} isManager={true} employees={[]} compact={false} />
 
       <QuickLeadsToComplete
         leads={quickLeads}
@@ -515,239 +522,16 @@ export default function ManagerControlCenter() {
         onDelete={(id) => handleLeadStatusChange(id, 'Deleted')}
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-600 to-emerald-500 text-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <DollarSign className="w-4 h-4 text-emerald-200" />
-              <span className="text-xs text-emerald-100">מכירות נטו</span>
-            </div>
-            <p className="text-lg md:text-xl font-bold">₪{kpiData.netSales.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-600 to-blue-500 text-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-4 h-4 text-blue-200" />
-              <span className="text-xs text-blue-100">מכירות ברוטו</span>
-            </div>
-            <p className="text-lg md:text-xl font-bold">₪{kpiData.grossSales.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-red-600 to-red-500 text-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <CreditCard className="w-4 h-4 text-red-200" />
-              <span className="text-xs text-red-100">זיכויים/החזרים</span>
-            </div>
-            <p className="text-lg md:text-xl font-bold">₪{kpiData.creditsTotal.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-indigo-600 to-indigo-500 text-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Smartphone className="w-4 h-4 text-indigo-200" />
-              <span className="text-xs text-indigo-100">מכשירים</span>
-            </div>
-            <p className="text-lg md:text-xl font-bold">{kpiData.devicesUnits}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-green-600 to-green-500 text-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Radio className="w-4 h-4 text-green-200" />
-              <span className="text-xs text-green-100">קווים</span>
-            </div>
-            <p className="text-lg md:text-xl font-bold">{kpiData.linesUnits}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-600 to-purple-500 text-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <ShoppingBag className="w-4 h-4 text-purple-200" />
-              <span className="text-xs text-purple-100">אביזרים נטו</span>
-            </div>
-            <p className="text-lg md:text-xl font-bold">₪{kpiData.accessoriesNet.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-orange-600 to-orange-500 text-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Package className="w-4 h-4 text-orange-200" />
-              <span className="text-xs text-orange-100">רכישות כולל</span>
-            </div>
-            <p className="text-lg md:text-xl font-bold">₪{kpiData.purchasesTotal.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-lg bg-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Percent className="w-4 h-4 text-gray-500" />
-              <span className="text-xs text-gray-500">יחס רכישות/מכירות</span>
-            </div>
-            <p className={`text-lg md:text-xl font-bold rounded px-2 py-0.5 inline-block ${getRatioColor(kpiData.ratio)}`}>
-              {kpiData.ratio}%
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="glass-card border-0">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-              סקירת מכירות
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[200px] mb-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={dailyChartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" fontSize={10} />
-                  <YAxis fontSize={10} tickFormatter={v => `₪${(v/1000).toFixed(0)}k`} width={50} />
-                  <RechartsTooltip formatter={(v) => `₪${v.toLocaleString()}`} />
-                  <Line type="monotone" dataKey="sales" stroke="#3B82F6" strokeWidth={2} name="מכירות נטו" dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-gray-700">נציגים מובילים</span>
-              <div className="flex gap-2">
-                <Input 
-                  placeholder="חיפוש..." 
-                  value={repSearch} 
-                  onChange={e => setRepSearch(e.target.value)} 
-                  className="w-32 h-7 text-xs"
-                />
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-7 px-2"
-                  onClick={() => exportCsv(repPerformance, 'reps_performance.csv', [
-                    { key: 'rep_name', label: 'נציג' },
-                    { key: 'total_net', label: 'מכירות נטו' },
-                    { key: 'devices_units', label: 'מכשירים' },
-                    { key: 'lines_units', label: 'קווים' },
-                    { key: 'accessories_net', label: 'אביזרים' }
-                  ])}
-                >
-                  <Download className="w-3 h-3" />
-                </Button>
-              </div>
-            </div>
-            <div className="overflow-x-auto max-h-[200px] overflow-y-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs cursor-pointer" onClick={() => handleRepSort('rep_name')}>נציג</TableHead>
-                    <TableHead className="text-xs text-left cursor-pointer" onClick={() => handleRepSort('total_net')}>נטו ₪</TableHead>
-                    <TableHead className="text-xs text-center cursor-pointer" onClick={() => handleRepSort('devices_units')}>מכשירים</TableHead>
-                    <TableHead className="text-xs text-center cursor-pointer" onClick={() => handleRepSort('lines_units')}>קווים</TableHead>
-                    <TableHead className="text-xs text-left cursor-pointer" onClick={() => handleRepSort('accessories_net')}>אביזרים</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {repPerformance.slice(0, 10).map(r => (
-                    <TableRow 
-                      key={r.rep_name} 
-                      className="hover:bg-blue-50 cursor-pointer"
-                      onClick={() => navigateToSalesReport()}
-                    >
-                      <TableCell className="text-xs font-medium">{r.rep_name}</TableCell>
-                      <TableCell className="text-xs text-left font-bold text-blue-600">₪{r.total_net.toLocaleString()}</TableCell>
-                      <TableCell className="text-xs text-center">{r.devices_units}</TableCell>
-                      <TableCell className="text-xs text-center">{r.lines_units}</TableCell>
-                      <TableCell className="text-xs text-left">₪{r.accessories_net.toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card border-0">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Users className="w-5 h-5 text-indigo-600" />
-                ביצועי נציגים
-              </CardTitle>
-              <Link to={createPageUrl("AgentPerformanceDashboard")}>
-                <Button variant="outline" size="sm" className="h-7 text-xs">צפה בפירוט</Button>
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[200px] mb-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={repPerformance.slice(0, 8).map(r => ({ name: r.rep_name, value: r.total_net }))}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" fontSize={9} angle={-20} textAnchor="end" height={50} />
-                  <YAxis fontSize={10} tickFormatter={v => `₪${(v/1000).toFixed(0)}k`} width={50} />
-                  <RechartsTooltip formatter={(v) => `₪${v.toLocaleString()}`} />
-                  <Bar dataKey="value" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="overflow-x-auto max-h-[200px] overflow-y-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs">נציג</TableHead>
-                    <TableHead className="text-xs text-center">
-                      <Smartphone className="w-3 h-3 inline ml-1" />מכשירים
-                    </TableHead>
-                    <TableHead className="text-xs text-center">
-                      <Radio className="w-3 h-3 inline ml-1" />קווים
-                    </TableHead>
-                    <TableHead className="text-xs text-left">
-                      <ShoppingBag className="w-3 h-3 inline ml-1" />אביזרים
-                    </TableHead>
-                    <TableHead className="text-xs text-left font-bold">סה״כ</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {repPerformance.map(r => (
-                    <TableRow 
-                      key={r.rep_name}
-                      className="hover:bg-indigo-50 cursor-pointer"
-                      onClick={() => navigateToSalesReport()}
-                    >
-                      <TableCell className="text-xs font-medium">{r.rep_name}</TableCell>
-                      <TableCell className="text-xs text-center text-blue-600 font-bold">{r.devices_units}</TableCell>
-                      <TableCell className="text-xs text-center text-green-600 font-bold">{r.lines_units}</TableCell>
-                      <TableCell className="text-xs text-left text-purple-600">₪{r.accessories_net.toLocaleString()}</TableCell>
-                      <TableCell className="text-xs text-left font-bold">₪{r.total_net.toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
+      {/* Purchases Dashboard */}
       <Card className="glass-card border-0">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-base flex items-center gap-2">
               <FileText className="w-5 h-5 text-orange-600" />
-              בקרת רכישות (חשבוניות מאושרות)
+              בקרת רכישות
             </CardTitle>
             <Link to={createPageUrl("PurchasesDashboard")}>
-              <Button variant="outline" size="sm" className="h-7 text-xs">צפה בדשבורד רכישות</Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs">דשבורד רכישות מלא</Button>
             </Link>
           </div>
         </CardHeader>
@@ -760,67 +544,36 @@ export default function ManagerControlCenter() {
                   <LineChart data={dailyChartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="name" fontSize={10} />
-                    <YAxis fontSize={10} tickFormatter={v => `₪${(v/1000).toFixed(0)}k`} width={50} />
+                    <YAxis fontSize={10} tickFormatter={v => `₪${(v / 1000).toFixed(0)}k`} width={50} />
                     <RechartsTooltip formatter={(v) => `₪${v.toLocaleString()}`} />
                     <Legend />
-                    <Line type="monotone" dataKey="sales" stroke="#3B82F6" strokeWidth={2} name="מכירות ברוטו" dot={false} />
-                    <Line type="monotone" dataKey="purchases" stroke="#F97316" strokeWidth={2} name="רכישות ברוטו" dot={false} />
+                    <Line type="monotone" dataKey="sales" stroke="#3B82F6" strokeWidth={2} name="מכירות נטו" dot={false} />
+                    <Line type="monotone" dataKey="purchases" stroke="#F97316" strokeWidth={2} name="רכישות" dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
-
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-gray-700">Top 10 ספקים</p>
-                <div className="flex gap-2">
-                  <Input 
-                    placeholder="חיפוש ספק..." 
-                    value={supplierSearch} 
-                    onChange={e => setSupplierSearch(e.target.value)} 
-                    className="w-32 h-7 text-xs"
-                  />
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-7 px-2"
-                    onClick={() => exportCsv(topSuppliers, 'top_suppliers.csv', [
-                      { key: 'name', label: 'ספק' },
-                      { key: 'total', label: 'סכום' },
-                      { key: 'percent', label: 'אחוז' }
-                    ])}
-                  >
-                    <Download className="w-3 h-3" />
-                  </Button>
-                </div>
-              </div>
-              <div className="overflow-x-auto max-h-[200px] overflow-y-auto">
+              <p className="text-sm font-medium text-gray-700 mb-2">Top 10 ספקים</p>
+              <div className="overflow-x-auto max-h-[220px] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-xs">ספק</TableHead>
-                      <TableHead className="text-xs text-left">רכישות ברוטו</TableHead>
-                      <TableHead className="text-xs text-center">% מסה״כ</TableHead>
+                      <TableHead className="text-xs text-left">סכום</TableHead>
+                      <TableHead className="text-xs text-center">%</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {topSuppliers.map(s => (
-                      <TableRow 
-                        key={s.id}
-                        className="hover:bg-orange-50 cursor-pointer"
-                        onClick={() => navigateToPurchases()}
-                      >
+                      <TableRow key={s.id} className="hover:bg-orange-50">
                         <TableCell className="text-xs font-medium">{s.name}</TableCell>
                         <TableCell className="text-xs text-left font-bold text-orange-600">₪{s.total.toLocaleString()}</TableCell>
-                        <TableCell className="text-xs text-center">
-                          <Badge variant="outline" className="text-xs">{s.percent}%</Badge>
-                        </TableCell>
+                        <TableCell className="text-xs text-center"><Badge variant="outline" className="text-xs">{s.percent}%</Badge></TableCell>
                       </TableRow>
                     ))}
                     {topSuppliers.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center text-gray-500 text-xs py-4">אין נתונים</TableCell>
-                      </TableRow>
+                      <TableRow><TableCell colSpan={3} className="text-center text-gray-500 text-xs py-4">אין נתונים</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -829,6 +582,19 @@ export default function ManagerControlCenter() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Drilldown Dialog */}
+      <RepSalesDrilldown
+        open={drilldown.open}
+        onClose={() => setDrilldown({ open: false, rep: null, group: null, label: '' })}
+        repName={drilldown.rep}
+        groupCode={drilldown.group}
+        groupLabel={drilldown.label}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        mappings={mappings}
+        checkFilters={checkFilters}
+      />
 
       {isLoading && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-white/90 backdrop-blur shadow-lg rounded-full px-4 py-2 flex items-center gap-2">
