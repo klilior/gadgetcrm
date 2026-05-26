@@ -19,6 +19,7 @@ import TextMeConfigPanel from "../components/sms/TextMeConfigPanel";
 import SmsLogTable from "../components/sms/SmsLogTable";
 import SmsTemplatesManager from "../components/sms/SmsTemplatesManager";
 import GetPackageSettingsPanel from "../components/getpackage/GetPackageSettingsPanel";
+import GadgetTeamSmsSettings from "../components/settings/GadgetTeamSmsSettings";
 
 export default function SettingsPage() {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -1517,6 +1518,7 @@ GADGET-TEAM`);
                 </TabsContent>
 
                 <TabsContent value="sms" className="space-y-6 mt-6">
+                    <GadgetTeamSmsSettings />
                     <TextMeConfigPanel />
                     <SmsTemplatesManager />
                     <SmsLogTable />
