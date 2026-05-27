@@ -12,10 +12,10 @@ Deno.serve(async (req) => {
     // WooCommerce
     let woo = [];
     try {
-      let raw = await sr.Order.list('-order_date', 200);
+      let raw = await sr.Order.list('-order_date', 500);
       if (!Array.isArray(raw)) raw = [];
       const cs = await sr.Client.list(null, 1000).catch(function() { return []; });
-      const ps = await sr.OrderProduct.list(null, 2000).catch(function() { return []; });
+      const ps = await sr.OrderProduct.list(null, 5000).catch(function() { return []; });
       const cM = {};
       for (const c of (Array.isArray(cs) ? cs : [])) cM[c.id] = c;
       const pM = {};

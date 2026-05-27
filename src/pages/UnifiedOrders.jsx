@@ -112,8 +112,8 @@ export default function UnifiedOrders() {
     let woo = [];
     try {
       const [rawOrders, rawProducts] = await Promise.all([
-        base44.entities.Order.list('-order_date', 200),
-        base44.entities.OrderProduct.list(null, 2000)
+        base44.entities.Order.list('-order_date', 500),
+        base44.entities.OrderProduct.list(null, 5000)
       ]);
       const pM = {};
       for (const p of rawProducts) { if (!pM[p.order_id]) pM[p.order_id] = []; pM[p.order_id].push(p); }
