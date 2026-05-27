@@ -266,11 +266,25 @@ Deno.serve(async (req) => {
             if (!existing) {
                 // New order — full processing
                 fullProcessing.push(wo);
-            } else if (existing.status !== wo.status) {
-                // Status changed — quick update only
-                statusOnlyUpdates.push({ wo, existing });
+            } else {
+                // Check if any important fields changed
+                const newShippingMethod = wo.shipping_lines?.[0]?.method_title || null;
+                const pickupMeta = (wo.meta_data || []).find(m => m.key === 'pkps_json');
+                const newPickupData = pickupMeta?.value ? (typeof pickupMeta.value === 'string' ? pickupMeta.value : JSON.stringify(pickupMeta.value)) : null;
+                const newBilling = JSON.stringify(wo.billing || {});
+
+                const hasStatusChange = existing.status !== wo.status;
+                const hasShippingChange = newShippingMethod && newShippingMethod !== existing.shipping_method;
+                const hasPickupChange = (newPickupData || null) !== (existing.pickup_point_data || null);
+                const hasTotalChange = wo.total !== existing.total;
+                const hasNoteChange = wo.customer_note && wo.customer_note !== existing.customer_note;
+                const hasBillingChange = newBilling !== (existing.raw_data_billing || '{}');
+
+                if (hasStatusChange || hasShippingChange || hasPickupChange || hasTotalChange || hasNoteChange || hasBillingChange) {
+                    statusOnlyUpdates.push({ wo, existing, newShippingMethod, newPickupData, newBilling });
+                }
+                // Otherwise: unchanged, skip
             }
-            // Otherwise: unchanged, skip
         }
 
         console.log(`🔍 ${statusOnlyUpdates.length} status updates, ${fullProcessing.length} new orders (${wooOrders.length - statusOnlyUpdates.length - fullProcessing.length} unchanged)`);
@@ -279,12 +293,25 @@ Deno.serve(async (req) => {
 
         // Phase 1: Fast status-only updates (lightweight, no client/product operations)
         for (let i = 0; i < statusOnlyUpdates.length; i++) {
-            const { wo, existing } = statusOnlyUpdates[i];
+            const { wo, existing, newShippingMethod, newPickupData, newBilling } = statusOnlyUpdates[i];
             try {
-                const updateData = { status: wo.status };
-                // Also update total and customer_note if changed
+                const updateData = {};
+                // Update all changed fields
+                if (wo.status !== existing.status) updateData.status = wo.status;
                 if (wo.total !== existing.total) updateData.total = wo.total;
                 if (wo.customer_note && wo.customer_note !== existing.customer_note) updateData.customer_note = wo.customer_note;
+                if (newShippingMethod && newShippingMethod !== existing.shipping_method) {
+                    updateData.shipping_method = newShippingMethod;
+                    updateData.shipping_total = wo.shipping_total;
+                    console.log(`\u{1F69A} Shipping changed for #${wo.id}: ${existing.shipping_method} -> ${newShippingMethod}`);
+                }
+                if ((newPickupData || null) !== (existing.pickup_point_data || null)) {
+                    updateData.pickup_point_data = newPickupData;
+                    console.log(`\u{1F4CD} Pickup point updated for #${wo.id}`);
+                }
+                if (newBilling && newBilling !== (existing.raw_data_billing || '{}')) {
+                    updateData.raw_data_billing = newBilling;
+                }
                 
                 // Pull tracking info from WooCommerce meta_data
                 const trackingInfo = extractTrackingFromWoo(wo);
