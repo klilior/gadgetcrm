@@ -426,9 +426,62 @@ Deno.serve(async (req) => {
             await delay(2000);
         }
 
-        const msg = `סנכרון WooCommerce הושלם: ${created} נוצרו, ${updated} עודכנו, ${failed} נכשלו (מתוך ${wooOrders.length}).`;
+        // Phase 3: Check stale open orders not covered by the date range
+        const openStatuses = ['processing', 'on-hold', 'pending'];
+        const recentWooIds = new Set(wooOrders.map(wo => wo.id.toString()));
+        const staleOpenOrders = existingOrders.filter(o => 
+            openStatuses.includes(o.status) && !recentWooIds.has(o.external_order_number)
+        );
+        
+        let staleUpdated = 0;
+        if (staleOpenOrders.length > 0) {
+            console.log(`🔄 Phase 3: Checking ${staleOpenOrders.length} stale open orders...`);
+            for (const staleOrder of staleOpenOrders) {
+                try {
+                    const url = `${wooCommerceUrl}/wp-json/wc/v3/orders/${staleOrder.external_order_number}`;
+                    const resp = await fetch(url, { headers: { 'Authorization': `Basic ${authString}` } });
+                    if (!resp.ok) {
+                        if (resp.status === 404) {
+                            console.warn(`⚠️ Order #${staleOrder.external_order_number} not found in WooCommerce`);
+                        }
+                        continue;
+                    }
+                    const wo = await resp.json();
+                    const updateData = {};
+                    if (wo.status !== staleOrder.status) updateData.status = wo.status;
+                    if (wo.total !== staleOrder.total) updateData.total = wo.total;
+                    const newShipping = wo.shipping_lines?.[0]?.method_title || null;
+                    if (newShipping && newShipping !== staleOrder.shipping_method) {
+                        updateData.shipping_method = newShipping;
+                        updateData.shipping_total = wo.shipping_total;
+                    }
+                    const pickupMeta = (wo.meta_data || []).find(m => m.key === 'pkps_json');
+                    const newPickup = pickupMeta?.value ? (typeof pickupMeta.value === 'string' ? pickupMeta.value : JSON.stringify(pickupMeta.value)) : null;
+                    if ((newPickup || null) !== (staleOrder.pickup_point_data || null)) updateData.pickup_point_data = newPickup;
+                    if (wo.customer_note && wo.customer_note !== staleOrder.customer_note) updateData.customer_note = wo.customer_note;
+                    const trackingInfo = extractTrackingFromWoo(wo);
+                    if (trackingInfo.tracking_number && trackingInfo.tracking_number !== staleOrder.tracking_number) {
+                        updateData.tracking_number = trackingInfo.tracking_number;
+                        updateData.tracking_carrier = trackingInfo.tracking_carrier;
+                        if (trackingInfo.tracking_url) updateData.tracking_url = trackingInfo.tracking_url;
+                    }
+                    if (Object.keys(updateData).length > 0) {
+                        await withRetry(() => sr.Order.update(staleOrder.id, updateData));
+                        staleUpdated++;
+                        console.log(`✅ Stale #${staleOrder.external_order_number}: ${staleOrder.status} → ${updateData.status || staleOrder.status}`);
+                    }
+                    await delay(500);
+                } catch (err) {
+                    console.error(`❌ Stale check #${staleOrder.external_order_number}: ${err.message}`);
+                }
+            }
+            console.log(`✅ Phase 3 done: ${staleUpdated} stale orders updated`);
+        }
+
+        updated += staleUpdated;
+        const msg = `סנכרון WooCommerce הושלם: ${created} נוצרו, ${updated} עודכנו, ${failed} נכשלו (מתוך ${wooOrders.length}, +${staleOpenOrders.length} ישנות).`;
         console.log(`✅ ${msg}`);
-        return Response.json({ success: true, message: msg, created, updated, failed, total: wooOrders.length });
+        return Response.json({ success: true, message: msg, created, updated, failed, total: wooOrders.length, staleChecked: staleOpenOrders.length, staleUpdated });
 
     } catch (error) {
         console.error("❌ WooSync Error:", error);
