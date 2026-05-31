@@ -330,6 +330,7 @@ export default function MiraklInvoiceBatch() {
                 type="file" 
                 accept=".csv,.json,.xlsx,.xls"
                 disabled={isLoading}
+                onChange={handleFileUpload}
               />
             </div>
           </div>
