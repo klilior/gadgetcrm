@@ -74,11 +74,12 @@ export default function MiraklInvoiceBatch() {
       let parsed;
       
       if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-        // Upload to Base44 then extract
+        // Upload to Base44 then use LLM to extract
         const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        const extraction = await base44.integrations.Core.ExtractDataFromUploadedFile({
-          file_url,
-          json_schema: {
+        const llmResult = await base44.integrations.Core.InvokeLLM({
+          prompt: `הקובץ המצורף הוא טבלת Excel של הזמנות Mirakl (סופר-פארם). חלץ את כל השורות לפורמט JSON. לכל שורה מצא: mirakl_order_id (מספר/סימוכין הזמנה), customer_name (לקוח), phone (טלפון), city (עיר), address (כתובת), products_text (מוצרים), expected_invoice (סכום חשבונית - מספר), expected_credit (סכום זיכוי - מספר, 0 אם אין), shipping_method (שיטת משלוח), tracking_number (מספר מעקב). החזר את כל השורות.`,
+          file_urls: [file_url],
+          response_json_schema: {
             type: "object",
             properties: {
               orders: {
@@ -86,24 +87,23 @@ export default function MiraklInvoiceBatch() {
                 items: {
                   type: "object",
                   properties: {
-                    mirakl_order_id: { type: "string", description: "מספר הזמנה Mirakl" },
-                    customer_name: { type: "string", description: "לקוח" },
-                    phone: { type: "string", description: "טלפון" },
-                    city: { type: "string", description: "עיר" },
-                    address: { type: "string", description: "כתובת" },
-                    products_text: { type: "string", description: "מוצרים / פריטים" },
-                    expected_invoice: { type: "number", description: "צפוי חשבונית" },
-                    expected_credit: { type: "number", description: "צפוי זיכוי" },
-                    shipping_method: { type: "string", description: "שיטת משלוח" },
-                    tracking_number: { type: "string", description: "מספר מעקב" },
+                    mirakl_order_id: { type: "string" },
+                    customer_name: { type: "string" },
+                    phone: { type: "string" },
+                    city: { type: "string" },
+                    address: { type: "string" },
+                    products_text: { type: "string" },
+                    expected_invoice: { type: "number" },
+                    expected_credit: { type: "number" },
+                    shipping_method: { type: "string" },
+                    tracking_number: { type: "string" },
                   }
                 }
               }
             }
           }
         });
-        if (extraction?.status === 'error') throw new Error(extraction.details || 'שגיאה בחילוץ');
-        parsed = extraction?.output?.orders || extraction?.output || [];
+        parsed = llmResult?.orders || [];
       } else if (file.name.endsWith('.json')) {
         const text = await file.text();
         parsed = JSON.parse(text);
