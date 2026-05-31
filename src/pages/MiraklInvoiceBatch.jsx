@@ -74,36 +74,54 @@ export default function MiraklInvoiceBatch() {
       let parsed;
       
       if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-        // Upload to Base44 then use LLM to extract
+        // Upload to Base44 then extract with exact column names
         const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        const llmResult = await base44.integrations.Core.InvokeLLM({
-          prompt: `הקובץ המצורף הוא טבלת Excel של הזמנות Mirakl (סופר-פארם). חלץ את כל השורות לפורמט JSON. לכל שורה מצא: mirakl_order_id (מספר/סימוכין הזמנה), customer_name (לקוח), phone (טלפון), city (עיר), address (כתובת), products_text (מוצרים), expected_invoice (סכום חשבונית - מספר), expected_credit (סכום זיכוי - מספר, 0 אם אין), shipping_method (שיטת משלוח), tracking_number (מספר מעקב). החזר את כל השורות.`,
-          file_urls: [file_url],
-          response_json_schema: {
+        const extraction = await base44.integrations.Core.ExtractDataFromUploadedFile({
+          file_url,
+          json_schema: {
             type: "object",
             properties: {
-              orders: {
+              rows: {
                 type: "array",
                 items: {
                   type: "object",
                   properties: {
-                    mirakl_order_id: { type: "string" },
-                    customer_name: { type: "string" },
-                    phone: { type: "string" },
-                    city: { type: "string" },
-                    address: { type: "string" },
-                    products_text: { type: "string" },
-                    expected_invoice: { type: "number" },
-                    expected_credit: { type: "number" },
-                    shipping_method: { type: "string" },
-                    tracking_number: { type: "string" },
+                    "מספר הזמנה Mirakl": { type: "string" },
+                    "סטטוס Mirakl": { type: "string" },
+                    "לקוח": { type: "string" },
+                    "טלפון": { type: "string" },
+                    "עיר": { type: "string" },
+                    "כתובת": { type: "string" },
+                    "מוצרים / פריטים": { type: "string" },
+                    "סכום Mirakl כולל משלוח": { type: "number" },
+                    "צפוי חשבונית": { type: "number" },
+                    "צפוי זיכוי": { type: "number" },
+                    "שיטת משלוח": { type: "string" },
+                    "מספר מעקב": { type: "string" },
+                    "סימוכין": { type: "string" },
                   }
                 }
               }
             }
           }
         });
-        parsed = llmResult?.orders || [];
+        if (extraction?.status === 'error') throw new Error(extraction.details || 'שגיאה בחילוץ');
+        // Handle both possible output shapes
+        let rawRows = extraction?.output?.rows || extraction?.output || [];
+        if (!Array.isArray(rawRows)) rawRows = [];
+        // Map Hebrew column names to internal fields
+        parsed = rawRows.map(row => ({
+          mirakl_order_id: row['מספר הזמנה Mirakl'] || row['סימוכין'] || '',
+          customer_name: row['לקוח'] || '',
+          phone: String(row['טלפון'] || ''),
+          city: row['עיר'] || '',
+          address: row['כתובת'] || '',
+          products_text: row['מוצרים / פריטים'] || '',
+          expected_invoice: Number(row['צפוי חשבונית'] || row['סכום Mirakl כולל משלוח'] || 0),
+          expected_credit: Number(row['צפוי זיכוי'] || 0),
+          shipping_method: row['שיטת משלוח'] || '',
+          tracking_number: String(row['מספר מעקב'] || ''),
+        }));
       } else if (file.name.endsWith('.json')) {
         const text = await file.text();
         parsed = JSON.parse(text);
@@ -134,18 +152,23 @@ export default function MiraklInvoiceBatch() {
       }
 
       if (Array.isArray(parsed)) {
-        const mapped = parsed.map(row => ({
-          mirakl_order_id: row['מספר הזמנה Mirakl'] || row.mirakl_order_id || row.order_id || row['סימוכין'] || '',
-          customer_name: row['לקוח'] || row.customer_name || '',
-          phone: row['טלפון'] || row.phone || '',
-          city: row['עיר'] || row.city || '',
-          address: row['כתובת'] || row.address || '',
-          products_text: row['מוצרים / פריטים'] || row.products_text || row.products || '',
-          expected_invoice: Number(row['צפוי חשבונית'] || row.expected_invoice || row.amount || row['סכום Mirakl כולל משלוח']) || 0,
-          expected_credit: Number(row['צפוי זיכוי'] || row.expected_credit) || 0,
-          shipping_method: row['שיטת משלוח'] || row.shipping_method || '',
-          tracking_number: row['מספר מעקב'] || row.tracking_number || '',
-        })).filter(o => o.mirakl_order_id);
+        const mapped = parsed.map(row => {
+          // Already mapped from XLSX path
+          if (row.mirakl_order_id !== undefined) return row;
+          // CSV/JSON path - map Hebrew columns
+          return {
+            mirakl_order_id: row['מספר הזמנה Mirakl'] || row['סימוכין'] || row.mirakl_order_id || row.order_id || '',
+            customer_name: row['לקוח'] || row.customer_name || '',
+            phone: String(row['טלפון'] || row.phone || ''),
+            city: row['עיר'] || row.city || '',
+            address: row['כתובת'] || row.address || '',
+            products_text: row['מוצרים / פריטים'] || row.products_text || row.products || '',
+            expected_invoice: Number(row['צפוי חשבונית'] || row['סכום Mirakl כולל משלוח'] || row.expected_invoice || row.amount || 0),
+            expected_credit: Number(row['צפוי זיכוי'] || row.expected_credit || 0),
+            shipping_method: row['שיטת משלוח'] || row.shipping_method || '',
+            tracking_number: String(row['מספר מעקב'] || row.tracking_number || ''),
+          };
+        }).filter(o => o.mirakl_order_id);
         
         setOrders(mapped);
         toast.success(`נטענו ${mapped.length} הזמנות מהקובץ`);
