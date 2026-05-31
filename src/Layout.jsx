@@ -246,7 +246,9 @@ function AppContent({ children, currentPageName }) {
     { title: "דוח מכירות", url: createPageUrl("SalesDashboard") },
   ] : [];
 
-  const superPharmItems = [];
+  const superPharmItems = !isTechnicianRole && isManager ? [
+    { title: "הפקת חשבוניות Mirakl", url: "/MiraklInvoiceBatch" },
+  ] : [];
 
   const settingsItems = isManager ? [
     { title: "עובדים", url: createPageUrl("ManageEmployees") },

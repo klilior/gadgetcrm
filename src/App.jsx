@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import SuperPharmOrdersPage from './pages/SuperPharmOrdersPage';
 import UnifiedOrders from './pages/UnifiedOrders';
 import Shipments from './pages/Shipments';
+import MiraklInvoiceBatch from './pages/MiraklInvoiceBatch';
 import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
@@ -88,6 +89,11 @@ const AuthenticatedApp = () => {
       <Route path="/Shipments" element={
         <LayoutWrapper currentPageName="Shipments">
           <Suspense fallback={<LazyFallback />}><Shipments /></Suspense>
+        </LayoutWrapper>
+      } />
+      <Route path="/MiraklInvoiceBatch" element={
+        <LayoutWrapper currentPageName="MiraklInvoiceBatch">
+          <Suspense fallback={<LazyFallback />}><MiraklInvoiceBatch /></Suspense>
         </LayoutWrapper>
       } />
       <Route path="*" element={<PageNotFound />} />
