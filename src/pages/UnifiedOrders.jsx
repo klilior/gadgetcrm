@@ -764,11 +764,8 @@ export default function UnifiedOrders() {
         <CargoShipmentModal
           open={!!cargoOrder}
           onClose={(resultData) => {
-            if (resultData?.shipment_id && (cargoOrder.source === 'woocommerce' || cargoOrder.source === 'mirakl')) {
-              setPostShipmentData({ order: cargoOrder, trackingNumber: String(resultData.shipment_id), carrierHint: 'cargo' });
-            } else {
-              loadData(true);
-            }
+            // Status update is now handled inside CargoShipmentModal itself
+            loadData(true);
             setCargoOrder(null);
           }}
           order={cargoOrder}

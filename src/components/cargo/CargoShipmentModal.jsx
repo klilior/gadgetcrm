@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Truck, Package, RefreshCw, Loader2, AlertTriangle, CheckCircle, Printer, Copy } from "lucide-react";
 import { cargoApi } from "@/functions/cargoApi";
+import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
+import { updateWooOrderStatus } from "@/functions/updateWooOrderStatus";
 import { toast } from "sonner";
 
 const SHIPMENT_TYPES = [
@@ -118,7 +120,33 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
       if (data.success) {
         setResult(data);
         toast.success(`משלוח קארגו נוצר בהצלחה! #${data.shipment_id}`);
-        // User can click "Print Label" button in the success view
+        
+        // Auto-update order status in external platform
+        if (data.shipment_id) {
+          if (order?.source === 'mirakl') {
+            try {
+              const miraklId = order.mirakl_order_id || order.order_number;
+              await updateSuperPharmOrder({
+                action: 'ship',
+                order_id: miraklId,
+                tracking_number: String(data.shipment_id),
+                carrier_code: 'deliv_cargoexp',
+                carrier_name: 'Cargo-Ship',
+              });
+              toast.success('הזמנה עודכנה ל-"נשלחה" ב-Mirakl');
+            } catch (e) {
+              console.error('[Cargo] Failed to update Mirakl:', e.message);
+              toast.error('משלוח נוצר אך עדכון Mirakl נכשל - יעודכן בסנכרון הבא');
+            }
+          } else if (order?.source === 'woocommerce') {
+            try {
+              await updateWooOrderStatus({ order_id: order.raw_id, new_status: 'completed' });
+              toast.success('הזמנה עודכנה ל-"הושלמה" בווקומרס');
+            } catch (e) {
+              console.error('[Cargo] Failed to update WooCommerce:', e.message);
+            }
+          }
+        }
       } else {
         setError(data.error || 'שגיאה ביצירת משלוח');
       }
