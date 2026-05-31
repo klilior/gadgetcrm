@@ -130,7 +130,7 @@ export default function MiraklInvoiceBatch() {
         const text = await file.text();
         const rows = [];
         const lines = text.split('\n');
-        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        const headers = lines[0].replace(/^\uFEFF/, '').split(',').map(h => h.trim().replace(/^"|"$/g, ''));
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
@@ -155,18 +155,23 @@ export default function MiraklInvoiceBatch() {
         const mapped = parsed.map(row => {
           // Already mapped from XLSX path
           if (row.mirakl_order_id !== undefined) return row;
-          // CSV/JSON path - map Hebrew columns
+          // Strip BOM from any key
+          const r = {};
+          for (const [k, v] of Object.entries(row)) {
+            r[k.replace(/^\uFEFF/, '')] = v;
+          }
+          // Map all known column name variants
           return {
-            mirakl_order_id: row['מספר הזמנה Mirakl'] || row['סימוכין'] || row.mirakl_order_id || row.order_id || '',
-            customer_name: row['לקוח'] || row.customer_name || '',
-            phone: String(row['טלפון'] || row.phone || ''),
-            city: row['עיר'] || row.city || '',
-            address: row['כתובת'] || row.address || '',
-            products_text: row['מוצרים / פריטים'] || row.products_text || row.products || '',
-            expected_invoice: Number(row['צפוי חשבונית'] || row['סכום Mirakl כולל משלוח'] || row.expected_invoice || row.amount || 0),
-            expected_credit: Number(row['צפוי זיכוי'] || row.expected_credit || 0),
-            shipping_method: row['שיטת משלוח'] || row.shipping_method || '',
-            tracking_number: String(row['מספר מעקב'] || row.tracking_number || ''),
+            mirakl_order_id: r['אסמכתא חיצונית'] || r['מספר הזמנה Mirakl'] || r['סימוכין'] || r.mirakl_order_id || r.order_id || '',
+            customer_name: r['שם לקוח'] || r['לקוח'] || r.customer_name || '',
+            phone: String(r['טלפון'] || r.phone || ''),
+            city: r['עיר'] || r.city || '',
+            address: r['כתובת'] || r.address || '',
+            products_text: r['פירוט פריטים לחשבונית'] || r['מוצרים / פריטים'] || r['שם פריט נקי'] || r.products_text || '',
+            expected_invoice: Number(r['סכום חשבונית צפוי'] || r['צפוי חשבונית'] || r['סכום Mirakl כולל משלוח'] || r.expected_invoice || 0),
+            expected_credit: Number(r['סכום זיכוי צפוי'] || r['צפוי זיכוי'] || r.expected_credit || 0),
+            shipping_method: r['שיטת משלוח'] || r.shipping_method || '',
+            tracking_number: String(r['מספר מעקב'] || r.tracking_number || ''),
           };
         }).filter(o => o.mirakl_order_id);
         
