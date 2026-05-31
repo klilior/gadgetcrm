@@ -8,6 +8,7 @@ import {
   FileSpreadsheet, Upload, Play, CheckCircle, XCircle, AlertTriangle, 
   Loader2, Search, Download, RefreshCw 
 } from "lucide-react";
+import { base44 } from "@/api/base44Client";
 import { batchCreateSPInvoices } from "@/functions/batchCreateSPInvoices";
 import { toast } from "sonner";
 
@@ -59,39 +60,88 @@ export default function MiraklInvoiceBatch() {
     }
   }, []);
 
-  // Load from file (CSV/JSON)
+  const [uploadError, setUploadError] = useState(null);
+
+  // Load from file (CSV/JSON/XLSX)
   const handleFileUpload = useCallback(async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsLoading(true);
+    setUploadError(null);
+    setOrders([]);
     try {
-      const text = await file.text();
       let parsed;
       
-      if (file.name.endsWith('.json')) {
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        // Upload to Base44 then extract
+        const { file_url } = await base44.integrations.Core.UploadFile({ file });
+        const extraction = await base44.integrations.Core.ExtractDataFromUploadedFile({
+          file_url,
+          json_schema: {
+            type: "object",
+            properties: {
+              orders: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    mirakl_order_id: { type: "string", description: "מספר הזמנה Mirakl" },
+                    customer_name: { type: "string", description: "לקוח" },
+                    phone: { type: "string", description: "טלפון" },
+                    city: { type: "string", description: "עיר" },
+                    address: { type: "string", description: "כתובת" },
+                    products_text: { type: "string", description: "מוצרים / פריטים" },
+                    expected_invoice: { type: "number", description: "צפוי חשבונית" },
+                    expected_credit: { type: "number", description: "צפוי זיכוי" },
+                    shipping_method: { type: "string", description: "שיטת משלוח" },
+                    tracking_number: { type: "string", description: "מספר מעקב" },
+                  }
+                }
+              }
+            }
+          }
+        });
+        if (extraction?.status === 'error') throw new Error(extraction.details || 'שגיאה בחילוץ');
+        parsed = extraction?.output?.orders || extraction?.output || [];
+      } else if (file.name.endsWith('.json')) {
+        const text = await file.text();
         parsed = JSON.parse(text);
       } else {
-        // Simple CSV parse
+        // CSV - handle quoted fields properly
+        const text = await file.text();
+        const rows = [];
         const lines = text.split('\n');
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-        parsed = lines.slice(1).filter(l => l.trim()).map(line => {
-          const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          const values = [];
+          let current = '';
+          let inQuotes = false;
+          for (let j = 0; j < line.length; j++) {
+            const ch = line[j];
+            if (ch === '"') { inQuotes = !inQuotes; }
+            else if (ch === ',' && !inQuotes) { values.push(current.trim()); current = ''; }
+            else { current += ch; }
+          }
+          values.push(current.trim());
           const obj = {};
-          headers.forEach((h, i) => obj[h] = values[i] || '');
-          return obj;
-        });
+          headers.forEach((h, idx) => obj[h] = values[idx] || '');
+          rows.push(obj);
+        }
+        parsed = rows;
       }
 
       if (Array.isArray(parsed)) {
         const mapped = parsed.map(row => ({
-          mirakl_order_id: row['מספר הזמנה Mirakl'] || row.mirakl_order_id || row.order_id || '',
+          mirakl_order_id: row['מספר הזמנה Mirakl'] || row.mirakl_order_id || row.order_id || row['סימוכין'] || '',
           customer_name: row['לקוח'] || row.customer_name || '',
           phone: row['טלפון'] || row.phone || '',
           city: row['עיר'] || row.city || '',
           address: row['כתובת'] || row.address || '',
           products_text: row['מוצרים / פריטים'] || row.products_text || row.products || '',
-          expected_invoice: Number(row['צפוי חשבונית'] || row.expected_invoice || row.amount) || 0,
+          expected_invoice: Number(row['צפוי חשבונית'] || row.expected_invoice || row.amount || row['סכום Mirakl כולל משלוח']) || 0,
           expected_credit: Number(row['צפוי זיכוי'] || row.expected_credit) || 0,
           shipping_method: row['שיטת משלוח'] || row.shipping_method || '',
           tracking_number: row['מספר מעקב'] || row.tracking_number || '',
@@ -101,6 +151,7 @@ export default function MiraklInvoiceBatch() {
         toast.success(`נטענו ${mapped.length} הזמנות מהקובץ`);
       }
     } catch (err) {
+      setUploadError(err.message);
       toast.error('שגיאה בקריאת הקובץ: ' + err.message);
     } finally {
       setIsLoading(false);
@@ -274,15 +325,28 @@ export default function MiraklInvoiceBatch() {
         <CardContent className="space-y-4">
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="text-sm text-gray-600 mb-1 block">טען מקובץ CSV/JSON</label>
+              <label className="text-sm text-gray-600 mb-1 block">טען מקובץ (Excel / CSV / JSON)</label>
               <Input 
                 type="file" 
-                accept=".csv,.json"
-                onChange={handleFileUpload}
+                accept=".csv,.json,.xlsx,.xls"
                 disabled={isLoading}
               />
             </div>
           </div>
+
+          {isLoading && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+              <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+              <span className="text-blue-800">מעבד את הקובץ... (עלול לקחת עד 30 שניות לקבצי Excel)</span>
+            </div>
+          )}
+
+          {uploadError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-red-800 text-sm">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span>שגיאה: {uploadError}</span>
+            </div>
+          )}
           
           <div>
             <label className="text-sm text-gray-600 mb-1 block">או הדבק נתונים כ-JSON</label>
