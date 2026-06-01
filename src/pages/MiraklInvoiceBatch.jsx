@@ -269,7 +269,7 @@ export default function MiraklInvoiceBatch() {
               items: {
                 type: "object",
                 properties: {
-                  "\u05de\u05e1\u05e4\u05e8 \u05de\u05e1\u05de\u05da": { type: "string" },
+                  "מספר מסמך": { type: "string" },
                 }
               }
             }
@@ -278,11 +278,11 @@ export default function MiraklInvoiceBatch() {
       });
       let rawRows = extraction?.output?.rows || extraction?.output || [];
       if (!Array.isArray(rawRows)) rawRows = [];
-      const docNums = [...new Set(rawRows.map(r => r['\u05de\u05e1\u05e4\u05e8 \u05de\u05e1\u05de\u05da']).filter(Boolean))];
+      const docNums = [...new Set(rawRows.map(r => r['מספר מסמך']).filter(Boolean))];
       setCreditDocNumbers(docNums);
-      toast.success(`\u05e0\u05d8\u05e2\u05e0\u05d5 ${docNums.length} \u05de\u05e1\u05e4\u05e8\u05d9 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05d9\u05d9\u05d7\u05d5\u05d3\u05d9\u05d9\u05dd`);
+      toast.success(`נטענו ${docNums.length} מספרי חשבוניות ייחודיים`);
     } catch (err) {
-      toast.error('\u05e9\u05d2\u05d9\u05d0\u05d4: ' + err.message);
+      toast.error('שגיאה: ' + err.message);
     }
   }, []);
 
@@ -290,12 +290,12 @@ export default function MiraklInvoiceBatch() {
     const nums = creditInput.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean);
     const unique = [...new Set(nums)];
     setCreditDocNumbers(unique);
-    toast.success(`${unique.length} \u05de\u05e1\u05e4\u05e8\u05d9 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea`);
+    toast.success(`${unique.length} מספרי חשבוניות`);
   }, [creditInput]);
 
   const handleProcessCredits = async () => {
     if (creditDocNumbers.length === 0) return;
-    if (!window.confirm(`\u05d4\u05d0\u05dd \u05dc\u05d9\u05e6\u05d5\u05e8 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05d6\u05d9\u05db\u05d5\u05d9 \u05dc-${creditDocNumbers.length} \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea?`)) return;
+    if (!window.confirm(`האם ליצור חשבוניות זיכוי ל-${creditDocNumbers.length} חשבוניות?`)) return;
     setIsCreditProcessing(true);
     setCreditResults([]);
     setCreditSummary(null);
@@ -308,12 +308,12 @@ export default function MiraklInvoiceBatch() {
       if (data.success) {
         setCreditResults(data.results || []);
         setCreditSummary(data.summary || null);
-        toast.success(`\u05d6\u05d9\u05db\u05d5\u05d9 \u05d4\u05d5\u05e9\u05dc\u05dd: ${data.summary?.credited || 0} \u05d6\u05d9\u05db\u05d5\u05d9\u05d9\u05dd \u05e0\u05d5\u05e6\u05e8\u05d5`);
+        toast.success(`זיכוי הושלם: ${data.summary?.credited || 0} זיכויים נוצרו`);
       } else {
-        toast.error(data.error || '\u05e9\u05d2\u05d9\u05d0\u05d4');
+        toast.error(data.error || 'שגיאה');
       }
     } catch (err) {
-      toast.error('\u05e9\u05d2\u05d9\u05d0\u05d4: ' + (err.response?.data?.error || err.message));
+      toast.error('שגיאה: ' + (err.response?.data?.error || err.message));
     } finally {
       setIsCreditProcessing(false);
     }
@@ -593,38 +593,38 @@ export default function MiraklInvoiceBatch() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2 text-red-700">
             <Undo2 className="w-4 h-4" />
-            \u05d4\u05e4\u05e7\u05ea \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05d6\u05d9\u05db\u05d5\u05d9 (\u05dc\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05db\u05e4\u05d5\u05dc\u05d5\u05ea)
+            הפקת חשבוניות זיכוי (לחשבוניות כפולות)
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="text-sm text-gray-600 mb-1 block">\u05d8\u05e2\u05df \u05e7\u05d5\u05d1\u05e5 Excel \u05e2\u05dd \u05e2\u05de\u05d5\u05d3\u05ea \u05f4\u05de\u05e1\u05e4\u05e8 \u05de\u05e1\u05de\u05da\u05f4</label>
+              <label className="text-sm text-gray-600 mb-1 block">טען קובץ Excel עם עמודת ״מספר מסמך״</label>
               <Input type="file" accept=".xlsx,.xls,.csv" onChange={handleCreditFileUpload} />
             </div>
           </div>
           <div>
-            <label className="text-sm text-gray-600 mb-1 block">\u05d0\u05d5 \u05d4\u05d3\u05d1\u05e7 \u05de\u05e1\u05e4\u05e8\u05d9 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea (\u05de\u05d5\u05e4\u05e8\u05d3\u05d9\u05dd \u05d1\u05e9\u05d5\u05e8\u05d4 \u05d7\u05d3\u05e9\u05d4 / \u05e4\u05e1\u05d9\u05e7)</label>
+            <label className="text-sm text-gray-600 mb-1 block">או הדבק מספרי חשבוניות (מופרדים בשורה חדשה / פסיק)</label>
             <div className="flex gap-2">
               <textarea
                 className="w-full h-20 p-3 border rounded-xl text-xs font-mono resize-none"
-                placeholder="42184\n42183\n42182"
+                placeholder="42184&#10;42183&#10;42182"
                 value={creditInput}
                 onChange={(e) => setCreditInput(e.target.value)}
               />
-              <Button variant="outline" onClick={handleParseCreditInput} className="self-end">\u05d8\u05e2\u05df</Button>
+              <Button variant="outline" onClick={handleParseCreditInput} className="self-end">טען</Button>
             </div>
           </div>
 
           {creditDocNumbers.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center justify-between">
               <div>
-                <span className="font-medium text-red-800">{creditDocNumbers.length} \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05dc\u05d6\u05d9\u05db\u05d5\u05d9</span>
+                <span className="font-medium text-red-800">{creditDocNumbers.length} חשבוניות לזיכוי</span>
                 <span className="text-red-600 text-xs mr-2">({creditDocNumbers.slice(0, 5).join(', ')}{creditDocNumbers.length > 5 ? '...' : ''})</span>
               </div>
               <Button onClick={handleProcessCredits} disabled={isCreditProcessing} className="bg-red-600 hover:bg-red-700 text-white">
                 {isCreditProcessing ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Undo2 className="w-4 h-4 ml-1" />}
-                \u05d4\u05e4\u05e7 \u05d6\u05d9\u05db\u05d5\u05d9\u05d9\u05dd
+                הפק זיכויים
               </Button>
             </div>
           )}
@@ -632,7 +632,7 @@ export default function MiraklInvoiceBatch() {
           {isCreditProcessing && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-red-600 mb-2" />
-              <p className="text-red-800 text-sm">\u05de\u05e2\u05d1\u05d3 \u05d6\u05d9\u05db\u05d5\u05d9\u05d9\u05dd... \u05d6\u05d4 \u05d9\u05db\u05d5\u05dc \u05dc\u05e7\u05d7\u05ea \u05de\u05e1\u05e4\u05e8 \u05d3\u05e7\u05d5\u05ea.</p>
+              <p className="text-red-800 text-sm">מעבד זיכויים... זה יכול לקחת מספר דקות.</p>
             </div>
           )}
 
@@ -640,15 +640,15 @@ export default function MiraklInvoiceBatch() {
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-green-50 rounded-xl p-3 text-center">
                 <div className="text-2xl font-bold text-green-700">{creditSummary.credited}</div>
-                <div className="text-xs text-green-600">\u05d6\u05d5\u05db\u05d5</div>
+                <div className="text-xs text-green-600">זוכו</div>
               </div>
               <div className="bg-gray-50 rounded-xl p-3 text-center">
                 <div className="text-2xl font-bold text-gray-700">{creditSummary.skipped}</div>
-                <div className="text-xs text-gray-600">\u05d3\u05d5\u05dc\u05d2\u05d5</div>
+                <div className="text-xs text-gray-600">דולגו</div>
               </div>
               <div className="bg-red-50 rounded-xl p-3 text-center">
                 <div className="text-2xl font-bold text-red-700">{creditSummary.errors}</div>
-                <div className="text-xs text-red-600">\u05e9\u05d2\u05d9\u05d0\u05d5\u05ea</div>
+                <div className="text-xs text-red-600">שגיאות</div>
               </div>
             </div>
           )}
@@ -658,11 +658,11 @@ export default function MiraklInvoiceBatch() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>\u05de\u05e1' \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea</TableHead>
-                    <TableHead>\u05e1\u05d8\u05d8\u05d5\u05e1</TableHead>
-                    <TableHead>\u05de\u05e1' \u05d6\u05d9\u05db\u05d5\u05d9</TableHead>
-                    <TableHead>\u05e1\u05db\u05d5\u05dd</TableHead>
-                    <TableHead>\u05d4\u05e2\u05e8\u05d5\u05ea</TableHead>
+                    <TableHead>מס׳ חשבונית</TableHead>
+                    <TableHead>סטטוס</TableHead>
+                    <TableHead>מס׳ זיכוי</TableHead>
+                    <TableHead>סכום</TableHead>
+                    <TableHead>הערות</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -671,11 +671,11 @@ export default function MiraklInvoiceBatch() {
                       <TableCell className="font-mono text-xs">{r.doc_number}</TableCell>
                       <TableCell>
                         <Badge className={r.status === 'credited' ? 'bg-green-100 text-green-700' : r.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}>
-                          {r.status === 'credited' ? '\u05d6\u05d5\u05db\u05d4' : r.status === 'not_found' ? '\u05dc\u05d0 \u05e0\u05de\u05e6\u05d0' : r.status === 'credit_exists' ? '\u05d6\u05d9\u05db\u05d5\u05d9 \u05e7\u05d9\u05d9\u05dd' : r.status}
+                          {r.status === 'credited' ? 'זוכה' : r.status === 'not_found' ? 'לא נמצא' : r.status === 'credit_exists' ? 'זיכוי קיים' : r.status}
                         </Badge>
                       </TableCell>
                       <TableCell className="font-mono text-xs text-purple-700">{r.credit_doc_number || '-'}</TableCell>
-                      <TableCell>{r.amount ? `\u20aa${r.amount}` : '-'}</TableCell>
+                      <TableCell>{r.amount ? `₪${r.amount}` : '-'}</TableCell>
                       <TableCell className="text-xs text-gray-500">{r.error || ''}</TableCell>
                     </TableRow>
                   ))}
