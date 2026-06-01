@@ -40,6 +40,8 @@ export default function MiraklInvoiceBatch() {
   const [isCreditProcessing, setIsCreditProcessing] = useState(false);
   const [creditInput, setCreditInput] = useState('');
   const [isCreditLoading, setIsCreditLoading] = useState(false);
+  const [creditFile, setCreditFile] = useState(null);
+  const [creditError, setCreditError] = useState(null);
 
   // Parse Excel data pasted as JSON (simplified approach)
   const handlePasteData = useCallback((e) => {
@@ -254,56 +256,107 @@ export default function MiraklInvoiceBatch() {
     }
   };
 
-  // Parse credit doc numbers from text input or file
-  const handleCreditFileUpload = useCallback(async (e) => {
+  // Store selected file for credit notes
+  const handleCreditFileSelect = (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    setIsCreditLoading(true);
-    try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      const extraction = await base44.integrations.Core.ExtractDataFromUploadedFile({
-        file_url,
-        json_schema: {
-          type: "object",
-          properties: {
-            rows: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  doc_number: { type: "string", description: "מספר מסמך" },
+    if (file) {
+      setCreditFile(file);
+      setCreditError(null);
+    }
+  };
+
+  // Main "load" handler - processes file OR textarea
+  const handleLoadCreditData = async () => {
+    setCreditError(null);
+    setCreditDocNumbers([]);
+
+    // Option 1: textarea has content
+    if (creditInput.trim()) {
+      const nums = creditInput.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean);
+      const unique = [...new Set(nums)];
+      if (unique.length === 0) {
+        setCreditError('לא נמצאו מספרים בטקסט');
+        return;
+      }
+      setCreditDocNumbers(unique);
+      toast.success(`נטענו ${unique.length} מספרי חשבוניות`);
+      return;
+    }
+
+    // Option 2: file was selected
+    if (creditFile) {
+      setIsCreditLoading(true);
+      try {
+        // For CSV - read locally
+        if (creditFile.name.endsWith('.csv')) {
+          const text = await creditFile.text();
+          const lines = text.split('\n');
+          const headers = lines[0].replace(/^\uFEFF/, '').split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+          const docColIdx = headers.findIndex(h => 
+            h.includes('מספר מסמך') || h.includes('docnum') || h.includes('doc_number')
+          );
+          if (docColIdx === -1) {
+            setCreditError('לא נמצאה עמודת "מספר מסמך" בקובץ. עמודות שנמצאו: ' + headers.join(', '));
+            return;
+          }
+          const nums = new Set();
+          for (let i = 1; i < lines.length; i++) {
+            const val = lines[i].split(',')[docColIdx]?.trim().replace(/^"|"$/g, '');
+            if (val && val !== '') nums.add(val);
+          }
+          const unique = [...nums];
+          if (unique.length === 0) {
+            setCreditError('הקובץ לא מכיל מספרי חשבוניות');
+            return;
+          }
+          setCreditDocNumbers(unique);
+          toast.success(`נטענו ${unique.length} מספרי חשבוניות מה-CSV`);
+          return;
+        }
+
+        // For Excel - use API extraction
+        const { file_url } = await base44.integrations.Core.UploadFile({ file: creditFile });
+        const extraction = await base44.integrations.Core.ExtractDataFromUploadedFile({
+          file_url,
+          json_schema: {
+            type: "object",
+            properties: {
+              rows: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    doc_number: { type: "string", description: "מספר מסמך" },
+                  }
                 }
               }
             }
           }
+        });
+        let rawRows = extraction?.output?.rows || extraction?.output || [];
+        if (!Array.isArray(rawRows)) rawRows = [];
+        const docNums = [...new Set(rawRows.map(r => {
+          const val = r.doc_number || r['מספר מסמך'] || r['docnum'] || '';
+          return String(val).trim();
+        }).filter(Boolean))];
+        if (docNums.length === 0) {
+          setCreditError('לא נמצאו מספרי חשבוניות בקובץ Excel');
+          return;
         }
-      });
-      let rawRows = extraction?.output?.rows || extraction?.output || [];
-      if (!Array.isArray(rawRows)) rawRows = [];
-      const docNums = [...new Set(rawRows.map(r => {
-        const val = r.doc_number || r['מספר מסמך'] || r['docnum'] || '';
-        return String(val).trim();
-      }).filter(Boolean))];
-      if (docNums.length === 0) {
-        toast.error('לא נמצאו מספרי חשבוניות בקובץ');
-      } else {
         setCreditDocNumbers(docNums);
-        toast.success(`נטענו ${docNums.length} מספרי חשבוניות ייחודיים`);
+        toast.success(`נטענו ${docNums.length} מספרי חשבוניות מה-Excel`);
+      } catch (err) {
+        console.error('Credit file error:', err);
+        setCreditError('שגיאה בקריאת הקובץ: ' + err.message);
+      } finally {
+        setIsCreditLoading(false);
       }
-    } catch (err) {
-      console.error('Credit file upload error:', err);
-      toast.error('שגיאה בקריאת הקובץ: ' + err.message);
-    } finally {
-      setIsCreditLoading(false);
+      return;
     }
-  }, []);
 
-  const handleParseCreditInput = useCallback(() => {
-    const nums = creditInput.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean);
-    const unique = [...new Set(nums)];
-    setCreditDocNumbers(unique);
-    toast.success(`${unique.length} מספרי חשבוניות`);
-  }, [creditInput]);
+    // Nothing provided
+    setCreditError('נא לבחור קובץ או להדביק מספרי חשבוניות בשדה הטקסט');
+  };
 
   const handleProcessCredits = async () => {
     if (creditDocNumbers.length === 0) return;
@@ -609,31 +662,29 @@ export default function MiraklInvoiceBatch() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-4 items-end">
-            <div className="flex-1">
-              <label className="text-sm text-gray-600 mb-1 block">טען קובץ Excel עם עמודת ״מספר מסמך״</label>
-              <Input type="file" accept=".xlsx,.xls,.csv" onChange={handleCreditFileUpload} disabled={isCreditLoading} />
-            </div>
-            {isCreditLoading && (
-              <div className="flex items-center gap-2 text-blue-700 text-sm pb-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                טוען קובץ...
-              </div>
-            )}
+          <div>
+            <label className="text-sm text-gray-600 mb-1 block">בחר קובץ Excel / CSV עם עמודת ״מספר מסמך״</label>
+            <Input type="file" accept=".xlsx,.xls,.csv" onChange={handleCreditFileSelect} disabled={isCreditLoading} />
+            {creditFile && <p className="text-xs text-green-700 mt-1">קובץ נבחר: {creditFile.name}</p>}
           </div>
           <div>
             <label className="text-sm text-gray-600 mb-1 block">או הדבק מספרי חשבוניות (מופרדים בשורה חדשה / פסיק)</label>
-            <div className="flex gap-2">
-              <textarea
-                className="w-full h-20 p-3 border rounded-xl text-xs font-mono resize-none"
-                placeholder="42184&#10;42183&#10;42182"
-                value={creditInput}
-                onChange={(e) => setCreditInput(e.target.value)}
-              />
-              <Button variant="outline" onClick={handleParseCreditInput} className="self-end">טען</Button>
-            </div>
+            <textarea
+              className="w-full h-20 p-3 border rounded-xl text-xs font-mono resize-none"
+              placeholder={"42184\n42183\n42182"}
+              value={creditInput}
+              onChange={(e) => setCreditInput(e.target.value)}
+            />
           </div>
-
+          <Button onClick={handleLoadCreditData} disabled={isCreditLoading} className="w-full">
+            {isCreditLoading ? <><Loader2 className="w-4 h-4 animate-spin ml-2" /> טוען נתונים...</> : 'טען מספרי חשבוניות'}
+          </Button>
+          {creditError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-red-800 text-sm">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              {creditError}
+            </div>
+          )}
           {creditDocNumbers.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center justify-between">
               <div>
