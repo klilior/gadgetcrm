@@ -436,6 +436,111 @@ Deno.serve(async (req) => {
       });
     }
 
+    // === ACTION: batch_credit_notes ===
+    if (action === 'batch_credit_notes') {
+      const { doc_numbers } = body; // Array of invoice doc numbers to credit
+      if (!doc_numbers || !Array.isArray(doc_numbers) || doc_numbers.length === 0) {
+        return Response.json({ error: 'לא סופקו מספרי חשבוניות' }, { status: 400 });
+      }
+
+      const results = [];
+      let credited = 0, skipped = 0, errors = 0;
+
+      for (let i = 0; i < doc_numbers.length; i++) {
+        const docNum = String(doc_numbers[i]).trim();
+        const r = { doc_number: docNum, status: 'pending', error: null };
+
+        try {
+          // Find the invoice in Linet by doc number
+          const searchResult = await linetPost('newsearch/docs', {
+            ...creds,
+            query: { docnum: docNum, doctype: ['9', '3'] },
+            limit: 1, offset: 0,
+          });
+          const docs = searchResult?.body || (Array.isArray(searchResult) ? searchResult : []);
+          if (!Array.isArray(docs) || docs.length === 0) {
+            r.status = 'not_found';
+            r.error = 'חשבונית לא נמצאה בלינט';
+            skipped++;
+            results.push(r);
+            await delay(300);
+            continue;
+          }
+
+          const origDoc = docs[0];
+          const origTotal = Number(origDoc.total || origDoc.total_with_vat || 0);
+          const accountId = origDoc.account_id || origDoc.account;
+          const refnumExt = origDoc.refnum_ext || '';
+
+          if (origTotal <= 0) {
+            r.status = 'skipped_zero';
+            r.error = 'סכום חשבונית 0';
+            skipped++;
+            results.push(r);
+            continue;
+          }
+
+          // Check if credit note already exists for this refnum_ext
+          if (refnumExt) {
+            const existingCredits = await findExistingDoc(creds, refnumExt + '_CREDIT', 4);
+            if (existingCredits.length > 0) {
+              r.status = 'credit_exists';
+              r.error = 'זיכוי כבר קיים';
+              r.credit_doc_number = String(existingCredits[0].docnum || '');
+              skipped++;
+              results.push(r);
+              await delay(300);
+              continue;
+            }
+          }
+
+          // Create credit note (type 4)
+          console.log(`[Credit ${i+1}/${doc_numbers.length}] #${docNum}: Creating credit ₪${origTotal}...`);
+          const creditResult = await createDoc(creds, {
+            doctype: 4,
+            accountId: String(accountId),
+            refnumExt: refnumExt ? refnumExt + '_CREDIT' : `credit_${docNum}`,
+            customerName: origDoc.company || origDoc.name || '',
+            phone: origDoc.phone || '',
+            email: '',
+            city: origDoc.city || '',
+            address: origDoc.address || '',
+            lines: [{
+              item_id: 1,
+              name: `זיכוי חשבונית כפולה #${docNum}`,
+              description: `זיכוי חשבונית כפולה - אסמכתא ${refnumExt || docNum}`,
+              qty: 1,
+              iItem: origTotal,
+              iItemWithVat: 1,
+              currency_id: "ILS",
+              vat_cat_id: 1,
+            }],
+            totalSum: origTotal,
+          });
+
+          r.status = 'credited';
+          r.credit_doc_id = String(creditResult.doc_id);
+          r.credit_doc_number = String(creditResult.doc_number || '');
+          r.amount = origTotal;
+          credited++;
+          console.log(`[Credit] #${docNum}: Credit note #${r.credit_doc_number} created for ₪${origTotal}`);
+
+        } catch (err) {
+          r.status = 'error';
+          r.error = err.message;
+          errors++;
+          console.error(`[Credit] #${docNum}: ERROR - ${err.message}`);
+        }
+
+        results.push(r);
+        await delay(1500);
+      }
+
+      const summary = { total: doc_numbers.length, credited, skipped, errors };
+      console.log(`[BatchCredit] Summary: ${credited} credited, ${skipped} skipped, ${errors} errors`);
+      return Response.json({ success: true, summary, results });
+    }
+
     return Response.json({ error: 'פעולה לא מוכרת' }, { status: 400 });
 
   } catch (error) {

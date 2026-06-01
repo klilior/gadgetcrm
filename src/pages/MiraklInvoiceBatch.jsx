@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { 
   FileSpreadsheet, Upload, Play, CheckCircle, XCircle, AlertTriangle, 
-  Loader2, Search, Download, RefreshCw 
+  Loader2, Search, Download, RefreshCw, Undo2 
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { batchCreateSPInvoices } from "@/functions/batchCreateSPInvoices";
@@ -32,6 +32,13 @@ export default function MiraklInvoiceBatch() {
   const [checkOrderId, setCheckOrderId] = useState('');
   const [checkResult, setCheckResult] = useState(null);
   const [isChecking, setIsChecking] = useState(false);
+
+  // Credit notes state
+  const [creditDocNumbers, setCreditDocNumbers] = useState([]);
+  const [creditResults, setCreditResults] = useState([]);
+  const [creditSummary, setCreditSummary] = useState(null);
+  const [isCreditProcessing, setIsCreditProcessing] = useState(false);
+  const [creditInput, setCreditInput] = useState('');
 
   // Parse Excel data pasted as JSON (simplified approach)
   const handlePasteData = useCallback((e) => {
@@ -243,6 +250,72 @@ export default function MiraklInvoiceBatch() {
       toast.error('שגיאה: ' + (err.response?.data?.error || err.message));
     } finally {
       setIsChecking(false);
+    }
+  };
+
+  // Parse credit doc numbers from text input or file
+  const handleCreditFileUpload = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const extraction = await base44.integrations.Core.ExtractDataFromUploadedFile({
+        file_url,
+        json_schema: {
+          type: "object",
+          properties: {
+            rows: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  "\u05de\u05e1\u05e4\u05e8 \u05de\u05e1\u05de\u05da": { type: "string" },
+                }
+              }
+            }
+          }
+        }
+      });
+      let rawRows = extraction?.output?.rows || extraction?.output || [];
+      if (!Array.isArray(rawRows)) rawRows = [];
+      const docNums = [...new Set(rawRows.map(r => r['\u05de\u05e1\u05e4\u05e8 \u05de\u05e1\u05de\u05da']).filter(Boolean))];
+      setCreditDocNumbers(docNums);
+      toast.success(`\u05e0\u05d8\u05e2\u05e0\u05d5 ${docNums.length} \u05de\u05e1\u05e4\u05e8\u05d9 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05d9\u05d9\u05d7\u05d5\u05d3\u05d9\u05d9\u05dd`);
+    } catch (err) {
+      toast.error('\u05e9\u05d2\u05d9\u05d0\u05d4: ' + err.message);
+    }
+  }, []);
+
+  const handleParseCreditInput = useCallback(() => {
+    const nums = creditInput.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean);
+    const unique = [...new Set(nums)];
+    setCreditDocNumbers(unique);
+    toast.success(`${unique.length} \u05de\u05e1\u05e4\u05e8\u05d9 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea`);
+  }, [creditInput]);
+
+  const handleProcessCredits = async () => {
+    if (creditDocNumbers.length === 0) return;
+    if (!window.confirm(`\u05d4\u05d0\u05dd \u05dc\u05d9\u05e6\u05d5\u05e8 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05d6\u05d9\u05db\u05d5\u05d9 \u05dc-${creditDocNumbers.length} \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea?`)) return;
+    setIsCreditProcessing(true);
+    setCreditResults([]);
+    setCreditSummary(null);
+    try {
+      const response = await batchCreateSPInvoices({
+        action: 'batch_credit_notes',
+        doc_numbers: creditDocNumbers,
+      });
+      const data = response.data || response;
+      if (data.success) {
+        setCreditResults(data.results || []);
+        setCreditSummary(data.summary || null);
+        toast.success(`\u05d6\u05d9\u05db\u05d5\u05d9 \u05d4\u05d5\u05e9\u05dc\u05dd: ${data.summary?.credited || 0} \u05d6\u05d9\u05db\u05d5\u05d9\u05d9\u05dd \u05e0\u05d5\u05e6\u05e8\u05d5`);
+      } else {
+        toast.error(data.error || '\u05e9\u05d2\u05d9\u05d0\u05d4');
+      }
+    } catch (err) {
+      toast.error('\u05e9\u05d2\u05d9\u05d0\u05d4: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsCreditProcessing(false);
     }
   };
 
@@ -514,6 +587,104 @@ export default function MiraklInvoiceBatch() {
           </CardContent>
         </Card>
       )}
+
+      {/* Credit Notes Section */}
+      <Card className="border-red-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2 text-red-700">
+            <Undo2 className="w-4 h-4" />
+            \u05d4\u05e4\u05e7\u05ea \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05d6\u05d9\u05db\u05d5\u05d9 (\u05dc\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05db\u05e4\u05d5\u05dc\u05d5\u05ea)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="text-sm text-gray-600 mb-1 block">\u05d8\u05e2\u05df \u05e7\u05d5\u05d1\u05e5 Excel \u05e2\u05dd \u05e2\u05de\u05d5\u05d3\u05ea \u05f4\u05de\u05e1\u05e4\u05e8 \u05de\u05e1\u05de\u05da\u05f4</label>
+              <Input type="file" accept=".xlsx,.xls,.csv" onChange={handleCreditFileUpload} />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm text-gray-600 mb-1 block">\u05d0\u05d5 \u05d4\u05d3\u05d1\u05e7 \u05de\u05e1\u05e4\u05e8\u05d9 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea (\u05de\u05d5\u05e4\u05e8\u05d3\u05d9\u05dd \u05d1\u05e9\u05d5\u05e8\u05d4 \u05d7\u05d3\u05e9\u05d4 / \u05e4\u05e1\u05d9\u05e7)</label>
+            <div className="flex gap-2">
+              <textarea
+                className="w-full h-20 p-3 border rounded-xl text-xs font-mono resize-none"
+                placeholder="42184\n42183\n42182"
+                value={creditInput}
+                onChange={(e) => setCreditInput(e.target.value)}
+              />
+              <Button variant="outline" onClick={handleParseCreditInput} className="self-end">\u05d8\u05e2\u05df</Button>
+            </div>
+          </div>
+
+          {creditDocNumbers.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center justify-between">
+              <div>
+                <span className="font-medium text-red-800">{creditDocNumbers.length} \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05dc\u05d6\u05d9\u05db\u05d5\u05d9</span>
+                <span className="text-red-600 text-xs mr-2">({creditDocNumbers.slice(0, 5).join(', ')}{creditDocNumbers.length > 5 ? '...' : ''})</span>
+              </div>
+              <Button onClick={handleProcessCredits} disabled={isCreditProcessing} className="bg-red-600 hover:bg-red-700 text-white">
+                {isCreditProcessing ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Undo2 className="w-4 h-4 ml-1" />}
+                \u05d4\u05e4\u05e7 \u05d6\u05d9\u05db\u05d5\u05d9\u05d9\u05dd
+              </Button>
+            </div>
+          )}
+
+          {isCreditProcessing && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-red-600 mb-2" />
+              <p className="text-red-800 text-sm">\u05de\u05e2\u05d1\u05d3 \u05d6\u05d9\u05db\u05d5\u05d9\u05d9\u05dd... \u05d6\u05d4 \u05d9\u05db\u05d5\u05dc \u05dc\u05e7\u05d7\u05ea \u05de\u05e1\u05e4\u05e8 \u05d3\u05e7\u05d5\u05ea.</p>
+            </div>
+          )}
+
+          {creditSummary && (
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-green-50 rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold text-green-700">{creditSummary.credited}</div>
+                <div className="text-xs text-green-600">\u05d6\u05d5\u05db\u05d5</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold text-gray-700">{creditSummary.skipped}</div>
+                <div className="text-xs text-gray-600">\u05d3\u05d5\u05dc\u05d2\u05d5</div>
+              </div>
+              <div className="bg-red-50 rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold text-red-700">{creditSummary.errors}</div>
+                <div className="text-xs text-red-600">\u05e9\u05d2\u05d9\u05d0\u05d5\u05ea</div>
+              </div>
+            </div>
+          )}
+
+          {creditResults.length > 0 && (
+            <div className="overflow-x-auto max-h-[300px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>\u05de\u05e1' \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea</TableHead>
+                    <TableHead>\u05e1\u05d8\u05d8\u05d5\u05e1</TableHead>
+                    <TableHead>\u05de\u05e1' \u05d6\u05d9\u05db\u05d5\u05d9</TableHead>
+                    <TableHead>\u05e1\u05db\u05d5\u05dd</TableHead>
+                    <TableHead>\u05d4\u05e2\u05e8\u05d5\u05ea</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {creditResults.map((r, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-mono text-xs">{r.doc_number}</TableCell>
+                      <TableCell>
+                        <Badge className={r.status === 'credited' ? 'bg-green-100 text-green-700' : r.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}>
+                          {r.status === 'credited' ? '\u05d6\u05d5\u05db\u05d4' : r.status === 'not_found' ? '\u05dc\u05d0 \u05e0\u05de\u05e6\u05d0' : r.status === 'credit_exists' ? '\u05d6\u05d9\u05db\u05d5\u05d9 \u05e7\u05d9\u05d9\u05dd' : r.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-purple-700">{r.credit_doc_number || '-'}</TableCell>
+                      <TableCell>{r.amount ? `\u20aa${r.amount}` : '-'}</TableCell>
+                      <TableCell className="text-xs text-gray-500">{r.error || ''}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Orders Preview (before processing) */}
       {orders.length > 0 && results.length === 0 && (
