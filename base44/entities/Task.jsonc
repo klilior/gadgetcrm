@@ -1,0 +1,75 @@
+{
+  "name": "Task",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "\u05db\u05d5\u05ea\u05e8\u05ea \u05d4\u05de\u05e9\u05d9\u05de\u05d4"
+    },
+    "due_date": {
+      "type": "string",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d9\u05e2\u05d3 (\u05d1\u05e4\u05d5\u05e8\u05de\u05d8 YYYY-MM-DDTHH:MM:SS)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "completed"
+      ],
+      "default": "pending",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1"
+    },
+    "assigned_to_id": {
+      "type": "string",
+      "description": "\u05d4\u05d5\u05e7\u05e6\u05d4 \u05dc\u05e2\u05d5\u05d1\u05d3"
+    },
+    "ticket_id": {
+      "type": "string",
+      "description": "\u05d8\u05d9\u05e7\u05d8 \u05de\u05e9\u05d5\u05d9\u05da"
+    }
+  },
+  "required": [
+    "title",
+    "due_date",
+    "assigned_to_id",
+    "ticket_id"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "assigned_to_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "write": {
+      "$or": [
+        {
+          "assigned_to_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

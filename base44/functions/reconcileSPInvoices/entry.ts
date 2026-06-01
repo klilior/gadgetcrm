@@ -61,6 +61,12 @@ async function findOrCreateAccount(creds, { name, phone, city, address }) {
   return id;
 }
 
+// ========== SAFETY LOCK ==========
+// יצירת חשבוניות חדשות חסומה. הפונקציה רק תקשר חשבוניות קיימות.
+// כדי לאפשר יצירה מחדש, שנה את הערך ל-true.
+const ALLOW_INVOICE_CREATION = false;
+// ==================================
+
 Deno.serve(async (req) => {
   const startTime = new Date();
   const base44 = createClientFromRequest(req);
@@ -155,7 +161,16 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Step 2: No invoice found → create one
+        // Step 2: No invoice found
+        if (!ALLOW_INVOICE_CREATION) {
+          r.status = 'blocked';
+          r.error = 'יצירת חשבוניות חסומה (ALLOW_INVOICE_CREATION=false)';
+          console.log(`[Reconcile] ${miraklId}: BLOCKED - invoice creation disabled`);
+          results.push(r);
+          continue;
+        }
+
+        // Create invoice
         const customerName = `${order.customer_first_name || ''} ${order.customer_last_name || ''}`.trim() || 'לקוח סופר-פארם';
         const accountId = await findOrCreateAccount(creds, {
           name: customerName,

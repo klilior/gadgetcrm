@@ -51,47 +51,5 @@
   "required": [
     "uploaded_by",
     "file_name"
-  ],
-  "rls": {
-    "create": {
-      "data.uploaded_by": "{{user.id}}"
-    },
-    "read": {
-      "$or": [
-        {
-          "data.uploaded_by": "{{user.id}}"
-        },
-        {
-          "user_condition": {
-            "role": {
-              "$in": [
-                "admin",
-                "\u05de\u05e0\u05d4\u05dc"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    "update": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    }
-  }
+  ]
 }

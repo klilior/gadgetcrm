@@ -31,55 +31,5 @@
   "required": [
     "carrier_code",
     "carrier_name"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    },
-    "read": {
-      "$or": [
-        {
-          "data.is_active": true
-        },
-        {
-          "user_condition": {
-            "role": {
-              "$in": [
-                "admin",
-                "\u05de\u05e0\u05d4\u05dc",
-                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    "update": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    }
-  }
+  ]
 }

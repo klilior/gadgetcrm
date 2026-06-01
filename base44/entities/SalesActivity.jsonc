@@ -47,58 +47,5 @@
     "activity_date",
     "metric_type",
     "metric_value"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    },
-    "read": {
-      "$or": [
-        {
-          "data.user_id": "{{user.id}}"
-        },
-        {
-          "data.employee_id": "{{user.id}}"
-        },
-        {
-          "user_condition": {
-            "role": {
-              "$in": [
-                "admin",
-                "\u05de\u05e0\u05d4\u05dc",
-                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    "update": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    }
-  }
+  ]
 }

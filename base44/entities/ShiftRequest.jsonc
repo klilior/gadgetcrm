@@ -1,0 +1,93 @@
+{
+  "name": "ShiftRequest",
+  "type": "object",
+  "properties": {
+    "employee_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05e2\u05d5\u05d1\u05d3 (Relation to Employee)"
+    },
+    "week_start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05d9\u05d5\u05dd \u05e8\u05d0\u05e9\u05d5\u05df \u05e9\u05dc \u05d4\u05e9\u05d1\u05d5\u05e2 \u05d4\u05e8\u05dc\u05d5\u05d5\u05e0\u05d8\u05d9"
+    },
+    "day": {
+      "type": "string",
+      "enum": [
+        "\u05d0",
+        "\u05d1",
+        "\u05d2",
+        "\u05d3",
+        "\u05d4",
+        "\u05d5",
+        "\u05e9"
+      ],
+      "description": "\u05d4\u05d9\u05d5\u05dd \u05d1\u05e9\u05d1\u05d5\u05e2"
+    },
+    "shift_type": {
+      "type": "string",
+      "enum": [
+        "\u05d1\u05d5\u05e7\u05e8",
+        "\u05e2\u05e8\u05d1"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05de\u05e9\u05de\u05e8\u05ea \u05d4\u05de\u05d1\u05d5\u05e7\u05e9\u05ea"
+    },
+    "is_available": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u05d4\u05d0\u05dd \u05d4\u05e2\u05d5\u05d1\u05d3 \u05d6\u05de\u05d9\u05df \u05dc\u05de\u05e9\u05de\u05e8\u05ea \u05d6\u05d5"
+    },
+    "late_arrival_time": {
+      "type": "string",
+      "description": "\u05e9\u05e2\u05ea \u05d4\u05d2\u05e2\u05d4 \u05de\u05d0\u05d5\u05d7\u05e8\u05ea (\u05d0\u05d5\u05e4\u05e6\u05d9\u05d5\u05e0\u05dc\u05d9, \u05e4\u05d5\u05e8\u05de\u05d8 HH:mm)"
+    },
+    "constraints": {
+      "type": "string",
+      "description": "\u05d0\u05d9\u05dc\u05d5\u05e6\u05d9\u05dd \u05d5\u05d4\u05e2\u05e8\u05d5\u05ea \u05de\u05d4\u05e2\u05d5\u05d1\u05d3"
+    }
+  },
+  "required": [
+    "employee_id",
+    "week_start_date",
+    "day",
+    "shift_type"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "employee_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "write": {
+      "$or": [
+        {
+          "employee_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

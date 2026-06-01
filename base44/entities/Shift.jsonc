@@ -1,0 +1,63 @@
+{
+  "name": "Shift",
+  "type": "object",
+  "properties": {
+    "shift_date": {
+      "type": "string",
+      "format": "date",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05de\u05e9\u05de\u05e8\u05ea"
+    },
+    "shift_type": {
+      "type": "string",
+      "enum": [
+        "\u05d1\u05d5\u05e7\u05e8",
+        "\u05e2\u05e8\u05d1"
+      ],
+      "description": "\u05de\u05e9\u05de\u05e8\u05ea"
+    },
+    "shift_employees": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u05e2\u05d5\u05d1\u05d3\u05d9\u05dd \u05d1\u05de\u05e9\u05de\u05e8\u05ea"
+    }
+  },
+  "required": [
+    "shift_date",
+    "shift_type"
+  ],
+  "rls": {
+    "read": {
+      " $or": [
+        {
+          "shift_employees": {
+            "$in": [
+              "{{user.id}}"
+            ]
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "\u05de\u05e0\u05d4\u05dc"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          }
+        }
+      ]
+    },
+    "write": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

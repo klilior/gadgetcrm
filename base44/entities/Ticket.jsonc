@@ -1,0 +1,183 @@
+{
+  "name": "Ticket",
+  "type": "object",
+  "properties": {
+    "subject": {
+      "type": "string",
+      "description": "\u05e0\u05d5\u05e9\u05d0 \u05e7\u05e6\u05e8"
+    },
+    "ticket_number": {
+      "type": "number",
+      "description": "\u05de\u05e1' \u05d8\u05d9\u05e7\u05d8",
+      "unique": true
+    },
+    "customer_id": {
+      "type": "string",
+      "description": "\u05dc\u05e7\u05d5\u05d7"
+    },
+    "contact_channel": {
+      "type": "string",
+      "enum": [
+        "whatsapp",
+        "phone",
+        "email",
+        "in_person",
+        "website"
+      ],
+      "description": "\u05e2\u05e8\u05d5\u05e5 \u05e4\u05e0\u05d9\u05d4"
+    },
+    "last_channel": {
+      "type": "string",
+      "enum": [
+        "whatsapp",
+        "phone",
+        "email",
+        "website"
+      ],
+      "description": "\u05e2\u05e8\u05d5\u05e5 \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "\u05d0\u05ea\u05e8",
+        "Mirakl-Zap",
+        "Mirakl-\u05e1\u05d5\u05e4\u05e8\u05e4\u05d0\u05e8\u05dd",
+        "\u05d8\u05dc\u05e4\u05d5\u05df-PayCall",
+        "whatsapp",
+        "email"
+      ],
+      "description": "\u05de\u05e7\u05d5\u05e8"
+    },
+    "order_number": {
+      "type": "string",
+      "description": "\u05de\u05e1' \u05d4\u05d6\u05de\u05e0\u05d4"
+    },
+    "inquiry_type": {
+      "type": "string",
+      "enum": [
+        "\u05e9\u05d9\u05dc\u05d5\u05d7",
+        "\u05ea\u05de\u05d9\u05db\u05d4 \u05d1\u05de\u05d5\u05e6\u05e8",
+        "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05d6\u05de\u05e0\u05d4",
+        "\u05ea\u05dc\u05d5\u05e0\u05d4",
+        "\u05d7\u05e7\u05d9\u05e8\u05ea \u05de\u05db\u05d9\u05e8\u05d4",
+        "\u05e9\u05d9\u05e8\u05d5\u05ea \u05dc\u05e7\u05d5\u05d7\u05d5\u05ea",
+        "\u05e9\u05d9\u05e8\u05d5\u05ea \u05ea\u05d9\u05e7\u05d5\u05e0\u05d9\u05dd \u05d1\u05de\u05e2\u05d1\u05d3\u05d4",
+        "\u05e9\u05d9\u05e8\u05d5\u05ea \u05d5\u05d0\u05d7\u05e8\u05d9\u05d5\u05ea"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05e4\u05e0\u05d9\u05d4"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "\u05e0\u05de\u05d5\u05db\u05d4",
+        "\u05d1\u05d9\u05e0\u05d5\u05e0\u05d9\u05ea",
+        "\u05d2\u05d1\u05d5\u05d4\u05d4",
+        "\u05d3\u05d7\u05d5\u05e3"
+      ],
+      "default": "\u05d1\u05d9\u05e0\u05d5\u05e0\u05d9\u05ea",
+      "description": "\u05e2\u05d3\u05d9\u05e4\u05d5\u05ea"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "\u05d7\u05d3\u05e9",
+        "\u05d1\u05d8\u05d9\u05e4\u05d5\u05dc",
+        "\u05de\u05de\u05ea\u05d9\u05df \u05dc\u05dc\u05e7\u05d5\u05d7",
+        "\u05de\u05de\u05ea\u05d9\u05df \u05dc\u05e1\u05e8\u05d9\u05d0\u05dc\u05d9",
+        "\u05de\u05de\u05ea\u05d9\u05df \u05dc\u05de\u05dc\u05d0\u05d9",
+        "\u05de\u05de\u05ea\u05d9\u05df \u05dc\u05e9\u05d9\u05dc\u05d5\u05d7",
+        "\u05e0\u05e1\u05d2\u05e8",
+        "\u05e0\u05e1\u05d2\u05e8 \u05dc\u05dc\u05d0 \u05de\u05e2\u05e0\u05d4"
+      ],
+      "default": "\u05d7\u05d3\u05e9",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1"
+    },
+    "assigned_to": {
+      "type": "string",
+      "description": "\u05de\u05d5\u05e7\u05e6\u05d4 \u05dc"
+    },
+    "shift": {
+      "type": "string",
+      "enum": [
+        "\u05d1\u05d5\u05e7\u05e8",
+        "\u05e2\u05e8\u05d1"
+      ],
+      "description": "\u05de\u05e9\u05de\u05e8\u05ea"
+    },
+    "description": {
+      "type": "string",
+      "description": "\u05ea\u05d9\u05d0\u05d5\u05e8"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea \u05e4\u05e0\u05d9\u05de\u05d9\u05d5\u05ea"
+    },
+    "thread_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e9\u05e8\u05e9\u05d5\u05e8/\u05e9\u05d9\u05d7\u05d4"
+    },
+    "email_message_id": {
+      "type": "string",
+      "description": "Message-ID \u05e9\u05dc \u05d4\u05de\u05d9\u05d9\u05dc \u05d4\u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "email_references": {
+      "type": "string",
+      "description": "References header \u05dc\u05e9\u05e8\u05e9\u05d5\u05e8 \u05de\u05d9\u05d9\u05dc\u05d9\u05dd"
+    },
+    "first_response": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d2\u05d5\u05d1\u05d4 \u05e8\u05d0\u05e9\u05d5\u05e0\u05d4"
+    },
+    "closed_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05e0\u05e1\u05d2\u05e8 \u05d1\u05ea\u05d0\u05e8\u05d9\u05da"
+    },
+    "sla_plan": {
+      "type": "string",
+      "enum": [
+        "\u05e9\u05d9\u05e8\u05d5\u05ea",
+        "\u05ea\u05dc\u05d5\u05e0\u05d4",
+        "\u05de\u05db\u05d9\u05e8\u05d4"
+      ],
+      "description": "\u05ea\u05d5\u05db\u05e0\u05d9\u05ea SLA"
+    },
+    "sla_target": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05d9\u05e2\u05d3 SLA"
+    },
+    "sla_breached": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d7\u05e8\u05d9\u05d2\u05ea SLA"
+    },
+    "customer_email": {
+      "type": "string",
+      "description": "\u05d0\u05d9\u05de\u05d9\u05d9\u05dc \u05dc\u05e7\u05d5\u05d7"
+    },
+    "customer_phone": {
+      "type": "string",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05dc\u05e7\u05d5\u05d7"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05dc\u05e7\u05d5\u05d7"
+    },
+    "whatsapp_draft": {
+      "type": "string",
+      "description": "\u05d8\u05d9\u05d5\u05d8\u05ea \u05ea\u05e9\u05d5\u05d1\u05d4 \u05dc\u05d5\u05d5\u05d0\u05d8\u05e1\u05d0\u05e4"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u05ea\u05d2\u05d9\u05d5\u05ea \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05d5\u05ea \u05d5\u05d9\u05d3\u05e0\u05d9\u05d5\u05ea"
+    }
+  },
+  "required": [
+    "subject"
+  ]
+}

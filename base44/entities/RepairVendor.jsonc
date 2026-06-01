@@ -27,38 +27,5 @@
   "required": [
     "name",
     "mobile"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    },
-    "read": null,
-    "update": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "\u05de\u05e0\u05d4\u05dc"
-          ]
-        }
-      }
-    }
-  }
+  ]
 }

@@ -1,0 +1,90 @@
+{
+  "name": "ShiftAssignment",
+  "type": "object",
+  "properties": {
+    "weekly_schedule_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05e1\u05d9\u05d3\u05d5\u05e8 \u05d4\u05e9\u05d1\u05d5\u05e2\u05d9 (Relation)"
+    },
+    "day": {
+      "type": "string",
+      "enum": [
+        "\u05d0",
+        "\u05d1",
+        "\u05d2",
+        "\u05d3",
+        "\u05d4",
+        "\u05d5",
+        "\u05e9"
+      ],
+      "description": "\u05d4\u05d9\u05d5\u05dd \u05d1\u05e9\u05d1\u05d5\u05e2"
+    },
+    "shift_type": {
+      "type": "string",
+      "enum": [
+        "\u05d1\u05d5\u05e7\u05e8",
+        "\u05e2\u05e8\u05d1"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05de\u05e9\u05de\u05e8\u05ea"
+    },
+    "start_time": {
+      "type": "string",
+      "description": "\u05e9\u05e2\u05ea \u05d4\u05ea\u05d7\u05dc\u05d4 (\u05e4\u05d5\u05e8\u05de\u05d8 HH:mm)"
+    },
+    "end_time": {
+      "type": "string",
+      "description": "\u05e9\u05e2\u05ea \u05e1\u05d9\u05d5\u05dd (\u05e4\u05d5\u05e8\u05de\u05d8 HH:mm)"
+    },
+    "assigned_employee_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u05de\u05d6\u05d4\u05d9 \u05d4\u05e2\u05d5\u05d1\u05d3\u05d9\u05dd \u05d4\u05de\u05e9\u05d5\u05d1\u05e6\u05d9\u05dd \u05dc\u05de\u05e9\u05de\u05e8\u05ea"
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d5\u05ea \u05dc\u05de\u05e9\u05de\u05e8\u05ea \u05d4\u05e1\u05e4\u05e6\u05d9\u05e4\u05d9\u05ea"
+    }
+  },
+  "required": [
+    "weekly_schedule_id",
+    "day",
+    "shift_type"
+  ],
+  "rls": {
+    "read": {
+      " $or": [
+        {
+          "assigned_employee_ids": {
+            "$in": [
+              "{{user.id}}"
+            ]
+          }
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "\u05de\u05e0\u05d4\u05dc",
+                "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "write": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "\u05de\u05e0\u05d4\u05dc",
+            "\u05de\u05e0\u05d4\u05dc \u05de\u05e9\u05de\u05e8\u05ea"
+          ]
+        }
+      }
+    }
+  }
+}
