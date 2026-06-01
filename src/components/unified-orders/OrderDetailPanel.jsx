@@ -276,7 +276,13 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </Button>
         )}
 
-        {/* 3 Shipping Buttons - always visible */}
+        {/* 3 Shipping Buttons - hidden for on-hold orders */}
+        {order.source === 'woocommerce' && order.status === 'on-hold' ? (
+          <div className="bg-yellow-50 border border-yellow-300 rounded-full px-4 py-2 flex items-center gap-2 text-yellow-800 text-sm font-medium">
+            <Truck className="w-4 h-4" />
+            ⚠️ הזמנה מושהית — יש לשנות סטטוס ל״בטיפול״ לפני משלוח
+          </div>
+        ) : (
         <div className="flex flex-wrap items-center gap-2">
           {/* Cargo - Blue - שליח עד הבית */}
           <Button
@@ -325,6 +331,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
             {shippingType === 'getpackage' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
           </Button>
         </div>
+        )}
 
         {/* Invoice button */}
         {onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id) && (
