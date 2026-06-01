@@ -39,6 +39,7 @@ export default function MiraklInvoiceBatch() {
   const [creditSummary, setCreditSummary] = useState(null);
   const [isCreditProcessing, setIsCreditProcessing] = useState(false);
   const [creditInput, setCreditInput] = useState('');
+  const [isCreditLoading, setIsCreditLoading] = useState(false);
 
   // Parse Excel data pasted as JSON (simplified approach)
   const handlePasteData = useCallback((e) => {
@@ -257,6 +258,7 @@ export default function MiraklInvoiceBatch() {
   const handleCreditFileUpload = useCallback(async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setIsCreditLoading(true);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       const extraction = await base44.integrations.Core.ExtractDataFromUploadedFile({
@@ -269,7 +271,7 @@ export default function MiraklInvoiceBatch() {
               items: {
                 type: "object",
                 properties: {
-                  "מספר מסמך": { type: "string" },
+                  doc_number: { type: "string", description: "מספר מסמך" },
                 }
               }
             }
@@ -278,11 +280,21 @@ export default function MiraklInvoiceBatch() {
       });
       let rawRows = extraction?.output?.rows || extraction?.output || [];
       if (!Array.isArray(rawRows)) rawRows = [];
-      const docNums = [...new Set(rawRows.map(r => r['מספר מסמך']).filter(Boolean))];
-      setCreditDocNumbers(docNums);
-      toast.success(`נטענו ${docNums.length} מספרי חשבוניות ייחודיים`);
+      const docNums = [...new Set(rawRows.map(r => {
+        const val = r.doc_number || r['מספר מסמך'] || r['docnum'] || '';
+        return String(val).trim();
+      }).filter(Boolean))];
+      if (docNums.length === 0) {
+        toast.error('לא נמצאו מספרי חשבוניות בקובץ');
+      } else {
+        setCreditDocNumbers(docNums);
+        toast.success(`נטענו ${docNums.length} מספרי חשבוניות ייחודיים`);
+      }
     } catch (err) {
-      toast.error('שגיאה: ' + err.message);
+      console.error('Credit file upload error:', err);
+      toast.error('שגיאה בקריאת הקובץ: ' + err.message);
+    } finally {
+      setIsCreditLoading(false);
     }
   }, []);
 
@@ -597,11 +609,17 @@ export default function MiraklInvoiceBatch() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-4">
+          <div className="flex gap-4 items-end">
             <div className="flex-1">
               <label className="text-sm text-gray-600 mb-1 block">טען קובץ Excel עם עמודת ״מספר מסמך״</label>
-              <Input type="file" accept=".xlsx,.xls,.csv" onChange={handleCreditFileUpload} />
+              <Input type="file" accept=".xlsx,.xls,.csv" onChange={handleCreditFileUpload} disabled={isCreditLoading} />
             </div>
+            {isCreditLoading && (
+              <div className="flex items-center gap-2 text-blue-700 text-sm pb-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                טוען קובץ...
+              </div>
+            )}
           </div>
           <div>
             <label className="text-sm text-gray-600 mb-1 block">או הדבק מספרי חשבוניות (מופרדים בשורה חדשה / פסיק)</label>
