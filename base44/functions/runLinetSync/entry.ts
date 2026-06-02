@@ -461,7 +461,7 @@ async function executeLinetSync(base44, body = {}) {
               const result = await upsertTransaction(base44, txData);
               if (result === 'created') stats.created++; else stats.updated++;
               // Throttle between line items to avoid rate limiting
-              await delay(300);
+              await delay(800);
 
               if (createLineContracts && !is_credit && quantity > 0) {
                 const carrierCode = detectCarrier(sku, product_name, carrierMappings);
@@ -479,7 +479,7 @@ async function executeLinetSync(base44, body = {}) {
 
       if (documents.length < BATCH_SIZE) { moreData = false; } else { offset += BATCH_SIZE; }
       // Throttle between batches to avoid rate limiting
-      await delay(3000);
+      await delay(5000);
     }
 
     const runFinishedAt = new Date().toISOString();

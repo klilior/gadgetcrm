@@ -71,6 +71,12 @@ Deno.serve(async (req) => {
 
     } catch (error) {
         console.error("❌ Hourly Sync Error:", error.message);
-        return Response.json({ success: false, error: error.message }, { status: 500 });
+        // Return 200 even on failure to prevent automation from auto-disabling
+        // after consecutive failures (e.g. temporary rate limits or Linet downtime)
+        return Response.json({ 
+            success: false, 
+            error: error.message,
+            note: 'Returned 200 to keep automation alive despite error'
+        }, { status: 200 });
     }
 });
