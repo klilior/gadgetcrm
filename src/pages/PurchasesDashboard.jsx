@@ -12,6 +12,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianG
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import useSuppliers from "../components/hooks/useSuppliers";
+import RecurringExpenseTable from "../components/recurring-expenses/RecurringExpenseTable";
 
 
 function FileActions({ invoiceId, sourceIntake }) {
@@ -199,6 +200,23 @@ export default function PurchasesDashboard() {
   const sum = (arr) => arr.reduce((acc, r) => acc + (Number(r.total_with_vat) || 0), 0);
   const purchasesSum = sum(purchases);
   const creditsSum = sum(credits);
+  const getInvoiceSupplier = (invoice) => suppliersMap[invoice.supplier] || suppliersMap[invoice.detected_supplier_id] || {};
+  const isGoodsPurchase = (invoice) => {
+    const supplier = getInvoiceSupplier(invoice);
+    return invoice.is_goods_invoice === true || supplier.supplier_type === 'goods' || supplier.include_in_goods_ratio === true;
+  };
+  const isRecurringPurchase = (invoice) => {
+    const supplier = getInvoiceSupplier(invoice);
+    return invoice.is_recurring_expense === true || supplier.is_recurring_expense === true || supplier.is_recurring === true;
+  };
+  const goodsPurchasesSum = sum(purchases.filter(isGoodsPurchase));
+  const recurringExpensesSum = sum(purchases.filter(r => !isGoodsPurchase(r) && isRecurringPurchase(r)));
+  const otherExpensesSum = purchasesSum - goodsPurchasesSum - recurringExpensesSum;
+  const recurringSuppliers = useMemo(() => suppliersList.filter(s =>
+    s.is_recurring_expense === true ||
+    s.is_recurring === true ||
+    (s.recurring_frequency && s.recurring_frequency !== 'none')
+  ), [suppliersList]);
 
   // Status counts (in selected date range)
   const statusCounts = useMemo(() => {
@@ -396,16 +414,29 @@ export default function PurchasesDashboard() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="glass-card border-0">
-          <CardHeader><CardTitle>סה״כ רכישות - {dateRangeLabel} (מאושרות)</CardTitle></CardHeader>
+          <CardHeader><CardTitle>סה״כ הוצאות - {dateRangeLabel}</CardTitle></CardHeader>
           <CardContent className="text-3xl font-bold text-emerald-700">₪ {purchasesSum.toLocaleString()}</CardContent>
         </Card>
         <Card className="glass-card border-0">
-          <CardHeader><CardTitle>סה״כ זיכויים - {dateRangeLabel} (מאושרים)</CardTitle></CardHeader>
-          <CardContent className="text-3xl font-bold text-rose-700">₪ {creditsSum.toLocaleString()}</CardContent>
+          <CardHeader><CardTitle>קניית סחורה</CardTitle></CardHeader>
+          <CardContent className="text-3xl font-bold text-blue-700">₪ {goodsPurchasesSum.toLocaleString()}</CardContent>
+        </Card>
+        <Card className="glass-card border-0">
+          <CardHeader><CardTitle>הוצאות קבועות</CardTitle></CardHeader>
+          <CardContent className="text-3xl font-bold text-amber-700">₪ {recurringExpensesSum.toLocaleString()}</CardContent>
+        </Card>
+        <Card className="glass-card border-0">
+          <CardHeader><CardTitle>זיכויים / אחרות</CardTitle></CardHeader>
+          <CardContent className="space-y-1">
+            <div className="text-xl font-bold text-rose-700">זיכויים: ₪ {creditsSum.toLocaleString()}</div>
+            <div className="text-sm font-semibold text-gray-600">אחרות: ₪ {otherExpensesSum.toLocaleString()}</div>
+          </CardContent>
         </Card>
       </div>
+
+      <RecurringExpenseTable recurringSuppliers={recurringSuppliers} />
 
       <Card className="glass-card border-0">
         <CardHeader><CardTitle>כל הספקים - {dateRangeLabel} (לפי סכום יורד)</CardTitle></CardHeader>

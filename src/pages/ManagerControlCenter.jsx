@@ -172,8 +172,21 @@ export default function ManagerControlCenter() {
     });
 
     const purchasesInvoices = invoices.filter(i => i.doc_type === 'חשבונית מס');
+    const getInvoiceSupplier = (invoice) => suppliersMap[invoice.supplier] || suppliersMap[invoice.detected_supplier_id] || {};
+    const isGoodsInvoice = (invoice) => {
+      const supplier = getInvoiceSupplier(invoice);
+      return invoice.is_goods_invoice === true || supplier.supplier_type === 'goods' || supplier.include_in_goods_ratio === true;
+    };
+    const isRecurringInvoice = (invoice) => {
+      const supplier = getInvoiceSupplier(invoice);
+      return invoice.is_recurring_expense === true || supplier.is_recurring_expense === true || supplier.is_recurring === true;
+    };
     const purchasesTotal = purchasesInvoices.reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
+    const goodsPurchases = purchasesInvoices.filter(isGoodsInvoice).reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
+    const recurringExpenses = purchasesInvoices.filter(i => !isGoodsInvoice(i) && isRecurringInvoice(i)).reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
+    const otherExpenses = purchasesTotal - goodsPurchases - recurringExpenses;
     const ratio = grossSales > 0 ? (purchasesTotal / grossSales) * 100 : 0;
+    const goodsRatio = grossSales > 0 ? (goodsPurchases / grossSales) * 100 : 0;
 
     // Today's sales (gross with VAT) — already signed
     const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -188,11 +201,15 @@ export default function ManagerControlCenter() {
       devicesNet: Math.round(devicesNet), linesNet: Math.round(linesNet),
       accessoriesNet: Math.round(accessoriesNet),
       purchasesTotal: Math.round(purchasesTotal),
+      goodsPurchases: Math.round(goodsPurchases),
+      recurringExpenses: Math.round(recurringExpenses),
+      otherExpenses: Math.round(otherExpenses),
       ratio: ratio.toFixed(1),
+      goodsRatio: goodsRatio.toFixed(1),
       todayGross: Math.round(todayGross * 100) / 100,
       todayNet: Math.round(todayNet * 100) / 100
     };
-  }, [uniqueSales, invoices, mappings]);
+  }, [uniqueSales, invoices, mappings, suppliersMap]);
 
   // Rep performance
   const repPerformance = useMemo(() => {
@@ -366,7 +383,7 @@ export default function ManagerControlCenter() {
       )}
 
       {/* Top KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
         <Card className="border-0 shadow-lg bg-gradient-to-br from-cyan-600 to-cyan-500 text-white">
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-1">
@@ -389,16 +406,35 @@ export default function ManagerControlCenter() {
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-1">
               <Package className="w-4 h-4 text-orange-200" />
-              <span className="text-xs text-orange-100">הוצאות שנקלטו</span>
+              <span className="text-xs text-orange-100">סה״כ הוצאות</span>
             </div>
             <p className="text-xl font-bold">₪{kpiData.purchasesTotal.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-600 to-blue-500 text-white">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <ShoppingBag className="w-4 h-4 text-blue-200" />
+              <span className="text-xs text-blue-100">קניית סחורה</span>
+            </div>
+            <p className="text-xl font-bold">₪{kpiData.goodsPurchases.toLocaleString()}</p>
+            <p className="text-xs text-blue-100 mt-0.5">{kpiData.goodsRatio}% מהמחזור</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-600 to-amber-500 text-white">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Clock className="w-4 h-4 text-amber-200" />
+              <span className="text-xs text-amber-100">הוצאות קבועות</span>
+            </div>
+            <p className="text-xl font-bold">₪{kpiData.recurringExpenses.toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-lg bg-white">
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-1">
               <Percent className="w-4 h-4 text-gray-500" />
-              <span className="text-xs text-gray-500">הוצאות % מהמכירות</span>
+              <span className="text-xs text-gray-500">סה״כ הוצאות %</span>
             </div>
             <p className={`text-xl font-bold rounded px-2 py-0.5 inline-block ${getRatioColor(kpiData.ratio)}`}>{kpiData.ratio}%</p>
           </CardContent>
