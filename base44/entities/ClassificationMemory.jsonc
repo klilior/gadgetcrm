@@ -1,0 +1,98 @@
+{
+  "name": "ClassificationMemory",
+  "type": "object",
+  "properties": {
+    "supplier_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e1\u05e4\u05e7",
+      "index": true
+    },
+    "supplier_name_normalized": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05e1\u05e4\u05e7 \u05de\u05e0\u05d5\u05e8\u05de\u05dc",
+      "index": true
+    },
+    "text_pattern": {
+      "type": "string",
+      "description": "\u05ea\u05d1\u05e0\u05d9\u05ea \u05d8\u05e7\u05e1\u05d8 \u05dc\u05d6\u05d9\u05d4\u05d5\u05d9"
+    },
+    "document_type": {
+      "type": "string",
+      "description": "\u05e1\u05d5\u05d2 \u05de\u05e1\u05de\u05da"
+    },
+    "line_pattern": {
+      "type": "string",
+      "description": "\u05ea\u05d1\u05e0\u05d9\u05ea \u05e9\u05d5\u05e8\u05ea \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea"
+    },
+    "default_category": {
+      "type": "string",
+      "description": "\u05e7\u05d8\u05d2\u05d5\u05e8\u05d9\u05d9\u05ea \u05d1\u05e8\u05d9\u05e8\u05ea \u05de\u05d7\u05d3\u05dc \u05dc\u05de\u05e1\u05de\u05da"
+    },
+    "default_line_category": {
+      "type": "string",
+      "enum": [
+        "goods",
+        "shipping",
+        "service",
+        "advertising",
+        "software",
+        "rent",
+        "communication",
+        "payment_fee",
+        "other"
+      ],
+      "description": "\u05e7\u05d8\u05d2\u05d5\u05e8\u05d9\u05d9\u05ea \u05e9\u05d5\u05e8\u05d4"
+    },
+    "goods_type": {
+      "type": "string",
+      "enum": [
+        "smartphones",
+        "accessories",
+        "tv",
+        "small_electrical",
+        "computers",
+        "tablets",
+        "lines",
+        "other"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05e1\u05d7\u05d5\u05e8\u05d4"
+    },
+    "include_in_goods_ratio": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d4\u05d0\u05dd \u05dc\u05db\u05dc\u05d5\u05dc \u05d1\u05d0\u05d7\u05d5\u05d6 \u05e1\u05d7\u05d5\u05e8\u05d4"
+    },
+    "confidence_score": {
+      "type": "number",
+      "default": 80,
+      "description": "\u05e6\u05d9\u05d5\u05df \u05d5\u05d3\u05d0\u05d5\u05ea"
+    },
+    "learned_from": {
+      "type": "string",
+      "enum": [
+        "ai",
+        "manual_correction",
+        "supplier_default"
+      ],
+      "description": "\u05de\u05e7\u05d5\u05e8 \u05d4\u05dc\u05de\u05d9\u05d3\u05d4"
+    },
+    "times_seen": {
+      "type": "number",
+      "default": 1,
+      "description": "\u05db\u05de\u05d4 \u05e4\u05e2\u05de\u05d9\u05dd \u05d4\u05d5\u05e4\u05d9\u05e2"
+    },
+    "last_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05e0\u05e8\u05d0\u05d4 \u05dc\u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u05e4\u05e2\u05d9\u05dc"
+    }
+  },
+  "required": [
+    "supplier_id"
+  ]
+}

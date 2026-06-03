@@ -1,0 +1,62 @@
+{
+  "name": "MissingInvoiceAlerts",
+  "type": "object",
+  "properties": {
+    "supplier_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e1\u05e4\u05e7",
+      "index": true
+    },
+    "expected_period": {
+      "type": "string",
+      "description": "\u05ea\u05e7\u05d5\u05e4\u05d4 \u05e6\u05e4\u05d5\u05d9\u05d4",
+      "index": true
+    },
+    "expected_date_range": {
+      "type": "string",
+      "description": "\u05d8\u05d5\u05d5\u05d7 \u05ea\u05d0\u05e8\u05d9\u05db\u05d9\u05dd \u05e6\u05e4\u05d5\u05d9"
+    },
+    "expected_amount_range": {
+      "type": "string",
+      "description": "\u05d8\u05d5\u05d5\u05d7 \u05e1\u05db\u05d5\u05dd \u05e6\u05e4\u05d5\u05d9"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "resolved",
+        "ignored"
+      ],
+      "default": "open",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1"
+    },
+    "alert_message": {
+      "type": "string",
+      "description": "\u05d4\u05d5\u05d3\u05e2\u05ea \u05d4\u05ea\u05e8\u05d0\u05d4"
+    },
+    "alert_type": {
+      "type": "string",
+      "enum": [
+        "missing_invoice",
+        "amount_variance"
+      ],
+      "default": "missing_invoice",
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05ea\u05e8\u05d0\u05d4"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d9\u05e6\u05d9\u05e8\u05d4"
+    },
+    "resolved_by_invoice_id": {
+      "type": "string",
+      "description": "\u05e0\u05e4\u05ea\u05e8 \u05e2\u05dc \u05d9\u05d3\u05d9 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea",
+      "index": true
+    }
+  },
+  "required": [
+    "supplier_id",
+    "expected_period",
+    "status"
+  ]
+}
