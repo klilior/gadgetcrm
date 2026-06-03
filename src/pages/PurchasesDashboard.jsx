@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import useSuppliers from "../components/hooks/useSuppliers";
 import RecurringExpenseTable from "../components/recurring-expenses/RecurringExpenseTable";
+import { getInvoiceClassification } from "../components/utils/invoiceClassification";
 
 
 function FileActions({ invoiceId, sourceIntake }) {
@@ -103,6 +104,9 @@ export default function PurchasesDashboard() {
   const [customTo, setCustomTo] = useState("");
   const [searchText, setSearchText] = useState("");
   const [sortOrder, setSortOrder] = useState("desc"); // desc = newest first, asc = oldest first
+  const [filterClassification, setFilterClassification] = useState(() => new URLSearchParams(window.location.search).get('classification') || 'all');
+  const [editingInvoice, setEditingInvoice] = useState(null);
+  const [editForm, setEditForm] = useState({ classification: 'goods', expense_category: '' });
   // Preview state for row click
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -127,6 +131,30 @@ export default function PurchasesDashboard() {
       setPreviewUrl(url);
       setPreviewOpen(true);
     }
+  };
+
+  const openEdit = (invoice) => {
+    const classification = getInvoiceClassification(invoice, suppliersMap);
+    setEditingInvoice(invoice);
+    setEditForm({
+      classification: classification.type,
+      expense_category: invoice.expense_category || classification.category || '',
+    });
+  };
+
+  const saveManualClassification = async () => {
+    if (!editingInvoice) return;
+    const data = {
+      classification_status: 'manually_corrected',
+      classification_confidence: 100,
+      expense_category: editForm.expense_category,
+      is_goods_invoice: editForm.classification === 'goods',
+      is_recurring_expense: editForm.classification === 'recurring',
+      notes: `${editingInvoice.notes || ''}\n[manual_classification_override] סיווג ידני: ${editForm.classification}`.trim(),
+    };
+    await base44.entities.Invoices.update(editingInvoice.id, data);
+    setRows(prev => prev.map(row => row.id === editingInvoice.id ? { ...row, ...data } : row));
+    setEditingInvoice(null);
   };
 
 
@@ -172,6 +200,7 @@ export default function PurchasesDashboard() {
     let result = rows.filter(r => {
       if (filterSupplier !== "all" && r.supplier !== filterSupplier) return false;
       if (filterStatus !== "all" && r.extraction_status !== filterStatus) return false;
+      if (filterClassification !== "all" && getInvoiceClassification(r, suppliersMap).type !== filterClassification) return false;
       if (!inDateRange(r)) return false;
       // Search by doc_number
       if (searchText.trim()) {
@@ -189,7 +218,7 @@ export default function PurchasesDashboard() {
       return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
     });
     return result;
-  }, [rows, filterSupplier, filterStatus, dateRange, customFrom, customTo, searchText, sortOrder, suppliersMap]);
+  }, [rows, filterSupplier, filterStatus, filterClassification, dateRange, customFrom, customTo, searchText, sortOrder, suppliersMap]);
 
   const now = new Date();
 
@@ -200,17 +229,10 @@ export default function PurchasesDashboard() {
   const sum = (arr) => arr.reduce((acc, r) => acc + (Number(r.total_with_vat) || 0), 0);
   const purchasesSum = sum(purchases);
   const creditsSum = sum(credits);
-  const getInvoiceSupplier = (invoice) => suppliersMap[invoice.supplier] || suppliersMap[invoice.detected_supplier_id] || {};
-  const isGoodsPurchase = (invoice) => {
-    const supplier = getInvoiceSupplier(invoice);
-    return invoice.is_goods_invoice === true || supplier.supplier_type === 'goods' || supplier.include_in_goods_ratio === true;
-  };
-  const isRecurringPurchase = (invoice) => {
-    const supplier = getInvoiceSupplier(invoice);
-    return invoice.is_recurring_expense === true || supplier.is_recurring_expense === true || supplier.is_recurring === true;
-  };
+  const isGoodsPurchase = (invoice) => getInvoiceClassification(invoice, suppliersMap).type === 'goods';
+  const isRecurringPurchase = (invoice) => getInvoiceClassification(invoice, suppliersMap).type === 'recurring';
   const goodsPurchasesSum = sum(purchases.filter(isGoodsPurchase));
-  const recurringExpensesSum = sum(purchases.filter(r => !isGoodsPurchase(r) && isRecurringPurchase(r)));
+  const recurringExpensesSum = sum(purchases.filter(isRecurringPurchase));
   const otherExpensesSum = purchasesSum - goodsPurchasesSum - recurringExpensesSum;
   const recurringSuppliers = useMemo(() => suppliersList.filter(s =>
     s.is_recurring_expense === true ||
@@ -419,11 +441,11 @@ export default function PurchasesDashboard() {
           <CardHeader><CardTitle>סה״כ הוצאות - {dateRangeLabel}</CardTitle></CardHeader>
           <CardContent className="text-3xl font-bold text-emerald-700">₪ {purchasesSum.toLocaleString()}</CardContent>
         </Card>
-        <Card className="glass-card border-0">
+        <Card className="glass-card border-0 cursor-pointer hover:ring-2 hover:ring-blue-200" onClick={() => { setFilterClassification('goods'); document.getElementById('invoices-table')?.scrollIntoView({ behavior: 'smooth' }); }}>
           <CardHeader><CardTitle>קניית סחורה</CardTitle></CardHeader>
           <CardContent className="text-3xl font-bold text-blue-700">₪ {goodsPurchasesSum.toLocaleString()}</CardContent>
         </Card>
-        <Card className="glass-card border-0">
+        <Card className="glass-card border-0 cursor-pointer hover:ring-2 hover:ring-amber-200" onClick={() => { setFilterClassification('recurring'); document.getElementById('invoices-table')?.scrollIntoView({ behavior: 'smooth' }); }}>
           <CardHeader><CardTitle>הוצאות קבועות</CardTitle></CardHeader>
           <CardContent className="text-3xl font-bold text-amber-700">₪ {recurringExpensesSum.toLocaleString()}</CardContent>
         </Card>
@@ -526,6 +548,17 @@ export default function PurchasesDashboard() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Select value={filterClassification} onValueChange={setFilterClassification}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="כל הסיווגים" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">כל הסיווגים</SelectItem>
+                    <SelectItem value="goods">סחורה</SelectItem>
+                    <SelectItem value="recurring">הוצאות קבועות</SelectItem>
+                    <SelectItem value="other">הוצאות אחרות</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                   <SelectTrigger className="w-[160px]">
                     <SelectValue placeholder="כל הסטטוסים" />
@@ -552,13 +585,15 @@ export default function PurchasesDashboard() {
                   <th className="text-right py-2 px-2">מספר</th>
                   <th className="text-right py-2 px-2">תאריך</th>
                   <th className="text-right py-2 px-2">סכום</th>
+                  <th className="text-right py-2 px-2">סיווג</th>
                   <th className="text-right py-2 px-2">סטטוס</th>
                   <th className="text-right py-2 px-2">קובץ</th>
+                  <th className="text-right py-2 px-2">פעולות</th>
                 </tr>
               </thead>
               <tbody>
                 {recentInvoices.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-4 text-gray-500">אין חשבוניות</td></tr>
+                  <tr><td colSpan={9} className="text-center py-4 text-gray-500">אין חשבוניות</td></tr>
                 ) : recentInvoices.map(inv => (
                   <tr key={inv.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => openPreview(inv)}>
                     <td className="py-2 px-2">{suppliersMap[inv.supplier]?.name || inv.supplier || "-"}</td>
@@ -566,6 +601,13 @@ export default function PurchasesDashboard() {
                     <td className="py-2 px-2 font-mono">{inv.doc_number || "-"}</td>
                     <td className="py-2 px-2">{inv.doc_date || "-"}</td>
                     <td className="py-2 px-2 font-semibold">{inv.total_with_vat ? `₪${inv.total_with_vat.toLocaleString()}` : "-"}</td>
+                    <td className="py-2 px-2">
+                      {(() => {
+                        const classification = getInvoiceClassification(inv, suppliersMap);
+                        const cls = classification.type === 'goods' ? 'bg-blue-100 text-blue-800' : classification.type === 'recurring' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-700';
+                        return <Badge className={cls}>{classification.label}</Badge>;
+                      })()}
+                    </td>
                     <td className="py-2 px-2">
                       <Badge variant="outline" className={
                         inv.extraction_status === 'אושר' ? 'bg-green-100 text-green-800' :
@@ -579,6 +621,11 @@ export default function PurchasesDashboard() {
                     <td className="py-2 px-2">
                       <FileActions invoiceId={inv.id} sourceIntake={inv.source_intake} />
                     </td>
+                    <td className="py-2 px-2">
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); openEdit(inv); }}>
+                        ערוך סיווג
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -586,6 +633,38 @@ export default function PurchasesDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={!!editingInvoice} onOpenChange={(open) => !open && setEditingInvoice(null)}>
+        <DialogContent dir="rtl" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>עריכת סיווג חשבונית</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-gray-600">
+              {editingInvoice && `${suppliersMap[editingInvoice.supplier]?.name || editingInvoice.supplier || '-'} · ${editingInvoice.doc_number || '-'}`}
+            </div>
+            <div className="space-y-2">
+              <Label>סיווג</Label>
+              <Select value={editForm.classification} onValueChange={(value) => setEditForm(prev => ({ ...prev, classification: value }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="goods">סחורה</SelectItem>
+                  <SelectItem value="recurring">הוצאה קבועה</SelectItem>
+                  <SelectItem value="other">הוצאה אחרת</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>קטגוריה</Label>
+              <Input value={editForm.expense_category} onChange={(e) => setEditForm(prev => ({ ...prev, expense_category: e.target.value }))} placeholder="לדוגמה: סחורה - טלפונים / שירותי תקשורת" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditingInvoice(null)}>ביטול</Button>
+              <Button onClick={saveManualClassification}>שמור</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

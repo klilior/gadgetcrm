@@ -21,6 +21,7 @@ import useSuppliers from "../components/hooks/useSuppliers";
 import UndeliveredOrdersWidget from "../components/dashboard/UndeliveredOrdersWidget";
 import QuickLeadsToComplete from "../components/dashboard/QuickLeadsToComplete";
 import RepSalesDrilldown from "../components/dashboard/RepSalesDrilldown";
+import { getInvoiceClassification } from "../components/utils/invoiceClassification";
 
 const RATIO_THRESHOLDS = { good: 40, warning: 60 };
 
@@ -172,18 +173,9 @@ export default function ManagerControlCenter() {
     });
 
     const purchasesInvoices = invoices.filter(i => i.doc_type === 'חשבונית מס');
-    const getInvoiceSupplier = (invoice) => suppliersMap[invoice.supplier] || suppliersMap[invoice.detected_supplier_id] || {};
-    const isGoodsInvoice = (invoice) => {
-      const supplier = getInvoiceSupplier(invoice);
-      return invoice.is_goods_invoice === true || supplier.supplier_type === 'goods' || supplier.include_in_goods_ratio === true;
-    };
-    const isRecurringInvoice = (invoice) => {
-      const supplier = getInvoiceSupplier(invoice);
-      return invoice.is_recurring_expense === true || supplier.is_recurring_expense === true || supplier.is_recurring === true;
-    };
     const purchasesTotal = purchasesInvoices.reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
-    const goodsPurchases = purchasesInvoices.filter(isGoodsInvoice).reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
-    const recurringExpenses = purchasesInvoices.filter(i => !isGoodsInvoice(i) && isRecurringInvoice(i)).reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
+    const goodsPurchases = purchasesInvoices.filter(i => getInvoiceClassification(i, suppliersMap).type === 'goods').reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
+    const recurringExpenses = purchasesInvoices.filter(i => getInvoiceClassification(i, suppliersMap).type === 'recurring').reduce((acc, i) => acc + (Number(i.total_with_vat) || 0), 0);
     const otherExpenses = purchasesTotal - goodsPurchases - recurringExpenses;
     const ratio = grossSales > 0 ? (purchasesTotal / grossSales) * 100 : 0;
     const goodsRatio = grossSales > 0 ? (goodsPurchases / grossSales) * 100 : 0;
@@ -411,25 +403,30 @@ export default function ManagerControlCenter() {
             <p className="text-xl font-bold">₪{kpiData.purchasesTotal.toLocaleString()}</p>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-600 to-blue-500 text-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <ShoppingBag className="w-4 h-4 text-blue-200" />
-              <span className="text-xs text-blue-100">קניית סחורה</span>
-            </div>
-            <p className="text-xl font-bold">₪{kpiData.goodsPurchases.toLocaleString()}</p>
-            <p className="text-xs text-blue-100 mt-0.5">{kpiData.goodsRatio}% מהמחזור</p>
-          </CardContent>
-        </Card>
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-600 to-amber-500 text-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Clock className="w-4 h-4 text-amber-200" />
-              <span className="text-xs text-amber-100">הוצאות קבועות</span>
-            </div>
-            <p className="text-xl font-bold">₪{kpiData.recurringExpenses.toLocaleString()}</p>
-          </CardContent>
-        </Card>
+        <Link to={`${createPageUrl("PurchasesDashboard")}?classification=goods`} className="block">
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-600 to-blue-500 text-white hover:scale-[1.02] transition-transform cursor-pointer">
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <ShoppingBag className="w-4 h-4 text-blue-200" />
+                <span className="text-xs text-blue-100">קניית סחורה</span>
+              </div>
+              <p className="text-xl font-bold">₪{kpiData.goodsPurchases.toLocaleString()}</p>
+              <p className="text-xs text-blue-100 mt-0.5">{kpiData.goodsRatio}% מהמחזור · לחץ לפירוט</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to={`${createPageUrl("PurchasesDashboard")}?classification=recurring`} className="block">
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-600 to-amber-500 text-white hover:scale-[1.02] transition-transform cursor-pointer">
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="w-4 h-4 text-amber-200" />
+                <span className="text-xs text-amber-100">הוצאות קבועות</span>
+              </div>
+              <p className="text-xl font-bold">₪{kpiData.recurringExpenses.toLocaleString()}</p>
+              <p className="text-xs text-amber-100 mt-0.5">לחץ לפירוט חשבוניות</p>
+            </CardContent>
+          </Card>
+        </Link>
         <Card className="border-0 shadow-lg bg-white">
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-1">
