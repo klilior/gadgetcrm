@@ -84,12 +84,9 @@ export default function RecurringExpenseTable({ recurringSuppliers }) {
       for (const s of recurringSuppliers) {
         const existing = checks.find(c => c.supplier_id === s.id);
         const expected = s.expected_invoices_per_month || 1;
-        const names = [s.name, ...(s.aliases || "").split(",").map(a => a.trim())].filter(Boolean);
-        
-        // Find ALL matching invoices (not just first)
-        const matched = relevant.filter(inv =>
-          names.some(n => (inv.supplier || "").includes(n) || n.includes(inv.supplier || ""))
-        );
+
+        // Find ALL matching invoices by supplier id / detected supplier id
+        const matched = relevant.filter(inv => inv.supplier === s.id || inv.detected_supplier_id === s.id);
         const receivedCount = matched.length;
         const status = receivedCount >= expected ? "התקבל" : receivedCount > 0 ? "חלקי" : "חסר";
         const matchedJson = JSON.stringify(matched.map(inv => ({ id: inv.id, doc_number: inv.doc_number || "", supplier: inv.supplier || "" })));
@@ -103,7 +100,7 @@ export default function RecurringExpenseTable({ recurringSuppliers }) {
           }
         } else {
           await base44.entities.RecurringExpenseCheck.create({
-            supplier_id: s.id, supplier_name: s.name, recurring_type: s.recurring_type || "",
+            supplier_id: s.id, supplier_name: s.name, recurring_type: s.recurring_type || s.supplier_type || "",
             month: selectedMonth, expected_count: expected, received_count: receivedCount,
             status, matched_invoices_json: matchedJson,
           });
@@ -126,7 +123,7 @@ export default function RecurringExpenseTable({ recurringSuppliers }) {
       } else {
         await base44.entities.RecurringExpenseCheck.create({
           supplier_id: row.supplier.id, supplier_name: row.supplier.name,
-          recurring_type: row.supplier.recurring_type || "", month: selectedMonth,
+          recurring_type: row.supplier.recurring_type || row.supplier.supplier_type || "", month: selectedMonth,
           expected_count: row.expected, received_count: 0, status: "אושר ידנית",
         });
       }
@@ -200,7 +197,7 @@ export default function RecurringExpenseTable({ recurringSuppliers }) {
                   <TableCell className="font-medium">{row.supplier.name}</TableCell>
                   <TableCell>
                     <Badge className={TYPE_COLORS[row.supplier.recurring_type] || "bg-gray-100 text-gray-700"}>
-                      {row.supplier.recurring_type || "-"}
+                      {row.supplier.recurring_type || row.supplier.recurring_frequency || row.supplier.supplier_type || "-"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-center font-mono">{row.expected}</TableCell>

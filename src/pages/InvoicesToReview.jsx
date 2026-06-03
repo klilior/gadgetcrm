@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import useSuppliers from "../components/hooks/useSuppliers";
 import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut, Download, ChevronUp, ChevronDown, Eye } from "lucide-react";
@@ -115,6 +116,10 @@ export default function InvoicesToReview() {
         total_with_vat: selected.total_with_vat != null ? Number(selected.total_with_vat) : undefined,
         notes: selected.notes || undefined,
         source_intake: selected.source_intake || undefined,
+        expense_category: selected.expense_category || undefined,
+        is_goods_invoice: !!selected.is_goods_invoice,
+        is_recurring_expense: !!selected.is_recurring_expense,
+        classification_status: 'manually_corrected',
       };
       await base44.entities.Invoices.update(selected.id, updatePayload);
       
@@ -182,6 +187,10 @@ export default function InvoicesToReview() {
         vat_amount: selected.vat_amount != null ? Number(selected.vat_amount) : undefined,
         total_with_vat: selected.total_with_vat != null ? Number(selected.total_with_vat) : undefined,
         notes: selected.notes || undefined,
+        expense_category: selected.expense_category || undefined,
+        is_goods_invoice: !!selected.is_goods_invoice,
+        is_recurring_expense: !!selected.is_recurring_expense,
+        classification_status: 'manually_corrected',
       };
       await base44.entities.Invoices.update(selected.id, updatePayload);
 
@@ -518,6 +527,32 @@ export default function InvoicesToReview() {
                         );
                       } catch (_) { return null; }
                     })()}
+                  </div>
+
+                  {/* Classification Info */}
+                  <div className="bg-green-50 rounded-lg p-3 space-y-2">
+                    <div className="font-medium text-green-800 text-sm">סיווג הוצאה</div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">קטגוריה</Label>
+                      <Select value={selected.expense_category || ""} onValueChange={(v) => setSelected({ ...selected, expense_category: v })}>
+                        <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="בחר קטגוריה" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="goods">סחורה</SelectItem>
+                          <SelectItem value="shipping">משלוחים</SelectItem>
+                          <SelectItem value="rent">שכירות</SelectItem>
+                          <SelectItem value="communication">תקשורת</SelectItem>
+                          <SelectItem value="advertising">פרסום</SelectItem>
+                          <SelectItem value="software">תוכנה</SelectItem>
+                          <SelectItem value="payment_fee">עמלות סליקה</SelectItem>
+                          <SelectItem value="service">שירותים</SelectItem>
+                          <SelectItem value="other">אחר</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <label className="flex items-center gap-2"><Switch checked={!!selected.is_goods_invoice} onCheckedChange={(v) => setSelected({ ...selected, is_goods_invoice: v })} /> סחורה</label>
+                      <label className="flex items-center gap-2"><Switch checked={!!selected.is_recurring_expense} onCheckedChange={(v) => setSelected({ ...selected, is_recurring_expense: v })} /> הוצאה קבועה</label>
+                    </div>
                   </div>
 
                   {/* Document Info */}
