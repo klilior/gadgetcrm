@@ -5,11 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Truck, RotateCcw, Loader2, CheckCircle, Copy, Printer, Search, Store, Lock } from "lucide-react";
+import { MapPin, Truck, RotateCcw, Loader2, CheckCircle, Copy, Printer, Search, Store, Lock, AlertTriangle } from "lucide-react";
 import { createShipment } from "@/functions/createShipment";
 import { searchPickupPoints } from "@/functions/searchPickupPoints";
 import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { toast } from "sonner";
+import { getPickupPointSafety } from "./pickupPointSafety";
 
 export default function UPSShipmentForm() {
   const [tab, setTab] = useState("standard");
@@ -49,6 +50,10 @@ export default function UPSShipmentForm() {
   const handleCreate = async () => {
     if (!name || !phone || !city) { toast.error("יש למלא שם, טלפון ועיר"); return; }
     if (tab === "pickup_point" && !selectedPoint) { toast.error("יש לבחור נקודת איסוף"); return; }
+    if (tab === "pickup_point") {
+      const safety = getPickupPointSafety(selectedPoint, city);
+      if (!safety.allowed) { toast.error(safety.reasons.join(' | ')); return; }
+    }
     setLoading(true);
     try {
       const { data } = await createShipment({
@@ -59,6 +64,8 @@ export default function UPSShipmentForm() {
         pickup_point_id: selectedPoint?.id || null,
         pickup_point_name: selectedPoint?.name || null,
         pickup_point_address: selectedPoint ? `${selectedPoint.street || ""}, ${selectedPoint.city || ""}` : null,
+        pickup_point_city: selectedPoint?.city || null,
+        pickup_point_distance: selectedPoint?.distance ?? null,
       });
       if (data.success) {
         setResult({ tracking: data.tracking_number, shipment_id: data.shipment_id });
@@ -188,6 +195,16 @@ export default function UPSShipmentForm() {
                       <Badge variant="outline" className="mt-2 text-xs border-green-300 text-green-700">
                         {selectedPoint.type === "store" ? "🏪 חנות" : "🔒 לוקר"} • {selectedPoint.id}
                       </Badge>
+                      {(() => {
+                        const safety = getPickupPointSafety(selectedPoint, city);
+                        if (safety.allowed) return null;
+                        return (
+                          <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-800 flex gap-2">
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                            <span>{safety.reasons.join(' · ')}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setSelectedPoint(null)}>שנה</Button>
                   </div>
@@ -201,18 +218,27 @@ export default function UPSShipmentForm() {
                 </Button>
                 {pickupPoints.length > 0 && (
                   <div className="space-y-2 max-h-[250px] overflow-y-auto">
-                    {pickupPoints.map(point => (
-                      <Card key={point.id} className="cursor-pointer hover:shadow-md hover:border-blue-400" onClick={() => setSelectedPoint(point)}>
-                        <CardContent className="p-3 flex items-start gap-3">
-                          {point.type === "store" ? <Store className="w-5 h-5 text-orange-500 mt-1" /> : <Lock className="w-5 h-5 text-blue-500 mt-1" />}
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm">{point.name}</div>
-                            <div className="text-xs text-gray-500">{point.street} {point.house}, {point.city}</div>
-                          </div>
-                          <Badge variant="outline" className="text-xs flex-shrink-0">{point.distance} ק"מ</Badge>
-                        </CardContent>
-                      </Card>
-                    ))}
+                    {pickupPoints.map(point => {
+                      const safety = getPickupPointSafety(point, city);
+                      return (
+                        <Card key={point.id} className={safety.allowed ? "cursor-pointer hover:shadow-md hover:border-blue-400" : "opacity-70 bg-red-50 border-red-200 cursor-not-allowed"} onClick={() => safety.allowed ? setSelectedPoint(point) : toast.error(safety.reasons.join(' | '))}>
+                          <CardContent className="p-3 flex items-start gap-3">
+                            {point.type === "store" ? <Store className="w-5 h-5 text-orange-500 mt-1" /> : <Lock className="w-5 h-5 text-blue-500 mt-1" />}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm">{point.name}</div>
+                              <div className="text-xs text-gray-500">{point.street} {point.house}, {point.city}</div>
+                              {!safety.allowed && (
+                                <div className="mt-2 text-xs text-red-700 flex gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                                  <span>{safety.reasons.join(' · ')}</span>
+                                </div>
+                              )}
+                            </div>
+                            <Badge variant="outline" className="text-xs flex-shrink-0">{point.distance} ק"מ</Badge>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                   </div>
                 )}
               </>

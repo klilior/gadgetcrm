@@ -1,6 +1,26 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const PLUGINS_BASE = 'https://plugins.ship.co.il';
+const MAX_PICKUP_DISTANCE_KM = 2;
+
+function normalizeCityName(value) {
+  return String(value || '')
+    .replace(/[\"'׳״]/g, '')
+    .replace(/[-–]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function toNumber(value) {
+  const num = Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(num) ? num : null;
+}
+
+function extractCityFromAddress(address) {
+  const parts = String(address || '').split(',').map(p => p.trim()).filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : '';
+}
 
 async function getToken() {
   const body = new URLSearchParams({
@@ -42,6 +62,8 @@ Deno.serve(async (req) => {
     pickup_point_id,
     pickup_point_name,
     pickup_point_address,
+    pickup_point_city,
+    pickup_point_distance,
     weight,
     num_packages,
     reference,
@@ -50,6 +72,27 @@ Deno.serve(async (req) => {
 
   if (!shipment_type || !consignee_name || !consignee_phone || !consignee_city) {
     return Response.json({ error: 'חסרים שדות חובה' }, { status: 400 });
+  }
+
+  if (shipment_type === 'pickup_point') {
+    const orderCity = normalizeCityName(consignee_city);
+    const pointCityLabel = pickup_point_city || extractCityFromAddress(pickup_point_address);
+    const pointCity = normalizeCityName(pointCityLabel);
+    const distance = toNumber(pickup_point_distance);
+
+    if (orderCity && pointCity && orderCity !== pointCity) {
+      return Response.json({
+        success: false,
+        error: `חסימת בטיחות: עיר נקודת האיסוף (${pointCityLabel}) שונה מעיר הלקוח (${consignee_city}). יש לבחור נקודה באותה עיר/יישוב.`
+      }, { status: 400 });
+    }
+
+    if (distance !== null && distance > MAX_PICKUP_DISTANCE_KM) {
+      return Response.json({
+        success: false,
+        error: `חסימת בטיחות: נקודת האיסוף רחוקה ${distance.toFixed(1)} ק״מ מהלקוח. יש לבחור נקודה עד ${MAX_PICKUP_DISTANCE_KM} ק״מ.`
+      }, { status: 400 });
+    }
   }
 
   console.log(`📦 Creating ${shipment_type} shipment for ${consignee_name}`);

@@ -691,6 +691,7 @@ export default function UnifiedOrders() {
             }),
             external_order_number: shipmentOrder.mirakl_order_id || shipmentOrder.order_number,
             shipping_method: 'איסוף מנקודת איסוף',
+            pickup_point_data: shipmentOrder.pickup_point_data,
             id: shipmentOrder.source === 'woocommerce' ? shipmentOrder.raw_id : null,
             client_id: shipmentOrder.source === 'woocommerce' ? shipmentOrder.client_id : null,
           }}

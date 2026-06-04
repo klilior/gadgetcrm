@@ -1,4 +1,19 @@
 const PICKING_BASE = 'https://api.ship.co.il';
+const MAX_PICKUP_DISTANCE_KM = 2;
+
+function normalizeCityName(value) {
+  return String(value || '')
+    .replace(/[\"'׳״]/g, '')
+    .replace(/[-–]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function toNumber(value) {
+  const num = Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(num) ? num : null;
+}
 
 async function getPickingToken() {
   const body = new URLSearchParams({
@@ -60,20 +75,35 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, error: data.ErrorMSG || 'לא נמצאו נקודות' });
     }
 
-    const points = (data.Points || []).map(p => ({
-      id: p.PointID,
-      name: p.PointName,
-      name_en: p.PointNameEn,
-      city: p.CityName,
-      street: p.StreetName,
-      house: p.HouseNumber,
-      phone: p.Phone,
-      type: p.PointType === 1 ? 'store' : 'locker',
-      distance: p.Distance,
-      hours: p.Description,
-      lat: p.Latitude,
-      lng: p.Longitude
-    }));
+    const requestedCity = normalizeCityName(city);
+    const points = (data.Points || []).map(p => {
+      const pointCity = normalizeCityName(p.CityName);
+      const distance = toNumber(p.Distance);
+      const warnings = [];
+      if (requestedCity && pointCity && requestedCity !== pointCity) {
+        warnings.push(`עיר נקודת האיסוף (${p.CityName}) שונה מעיר הלקוח (${city})`);
+      }
+      if (distance !== null && distance > MAX_PICKUP_DISTANCE_KM) {
+        warnings.push(`נקודת האיסוף רחוקה ${distance.toFixed(1)} ק״מ — מעל ${MAX_PICKUP_DISTANCE_KM} ק״מ`);
+      }
+
+      return {
+        id: p.PointID,
+        name: p.PointName,
+        name_en: p.PointNameEn,
+        city: p.CityName,
+        street: p.StreetName,
+        house: p.HouseNumber,
+        phone: p.Phone,
+        type: p.PointType === 1 ? 'store' : 'locker',
+        distance: p.Distance,
+        hours: p.Description,
+        lat: p.Latitude,
+        lng: p.Longitude,
+        allowed: warnings.length === 0,
+        warnings
+      };
+    });
 
     return Response.json({ success: true, points });
   } catch (error) {

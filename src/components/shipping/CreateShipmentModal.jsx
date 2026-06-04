@@ -6,11 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, MapPin, Truck, RotateCcw, Package, CheckCircle, Copy, Search, Store, Lock, Printer } from "lucide-react";
+import { Loader2, MapPin, Truck, RotateCcw, Package, CheckCircle, Copy, Search, Store, Lock, Printer, AlertTriangle } from "lucide-react";
 import { createShipment } from "@/functions/createShipment";
 import { searchPickupPoints } from "@/functions/searchPickupPoints";
 import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { toast } from "sonner";
+import { getPickupPointSafety } from "./pickupPointSafety";
 
 function parsePickupPointData(order) {
   if (!order?.pickup_point_data) return null;
@@ -33,7 +34,8 @@ function parsePickupPointData(order) {
       type: parsed.type || 'store',
       hours: parsed.zip || '', // "zip" field actually holds hours in pkps_json
       lat: parsed.lat,
-      lng: parsed.lng
+      lng: parsed.lng,
+      distance: parsed.dist
     };
   } catch (e) {
     console.error('Failed to parse pickup point data:', e);
@@ -213,6 +215,13 @@ iframe{width:100%;height:100%;border:none;}</style></head>
       toast.error("יש לבחור נקודת איסוף");
       return;
     }
+    if (tab === "pickup_point") {
+      const safety = getPickupPointSafety(activePoint, city);
+      if (!safety.allowed) {
+        toast.error(safety.reasons.join(' | '));
+        return;
+      }
+    }
 
     setLoading(true);
     try {
@@ -230,7 +239,9 @@ iframe{width:100%;height:100%;border:none;}</style></head>
         reference: order?.external_order_number || '',
         pickup_point_id: activePoint?.id || null,
         pickup_point_name: activePoint?.name || null,
-        pickup_point_address: activePoint ? `${activePoint.street || ''}, ${activePoint.city || ''}` : null
+        pickup_point_address: activePoint ? `${activePoint.street || ''}, ${activePoint.city || ''}` : null,
+        pickup_point_city: activePoint?.city || null,
+        pickup_point_distance: activePoint?.distance ?? null
       };
 
       const { data } = await createShipment(payload);
@@ -388,6 +399,16 @@ iframe{width:100%;height:100%;border:none;}</style></head>
                       <Badge variant="outline" className="mt-2 text-xs border-green-300 text-green-700">
                         {wooPickupPoint.type === 'store' ? '🏪 חנות' : '🔒 לוקר'} • {wooPickupPoint.id}
                       </Badge>
+                      {(() => {
+                        const safety = getPickupPointSafety(wooPickupPoint, city);
+                        if (safety.allowed) return null;
+                        return (
+                          <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-800 flex gap-2">
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                            <span>{safety.reasons.join(' · ')}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </CardContent>
@@ -412,6 +433,16 @@ iframe{width:100%;height:100%;border:none;}</style></head>
                           <Badge variant="outline" className="mt-2 text-xs border-green-300 text-green-700">
                             {selectedPoint.type === 'store' ? '🏪 חנות' : '🔒 לוקר'} • {selectedPoint.id}
                           </Badge>
+                          {(() => {
+                            const safety = getPickupPointSafety(selectedPoint, city);
+                            if (safety.allowed) return null;
+                            return (
+                              <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-800 flex gap-2">
+                                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                                <span>{safety.reasons.join(' · ')}</span>
+                              </div>
+                            );
+                          })()}
                         </div>
                         <Button 
                           variant="ghost" 
@@ -455,27 +486,36 @@ iframe{width:100%;height:100%;border:none;}</style></head>
                     {!searchingPoints && pickupPoints.length > 0 && (
                       <div className="space-y-2 max-h-[250px] overflow-y-auto">
                         <p className="text-xs text-gray-500 font-medium">לחץ על נקודה כדי לבחור:</p>
-                        {pickupPoints.map(point => (
-                          <Card 
-                            key={point.id}
-                            className="cursor-pointer transition-all hover:shadow-md hover:border-blue-400 border-gray-200"
-                            onClick={() => setSelectedPoint(point)}
-                          >
-                            <CardContent className="p-3">
-                              <div className="flex items-start gap-3">
-                                <div className="mt-1">
-                                  {point.type === 'store' ? <Store className="w-5 h-5 text-orange-500" /> : <Lock className="w-5 h-5 text-blue-500" />}
+                        {pickupPoints.map(point => {
+                          const safety = getPickupPointSafety(point, city);
+                          return (
+                            <Card 
+                              key={point.id}
+                              className={`transition-all border-gray-200 ${safety.allowed ? 'cursor-pointer hover:shadow-md hover:border-blue-400' : 'opacity-70 bg-red-50 border-red-200 cursor-not-allowed'}`}
+                              onClick={() => safety.allowed ? setSelectedPoint(point) : toast.error(safety.reasons.join(' | '))}
+                            >
+                              <CardContent className="p-3">
+                                <div className="flex items-start gap-3">
+                                  <div className="mt-1">
+                                    {point.type === 'store' ? <Store className="w-5 h-5 text-orange-500" /> : <Lock className="w-5 h-5 text-blue-500" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-sm">{point.name}</div>
+                                    <div className="text-xs text-gray-500">{point.street} {point.house}, {point.city}</div>
+                                    <div className="text-xs text-gray-400 mt-1">{point.hours}</div>
+                                    {!safety.allowed && (
+                                      <div className="mt-2 text-xs text-red-700 flex gap-1">
+                                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                                        <span>{safety.reasons.join(' · ')}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <Badge variant="outline" className="text-xs flex-shrink-0">{point.distance} ק"מ</Badge>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-sm">{point.name}</div>
-                                  <div className="text-xs text-gray-500">{point.street} {point.house}, {point.city}</div>
-                                  <div className="text-xs text-gray-400 mt-1">{point.hours}</div>
-                                </div>
-                                <Badge variant="outline" className="text-xs flex-shrink-0">{point.distance} ק"מ</Badge>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
                       </div>
                     )}
 
