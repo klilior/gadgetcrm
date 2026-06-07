@@ -12,6 +12,32 @@ import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
 import SPProcessTimeline from "./SPProcessTimeline";
 
+function detectCarrierFromOrder(order) {
+  const values = [
+    order?._shipCarrier,
+    order?.shipment_source,
+    order?.tracking_carrier,
+    order?.carrier_code,
+    order?.carrier_name,
+    order?.shipping_carrier_code,
+    order?.shipping_company,
+  ];
+
+  if (order?.raw_mirakl_json) {
+    try {
+      const raw = JSON.parse(order.raw_mirakl_json);
+      values.push(raw?.shipping_carrier_code, raw?.shipping_company, raw?.shipping_type_code, raw?.shipping_tracking_url);
+    } catch (_) {}
+  }
+
+  const joined = values.filter(Boolean).join(" ").toLowerCase();
+  if (joined.includes("ups") || joined.includes("deliv_ups")) {
+    return { key: "ups", code: "deliv_ups", name: "UPS" };
+  }
+
+  return { key: "cargo", code: "deliv_cargoexp", name: "Cargo-Ship" };
+}
+
 export default function SPShipmentSuccessScreen({ 
   trackingNumber, 
   order,
@@ -99,14 +125,13 @@ iframe{width:100%;height:100%;border:none;}</style></head>
 
       // Step 1: Update Mirakl with tracking + mark as shipped
       setStep("מעדכן מספר מעקב ב-Mirakl...");
-      const orderCarrier = (freshOrder?.carrier_code || freshOrder?.tracking_carrier || order?.carrier_code || order?.tracking_carrier || 'cargo').toLowerCase();
-      const isUps = orderCarrier.includes('ups');
+      const detectedCarrier = detectCarrierFromOrder(order?._shipCarrier ? order : freshOrder);
       const { data: miraklResult } = await updateSuperPharmOrder({
         action: "ship",
         order_id: order.mirakl_order_id,
         tracking_number: trackingNumber,
-        carrier_code: isUps ? "deliv_ups" : "deliv_cargoexp",
-        carrier_name: isUps ? "UPS" : "Cargo-Ship",
+        carrier_code: detectedCarrier.code,
+        carrier_name: detectedCarrier.name,
       });
 
       if (!miraklResult.success) {
@@ -117,7 +142,7 @@ iframe{width:100%;height:100%;border:none;}</style></head>
         return;
       }
 
-      addProcessEvent("Mirakl עודכן — הזמנה סומנה כנשלחה");
+      addProcessEvent("Mirakl עודכן — הזמנה סומנה כנשלחה", "done", `חברת שילוח: ${detectedCarrier.name}`);
       toast.success("✅ Mirakl עודכן — הזמנה סומנה כנשלחה");
 
       // Step 2: Create Linet invoice (only if not already created)
@@ -187,7 +212,7 @@ iframe{width:100%;height:100%;border:none;}</style></head>
           customer_phone: freshOrder.customer_phone || "",
           customer_name: customerName,
           tracking_number: trackingNumber,
-          tracking_carrier: isUps ? "ups" : "cargo",
+          tracking_carrier: detectedCarrier.key,
           order_number: freshOrder.mirakl_order_id,
         });
 

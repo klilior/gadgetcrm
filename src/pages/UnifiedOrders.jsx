@@ -708,6 +708,10 @@ export default function UnifiedOrders() {
                 customer_first_name: shipmentOrder.customer_first_name || shipmentOrder.customer_name?.split(' ')[0] || '',
                 customer_last_name: shipmentOrder.customer_last_name || shipmentOrder.customer_name?.split(' ').slice(1).join(' ') || '',
                 customer_phone: shipmentOrder.customer_phone || '',
+                _shipCarrier: shipmentOrder._shipCarrier || 'ups',
+                carrier_code: shipmentOrder.carrier_code || shipmentOrder.shipping_carrier_code || 'deliv_ups',
+                carrier_name: shipmentOrder.carrier_name || shipmentOrder.shipping_company || 'UPS',
+                raw_mirakl_json: shipmentOrder.raw_mirakl_json || '',
                 order_lines_json: JSON.stringify(shipmentOrder.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
                 total_price: shipmentOrder.total || 0,
               };
