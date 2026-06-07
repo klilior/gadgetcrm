@@ -8,6 +8,7 @@ import { Truck, Package, RefreshCw, Loader2, AlertTriangle, CheckCircle, Printer
 import { cargoApi } from "@/functions/cargoApi";
 import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
 import { updateWooOrderStatus } from "@/functions/updateWooOrderStatus";
+import { createSPLinetInvoice } from "@/functions/createSPLinetInvoice";
 import { sendTrackingSms } from "@/functions/sendTrackingSms";
 import { toast } from "sonner";
 
@@ -145,6 +146,39 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
               toast.success('הזמנה עודכנה ל-"הושלמה" בווקומרס');
             } catch (e) {
               console.error('[Cargo] Failed to update WooCommerce:', e.message);
+            }
+          }
+
+          if (order?.source === 'mirakl') {
+            try {
+              const products = order.products || [];
+              const productDesc = products.map(p => p.name).filter(Boolean).join(', ') || `הזמנת סופר-פארם ${order.mirakl_order_id || order.order_number}`;
+              const qty = products.reduce((sum, p) => sum + (p.quantity || 1), 0) || 1;
+              const productsTotal = products.reduce((sum, p) => sum + (Number(p.total) || 0), 0);
+              const orderTotal = Number(order.total) || productsTotal;
+              const shippingAmount = orderTotal > productsTotal && productsTotal > 0 ? orderTotal - productsTotal : 0;
+
+              const { data: invoiceData } = await createSPLinetInvoice({
+                customer_name: toName,
+                customer_phone: toPhone,
+                customer_email: order.customer_email || '',
+                product_description: productDesc,
+                quantity: qty,
+                unit_price: productsTotal || orderTotal,
+                shipping_amount: shippingAmount,
+                mirakl_order_id: order.mirakl_order_id || order.order_number,
+                send_email: order.customer_email || undefined,
+              });
+
+              if (invoiceData?.success || invoiceData?.duplicate) {
+                toast.success(invoiceData?.duplicate ? 'חשבונית כבר קיימת בלינט' : 'חשבונית לינט נוצרה');
+              } else {
+                toast.error('משלוח נוצר, אבל יצירת חשבונית נכשלה');
+                console.error('[Cargo] Failed to create Linet invoice:', invoiceData?.error || invoiceData);
+              }
+            } catch (invoiceErr) {
+              console.error('[Cargo] Failed to create Linet invoice:', invoiceErr.message);
+              toast.error('משלוח נוצר, אבל יצירת חשבונית נכשלה');
             }
           }
 
