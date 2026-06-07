@@ -99,9 +99,8 @@ iframe{width:100%;height:100%;border:none;}</style></head>
 
       // Step 1: Update Mirakl with tracking + mark as shipped
       setStep("מעדכן מספר מעקב ב-Mirakl...");
-      // This success screen is used after UPS label creation, so UPS is the default carrier.
-      const orderCarrier = (order?.carrier_code || order?.tracking_carrier || 'ups').toLowerCase();
-      const isUps = !orderCarrier || orderCarrier.includes('ups');
+      const orderCarrier = (freshOrder?.carrier_code || freshOrder?.tracking_carrier || order?.carrier_code || order?.tracking_carrier || 'cargo').toLowerCase();
+      const isUps = orderCarrier.includes('ups');
       const { data: miraklResult } = await updateSuperPharmOrder({
         action: "ship",
         order_id: order.mirakl_order_id,
@@ -188,7 +187,7 @@ iframe{width:100%;height:100%;border:none;}</style></head>
           customer_phone: freshOrder.customer_phone || "",
           customer_name: customerName,
           tracking_number: trackingNumber,
-          tracking_carrier: "ups",
+          tracking_carrier: isUps ? "ups" : "cargo",
           order_number: freshOrder.mirakl_order_id,
         });
 
