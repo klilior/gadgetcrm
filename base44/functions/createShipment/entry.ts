@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'חסרים שדות חובה' }, { status: 400 });
   }
 
+  const pickupWarnings = [];
   if (shipment_type === 'pickup_point') {
     const orderCity = normalizeCityName(consignee_city);
     const pointCityLabel = pickup_point_city || extractCityFromAddress(pickup_point_address);
@@ -81,20 +82,15 @@ Deno.serve(async (req) => {
     const distance = toNumber(pickup_point_distance);
 
     if (orderCity && pointCity && orderCity !== pointCity) {
-      return Response.json({
-        success: false,
-        error: `חסימת בטיחות: עיר נקודת האיסוף (${pointCityLabel}) שונה מעיר הלקוח (${consignee_city}). יש לבחור נקודה באותה עיר/יישוב.`
-      }, { status: 400 });
+      pickupWarnings.push(`עיר נקודת האיסוף (${pointCityLabel}) שונה מעיר הלקוח (${consignee_city})`);
     }
 
     if (distance !== null && distance > MAX_PICKUP_DISTANCE_KM) {
-      return Response.json({
-        success: false,
-        error: `חסימת בטיחות: נקודת האיסוף רחוקה ${distance.toFixed(1)} ק״מ מהלקוח. יש לבחור נקודה עד ${MAX_PICKUP_DISTANCE_KM} ק״מ.`
-      }, { status: 400 });
+      pickupWarnings.push(`נקודת האיסוף רחוקה ${distance.toFixed(1)} ק״מ מהלקוח — מעל ${MAX_PICKUP_DISTANCE_KM} ק״מ`);
     }
   }
 
+  if (pickupWarnings.length) console.log(`⚠️ Pickup point approved with warning: ${pickupWarnings.join(' | ')}`);
   console.log(`📦 Creating ${shipment_type} shipment for ${consignee_name}`);
 
   const token = await getToken();

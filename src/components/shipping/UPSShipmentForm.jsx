@@ -52,7 +52,10 @@ export default function UPSShipmentForm() {
     if (tab === "pickup_point" && !selectedPoint) { toast.error("יש לבחור נקודת איסוף"); return; }
     if (tab === "pickup_point") {
       const safety = getPickupPointSafety(selectedPoint, city);
-      if (!safety.allowed) { toast.error(safety.reasons.join(' | ')); return; }
+      if (!safety.allowed) {
+        const approved = window.confirm(`שים לב: נקודת האיסוף דורשת בדיקה:\n${safety.reasons.join('\n')}\n\nהאם לאשר וליצור שטר מטען בכל זאת?`);
+        if (!approved) return;
+      }
     }
     setLoading(true);
     try {
@@ -199,9 +202,9 @@ export default function UPSShipmentForm() {
                         const safety = getPickupPointSafety(selectedPoint, city);
                         if (safety.allowed) return null;
                         return (
-                          <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-800 flex gap-2">
+                          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 flex gap-2">
                             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                            <span>{safety.reasons.join(' · ')}</span>
+                            <span>דורש בדיקת נציג ואישור: {safety.reasons.join(' · ')}</span>
                           </div>
                         );
                       })()}
@@ -221,16 +224,16 @@ export default function UPSShipmentForm() {
                     {pickupPoints.map(point => {
                       const safety = getPickupPointSafety(point, city);
                       return (
-                        <Card key={point.id} className={safety.allowed ? "cursor-pointer hover:shadow-md hover:border-blue-400" : "opacity-70 bg-red-50 border-red-200 cursor-not-allowed"} onClick={() => safety.allowed ? setSelectedPoint(point) : toast.error(safety.reasons.join(' | '))}>
+                        <Card key={point.id} className={safety.allowed ? "cursor-pointer hover:shadow-md hover:border-blue-400" : "cursor-pointer bg-amber-50 border-amber-300 hover:shadow-md hover:border-amber-400"} onClick={() => setSelectedPoint(point)}>
                           <CardContent className="p-3 flex items-start gap-3">
                             {point.type === "store" ? <Store className="w-5 h-5 text-orange-500 mt-1" /> : <Lock className="w-5 h-5 text-blue-500 mt-1" />}
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-sm">{point.name}</div>
                               <div className="text-xs text-gray-500">{point.street} {point.house}, {point.city}</div>
                               {!safety.allowed && (
-                                <div className="mt-2 text-xs text-red-700 flex gap-1">
+                                <div className="mt-2 text-xs text-amber-800 flex gap-1">
                                   <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                                  <span>{safety.reasons.join(' · ')}</span>
+                                  <span>דורש בדיקת נציג ואישור: {safety.reasons.join(' · ')}</span>
                                 </div>
                               )}
                             </div>

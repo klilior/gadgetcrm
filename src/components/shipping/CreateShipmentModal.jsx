@@ -215,11 +215,11 @@ iframe{width:100%;height:100%;border:none;}</style></head>
       toast.error("יש לבחור נקודת איסוף");
       return;
     }
-    if (tab === "pickup_point") {
-      const safety = getPickupPointSafety(activePoint, city);
+    if (tab === "pickup_point" && selectedPoint && !wooPickupPoint) {
+      const safety = getPickupPointSafety(selectedPoint, city);
       if (!safety.allowed) {
-        toast.error(safety.reasons.join(' | '));
-        return;
+        const approved = window.confirm(`שים לב: נקודת האיסוף דורשת בדיקה:\n${safety.reasons.join('\n')}\n\nהאם לאשר וליצור שטר מטען בכל זאת?`);
+        if (!approved) return;
       }
     }
 
@@ -399,16 +399,9 @@ iframe{width:100%;height:100%;border:none;}</style></head>
                       <Badge variant="outline" className="mt-2 text-xs border-green-300 text-green-700">
                         {wooPickupPoint.type === 'store' ? '🏪 חנות' : '🔒 לוקר'} • {wooPickupPoint.id}
                       </Badge>
-                      {(() => {
-                        const safety = getPickupPointSafety(wooPickupPoint, city);
-                        if (safety.allowed) return null;
-                        return (
-                          <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-800 flex gap-2">
-                            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                            <span>{safety.reasons.join(' · ')}</span>
-                          </div>
-                        );
-                      })()}
+                      <div className="mt-3 rounded-lg border border-green-200 bg-white/60 p-2 text-xs text-green-800">
+                        הנקודה נבחרה על ידי הלקוח ולכן מאושרת ללא בדיקת מרחק/עיר.
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -437,9 +430,9 @@ iframe{width:100%;height:100%;border:none;}</style></head>
                             const safety = getPickupPointSafety(selectedPoint, city);
                             if (safety.allowed) return null;
                             return (
-                              <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-800 flex gap-2">
+                              <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 flex gap-2">
                                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                                <span>{safety.reasons.join(' · ')}</span>
+                                <span>דורש בדיקת נציג ואישור: {safety.reasons.join(' · ')}</span>
                               </div>
                             );
                           })()}
@@ -491,8 +484,8 @@ iframe{width:100%;height:100%;border:none;}</style></head>
                           return (
                             <Card 
                               key={point.id}
-                              className={`transition-all border-gray-200 ${safety.allowed ? 'cursor-pointer hover:shadow-md hover:border-blue-400' : 'opacity-70 bg-red-50 border-red-200 cursor-not-allowed'}`}
-                              onClick={() => safety.allowed ? setSelectedPoint(point) : toast.error(safety.reasons.join(' | '))}
+                              className={`cursor-pointer transition-all hover:shadow-md ${safety.allowed ? 'border-gray-200 hover:border-blue-400' : 'bg-amber-50 border-amber-300 hover:border-amber-400'}`}
+                              onClick={() => setSelectedPoint(point)}
                             >
                               <CardContent className="p-3">
                                 <div className="flex items-start gap-3">
@@ -504,9 +497,9 @@ iframe{width:100%;height:100%;border:none;}</style></head>
                                     <div className="text-xs text-gray-500">{point.street} {point.house}, {point.city}</div>
                                     <div className="text-xs text-gray-400 mt-1">{point.hours}</div>
                                     {!safety.allowed && (
-                                      <div className="mt-2 text-xs text-red-700 flex gap-1">
+                                      <div className="mt-2 text-xs text-amber-800 flex gap-1">
                                         <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                                        <span>{safety.reasons.join(' · ')}</span>
+                                        <span>דורש בדיקת נציג ואישור: {safety.reasons.join(' · ')}</span>
                                       </div>
                                     )}
                                   </div>
