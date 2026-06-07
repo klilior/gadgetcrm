@@ -48,11 +48,15 @@ Deno.serve(async (req) => {
   const autoUrl = getTrackingUrl(tracking_carrier, tracking_number);
   const finalUrl = tracking_url || autoUrl;
 
-  // Build a friendly, clear SMS message
+  const carrierKey = (tracking_carrier || '').toLowerCase();
+  const isUpsPickup = carrierKey === 'ups';
+  const isCargoCourier = carrierKey === 'cargo' || carrierKey === 'קארגו';
+
+  // Build a friendly, clear SMS message according to the actual shipment flow used by the agent
   let message = `שלום ${firstName} 👋\n\n`;
   message += `ההזמנה שלך מ-GADGET-TEAM`;
   if (order_number) message += ` (מספר ${order_number})`;
-  message += ` יצאה לדרך! 🚚\n\n`;
+  message += isUpsPickup ? ` נשלחה לנקודת איסוף! 📦\n\n` : ` יצאה למשלוח עם שליח עד הבית! 🚚\n\n`;
   message += `📦 מספר מעקב: ${tracking_number}\n`;
   message += `🏢 חברת משלוח: ${carrierName}\n`;
 
@@ -60,7 +64,7 @@ Deno.serve(async (req) => {
     message += `\n🔗 למעקב אחרי המשלוח שלך:\n${finalUrl}\n`;
   }
 
-  message += `\nזמן משלוח משוער: 1-3 ימי עסקים`;
+  message += isCargoCourier ? `\nזמן משלוח משוער עם שליח: 1-3 ימי עסקים` : `\nתקבל/י עדכון כשהחבילה תהיה זמינה לאיסוף`;
   message += `\n\n❓ יש שאלות? אפשר להשיב להודעה הזאת ואנחנו כאן בשבילך!`;
   message += `\n\nתודה שבחרת ב-GADGET-TEAM 💜`;
 

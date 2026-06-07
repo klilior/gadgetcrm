@@ -8,6 +8,7 @@ import { Truck, Package, RefreshCw, Loader2, AlertTriangle, CheckCircle, Printer
 import { cargoApi } from "@/functions/cargoApi";
 import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
 import { updateWooOrderStatus } from "@/functions/updateWooOrderStatus";
+import { sendTrackingSms } from "@/functions/sendTrackingSms";
 import { toast } from "sonner";
 
 const SHIPMENT_TYPES = [
@@ -145,6 +146,21 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
             } catch (e) {
               console.error('[Cargo] Failed to update WooCommerce:', e.message);
             }
+          }
+
+          try {
+            await sendTrackingSms({
+              order_id: order?.raw_id || order?.id || order?.mirakl_order_id || order?.order_number || '',
+              customer_phone: toPhone,
+              customer_name: toName,
+              tracking_number: String(data.shipment_id),
+              tracking_carrier: 'cargo',
+              order_number: order?.order_number || order?.external_order_number || order?.mirakl_order_id || '',
+            });
+            toast.success('SMS מעקב נשלח לפי משלוח קארגו');
+          } catch (smsErr) {
+            console.error('[Cargo] Failed to send tracking SMS:', smsErr.message);
+            toast.error('משלוח נוצר, אבל שליחת SMS נכשלה');
           }
         }
       } else {

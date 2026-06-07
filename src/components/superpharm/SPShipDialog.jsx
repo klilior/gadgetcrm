@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Truck, CheckCircle, FileText, Copy } from "lucide-react";
 import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
 import { veloOrder } from "@/functions/veloOrder";
+import { sendTrackingSms } from "@/functions/sendTrackingSms";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 
@@ -112,6 +113,23 @@ export default function SPShipDialog({ order, open, onClose, onSuccess, onCreate
           }
         } catch (_e) {
           console.warn("Could not save sticker_url:", _e);
+        }
+      }
+
+      if (tn) {
+        try {
+          await sendTrackingSms({
+            order_id: order.mirakl_order_id,
+            customer_phone: order.customer_phone || "",
+            customer_name: `${order.customer_first_name || ""} ${order.customer_last_name || ""}`.trim(),
+            tracking_number: tn,
+            tracking_carrier: "cargo",
+            order_number: order.mirakl_order_id,
+          });
+          toast.success("SMS מעקב נשלח לפי משלוח קארגו");
+        } catch (smsErr) {
+          console.error("[SPShipDialog] Failed to send tracking SMS:", smsErr.message);
+          toast.error("משלוח נוצר, אבל שליחת SMS נכשלה");
         }
       }
 

@@ -34,8 +34,11 @@ function detectCarrierFromOrder(order) {
   if (joined.includes("ups") || joined.includes("deliv_ups")) {
     return { key: "ups", code: "deliv_ups", name: "UPS" };
   }
+  if (joined.includes("cargo") || joined.includes("קרגו") || joined.includes("deliv_cargoexp")) {
+    return { key: "cargo", code: "deliv_cargoexp", name: "Cargo-Ship" };
+  }
 
-  return { key: "cargo", code: "deliv_cargoexp", name: "Cargo-Ship" };
+  return null;
 }
 
 export default function SPShipmentSuccessScreen({ 
@@ -126,6 +129,13 @@ iframe{width:100%;height:100%;border:none;}</style></head>
       // Step 1: Update Mirakl with tracking + mark as shipped
       setStep("מעדכן מספר מעקב ב-Mirakl...");
       const detectedCarrier = detectCarrierFromOrder(order?._shipCarrier ? order : freshOrder);
+      if (!detectedCarrier) {
+        addProcessEvent("לא זוהה ספק שילוח מהתהליך", "error", "לא נשלח SMS כדי לא לנחש בין UPS לקארגו");
+        toast.error("לא זוהה ספק שילוח מהתהליך — לא נשלח SMS כדי לא לנחש");
+        setStep("");
+        setSaving(false);
+        return;
+      }
       const { data: miraklResult } = await updateSuperPharmOrder({
         action: "ship",
         order_id: order.mirakl_order_id,
