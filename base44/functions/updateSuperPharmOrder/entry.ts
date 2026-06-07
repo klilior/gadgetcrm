@@ -178,6 +178,16 @@ Deno.serve(async (req) => {
         return Response.json({ error: 'חסר מספר מעקב' }, { status: 400 });
       }
 
+      if (localOrder.order_state === 'SHIPPED' || localOrder.order_state === 'TO_COLLECT') {
+        await sr.SuperPharmOrder.update(localOrder.id, {
+          tracking_number,
+          carrier_code: carrier_code || localOrder.carrier_code || 'deliv_ups',
+          carrier_name: carrier_name || localOrder.carrier_name || 'UPS',
+          shipped_at: localOrder.shipped_at || new Date().toISOString(),
+        });
+        return Response.json({ success: true, message: 'ההזמנה כבר מסומנת כנשלחה — ממשיך לחשבונית ו-SMS', new_state: localOrder.order_state, already_shipped: true });
+      }
+
       // Step 1: Normalize carrier code to valid Mirakl codes
       // Valid: deliv_cargoexp (Cargo-Ship), deliv_ups (UPS), deliv_getpackage (GetPackage)
       let finalCarrierCode = carrier_code || 'deliv_ups';

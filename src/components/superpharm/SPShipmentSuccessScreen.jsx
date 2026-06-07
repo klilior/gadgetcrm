@@ -7,8 +7,10 @@ import { Loader2, CheckCircle, Copy, Printer, Save, Receipt, Mail } from "lucide
 import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
 import { createSPLinetInvoice } from "@/functions/createSPLinetInvoice";
+import { sendTrackingSms } from "@/functions/sendTrackingSms";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
+import SPProcessTimeline from "./SPProcessTimeline";
 
 export default function SPShipmentSuccessScreen({ 
   trackingNumber, 
@@ -20,8 +22,19 @@ export default function SPShipmentSuccessScreen({
   const [saved, setSaved] = useState(false);
   const [printingLabel, setPrintingLabel] = useState(null);
   const [invoiceResult, setInvoiceResult] = useState(null);
+  const [smsResult, setSmsResult] = useState(null);
   const [step, setStep] = useState("");
   const [sendEmail, setSendEmail] = useState("");
+  const [processEvents, setProcessEvents] = useState([]);
+
+  const addProcessEvent = (label, status = "done", details = "") => {
+    setProcessEvents(prev => [...prev, {
+      label,
+      status,
+      details,
+      time: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    }]);
+  };
 
   const copyTracking = () => {
     navigator.clipboard.writeText(trackingNumber);
@@ -60,6 +73,8 @@ iframe{width:100%;height:100%;border:none;}</style></head>
           document.body.removeChild(a);
         }
         toast.success(`שטר מטען ${format === 'a4' ? 'A4' : 'תרמי'} נפתח`);
+        addProcessEvent(`שטר מטען ${format === 'a4' ? 'A4' : 'תרמי'} נפתח להדפסה`);
+        await handleSaveAndFinalize();
       } else {
         toast.error(data.error || "שגיאה בהורדת שטר מטען");
       }
@@ -71,13 +86,22 @@ iframe{width:100%;height:100%;border:none;}</style></head>
   };
 
   const handleSaveAndFinalize = async () => {
+    if (saving || saved) return;
     setSaving(true);
     try {
+      addProcessEvent("התחלת סיום טיפול בהזמנה", "running");
+
+      let freshOrder = order;
+      try {
+        const freshOrders = await base44.entities.SuperPharmOrder.filter({ mirakl_order_id: order.mirakl_order_id }, null, 1);
+        if (freshOrders.length > 0) freshOrder = freshOrders[0];
+      } catch (_) {}
+
       // Step 1: Update Mirakl with tracking + mark as shipped
       setStep("מעדכן מספר מעקב ב-Mirakl...");
-      // Detect carrier from order context — default to cargo for SuperPharm
-      const orderCarrier = (order?.carrier_code || order?.tracking_carrier || '').toLowerCase();
-      const isUps = orderCarrier.includes('ups');
+      // This success screen is used after UPS label creation, so UPS is the default carrier.
+      const orderCarrier = (order?.carrier_code || order?.tracking_carrier || 'ups').toLowerCase();
+      const isUps = !orderCarrier || orderCarrier.includes('ups');
       const { data: miraklResult } = await updateSuperPharmOrder({
         action: "ship",
         order_id: order.mirakl_order_id,
@@ -88,24 +112,19 @@ iframe{width:100%;height:100%;border:none;}</style></head>
 
       if (!miraklResult.success) {
         toast.error("שגיאה בעדכון Mirakl: " + (miraklResult.error || ""));
+        addProcessEvent("עדכון Mirakl נכשל", "error", miraklResult.error || "");
         setSaving(false);
         setStep("");
         return;
       }
 
+      addProcessEvent("Mirakl עודכן — הזמנה סומנה כנשלחה");
       toast.success("✅ Mirakl עודכן — הזמנה סומנה כנשלחה");
 
       // Step 2: Create Linet invoice (only if not already created)
       if (!hasExistingInvoice) {
         setStep("יוצר חשבונית מס-קבלה בלינט...");
         
-        // Re-fetch fresh order data from DB to get latest synced customer info
-        let freshOrder = order;
-        try {
-          const freshOrders = await base44.entities.SuperPharmOrder.filter({ mirakl_order_id: order.mirakl_order_id }, null, 1);
-          if (freshOrders.length > 0) freshOrder = freshOrders[0];
-        } catch (_) {}
-
         let productDesc = "";
         let totalProductPrice = 0;
         let shippingAmount = 0;
@@ -139,22 +158,54 @@ iframe{width:100%;height:100%;border:none;}</style></head>
           });
 
           if (invoiceData.duplicate) {
+            setInvoiceResult({ doc_number: invoiceData.existing_doc_number, doc_id: invoiceData.existing_doc_id });
+            addProcessEvent("חשבונית לינט כבר קיימת", "warning", invoiceData.existing_doc_number || invoiceData.existing_doc_id || "");
             toast.warning(invoiceData.error);
           } else if (invoiceData.success) {
             setInvoiceResult(invoiceData);
             const emailNote = invoiceData.email_sent ? " ונשלחה במייל" : "";
+            addProcessEvent("חשבונית לינט נוצרה", "done", invoiceData.doc_number || invoiceData.doc_id || "");
             toast.success(`✅ חשבונית לינט ${invoiceData.doc_number || invoiceData.doc_id} נוצרה${emailNote}`);
           } else {
+            addProcessEvent("יצירת חשבונית לינט נכשלה", "error", invoiceData.error || "");
             toast.error("שגיאה ביצירת חשבונית לינט: " + (invoiceData.error || ""));
           }
         } catch (invErr) {
+          addProcessEvent("יצירת חשבונית לינט נכשלה", "error", invErr.message);
           toast.error("שגיאה ביצירת חשבונית: " + invErr.message);
         }
       } else {
         setInvoiceResult({ doc_number: order.linet_invoice_doc_number, doc_id: order.linet_invoice_doc_id });
+        addProcessEvent("חשבונית לינט כבר קיימת", "warning", order.linet_invoice_doc_number || order.linet_invoice_doc_id || "");
         toast.info(`חשבונית כבר קיימת: #${order.linet_invoice_doc_number || order.linet_invoice_doc_id}`);
       }
 
+      setStep("שולח SMS מעקב ללקוח...");
+      try {
+        const customerName = `${freshOrder.customer_first_name || ""} ${freshOrder.customer_last_name || ""}`.trim();
+        const { data: smsData } = await sendTrackingSms({
+          order_id: freshOrder.id || freshOrder.mirakl_order_id,
+          customer_phone: freshOrder.customer_phone || "",
+          customer_name: customerName,
+          tracking_number: trackingNumber,
+          tracking_carrier: "ups",
+          order_number: freshOrder.mirakl_order_id,
+        });
+
+        if (smsData?.success) {
+          setSmsResult(smsData);
+          addProcessEvent("SMS מעקב נשלח ללקוח");
+          toast.success("✅ SMS מעקב נשלח ללקוח");
+        } else {
+          addProcessEvent("שליחת SMS נכשלה", "error", smsData?.error || smsData?.message || "");
+          toast.error("שגיאה בשליחת SMS: " + (smsData?.error || smsData?.message || ""));
+        }
+      } catch (smsErr) {
+        addProcessEvent("שליחת SMS נכשלה", "error", smsErr.message);
+        toast.error("שגיאה בשליחת SMS: " + smsErr.message);
+      }
+
+      addProcessEvent("סיום טיפול בהזמנה");
       setSaved(true);
       setStep("");
     } catch (e) {
@@ -201,6 +252,8 @@ iframe{width:100%;height:100%;border:none;}</style></head>
             </Button>
           </div>
 
+          <SPProcessTimeline events={processEvents} />
+
           {/* Save & Finalize */}
           {!saved ? (
             <div className="pt-2 border-t space-y-3">
@@ -221,8 +274,8 @@ iframe{width:100%;height:100%;border:none;}</style></head>
               </div>
 
               <p className="text-xs text-gray-500">
-                לחיצה על שמירה תעדכן את Mirakl, תסמן כנשלחה ותיצור חשבונית מס-קבלה בלינט
-                {sendEmail && " + תשלח במייל"}
+                לאחר פתיחת התווית להדפסה המערכת תעדכן את Mirakl, תיצור חשבונית לינט ותשלח SMS מעקב ללקוח.
+                {sendEmail && " החשבונית תישלח גם במייל."}
               </p>
               <Button
                 onClick={handleSaveAndFinalize}
@@ -237,7 +290,7 @@ iframe{width:100%;height:100%;border:none;}</style></head>
                 ) : (
                   <>
                     <Save className="w-5 h-5 ml-2" />
-                    💾 שמור — עדכן Mirakl + צור חשבונית לינט
+                    המשך עכשיו — Mirakl + חשבונית + SMS
                   </>
                 )}
               </Button>
@@ -264,17 +317,21 @@ iframe{width:100%;height:100%;border:none;}</style></head>
                   ⚠️ חשבונית לינט לא נוצרה — יש ליצור ידנית
                 </div>
               )}
+              {smsResult && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+                  ✅ SMS מעקב נשלח ללקוח
+                </div>
+              )}
               <Button onClick={onDone} className="w-full">
                 סגור
               </Button>
             </div>
           )}
 
-          {/* Cancel without saving */}
           {!saved && (
-            <Button variant="ghost" onClick={onDone} disabled={saving} className="text-xs text-gray-400">
-              סגור בלי לשמור
-            </Button>
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+              אין לסגור לפני סיום התהליך — לאחר פתיחת התווית המערכת תמשיך אוטומטית לחשבונית ו-SMS.
+            </div>
           )}
         </div>
       </DialogContent>
