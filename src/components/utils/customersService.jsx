@@ -65,7 +65,13 @@ export const customersService = {
   async search({ query, phone, email }, limit = 50) {
     // Use server-side filter for phone/email when possible
     if (phone && !query && !email) {
-      return await base44.entities.Client.filter({ phone: { $regex: phone } }, null, limit).catch(() => []);
+      const direct = await base44.entities.Client.filter({ phone: { $regex: phone } }, null, limit).catch(() => []);
+      if (direct.length > 0) return direct;
+      const digits = String(phone).replace(/\D/g, '');
+      const list = await this.list();
+      return list
+        .filter((c) => String(c.phone || c.phone_original || '').replace(/\D/g, '').includes(digits))
+        .slice(0, limit);
     }
     if (email && !query && !phone) {
       return await base44.entities.Client.filter({ email: { $regex: email } }, null, limit).catch(() => []);
@@ -77,8 +83,11 @@ export const customersService = {
       .filter((c) => {
         const byPhone = phone ? (c.phone || '').includes(phone) : true;
         const byEmail = email ? (c.email || '').toLowerCase().includes(email.toLowerCase()) : true;
-        const byQuery = q ? [c.name, c.full_name, c.email, c.phone, c.id_number]
-          .some((v) => (v || '').toLowerCase().includes(q)) : true;
+        const byQuery = q ? [
+          c.name, c.full_name, c.email, c.phone, c.phone_original, c.id_number,
+          c.city, c.full_address, c.source, c.notes, c.customer_tier,
+          c.woo_customer_id, c.linet_account_id, c.last_tracking_number
+        ].some((v) => String(v || '').toLowerCase().includes(q)) : true;
         return byPhone && byEmail && byQuery;
       })
       .slice(0, limit);

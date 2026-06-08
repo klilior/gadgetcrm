@@ -2,16 +2,18 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Truck, Package, Loader2, List } from "lucide-react";
+import { Truck, Package, Loader2, List, UserCheck } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import UPSShipmentForm from "../components/shipping/UPSShipmentForm";
 import CargoShipmentForm from "../components/shipping/CargoShipmentForm";
 import GetPackageShipmentForm from "../components/shipping/GetPackageShipmentForm";
 import CargoShipmentsList from "../components/shipping/CargoShipmentsList";
+import CustomerLookupPanel, { customerToShipmentData } from "../components/customers/CustomerLookupPanel";
 
 export default function Shipments() {
   const [activeProviders, setActiveProviders] = useState({ ups: false, cargo: false, getpackage: false });
   const [loadingProviders, setLoadingProviders] = useState(true);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   useEffect(() => {
     const loadProviders = async () => {
@@ -56,6 +58,17 @@ export default function Shipments() {
         </div>
       </div>
 
+      <CustomerLookupPanel
+        onSelect={setSelectedCustomer}
+      />
+
+      {selectedCustomer && (
+        <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+          <UserCheck className="w-4 h-4" />
+          נטענו פרטי הלקוח: <strong>{selectedCustomer.full_name}</strong>
+        </div>
+      )}
+
       {/* Provider status */}
       <div className="flex flex-wrap gap-2">
         <Badge className={activeProviders.ups ? "bg-green-100 text-green-700 border-green-200" : "bg-red-100 text-red-700 border-red-200"}>
@@ -94,15 +107,15 @@ export default function Shipments() {
         </TabsContent>
 
         <TabsContent value="ups">
-          <UPSShipmentForm />
+          <UPSShipmentForm initialCustomer={customerToShipmentData(selectedCustomer)} />
         </TabsContent>
 
         <TabsContent value="cargo">
-          <CargoShipmentForm />
+          <CargoShipmentForm initialCustomer={customerToShipmentData(selectedCustomer)} />
         </TabsContent>
 
         <TabsContent value="getpackage">
-          <GetPackageShipmentForm />
+          <GetPackageShipmentForm initialCustomer={customerToShipmentData(selectedCustomer)} />
         </TabsContent>
       </Tabs>
     </div>

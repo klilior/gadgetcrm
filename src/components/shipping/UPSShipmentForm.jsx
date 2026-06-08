@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { printShipmentLabel } from "@/functions/printShipmentLabel";
 import { toast } from "sonner";
 import { getPickupPointSafety } from "./pickupPointSafety";
 
-export default function UPSShipmentForm() {
+export default function UPSShipmentForm({ initialCustomer }) {
   const [tab, setTab] = useState("standard");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -31,6 +31,14 @@ export default function UPSShipmentForm() {
   const [pickupPoints, setPickupPoints] = useState([]);
   const [searchingPoints, setSearchingPoints] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState(null);
+
+  useEffect(() => {
+    if (!initialCustomer) return;
+    setName(initialCustomer.name || "");
+    setPhone(initialCustomer.phone || "");
+    setCity(initialCustomer.city || "");
+    setStreet(initialCustomer.address || "");
+  }, [initialCustomer]);
 
   const handleSearchPoints = async () => {
     if (!city) { toast.error("יש להזין עיר"); return; }

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ const SHIPMENT_TYPES = [
   { value: "exchange", label: "🔄 החלפה", desc: "שליחה + איסוף", color: "bg-purple-100 text-purple-800 border-purple-300" },
 ];
 
-export default function CargoShipmentForm() {
+export default function CargoShipmentForm({ initialCustomer }) {
   const [shipmentType, setShipmentType] = useState("delivery");
   const [toName, setToName] = useState("");
   const [toPhone, setToPhone] = useState("");
@@ -33,6 +33,14 @@ export default function CargoShipmentForm() {
   const [printingLabel, setPrintingLabel] = useState(false);
   const [statusResult, setStatusResult] = useState(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
+
+  useEffect(() => {
+    if (!initialCustomer) return;
+    setToName(initialCustomer.name || "");
+    setToPhone(initialCustomer.phone || "");
+    setToCity(initialCustomer.city || "");
+    setToStreet(initialCustomer.address || "");
+  }, [initialCustomer]);
 
   const handleSubmit = async () => {
     if (!toName || !toPhone || !toCity) { toast.error("נא למלא שם, טלפון ועיר"); return; }

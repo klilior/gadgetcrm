@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { getPackageApi } from "@/functions/getPackageApi";
 import { toast } from "sonner";
 import GetPackageLabel from "./GetPackageLabel";
 
-export default function GetPackageShipmentForm() {
+export default function GetPackageShipmentForm({ initialCustomer }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("");
@@ -24,6 +24,14 @@ export default function GetPackageShipmentForm() {
   const [shipmentId, setShipmentId] = useState(null);
   const [acceptedShipment, setAcceptedShipment] = useState(null);
   const [showLabel, setShowLabel] = useState(false);
+
+  useEffect(() => {
+    if (!initialCustomer) return;
+    setName(initialCustomer.name || "");
+    setPhone(initialCustomer.phone || "");
+    setCity(initialCustomer.city || "");
+    setAddress(initialCustomer.address || "");
+  }, [initialCustomer]);
 
   const handleGetQuote = async () => {
     if (!name || !phone || !city || !address) { toast.error("נא למלא שם, טלפון, עיר וכתובת"); return; }

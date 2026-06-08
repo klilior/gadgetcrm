@@ -6,15 +6,25 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Lead } from '@/entities/all';
+import { base44 } from '@/api/base44Client';
+import CustomerLookupPanel, { buildCustomerNote, customerToShipmentData } from '@/components/customers/CustomerLookupPanel';
+import UPSShipmentForm from '@/components/shipping/UPSShipmentForm';
+import CargoShipmentForm from '@/components/shipping/CargoShipmentForm';
+import GetPackageShipmentForm from '@/components/shipping/GetPackageShipmentForm';
 import { useUser } from '../UserAuth';
 import { useEmployees } from '../EmployeeProvider';
 import { toast } from 'sonner';
-import { Phone, User, FileText, Bell, Clock, Loader2, StickyNote } from 'lucide-react';
+import { Phone, User, FileText, Bell, Clock, Loader2, StickyNote, Truck } from 'lucide-react';
 
 export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
   const { currentUser } = useUser();
   const { employees } = useEmployees();
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [showShipmentCreator, setShowShipmentCreator] = useState(false);
+  const [shipmentProvider, setShipmentProvider] = useState('ups');
+  const [activeProviders, setActiveProviders] = useState({ ups: true, cargo: false, getpackage: false });
+  const [shipmentCustomerData, setShipmentCustomerData] = useState(null);
   
   const [formData, setFormData] = useState({
     phone: '',
@@ -26,6 +36,25 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
     reminder_at: '',
     sla_due_at: ''
   });
+
+  useEffect(() => {
+    if (isOpen) return;
+    setShowShipmentCreator(false);
+    setShipmentCustomerData(null);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const loadProviders = async () => {
+      const map = { ups: true, cargo: false, getpackage: false };
+      const providers = await base44.entities.ShippingProvider.list().catch(() => []);
+      providers.forEach(p => { if (p.provider_type === 'cargo' && p.is_active) map.cargo = true; });
+      const gpSettings = await base44.entities.GetPackageSettings.list('-created_date', 1).catch(() => []);
+      if (gpSettings?.[0]?.is_active) map.getpackage = true;
+      setActiveProviders(map);
+    };
+    loadProviders();
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !currentUser || employees.length === 0) return;
@@ -45,7 +74,18 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
     }
   }, [isOpen, currentUser, employees]);
 
-  const handleSubmit = async (e) => {
+  const applyCustomer = (customer) => {
+    setSelectedCustomer(customer);
+    const customerNote = buildCustomerNote(customer);
+    setFormData(prev => ({
+      ...prev,
+      phone: customer.phone || prev.phone,
+      customer_name: customer.full_name || prev.customer_name,
+      notes: prev.notes?.includes('פרטי לקוח קיימים:') ? prev.notes : [prev.notes, customerNote].filter(Boolean).join('\n\n')
+    }));
+  };
+
+  const handleSubmit = async (e, createShipmentAfter = false) => {
     e.preventDefault();
     
     if (!formData.phone || !formData.topic || !formData.assigned_to) {
@@ -78,9 +118,25 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
         quick_incomplete: true
       };
 
-      await Lead.create(leadData);
+      const createdLead = await Lead.create(leadData);
       
       toast.success(`ליד נשמר והוקצה ל-${formData.assigned_to_name}`);
+      
+      if (onLeadCreated) onLeadCreated();
+
+      if (createShipmentAfter) {
+        setShipmentCustomerData(selectedCustomer ? customerToShipmentData(selectedCustomer) : {
+          name: formData.customer_name,
+          phone: formData.phone,
+          city: '',
+          address: '',
+          email: '',
+          customer: null,
+          reference: createdLead?.id || ''
+        });
+        setShowShipmentCreator(true);
+        return;
+      }
       
       // Reset form
       setFormData({
@@ -93,8 +149,7 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
         reminder_at: '',
         sla_due_at: ''
       });
-      
-      if (onLeadCreated) onLeadCreated();
+      setSelectedCustomer(null);
       onClose();
     } catch (error) {
       console.error('Error creating lead:', error);
@@ -112,6 +167,35 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
       assigned_to_name: emp?.employee_name || ''
     }));
   };
+
+  if (showShipmentCreator) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Truck className="w-5 h-5 text-blue-600" />
+              יצירת משלוח מהפתק
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              <Button type="button" variant={shipmentProvider === 'ups' ? 'default' : 'outline'} disabled={!activeProviders.ups} onClick={() => setShipmentProvider('ups')}>UPS</Button>
+              <Button type="button" variant={shipmentProvider === 'cargo' ? 'default' : 'outline'} disabled={!activeProviders.cargo} onClick={() => setShipmentProvider('cargo')}>קארגו</Button>
+              <Button type="button" variant={shipmentProvider === 'getpackage' ? 'default' : 'outline'} disabled={!activeProviders.getpackage} onClick={() => setShipmentProvider('getpackage')}>GetPackage</Button>
+            </div>
+
+            {shipmentProvider === 'ups' && <UPSShipmentForm initialCustomer={shipmentCustomerData} />}
+            {shipmentProvider === 'cargo' && <CargoShipmentForm initialCustomer={shipmentCustomerData} />}
+            {shipmentProvider === 'getpackage' && <GetPackageShipmentForm initialCustomer={shipmentCustomerData} />}
+
+            <Button type="button" variant="outline" onClick={onClose} className="w-full">סגור</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -137,6 +221,12 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
               autoFocus
             />
           </div>
+
+          <CustomerLookupPanel
+            phoneValue={formData.phone}
+            onSelect={applyCustomer}
+            compact
+          />
 
           <div>
             <Label className="flex items-center gap-1 mb-1">
@@ -220,14 +310,23 @@ export default function QuickLeadModal({ isOpen, onClose, onLeadCreated }) {
             * אם לא הוגדר SLA, יוגדר אוטומטית ל-2 שעות מעכשיו
           </p>
 
-          <div className="flex gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
               ביטול
+            </Button>
+            <Button 
+              type="button"
+              disabled={isLoading}
+              onClick={(e) => handleSubmit(e, true)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Truck className="w-4 h-4 ml-1" />
+              שמור וצור משלוח
             </Button>
             <Button 
               type="submit" 
               disabled={isLoading}
-              className="flex-1 bg-purple-600 hover:bg-purple-700"
+              className="bg-purple-600 hover:bg-purple-700"
             >
               {isLoading ? (
                 <>
