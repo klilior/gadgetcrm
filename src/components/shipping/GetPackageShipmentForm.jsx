@@ -30,7 +30,9 @@ export default function GetPackageShipmentForm({ initialCustomer }) {
     setName(initialCustomer.name || "");
     setPhone(initialCustomer.phone || "");
     setCity(initialCustomer.city || "");
-    setAddress(initialCustomer.address || "");
+    setAddress(initialCustomer.address || [initialCustomer.street, initialCustomer.house].filter(Boolean).join(" ") || "");
+    setDropoffNotes(initialCustomer.notes || [initialCustomer.floor ? `קומה ${initialCustomer.floor}` : "", initialCustomer.apartment ? `דירה ${initialCustomer.apartment}` : "", initialCustomer.entrance ? `כניסה ${initialCustomer.entrance}` : ""].filter(Boolean).join(", "));
+    setReference(initialCustomer.reference || "");
   }, [initialCustomer]);
 
   const handleGetQuote = async () => {

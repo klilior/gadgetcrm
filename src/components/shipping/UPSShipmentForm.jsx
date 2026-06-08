@@ -37,7 +37,10 @@ export default function UPSShipmentForm({ initialCustomer }) {
     setName(initialCustomer.name || "");
     setPhone(initialCustomer.phone || "");
     setCity(initialCustomer.city || "");
-    setStreet(initialCustomer.address || "");
+    setStreet(initialCustomer.street || initialCustomer.address || "");
+    setHouse(initialCustomer.house || "");
+    setZip(initialCustomer.zip || "");
+    setReference(initialCustomer.reference || "");
   }, [initialCustomer]);
 
   const handleSearchPoints = async () => {

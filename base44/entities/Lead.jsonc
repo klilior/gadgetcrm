@@ -11,6 +11,43 @@
       "description": "\u05d8\u05dc\u05e4\u05d5\u05df",
       "index": true
     },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "\u05d3\u05d5\u05d0\"\u05dc"
+    },
+    "city": {
+      "type": "string",
+      "description": "\u05e2\u05d9\u05e8 \u05dc\u05de\u05e9\u05dc\u05d5\u05d7"
+    },
+    "street": {
+      "type": "string",
+      "description": "\u05e8\u05d7\u05d5\u05d1 / \u05db\u05ea\u05d5\u05d1\u05ea \u05dc\u05de\u05e9\u05dc\u05d5\u05d7"
+    },
+    "house": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d1\u05d9\u05ea"
+    },
+    "zip": {
+      "type": "string",
+      "description": "\u05de\u05d9\u05e7\u05d5\u05d3"
+    },
+    "floor": {
+      "type": "string",
+      "description": "\u05e7\u05d5\u05de\u05d4"
+    },
+    "apartment": {
+      "type": "string",
+      "description": "\u05d3\u05d9\u05e8\u05d4"
+    },
+    "entrance": {
+      "type": "string",
+      "description": "\u05db\u05e0\u05d9\u05e1\u05d4"
+    },
+    "full_address": {
+      "type": "string",
+      "description": "\u05db\u05ea\u05d5\u05d1\u05ea \u05de\u05dc\u05d0\u05d4 \u05dc\u05de\u05e9\u05dc\u05d5\u05d7"
+    },
     "topic": {
       "type": "string",
       "description": "\u05e0\u05d5\u05e9\u05d0 \u05d4\u05e4\u05e0\u05d9\u05d9\u05d4"
@@ -77,7 +114,6 @@
   },
   "required": [
     "phone",
-    "topic",
     "assigned_to"
   ]
 }

@@ -39,7 +39,11 @@ export default function CargoShipmentForm({ initialCustomer }) {
     setToName(initialCustomer.name || "");
     setToPhone(initialCustomer.phone || "");
     setToCity(initialCustomer.city || "");
-    setToStreet(initialCustomer.address || "");
+    setToStreet(initialCustomer.address || [initialCustomer.street, initialCustomer.house].filter(Boolean).join(" ") || "");
+    setToFloor(initialCustomer.floor || "");
+    setToApartment(initialCustomer.apartment || "");
+    setToEntrance(initialCustomer.entrance || "");
+    setReference(initialCustomer.reference || "");
   }, [initialCustomer]);
 
   const handleSubmit = async () => {
