@@ -132,6 +132,10 @@ Deno.serve(async (req) => {
     let resolvedEmail = customer_email || send_email || '';
     let resolvedCity = '';
     let resolvedAddress = '';
+    let resolvedProductDescription = product_description || '';
+    let resolvedQuantity = quantity || 1;
+    let resolvedUnitPrice = Number(unit_price) || 0;
+    let resolvedShippingAmount = Number(shipping_amount) || 0;
 
     if (mirakl_order_id) {
       console.log('[SP Invoice] Loading order from DB for mirakl_order_id:', mirakl_order_id);
@@ -170,6 +174,28 @@ Deno.serve(async (req) => {
           } catch (_) {}
         }
 
+        if ((!resolvedProductDescription || !resolvedUnitPrice) && existingOrder.order_lines_json) {
+          try {
+            const lines = JSON.parse(existingOrder.order_lines_json || '[]');
+            if (Array.isArray(lines) && lines.length > 0) {
+              resolvedProductDescription = resolvedProductDescription || lines.map(function(line) {
+                return line.product_title || line.offer_sku || 'פריט סופר-פארם';
+              }).join(', ');
+              resolvedQuantity = lines.reduce(function(sum, line) { return sum + (Number(line.quantity) || 1); }, 0) || 1;
+              const productsTotal = lines.reduce(function(sum, line) { return sum + (Number(line.total_price) || Number(line.price) || 0); }, 0);
+              if (!resolvedUnitPrice && productsTotal > 0) resolvedUnitPrice = productsTotal;
+              if (!resolvedShippingAmount && existingOrder.total_price > productsTotal && productsTotal > 0) {
+                resolvedShippingAmount = Number(existingOrder.total_price) - productsTotal;
+              }
+            }
+          } catch (linesErr) {
+            console.warn('[SP Invoice] Failed parsing order lines: ' + linesErr.message);
+          }
+        }
+
+        if (!resolvedUnitPrice && existingOrder.total_price) resolvedUnitPrice = Number(existingOrder.total_price);
+        if (!resolvedProductDescription) resolvedProductDescription = 'הזמנת סופר-פארם ' + existingOrder.mirakl_order_id;
+
         console.log('[SP Invoice] Customer from entity: "' + resolvedCustomerName + '", phone: ' + resolvedPhone + ', city: ' + resolvedCity + ', email: ' + resolvedEmail);
       }
     }
@@ -179,7 +205,7 @@ Deno.serve(async (req) => {
       resolvedCustomerName = (customer_name || '').trim();
     }
 
-    if (!resolvedCustomerName || !product_description || !unit_price) {
+    if (!resolvedCustomerName || !resolvedProductDescription || !resolvedUnitPrice) {
       return Response.json({ error: 'חסרים שדות חובה: שם לקוח, תיאור מוצר, מחיר' }, { status: 400 });
     }
 
@@ -204,22 +230,22 @@ Deno.serve(async (req) => {
 
     docDet.push({
       item_id: 1,
-      name: product_description,
+      name: resolvedProductDescription,
       description: 'הזמנת סופר-פארם ' + (mirakl_order_id || ''),
-      qty: quantity || 1,
-      iItem: Number(unit_price),
+      qty: resolvedQuantity || 1,
+      iItem: Number(resolvedUnitPrice),
       iItemWithVat: 1,
       currency_id: "ILS",
       vat_cat_id: 1,
     });
 
-    if (shipping_amount && Number(shipping_amount) > 0) {
+    if (resolvedShippingAmount && Number(resolvedShippingAmount) > 0) {
       docDet.push({
         item_id: 1,
         name: 'דמי משלוח',
         description: 'משלוח הזמנה ' + (mirakl_order_id || ''),
         qty: 1,
-        iItem: Number(shipping_amount),
+        iItem: Number(resolvedShippingAmount),
         iItemWithVat: 1,
         currency_id: "ILS",
         vat_cat_id: 1,
