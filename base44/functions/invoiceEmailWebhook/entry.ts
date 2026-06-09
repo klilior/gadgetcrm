@@ -15,6 +15,14 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * - file_name: original filename (optional)
  */
 
+function isLikelyInlineOrPreviewImage(fileName, fileMime) {
+  const name = (fileName || '').trim().toLowerCase();
+  const mime = (fileMime || '').trim().toLowerCase();
+  const isImage = mime.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(name);
+  if (!isImage) return false;
+  return name.startsWith('~') || name.includes('logo') || name.includes('signature') || name.includes('image00') || name.includes('cid:');
+}
+
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   
@@ -67,6 +75,15 @@ Deno.serve(async (req) => {
     // Validate file
     if (!file_url) {
       return Response.json({ success: false, error: 'No file provided' }, { status: 400 });
+    }
+
+    if (isLikelyInlineOrPreviewImage(file_name, file_mime)) {
+      console.log(`Skipping inline/preview image attachment: ${file_name || 'unnamed'}`);
+      return Response.json({
+        success: true,
+        skipped: true,
+        reason: 'Inline or preview image attachment - not an invoice source file'
+      });
     }
     
     // Check for duplicate by attachment_id (primary) or message_id

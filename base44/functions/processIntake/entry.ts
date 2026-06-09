@@ -1,7 +1,16 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+function isLikelyInlineOrPreviewImage(intake) {
+  const name = (intake?.file_name || '').trim().toLowerCase();
+  const mime = (intake?.file_mime || '').trim().toLowerCase();
+  const isImage = mime.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(name);
+  if (!isImage) return false;
+  return name.startsWith('~') || name.includes('logo') || name.includes('signature') || name.includes('image00') || name.includes('cid:');
+}
+
 function isValidFile(intake) {
-  const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+  if (isLikelyInlineOrPreviewImage(intake)) return false;
+  const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'application/octet-stream'];
   if (!intake?.file) return false;
   if (intake?.file_mime && allowed.includes(intake.file_mime.toLowerCase())) return true;
   try {
