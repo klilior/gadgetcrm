@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
               resolvedProductDescription = resolvedProductDescription || lines.map(function(line) {
                 return line.product_title || line.offer_sku || 'פריט סופר-פארם';
               }).join(', ');
-              resolvedQuantity = lines.reduce(function(sum, line) { return sum + (Number(line.quantity) || 1); }, 0) || 1;
+              resolvedQuantity = 1;
               const productsTotal = lines.reduce(function(sum, line) { return sum + (Number(line.total_price) || Number(line.price) || 0); }, 0);
               if (!resolvedUnitPrice && productsTotal > 0) resolvedUnitPrice = productsTotal;
               if (!resolvedShippingAmount && existingOrder.total_price > productsTotal && productsTotal > 0) {

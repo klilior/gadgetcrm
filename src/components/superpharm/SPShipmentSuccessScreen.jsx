@@ -184,7 +184,7 @@ iframe{width:100%;height:100%;border:none;}</style></head>
             customer_phone: freshOrder.customer_phone || "",
             customer_email: sendEmail || "",
             product_description: productDesc || `הזמנת סופר-פארם ${freshOrder.mirakl_order_id}`,
-            quantity: qty,
+            quantity: 1,
             unit_price: totalProductPrice || orderTotal,
             shipping_amount: shippingAmount,
             mirakl_order_id: freshOrder.mirakl_order_id,

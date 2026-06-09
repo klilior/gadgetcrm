@@ -163,7 +163,7 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
                 customer_phone: toPhone,
                 customer_email: order.customer_email || '',
                 product_description: productDesc,
-                quantity: qty,
+                quantity: 1,
                 unit_price: productsTotal || orderTotal,
                 shipping_amount: shippingAmount,
                 mirakl_order_id: order.mirakl_order_id || order.order_number,
