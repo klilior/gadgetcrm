@@ -14,7 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import useSuppliers from "../components/hooks/useSuppliers";
-import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut, Download, ChevronUp, ChevronDown, Eye } from "lucide-react";
+import InvoiceSourceInfo from "../components/invoices/InvoiceSourceInfo";
+import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut, Download, ChevronUp, ChevronDown, Eye, AlertCircle } from "lucide-react";
 
 export default function InvoicesToReview() {
   const [rows, setRows] = useState([]);
@@ -23,6 +24,8 @@ export default function InvoicesToReview() {
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
   const [intakeFile, setIntakeFile] = useState(null);
+  const [intakeRecord, setIntakeRecord] = useState(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
   const [imageZoom, setImageZoom] = useState(100);
   const [showDocOnMobile, setShowDocOnMobile] = useState(false);
   const { currentUser } = useUser();
@@ -81,14 +84,17 @@ export default function InvoicesToReview() {
   const openRecord = async (row) => {
     setSelected({ ...row });
     setIntakeFile(null);
+    setIntakeRecord(null);
+    setPreviewFailed(false);
     setImageZoom(100);
     setShowDocOnMobile(false);
     
     if (row.source_intake) {
       try {
         const intakeList = await base44.entities.InvoiceIntakeRaw.filter({ id: row.source_intake });
-        if (intakeList && intakeList.length > 0 && intakeList[0].file) {
-          setIntakeFile(intakeList[0].file);
+        if (intakeList && intakeList.length > 0) {
+          setIntakeRecord(intakeList[0]);
+          if (intakeList[0].file) setIntakeFile(intakeList[0].file);
         }
       } catch (e) {
         console.error("Failed to load intake file:", e);
@@ -99,6 +105,8 @@ export default function InvoicesToReview() {
   const closeDialog = () => {
     setSelected(null);
     setIntakeFile(null);
+    setIntakeRecord(null);
+    setPreviewFailed(false);
   };
 
   const saveRecord = async () => {
@@ -421,12 +429,21 @@ export default function InvoicesToReview() {
                       
                       if (isImage) {
                         return (
-                          <img 
-                            src={intakeFile} 
-                            alt="Invoice document" 
-                            style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
-                            className="object-contain shadow-lg bg-white"
-                          />
+                          <div className="w-full flex flex-col items-center gap-3">
+                            {previewFailed && (
+                              <div className="w-full max-w-md bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex items-start gap-2">
+                                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                                <span>התצוגה המקדימה לא נטענה. אפשר לפתוח או להוריד את קובץ המקור מהכפתורים למעלה.</span>
+                              </div>
+                            )}
+                            <img 
+                              src={intakeFile} 
+                              alt="Invoice document" 
+                              style={{ width: `${imageZoom}%`, maxWidth: 'none', display: previewFailed ? 'none' : 'block' }}
+                              className="object-contain shadow-lg bg-white"
+                              onError={() => setPreviewFailed(true)}
+                            />
+                          </div>
                         );
                       }
                       
@@ -485,7 +502,9 @@ export default function InvoicesToReview() {
                   </button>
                 )}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
-                  {/* Supplier Info Section */}
+                <InvoiceSourceInfo intake={intakeRecord} />
+
+                {/* Supplier Info Section */}
                   <div className="bg-blue-50 rounded-lg p-3 space-y-2">
                     <div className="font-medium text-blue-800 text-sm">פרטי ספק</div>
                     <div className="space-y-1">
