@@ -24,6 +24,14 @@ export default function CustomerTimelineTab({ orders, tickets, repairs, activiti
                 description: `סכום: ₪${order.total}`,
                 icon: ShoppingCart, color: 'text-green-600 bg-green-50'
             });
+            if (order.tracking_number) {
+                events.push({
+                    type: 'order-tracking', date: order.updated_date || order.order_date,
+                    title: `מספר מעקב להזמנה #${order.external_order_number}`,
+                    description: `${order.tracking_carrier || ''} • ${order.tracking_number}`,
+                    icon: Truck, color: 'text-cyan-600 bg-cyan-50'
+                });
+            }
         });
 
         (tickets || []).forEach(ticket => {
@@ -101,6 +109,22 @@ export default function CustomerTimelineTab({ orders, tickets, repairs, activiti
                 description: `₪${sp.total_price || 0} • ${sp.order_state || ''}`,
                 icon: Package, color: 'text-emerald-600 bg-emerald-50'
             });
+            if (sp.tracking_number) {
+                events.push({
+                    type: 'sp-tracking', date: sp.shipped_at || sp.updated_date,
+                    title: `משלוח סופר-פארם #${sp.mirakl_order_id}`,
+                    description: `${sp.carrier_name || sp.carrier_code || ''} • מעקב ${sp.tracking_number}`,
+                    icon: Truck, color: 'text-cyan-600 bg-cyan-50'
+                });
+            }
+            if (sp.linet_invoice_doc_id) {
+                events.push({
+                    type: 'sp-invoice', date: sp.linet_invoice_created_at || sp.updated_date,
+                    title: `חשבונית סופר-פארם #${sp.mirakl_order_id}`,
+                    description: `מס׳ חשבונית ${sp.linet_invoice_doc_number || sp.linet_invoice_doc_id}${sp.linet_invoice_email_sent ? ' • נשלחה במייל' : ''}`,
+                    icon: FileText, color: 'text-indigo-600 bg-indigo-50'
+                });
+            }
         });
 
         events.sort((a, b) => new Date(b.date) - new Date(a.date));

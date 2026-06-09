@@ -28,6 +28,13 @@ function phoneVariants(phone) {
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+function isWooSyncBusinessHours() {
+    const now = new Date();
+    const jerusalemTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
+    const hour = jerusalemTime.getHours();
+    return hour >= 8 && hour < 23;
+}
+
 // ─── Extract tracking from WooCommerce meta_data ───
 function extractTrackingFromWoo(wooOrder) {
     const meta = wooOrder.meta_data || [];
@@ -226,6 +233,14 @@ Deno.serve(async (req) => {
     const sr = base44.asServiceRole.entities;
 
     try {
+        let body = {};
+        try { body = await req.json(); } catch (_) {}
+        if (!body.force && !isWooSyncBusinessHours()) {
+            const message = 'מחוץ לשעות הפעילות של סנכרון WooCommerce (08:00-23:00)';
+            console.log('⏸️ [WooSync] ' + message);
+            return Response.json({ success: true, skipped: true, message });
+        }
+
         console.log("🚀 [WooSync] Starting...");
 
         const [urlSetting, keySetting, secretSetting] = await Promise.all([

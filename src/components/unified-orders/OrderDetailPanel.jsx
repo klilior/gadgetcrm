@@ -11,6 +11,7 @@ import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusOptions, getStatusColor } from "./OrderStatusConfig";
 import { detectShippingType, getShippingTypeBadge } from "./ShippingTypeHelper";
 import ProductMetaBadges from "./ProductMetaBadges";
+import OrderTreatmentTimeline from "./OrderTreatmentTimeline";
 
 function copyText(text) {
   navigator.clipboard.writeText(text);
@@ -230,6 +231,8 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
 
       {/* GetPackage Shipment Card - shown only when there's an active GP shipment or user clicked GP button */}
       <GetPackageOrderCardWrapper order={order} isManager={isManager} isShiftManager={isShiftManager} />
+
+      <OrderTreatmentTimeline order={order} />
 
       {/* Actions row */}
       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">

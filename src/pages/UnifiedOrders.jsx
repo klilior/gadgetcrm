@@ -84,11 +84,12 @@ export default function UnifiedOrders() {
       for (const c of rawClients) cM[c.id] = c;
     } catch (e) { /* clients will be empty */ }
 
-    // Pre-fetch shipments and GetPackage shipments for tracking enrichment
+    // Pre-fetch shipments, GetPackage shipments and SMS logs for tracking/timeline enrichment
     let shipmentsByOrder = {};
     let gpShipmentsByOrder = {};
+    let smsLogs = [];
     try {
-      const recentShipments = await base44.entities.Shipment.list('-created_date', 200);
+      const recentShipments = await base44.entities.Shipment.list('-created_date', 300);
       for (const s of recentShipments) {
         if (s.tracking_number && s.external_order_number) {
           if (!shipmentsByOrder[s.external_order_number] || s.created_date > shipmentsByOrder[s.external_order_number].created_date) {
@@ -98,7 +99,7 @@ export default function UnifiedOrders() {
       }
     } catch (_) {}
     try {
-      const gpShipments = await base44.entities.GetPackageShipment.list('-created_date', 200);
+      const gpShipments = await base44.entities.GetPackageShipment.list('-created_date', 300);
       for (const s of gpShipments) {
         if (s.order_id && s.delivery_id && !['cancelled', 'failed', 'draft', 'quote_failed'].includes(s.status)) {
           if (!gpShipmentsByOrder[s.order_id] || s.created_date > gpShipmentsByOrder[s.order_id].created_date) {
@@ -107,6 +108,22 @@ export default function UnifiedOrders() {
         }
       }
     } catch (_) {}
+    try {
+      smsLogs = await base44.entities.NotificationLog.list('-sent_at', 300);
+    } catch (_) {}
+
+    const findOrderSms = (orderNumber, phone) => {
+      const candidates = smsLogs.filter(s => {
+        const fp = s.fingerprint || '';
+        const msg = s.message || '';
+        return (phone && s.to_phone === phone) && (
+          (orderNumber && fp.includes(orderNumber)) ||
+          (orderNumber && msg.includes(String(orderNumber))) ||
+          fp.includes('tracking|') || fp.includes('order_sms|')
+        );
+      });
+      return candidates.sort((a, b) => new Date(b.sent_at || b.created_date || 0) - new Date(a.sent_at || a.created_date || 0))[0] || null;
+    };
 
     // WooCommerce
     let woo = [];
@@ -150,6 +167,8 @@ export default function UnifiedOrders() {
           trackUrl = gp.tracking_url || '';
         }
 
+        const shipment = shipmentsByOrder[extNum] || gpShipmentsByOrder[o.id] || gpShipmentsByOrder['woo_' + o.id] || null;
+        const smsLog = findOrderSms(extNum, c?.phone || '');
         woo.push({
           id: 'woo_' + o.id, source: 'woocommerce',
           order_number: extNum, order_date: o.order_date || '',
@@ -166,6 +185,11 @@ export default function UnifiedOrders() {
           tracking_number: trackNum,
           tracking_carrier: trackCarrier,
           tracking_url: trackUrl,
+          shipment_created_at: shipment?.created_date || '',
+          tracking_created_at: shipment?.created_date || '',
+          sms_sent_at: smsLog?.sent_at || smsLog?.created_date || '',
+          sms_status: smsLog?.status || '',
+          sms_event_type: smsLog?.event_type || '',
         });
       }
     } catch (e) { errs.push({source: 'woocommerce', message: e.message}); }
@@ -177,6 +201,7 @@ export default function UnifiedOrders() {
       for (const o of spOrders) {
         if (!showClosed && closedMirakl.has(o.order_state)) continue;
         let lines = []; try { lines = JSON.parse(o.order_lines_json || '[]'); } catch(e) {}
+        const smsLog = findOrderSms(o.mirakl_order_id || '', o.customer_phone || '');
         mk.push({
           id: 'mirakl_' + o.id, source: 'mirakl',
           order_number: o.mirakl_order_id || '', order_date: o.created_at_mirakl || o.created_date || '',
@@ -191,6 +216,12 @@ export default function UnifiedOrders() {
           tracking_number: o.tracking_number || '',
           tracking_carrier: o.carrier_name || o.carrier_code || '',
           tracking_url: '',
+          shipment_created_at: o.shipped_at || '',
+          tracking_created_at: o.shipped_at || '',
+          sms_sent_at: smsLog?.sent_at || smsLog?.created_date || '',
+          sms_status: smsLog?.status || '',
+          sms_event_type: smsLog?.event_type || '',
+          linet_invoice_created_at: o.linet_invoice_created_at || '',
           currency: o.currency || 'ILS',
           raw_mirakl_json: o.raw_mirakl_json || '',
           customer_first_name: o.customer_first_name || '',
@@ -275,6 +306,8 @@ export default function UnifiedOrders() {
           shipping_address_full: [client?.full_address, client?.city].filter(Boolean).join(', '),
           status, notes: existing?.notes || '',
           raw_id: existing?.id || '', linet_doc_id: meta.linet_doc_id || '',
+          linet_doc_number: dn,
+          invoice_created_at: meta.issue_date || '',
           client_id: meta.client_id || '',
           sales_rep: meta.sales_rep || '', currency: 'ILS'
         });
