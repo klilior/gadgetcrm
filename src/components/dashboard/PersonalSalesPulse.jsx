@@ -35,7 +35,6 @@ function SummaryCard({ title, subtitle, data, icon: Icon, gradient }) {
         <div className="flex items-start justify-between gap-3 mb-5">
           <div>
             <p className="text-white/75 text-sm">{title}</p>
-            <h2 className="text-3xl md:text-4xl font-black mt-1">{formatMoney(data?.TotalSalesRevenue)}</h2>
             <p className="text-white/70 text-xs mt-1">{subtitle}</p>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-white/18 flex items-center justify-center">
@@ -45,19 +44,19 @@ function SummaryCard({ title, subtitle, data, icon: Icon, gradient }) {
 
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-2xl bg-white/14 p-3">
-            <Smartphone className="w-4 h-4 mb-1 text-white/80" />
-            <div className="text-xl font-bold">{formatUnits(data?.Devices)}</div>
-            <div className="text-[11px] text-white/70">מכשירים</div>
-          </div>
-          <div className="rounded-2xl bg-white/14 p-3">
-            <ShoppingBag className="w-4 h-4 mb-1 text-white/80" />
-            <div className="text-xl font-bold">{formatMoney(data?.AccessoriesRevenue)}</div>
-            <div className="text-[11px] text-white/70">אביזרים</div>
-          </div>
-          <div className="rounded-2xl bg-white/14 p-3">
-            <Radio className="w-4 h-4 mb-1 text-white/80" />
-            <div className="text-xl font-bold">{formatUnits(lines)}</div>
+            <Radio className="w-4 h-4 mb-2 text-white/80" />
+            <div className="text-3xl font-black">{formatUnits(lines)}</div>
             <div className="text-[11px] text-white/70">קווים</div>
+          </div>
+          <div className="rounded-2xl bg-white/14 p-3">
+            <ShoppingBag className="w-4 h-4 mb-2 text-white/80" />
+            <div className="text-3xl font-black">{formatMoney(data?.AccessoriesRevenue)}</div>
+            <div className="text-[11px] text-white/70">אביזרים נטו</div>
+          </div>
+          <div className="rounded-2xl bg-white/14 p-3">
+            <Smartphone className="w-4 h-4 mb-2 text-white/80" />
+            <div className="text-3xl font-black">{formatUnits(data?.Devices)}</div>
+            <div className="text-[11px] text-white/70">מכשירים</div>
           </div>
         </div>
       </CardContent>

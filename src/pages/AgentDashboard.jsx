@@ -18,7 +18,6 @@ import { he } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
-import KPIStrip from '../components/dashboard/KPIStrip';
 import SalesVsTarget from '../components/dashboard/SalesVsTarget';
 import PersonalSalesPulse from '../components/dashboard/PersonalSalesPulse';
 import LeadsTable from '../components/dashboard/LeadsTable';
@@ -632,8 +631,6 @@ export default function AgentDashboard() {
       {/* Personal Sales Pulse */}
       <PersonalSalesPulse data={personalSalesPulse} />
 
-      {/* KPI Strip */}
-      <KPIStrip data={kpiData} showTeamStats={isManager} />
 
       {/* Quick Leads to Complete */}
       <QuickLeadsToComplete
