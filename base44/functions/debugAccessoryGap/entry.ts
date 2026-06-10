@@ -1,8 +1,53 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const ACCESSORY_CATEGORIES = ['אביזרים סלולריים', 'טאבלטים', 'טלפונים למבוגרים'];
-// SKUs the user explicitly confirmed are NOT accessories
-const EXCLUDE_SKUS = ['3333', '368459', '1991705009'];
+// Truth data hardcoded from דניאל's accessory-group file (1-10/6/2026).
+// Format: [doc_number, sku, line_before_vat]
+const TRUTH = [
+    ['42429','938182023',287.29],['42429','933',244.92],['42425','7777ku',42.37],
+    ['42424','7777ku',42.37],['42421','7777ku',101.69],['42420','1102198014',270.34],
+    ['42419','4444ku',42.37],['42418','173304535194200',59.32],['42417','7777ku',25.34],
+    ['42417','2222ku',33.81],['42416','7777ku',41.53],['42414','5555ku',144.07],
+    ['42400','2056229924',720.34],['42400','1918993686',127.12],['42399','173304535194200',100],
+    ['42397','5555ku',168.64],['42397','1111ku',109.32],['42394','6666ku',144.07],
+    ['42394','2056229924',127.12],['42394','2222ku',66.95],['42394','1182348075',422.88],
+    ['42391','7777ku',27.12],['42391','2222ku',30.51],['42390','83937',50],
+    ['42387','7290018702871',168.64],['42387','1778595529',84.75],['42386','ku9999',66.95],
+    ['42384','5003633110',55.08],['42384','963258741',0],['42375','6666ku',66.95],
+    ['42372','194252721247',465.24],['42370','1954269753',846.61],['42363','4444ku',66.95],
+    ['42362','7777ku',58.47],['42361','619659185091',100.85],['42358','83937',50],
+    ['42357','7777ku',42.37],['42357','ku9999',42.37],['42356','7777ku',33.9],
+    ['42355','394927',59.32],['42353','2488254785825111',75.51],['42351','1918993686',97.46],
+    ['42349','7290118910039',83.9],['42348','1102198014',295.76],['42347','2222ku',27.97],
+    ['42346','2222ku',66.1],['42346','963258741',0],['42345','2056229924',84.75],
+    ['42344','7290118922711',168.64],['42342','2056229924',59.32],['42339','7777ku',41.53],
+    ['42339','2222ku',41.53],['42335','624804',42.37],['42334','6932172641764',100.85],
+    ['42333','8888ku',58.47],['42332','190198531704',83.9],['42328','ku9999',83.9],
+    ['42326','ku9999',100.85],['42326','6666ku',126.27],['42325','361713145',295.77],
+    ['42315','2056229924',84.75],['42313','3951741',507.64],['42291','1918993686',127.12],
+    ['42289','1918993686',59.32],['401247','1918993686',-59.32],['42286','1918993686',59.32],
+    ['42285','2222ku',24.58],['42282','2222ku',50],['42280','6666ku',126.27],
+    ['42273','8888ku',83.9],['42272','8888ku',50],['42272','7777ku',38.14],
+    ['42271','6666ku',126.27],['42270','2222ku',66.95],['42270','173304535186700',101.69],
+    ['42270','173304535194200',67.8],['42269','7777ku',41.53],['42269','2222ku',66.95],
+    ['42269','392957',18.64],['42268','1111ku',103.66],['42268','6666ku',108.59],
+    ['42266','7290109764191',185.58],['42265','1918993686',60.17],['42265','757149143',84.75],
+    ['42264','2082336079',42.37],['42246','1595423341',720.34],['42246','6666ku',126.27],
+    ['42233','1595423341',42.37],['42232','1111ku',84.75],['42230','624815',101.69],
+    ['42230','2082336079',42.37],['42228','195950084658',118.05],['42228','1111ku',131.54],
+    ['42228','5555ku',148.47],['42227','1697232816',211.86],['42226','5555ku',168.64],
+    ['42226','1111ku',126.27],['42225','6666ku',252.54],['42224','ku9999',83.9],
+    ['42223','ku9999',66.95],['42223','7777ku',42.5],['42216','2056229924',1440.68],
+    ['42215','8888ku',83.9],['42207','7290117621097',33.9],['42204','7290016039030',12.71],
+    ['42203','1111ku',126.27],['42203','3931754415',168.64],['42203','7296011720713',83.9],
+    ['42201','1918993686',59.32],['42200','1111ku',109.32],['42199','7290117624005',100.85],
+    ['42196','1141478807',126.27],['42196','ku9999',66.95],['42195','ku9999',83.9],
+    ['42194','1005672748',591.53],['42194','4444ku',42.37],['42193','173304535194200',133.9],
+    ['42192','7777ku',41.53],['42192','1366895835',67.8],['42191','7290118910039',83.9],
+    ['42190','5555ku',127.12],['42190','8888ku',84.75],['42187','ku9999',66.95],
+    ['42185','173304535194200',58.47],
+];
+
+const ACCESSORY = ['אביזרים סלולריים', 'טאבלטים', 'טלפונים למבוגרים'];
 
 Deno.serve(async (req) => {
     try {
@@ -10,42 +55,57 @@ Deno.serve(async (req) => {
         const user = await base44.auth.me();
         if (user?.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
 
-        const body = await req.json().catch(() => ({}));
-        const dateFrom = body.date_from || '2026-06-01';
-        const dateTo = body.date_to || '2026-06-10';
-        const owner = body.owner || 'דניאל';
+        const truthByKey = {};
+        let truthNet = 0;
+        TRUTH.forEach(([doc, sku, net]) => {
+            const key = `${doc}|${sku}`;
+            truthNet += net;
+            if (!truthByKey[key]) truthByKey[key] = { net: 0, count: 0 };
+            truthByKey[key].net += net;
+            truthByKey[key].count++;
+        });
 
-        const txs = await base44.asServiceRole.entities.SalesTransaction.filter(
-            { issue_date: { $gte: dateFrom, $lte: dateTo }, sales_rep: owner }, null, 10000
+        const ourTx = await base44.asServiceRole.entities.SalesTransaction.filter(
+            { issue_date: { $gte: '2026-06-01', $lte: '2026-06-10' }, sales_rep: 'דניאל' }, null, 10000
         );
+        const ourByKey = {};
+        ourTx.forEach(t => {
+            const key = `${String(t.doc_number || '').trim()}|${String(t.sku || '').trim()}`;
+            if (!ourByKey[key]) ourByKey[key] = { net: 0, count: 0, name: t.product_name, category: (t.category || 'ריק').trim() };
+            ourByKey[key].net += Number(t.price_ex_vat || 0);
+            ourByKey[key].count++;
+        });
 
-        const getSign = (s) => {
-            const raw = String(s?.doc_type ?? '').trim();
-            const isCredit = /זיכוי|זכוי|credit/i.test(raw) || Number(s.price_ex_vat || 0) < 0 || Number(s.quantity || 0) < 0;
-            return isCredit ? -1 : 1;
-        };
+        const miscategorized = []; // truth=accessory, ours != accessory  → THE GAP
+        const notFound = [];        // truth row not present at all
+        const amountDiff = [];      // present + accessory but different net
 
-        // Non-accessory lines, excluding the SKUs user confirmed are correct
-        const nonAcc = txs.filter(t =>
-            !ACCESSORY_CATEGORIES.includes((t.category || '').trim()) &&
-            !EXCLUDE_SKUS.includes(String(t.sku || '').trim())
-        );
+        Object.entries(truthByKey).forEach(([key, t]) => {
+            const ours = ourByKey[key];
+            if (!ours) {
+                notFound.push({ key, truth_net: Math.round(t.net * 100) / 100 });
+            } else if (!ACCESSORY.includes(ours.category)) {
+                miscategorized.push({ key, name: ours.name, our_category: ours.category, truth_net: Math.round(t.net * 100) / 100 });
+            } else if (Math.abs(ours.net - t.net) > 1) {
+                amountDiff.push({ key, name: ours.name, our_net: Math.round(ours.net * 100) / 100, truth_net: Math.round(t.net * 100) / 100 });
+            }
+        });
 
-        let remainingNet = 0;
-        const lines = nonAcc
-            .map(t => {
-                const v = getSign(t) * Math.abs(Number(t.price_ex_vat || 0));
-                remainingNet += v;
-                return { doc: t.doc_number, sku: t.sku, name: t.product_name, category: (t.category || 'ריק').trim(), price_ex_vat: t.price_ex_vat, signed: Math.round(v * 100) / 100 };
-            })
-            .filter(l => Math.abs(l.signed) > 0.5)
-            .sort((a, b) => b.signed - a.signed);
+        const sum = (arr) => Math.round(arr.reduce((s, r) => s + r.truth_net, 0) * 100) / 100;
 
         return Response.json({
             success: true,
-            remaining_non_accessory_net: Math.round(remainingNet * 100) / 100,
-            note: 'These are non-accessory lines AFTER excluding SKUs 3333/368459/1991705009',
-            lines,
+            truth_total_net: Math.round(truthNet * 100) / 100,
+            truth_keys: Object.keys(truthByKey).length,
+            our_total_lines: ourTx.length,
+            miscategorized_count: miscategorized.length,
+            miscategorized_net: sum(miscategorized),
+            not_found_count: notFound.length,
+            not_found_net: sum(notFound),
+            amount_diff_count: amountDiff.length,
+            miscategorized,
+            not_found: notFound,
+            amount_diff: amountDiff,
         });
     } catch (error) {
         return Response.json({ success: false, error: error.message }, { status: 500 });
