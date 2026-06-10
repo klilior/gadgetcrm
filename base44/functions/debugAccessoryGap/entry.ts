@@ -1,6 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const ACCESSORY_CATEGORIES = ['אביזרים סלולריים', 'טאבלטים', 'טלפונים למבוגרים'];
+// SKUs the user explicitly confirmed are NOT accessories
+const EXCLUDE_SKUS = ['3333', '368459', '1991705009'];
 
 Deno.serve(async (req) => {
     try {
@@ -23,30 +25,27 @@ Deno.serve(async (req) => {
             return isCredit ? -1 : 1;
         };
 
-        const acc = txs.filter(t => ACCESSORY_CATEGORIES.includes((t.category || '').trim()));
-        let accNet = 0;
-        acc.forEach(t => { accNet += getSign(t) * Math.abs(Number(t.price_ex_vat || 0)); });
+        // Non-accessory lines, excluding the SKUs user confirmed are correct
+        const nonAcc = txs.filter(t =>
+            !ACCESSORY_CATEGORIES.includes((t.category || '').trim()) &&
+            !EXCLUDE_SKUS.includes(String(t.sku || '').trim())
+        );
 
-        // Only return non-accessory categories summary (this holds the missing gap)
-        const nonAcc = txs.filter(t => !ACCESSORY_CATEGORIES.includes((t.category || '').trim()));
-        const nonAccByCat = {};
-        nonAcc.forEach(t => {
-            const c = (t.category || 'ריק').trim();
-            if (!nonAccByCat[c]) nonAccByCat[c] = { count: 0, net: 0, lines: [] };
-            const v = getSign(t) * Math.abs(Number(t.price_ex_vat || 0));
-            nonAccByCat[c].count++;
-            nonAccByCat[c].net += v;
-            nonAccByCat[c].lines.push({ doc: t.doc_number, sku: t.sku, name: t.product_name, price_ex_vat: t.price_ex_vat });
-        });
-        Object.values(nonAccByCat).forEach(g => g.net = Math.round(g.net * 100) / 100);
+        let remainingNet = 0;
+        const lines = nonAcc
+            .map(t => {
+                const v = getSign(t) * Math.abs(Number(t.price_ex_vat || 0));
+                remainingNet += v;
+                return { doc: t.doc_number, sku: t.sku, name: t.product_name, category: (t.category || 'ריק').trim(), price_ex_vat: t.price_ex_vat, signed: Math.round(v * 100) / 100 };
+            })
+            .filter(l => Math.abs(l.signed) > 0.5)
+            .sort((a, b) => b.signed - a.signed);
 
         return Response.json({
             success: true,
-            accessory_lines_count: acc.length,
-            accessories_net_ex_vat: Math.round(accNet * 100) / 100,
-            file_target: 15031.55,
-            gap: Math.round((15031.55 - accNet) * 100) / 100,
-            non_accessory_categories: nonAccByCat,
+            remaining_non_accessory_net: Math.round(remainingNet * 100) / 100,
+            note: 'These are non-accessory lines AFTER excluding SKUs 3333/368459/1991705009',
+            lines,
         });
     } catch (error) {
         return Response.json({ success: false, error: error.message }, { status: 500 });
