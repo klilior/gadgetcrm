@@ -159,22 +159,21 @@ export function filterTargetsByEmployee(targets, employeeId) {
 /**
  * חישוב מכירות לפי קטגוריות
  */
+export const ACCESSORY_CATEGORIES = ['אביזרים סלולריים', 'טאבלטים', 'טלפונים למבוגרים'];
+
 export const SalesCategories = {
   isDevice: (category, productName) => {
     if (!category && !productName) return false;
     const catLower = (category || '').toLowerCase();
     const prodLower = (productName || '').toLowerCase();
+    if (ACCESSORY_CATEGORIES.map(c => c.toLowerCase()).includes(catLower)) return false;
     return catLower.includes('טלפון') || catLower.includes('סמארטפון') ||
            catLower === 'טלפונים סלולרים' || 
            prodLower.includes('galaxy') || prodLower.includes('iphone') || 
            prodLower.includes('סמסונג') || prodLower.includes('אייפון');
   },
   
-  isAccessory: (category) => {
-    if (!category) return false;
-    const lower = category.toLowerCase();
-    return lower.includes('אביזר') || lower === 'אביזרים סלולריים';
-  },
+  isAccessory: (category) => ACCESSORY_CATEGORIES.map(c => c.toLowerCase()).includes((category || '').toLowerCase().trim()),
   
   isLine: (category, productName) => {
     if (!category && !productName) return false;
@@ -226,7 +225,7 @@ export function calculateSalesSummary(salesTransactions) {
     
   const accessoriesRevenue = salesTransactions
     .filter(s => SalesCategories.isAccessory(s.category))
-    .reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
+    .reduce((sum, s) => sum + (Number(s.price_ex_vat || 0)), 0);
     
   const lineSales = salesTransactions.filter(s => SalesCategories.isLine(s.category, s.product_name));
   const totalLines = lineSales.reduce((sum, s) => sum + Math.abs(Number(s.quantity ?? 1)), 0);
@@ -240,7 +239,7 @@ export function calculateSalesSummary(salesTransactions) {
   
   return {
     Devices: devices,
-    AccessoriesRevenue: Math.round(accessoriesRevenue),
+    AccessoriesRevenue: Math.round(accessoriesRevenue * 100) / 100,
     Lines4G: finalLines4g,
     Lines5G: lines5g,
     TotalSalesRevenue: Math.round(totalRevenue),

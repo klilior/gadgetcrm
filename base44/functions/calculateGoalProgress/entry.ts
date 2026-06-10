@@ -35,24 +35,34 @@ Deno.serve(async (req) => {
 
         const checkFilters = (sale, filters) => {
             if (!filters) return false;
+            const normalize = (v) => String(v || '').trim().toLowerCase();
+            const saleCategory = normalize(sale.category);
             
-            // Support multiple filter formats
             if (filters.category_in && filters.category_in.length > 0) {
-                if (!filters.category_in.includes(sale.category)) return false;
+                const categories = filters.category_in.map(normalize);
+                if (!categories.includes(saleCategory)) return false;
             }
             if (filters.categories_included && filters.categories_included.length > 0) {
-                if (!filters.categories_included.includes(sale.category)) return false;
+                const categories = filters.categories_included.map(normalize);
+                if (!categories.includes(saleCategory)) return false;
             }
-            if (filters.category && sale.category !== filters.category) return false;
+            if (filters.category && saleCategory !== normalize(filters.category)) return false;
             
-            // Product name filter
             if (filters.product_name_contains) {
-                if (!sale.product_name || !sale.product_name.includes(filters.product_name_contains)) {
-                    return false;
-                }
+                const terms = Array.isArray(filters.product_name_contains) ? filters.product_name_contains : [filters.product_name_contains];
+                const productName = normalize(sale.product_name);
+                if (!terms.map(normalize).some(term => productName.includes(term))) return false;
             }
             
             return true;
+        };
+
+        const getTxSign = (sale) => {
+            const raw = String(sale?.doc_type ?? '').trim();
+            const num = parseInt(raw, 10);
+            const isCredit = num === 3 || /credit/i.test(raw) || raw.includes('זיכוי') || raw.includes('זכוי');
+            const hasNegative = Number(sale.total_row_amount || 0) < 0 || Number(sale.price_ex_vat || 0) < 0 || Number(sale.quantity || 0) < 0;
+            return (isCredit || hasNegative) ? -1 : 1;
         };
 
         // Get goals to calculate
@@ -87,20 +97,21 @@ Deno.serve(async (req) => {
             let currentValue = 0;
             switch (goal.metric_type) {
                 case 'UNITS':
-                    currentValue = filteredSales.reduce((sum, s) => sum + Math.abs(s.quantity || 0), 0);
+                    currentValue = filteredSales.reduce((sum, s) => sum + (getTxSign(s) * Math.abs(Number(s.quantity || 0))), 0);
                     break;
                 case 'NET_AMOUNT':
-                    currentValue = filteredSales.reduce((sum, s) => sum + (s.price_ex_vat || 0), 0);
+                    currentValue = filteredSales.reduce((sum, s) => sum + (getTxSign(s) * Math.abs(Number(s.price_ex_vat || 0))), 0);
+                    currentValue = Math.round(currentValue * 100) / 100;
                     break;
                 case 'LINES_4G_UNITS':
                     currentValue = filteredSales
                         .filter(s => !(s.product_name || '').toLowerCase().includes('5g'))
-                        .reduce((sum, s) => sum + Math.abs(s.quantity || 0), 0);
+                        .reduce((sum, s) => sum + (getTxSign(s) * Math.abs(Number(s.quantity || 0))), 0);
                     break;
                 case 'LINES_5G_UNITS':
                     currentValue = filteredSales
                         .filter(s => (s.product_name || '').toLowerCase().includes('5g'))
-                        .reduce((sum, s) => sum + Math.abs(s.quantity || 0), 0);
+                        .reduce((sum, s) => sum + (getTxSign(s) * Math.abs(Number(s.quantity || 0))), 0);
                     break;
             }
 
