@@ -342,9 +342,9 @@ function normalizeValue(value) {
 }
 
 function getMappedCommissionGroup(tx, commissionMappings = []) {
+  // קטגוריית לינט היא מקור האמת. השיוך לקבוצות עמלה מתבסס על הקטגוריה בלבד,
+  // ולא על שם המוצר (לדוגמה: "טלפון למבוגרים" נספר בקבוצת האביזרים לפי הקטגוריה שלו).
   const category = normalizeValue(tx?.category);
-  const sku = normalizeValue(tx?.sku);
-  const productName = normalizeValue(tx?.product_name);
 
   const sortedMappings = [...(commissionMappings || [])]
     .filter(m => m?.is_active !== false)
@@ -353,16 +353,11 @@ function getMappedCommissionGroup(tx, commissionMappings = []) {
   for (const mapping of sortedMappings) {
     const filters = mapping.filters_json || {};
     const categoryIn = (filters.category_in || []).map(normalizeValue);
-    const skuIn = (filters.sku_in || []).map(normalizeValue);
-    const productContains = (filters.product_name_contains || filters.name_contains || []).map(normalizeValue);
 
     const matchesCategory = filters.category ? category === normalizeValue(filters.category) : false;
     const matchesCategoryIn = categoryIn.length ? categoryIn.includes(category) : false;
-    const matchesSku = filters.sku ? sku === normalizeValue(filters.sku) : false;
-    const matchesSkuIn = skuIn.length ? skuIn.includes(sku) : false;
-    const matchesProduct = productContains.length ? productContains.some(term => productName.includes(term)) : false;
 
-    if (matchesCategory || matchesCategoryIn || matchesSku || matchesSkuIn || matchesProduct) {
+    if (matchesCategory || matchesCategoryIn) {
       return mapping.commission_group_code;
     }
   }
@@ -380,9 +375,10 @@ export function calculateSalesSummarySigned(salesTransactions = [], commissionMa
     const price = Math.abs(Number(s.price_ex_vat ?? s.total_row_amount ?? 0));
     const mappedGroup = getMappedCommissionGroup(s, commissionMappings);
 
-    const isDevice = hasMappings ? mappedGroup === 'DEVICES' : SalesCategories.isDevice(s.category, s.product_name);
+    // הסיווג מתבסס על קטגוריית לינט בלבד (מקור האמת), ללא התייחסות לשם המוצר
+    const isDevice = hasMappings ? mappedGroup === 'DEVICES' : SalesCategories.isDevice(s.category, null);
     const isAccessory = hasMappings ? mappedGroup === 'ACCESSORIES_GROUP' : SalesCategories.isAccessory(s.category);
-    const isLine = hasMappings ? mappedGroup === 'LINES' : SalesCategories.isLine(s.category, s.product_name);
+    const isLine = hasMappings ? mappedGroup === 'LINES' : SalesCategories.isLine(s.category, null);
 
     if (isDevice) devices += sign * qty;
     if (isAccessory) accessoriesRevenue += sign * price;
