@@ -13,7 +13,7 @@ import {
   Smartphone, ShoppingBag, Signal, Zap, DollarSign, Wrench,
   RefreshCw, Calendar
 } from 'lucide-react';
-import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, isWithinInterval, differenceInDays } from 'date-fns';
+import { format, startOfDay, endOfDay, startOfMonth, differenceInDays } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -99,7 +99,7 @@ export default function AgentDashboard() {
         dateEnd = endOfDay(now);
       } else {
         dateStart = startOfMonth(now);
-        dateEnd = endOfMonth(now);
+        dateEnd = endOfDay(now);
       }
 
       // Format dates for server-side filtering

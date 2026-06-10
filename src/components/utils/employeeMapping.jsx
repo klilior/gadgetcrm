@@ -300,7 +300,7 @@ export function mapTargetsToMap(targets) {
 export function getTxSign(tx) {
   const raw = String(tx?.doc_type ?? '').trim();
   const num = parseInt(raw, 10);
-  const isCredit = num === 3 || /credit/i.test(raw);
+  const isCredit = num === 3 || /credit/i.test(raw) || raw.includes('זיכוי') || raw.includes('זכוי') || raw.includes('credit note');
   const n = (v) => Number(v ?? 0);
   const hasNegative = n(tx.total_row_amount) < 0 || n(tx.price_ex_vat) < 0 || n(tx.quantity) < 0;
   return (isCredit || hasNegative) ? -1 : 1;
