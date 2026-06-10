@@ -159,7 +159,7 @@ export function filterTargetsByEmployee(targets, employeeId) {
 /**
  * חישוב מכירות לפי קטגוריות
  */
-export const ACCESSORY_CATEGORIES = ['אביזרים סלולריים', 'טאבלטים', 'טלפונים למבוגרים'];
+export const ACCESSORY_CATEGORIES = ['אביזרים סלולריים', 'טאבלטים', 'טלפונים למבוגרים', 'ציוד אבטחה והאזנה'];
 
 export const SalesCategories = {
   isDevice: (category, productName) => {
