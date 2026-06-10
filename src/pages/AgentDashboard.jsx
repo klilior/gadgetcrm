@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from "@/api/base44Client";
-import { Lead, Target, SalesActivity, Repair, GoalDefinition, GoalProgress, SalesTransaction } from '@/entities/all';
+import { Lead, Target, SalesActivity, Repair, GoalDefinition, GoalProgress, SalesTransaction, CommissionGroupMapping } from '@/entities/all';
 import { useEmployees } from '../components/EmployeeProvider';
 import { useUser } from '../components/UserAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -110,7 +110,7 @@ export default function AgentDashboard() {
 
       // Load data in parallel — employees & linetUsersMap come from EmployeeProvider
       const allEmployees = employees;
-      const [allLeads, allTargets, allActivities, allRepairs, allGoals, allGoalProgress, allSalesTransactions, currentMonthSalesTransactions, currentMonthTargets] = await Promise.all([
+      const [allLeads, allTargets, allActivities, allRepairs, allGoals, allGoalProgress, allSalesTransactions, currentMonthSalesTransactions, currentMonthTargets, allCommissionMappings] = await Promise.all([
         Lead.filter({ status: { $ne: 'Deleted' } }),
         Target.filter({ period_start: { $lte: dateToStr }, period_end: { $gte: dateFromStr } }).catch(() => []),
         SalesActivity.filter({ activity_date: { $gte: dateFromStr, $lte: dateToStr } }).catch(() => []),
@@ -120,6 +120,7 @@ export default function AgentDashboard() {
         SalesTransaction.filter({ issue_date: { $gte: dateFromStr, $lte: dateToStr } }, '-issue_date', 5000).catch(() => []),
         SalesTransaction.filter({ issue_date: { $gte: monthStartStr, $lte: todayStr } }, '-issue_date', 5000).catch(() => []),
         Target.filter({ period_start: { $lte: todayStr }, period_end: { $gte: monthStartStr } }).catch(() => []),
+        CommissionGroupMapping.filter({ is_active: true }).catch(() => []),
       ]);
       console.log(`⏱️ [AgentDashboard] Data fetched in ${Date.now() - start}ms — Sales: ${allSalesTransactions.length}, Activities: ${allActivities.length}`);
 
@@ -128,6 +129,7 @@ export default function AgentDashboard() {
       
       // Build employee map with all aliases for matching
       const employeeMap = buildEmployeeMap(allEmployees || [], allLinetUsersMap || []);
+      const activeCommissionMappings = (allCommissionMappings || []).filter(m => m.is_active !== false);
 
       // Filter leads
       const activeLeads = (allLeads || []).filter(l => l.status !== 'Deleted');
@@ -305,9 +307,9 @@ export default function AgentDashboard() {
       const myTodaySales = myMonthSales.filter(s => s.issue_date === todayStr);
       
       // חישוב מכירות חתומות (כולל זיכויים) אחרי שיוך ייחודי
-      const mySummary = calculateSalesSummarySigned(mySales);
-      const myMonthSummary = calculateSalesSummarySigned(myMonthSales);
-      const myTodaySummary = calculateSalesSummarySigned(myTodaySales);
+      const mySummary = calculateSalesSummarySigned(mySales, activeCommissionMappings);
+      const myMonthSummary = calculateSalesSummarySigned(myMonthSales, activeCommissionMappings);
+      const myTodaySummary = calculateSalesSummarySigned(myTodaySales, activeCommissionMappings);
       
       // העדפה לעסקאות בפועל אם קיימות בכלל (גם אם התוצאה 0 נטו), אחרת מגיבוי SalesActivity
       const hasMyTx = (mySales || []).length > 0;
@@ -331,8 +333,8 @@ export default function AgentDashboard() {
       const pulseTargets = {
         Devices: monthGoalTargets.Devices || legacyMonthTargets.Devices || 0,
         AccessoriesRevenue: monthGoalTargets.AccessoriesRevenue || legacyMonthTargets.AccessoriesRevenue || 0,
-        Lines: (monthGoalTargets.Lines4G || 0) + (monthGoalTargets.Lines5G || 0) || legacyMonthTargets.Lines || 0,
-        TotalSalesRevenue: monthGoalTargets.TotalSalesRevenue || legacyMonthTargets.TotalSalesRevenue || 0,
+        Lines4G: monthGoalTargets.Lines4G || legacyMonthTargets.Lines4G || 0,
+        Lines5G: monthGoalTargets.Lines5G || legacyMonthTargets.Lines5G || 0,
       };
       setPersonalSalesPulse({ month: myMonthSummary, today: myTodaySummary, targets: pulseTargets });
 
@@ -365,7 +367,7 @@ export default function AgentDashboard() {
             );
             
             const hasEmpTx = (empSales || []).length > 0;
-            const empSummary = calculateSalesSummarySigned(empSales);
+            const empSummary = calculateSalesSummarySigned(empSales, activeCommissionMappings);
 
             // Fallback ל‑SalesActivity רק אם אין בכלל עסקאות בחתך התקופה
             const empActuals = {

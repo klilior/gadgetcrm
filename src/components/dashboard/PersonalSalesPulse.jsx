@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { TrendingUp, CalendarDays, Smartphone, ShoppingBag, Radio, Target } from 'lucide-react';
 
-const formatMoney = (value) => `₪${Math.round(Number(value || 0)).toLocaleString()}`;
+const formatMoney = (value) => `₪${Number(value || 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const formatUnits = (value) => Number(value || 0).toLocaleString();
 
 function TargetRow({ label, actual, target, isAmount }) {
@@ -27,7 +27,8 @@ function TargetRow({ label, actual, target, isAmount }) {
 }
 
 function SummaryCard({ title, subtitle, data, icon: Icon, gradient }) {
-  const lines = (data?.Lines4G || 0) + (data?.Lines5G || 0);
+  const lines4g = data?.Lines4G || 0;
+  const lines5g = data?.Lines5G || 0;
 
   return (
     <Card className={`border-0 shadow-xl overflow-hidden ${gradient}`}>
@@ -42,11 +43,16 @@ function SummaryCard({ title, subtitle, data, icon: Icon, gradient }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <div className="rounded-2xl bg-white/14 p-3">
             <Radio className="w-4 h-4 mb-2 text-white/80" />
-            <div className="text-3xl font-black">{formatUnits(lines)}</div>
-            <div className="text-[11px] text-white/70">קווים</div>
+            <div className="text-3xl font-black">{formatUnits(lines4g)}</div>
+            <div className="text-[11px] text-white/70">קווי 4G</div>
+          </div>
+          <div className="rounded-2xl bg-white/14 p-3">
+            <Radio className="w-4 h-4 mb-2 text-white/80" />
+            <div className="text-3xl font-black">{formatUnits(lines5g)}</div>
+            <div className="text-[11px] text-white/70">קווי 5G</div>
           </div>
           <div className="rounded-2xl bg-white/14 p-3">
             <ShoppingBag className="w-4 h-4 mb-2 text-white/80" />
@@ -70,7 +76,8 @@ export default function PersonalSalesPulse({ data }) {
   const targets = data?.targets || {};
   const hasTargets = Object.values(targets).some(v => Number(v || 0) > 0);
   const monthLines = (month.Lines4G || 0) + (month.Lines5G || 0);
-  const targetLines = targets.Lines || (targets.Lines4G || 0) + (targets.Lines5G || 0);
+  const targetLines4G = targets.Lines4G || 0;
+  const targetLines5G = targets.Lines5G || 0;
 
   return (
     <div className="space-y-3">
@@ -102,10 +109,11 @@ export default function PersonalSalesPulse({ data }) {
           </div>
 
           {hasTargets ? (
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-4 gap-4">
               <TargetRow label="מכשירים" actual={month.Devices} target={targets.Devices} />
               <TargetRow label="אביזרים" actual={month.AccessoriesRevenue} target={targets.AccessoriesRevenue} isAmount />
-              <TargetRow label="קווים" actual={monthLines} target={targetLines} />
+              <TargetRow label="קווי 4G" actual={month.Lines4G} target={targetLines4G} />
+              <TargetRow label="קווי 5G" actual={month.Lines5G} target={targetLines5G} />
             </div>
           ) : (
             <p className="text-sm text-slate-500">ברגע שיוזן יעד לנציג, יוצג כאן אחוז ביצוע מהיעד.</p>

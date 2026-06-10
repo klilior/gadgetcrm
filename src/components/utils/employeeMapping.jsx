@@ -338,26 +338,66 @@ export function groupSalesByEmployee(salesTransactions = [], employeeMap) {
   return grouped;
 }
 
-export function calculateSalesSummarySigned(salesTransactions = []) {
+function normalizeValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getMappedCommissionGroup(tx, commissionMappings = []) {
+  const category = normalizeValue(tx?.category);
+  const sku = normalizeValue(tx?.sku);
+  const productName = normalizeValue(tx?.product_name);
+
+  const sortedMappings = [...(commissionMappings || [])]
+    .filter(m => m?.is_active !== false)
+    .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
+
+  for (const mapping of sortedMappings) {
+    const filters = mapping.filters_json || {};
+    const categoryIn = (filters.category_in || []).map(normalizeValue);
+    const skuIn = (filters.sku_in || []).map(normalizeValue);
+    const productContains = (filters.product_name_contains || filters.name_contains || []).map(normalizeValue);
+
+    const matchesCategory = filters.category ? category === normalizeValue(filters.category) : false;
+    const matchesCategoryIn = categoryIn.length ? categoryIn.includes(category) : false;
+    const matchesSku = filters.sku ? sku === normalizeValue(filters.sku) : false;
+    const matchesSkuIn = skuIn.length ? skuIn.includes(sku) : false;
+    const matchesProduct = productContains.length ? productContains.some(term => productName.includes(term)) : false;
+
+    if (matchesCategory || matchesCategoryIn || matchesSku || matchesSkuIn || matchesProduct) {
+      return mapping.commission_group_code;
+    }
+  }
+
+  return null;
+}
+
+export function calculateSalesSummarySigned(salesTransactions = [], commissionMappings = []) {
   let devices = 0, accessoriesRevenue = 0, totalRevenue = 0, lines4g = 0, lines5g = 0;
+  const hasMappings = (commissionMappings || []).length > 0;
+
   (salesTransactions || []).forEach((s) => {
     const sign = getTxSign(s);
     const qty = Math.abs(Number(s.quantity ?? 1)) || 1;
     const price = Math.abs(Number(s.price_ex_vat ?? s.total_row_amount ?? 0));
+    const mappedGroup = getMappedCommissionGroup(s, commissionMappings);
 
-    if (SalesCategories.isDevice(s.category, s.product_name)) devices += sign * qty;
-    if (SalesCategories.isAccessory(s.category)) accessoriesRevenue += sign * price;
-    if (SalesCategories.isLine(s.category, s.product_name)) {
+    const isDevice = hasMappings ? mappedGroup === 'DEVICES' : SalesCategories.isDevice(s.category, s.product_name);
+    const isAccessory = hasMappings ? mappedGroup === 'ACCESSORIES_GROUP' : SalesCategories.isAccessory(s.category);
+    const isLine = hasMappings ? mappedGroup === 'LINES' : SalesCategories.isLine(s.category, s.product_name);
+
+    if (isDevice) devices += sign * qty;
+    if (isAccessory) accessoriesRevenue += sign * price;
+    if (isLine) {
       if (SalesCategories.is5GLine(s)) lines5g += sign * qty;
-      else if (SalesCategories.is4GLine(s)) lines4g += sign * qty;
-      else lines4g += sign * qty; // ברירת מחדל
+      else lines4g += sign * qty;
     }
 
     totalRevenue += sign * price;
   });
+
   return {
     Devices: devices,
-    AccessoriesRevenue: Math.round(accessoriesRevenue),
+    AccessoriesRevenue: Math.round(accessoriesRevenue * 100) / 100,
     Lines4G: lines4g,
     Lines5G: lines5g,
     TotalSalesRevenue: Math.round(totalRevenue),
