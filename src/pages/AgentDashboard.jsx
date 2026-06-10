@@ -20,6 +20,7 @@ import { createPageUrl } from '@/utils';
 
 import KPIStrip from '../components/dashboard/KPIStrip';
 import SalesVsTarget from '../components/dashboard/SalesVsTarget';
+import PersonalSalesPulse from '../components/dashboard/PersonalSalesPulse';
 import LeadsTable from '../components/dashboard/LeadsTable';
 import RemindersAlert from '../components/dashboard/RemindersAlert';
 import TeamPerformanceTable from '../components/dashboard/TeamPerformanceTable';
@@ -63,6 +64,7 @@ export default function AgentDashboard() {
   const [actuals, setActuals] = useState({});
   const [kpiData, setKpiData] = useState({});
   const [teamData, setTeamData] = useState([]);
+  const [personalSalesPulse, setPersonalSalesPulse] = useState({ month: {}, today: {}, targets: {} });
   const [repairs, setRepairs] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [quickLeads, setQuickLeads] = useState([]);
@@ -104,10 +106,12 @@ export default function AgentDashboard() {
       // Format dates for server-side filtering
       const dateFromStr = format(dateStart, 'yyyy-MM-dd');
       const dateToStr = format(dateEnd, 'yyyy-MM-dd');
+      const todayStr = format(now, 'yyyy-MM-dd');
+      const monthStartStr = format(startOfMonth(now), 'yyyy-MM-dd');
 
       // Load data in parallel — employees & linetUsersMap come from EmployeeProvider
       const allEmployees = employees;
-      const [allLeads, allTargets, allActivities, allRepairs, allGoals, allGoalProgress, allSalesTransactions] = await Promise.all([
+      const [allLeads, allTargets, allActivities, allRepairs, allGoals, allGoalProgress, allSalesTransactions, currentMonthSalesTransactions, currentMonthTargets] = await Promise.all([
         Lead.filter({ status: { $ne: 'Deleted' } }),
         Target.filter({ period_start: { $lte: dateToStr }, period_end: { $gte: dateFromStr } }).catch(() => []),
         SalesActivity.filter({ activity_date: { $gte: dateFromStr, $lte: dateToStr } }).catch(() => []),
@@ -115,6 +119,8 @@ export default function AgentDashboard() {
         GoalDefinition.filter({ is_active: true }),
         GoalProgress.filter({ period_start: { $lte: dateToStr }, period_end: { $gte: dateFromStr } }).catch(() => []),
         SalesTransaction.filter({ issue_date: { $gte: dateFromStr, $lte: dateToStr } }, '-issue_date', 5000).catch(() => []),
+        SalesTransaction.filter({ issue_date: { $gte: monthStartStr, $lte: todayStr } }, '-issue_date', 5000).catch(() => []),
+        Target.filter({ period_start: { $lte: todayStr }, period_end: { $gte: monthStartStr } }).catch(() => []),
       ]);
       console.log(`⏱️ [AgentDashboard] Data fetched in ${Date.now() - start}ms — Sales: ${allSalesTransactions.length}, Activities: ${allActivities.length}`);
 
@@ -211,8 +217,8 @@ export default function AgentDashboard() {
       const periodTargets = allTargets || [];
 
       // ========== Current user's targets (from GoalDefinition + Target) ==========
-      const myGoals = filterGoalsByEmployee(periodGoals, employeeMap, userId);
-      const myTargetsRaw = filterTargetsByEmployee(periodTargets, userId);
+      const myGoals = filterGoalsByEmployee(periodGoals, employeeMap, myEmpId);
+      const myTargetsRaw = filterTargetsByEmployee(periodTargets, myEmpId);
 
       // יעד לנציג לפי GoalDefinition (מועדף), עם נפילה אחורה ל-Target entity
       const computedTargets = { Devices: 0, AccessoriesRevenue: 0, Lines: 0 };
@@ -238,6 +244,7 @@ export default function AgentDashboard() {
       const periodSales = allSalesTransactions || [];
       // שיוך חד-חד ערכי של עסקאות לנציגים
       const salesByEmployee = groupSalesByEmployee(periodSales, employeeMap);
+      const currentMonthSalesByEmployee = groupSalesByEmployee(currentMonthSalesTransactions || [], employeeMap);
       
       // Helper to match sales rep names (handle Linet variations)
       // Linet uses first name only (e.g., "דניאל", "גיא") while Employee has full name (e.g., "דניאל קריידן", "גיא פאר")
@@ -294,10 +301,14 @@ export default function AgentDashboard() {
         return cat.includes('5g') || prod.includes('5g');
       };
       
-      const mySales = salesByEmployee[userId] || [];
+      const mySales = salesByEmployee[myEmpId] || salesByEmployee[userId] || [];
+      const myMonthSales = currentMonthSalesByEmployee[myEmpId] || currentMonthSalesByEmployee[userId] || [];
+      const myTodaySales = myMonthSales.filter(s => s.issue_date === todayStr);
       
       // חישוב מכירות חתומות (כולל זיכויים) אחרי שיוך ייחודי
       const mySummary = calculateSalesSummarySigned(mySales);
+      const myMonthSummary = calculateSalesSummarySigned(myMonthSales);
+      const myTodaySummary = calculateSalesSummarySigned(myTodaySales);
       
       // העדפה לעסקאות בפועל אם קיימות בכלל (גם אם התוצאה 0 נטו), אחרת מגיבוי SalesActivity
       const hasMyTx = (mySales || []).length > 0;
@@ -309,6 +320,22 @@ export default function AgentDashboard() {
         TotalSalesRevenue: hasMyTx ? mySummary.TotalSalesRevenue : myActualsFromActivities.TotalSalesRevenue,
       };
       setActuals(finalActuals);
+
+      const monthGoals = filterGoalsByEmployee((allGoals || []).filter(g => {
+        const startsBeforeMonthEnds = !g.period_start || g.period_start <= todayStr;
+        const endsAfterMonthStarts = !g.period_end || g.period_end >= monthStartStr;
+        return startsBeforeMonthEnds && endsAfterMonthStarts;
+      }), employeeMap, myEmpId);
+      const monthGoalTargets = mapGoalsToTargets(monthGoals);
+      const monthTargetsRaw = filterTargetsByEmployee(currentMonthTargets || [], myEmpId);
+      const legacyMonthTargets = mapTargetsToMap(monthTargetsRaw);
+      const pulseTargets = {
+        Devices: monthGoalTargets.Devices || legacyMonthTargets.Devices || 0,
+        AccessoriesRevenue: monthGoalTargets.AccessoriesRevenue || legacyMonthTargets.AccessoriesRevenue || 0,
+        Lines: (monthGoalTargets.Lines4G || 0) + (monthGoalTargets.Lines5G || 0) || legacyMonthTargets.Lines || 0,
+        TotalSalesRevenue: monthGoalTargets.TotalSalesRevenue || legacyMonthTargets.TotalSalesRevenue || 0,
+      };
+      setPersonalSalesPulse({ month: myMonthSummary, today: myTodaySummary, targets: pulseTargets });
 
       // KPI data
       if (isManager) {
@@ -415,7 +442,7 @@ export default function AgentDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser, period, isManager, userId]);
+  }, [currentUser, period, isManager, userId, employees, allLinetUsersMap]);
 
   useEffect(() => {
     loadData();
@@ -601,6 +628,9 @@ export default function AgentDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* Personal Sales Pulse */}
+      <PersonalSalesPulse data={personalSalesPulse} />
 
       {/* KPI Strip */}
       <KPIStrip data={kpiData} showTeamStats={isManager} />
