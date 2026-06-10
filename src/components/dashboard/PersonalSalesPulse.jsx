@@ -103,8 +103,7 @@ export default function PersonalSalesPulse({ data }) {
           </div>
 
           {hasTargets ? (
-            <div className="grid md:grid-cols-4 gap-4">
-              <TargetRow label="סה״כ מכירות" actual={month.TotalSalesRevenue} target={targets.TotalSalesRevenue} isAmount />
+            <div className="grid md:grid-cols-3 gap-4">
               <TargetRow label="מכשירים" actual={month.Devices} target={targets.Devices} />
               <TargetRow label="אביזרים" actual={month.AccessoriesRevenue} target={targets.AccessoriesRevenue} isAmount />
               <TargetRow label="קווים" actual={monthLines} target={targetLines} />
