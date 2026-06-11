@@ -157,25 +157,15 @@ export default function AgentDashboard() {
       );
       setReminders(activeReminders);
 
-      // Quick notes candidates: include capture_type="Quick" OR quick_incomplete flag; let widget filter status
-      // For managers (including shift managers), show ALL quick notes
-      // For regular reps, show only their own
+      // Quick notes candidates: all quick notes from all users, including completed ones for history
       const quickIncomplete = activeLeads.filter(l => {
-        // Must be quick note
         const isQuickNote = l.capture_type === 'Quick' || l.quick_incomplete === true;
         if (!isQuickNote) return false;
-        
-        // Must not be deleted
         if (l.status === 'Deleted') return false;
-        
-        // Filter out test/demo leads
         if (l.customer_name?.includes('בדיקת פתק') || 
             l.customer_name?.includes('בדיקת מערכת') ||
             l.topic?.includes('בדיקת מערכת')) return false;
-        
-        // Managers see all, reps see only their own
-        if (isManager) return true;
-        return l.assigned_to === myEmpId || l.assigned_to === userId;
+        return true;
       }).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
       
       console.log('[AgentDashboard] Quick notes found:', quickIncomplete.length, 'isManager:', isManager);
@@ -459,14 +449,6 @@ export default function AgentDashboard() {
       if (newStatus === 'Deleted') {
         updateData.deleted_at = new Date().toISOString();
       }
-      if (newStatus === 'InProgress' && lead?.quick_incomplete) {
-        updateData.quick_incomplete = false;
-        updateData.capture_type = 'Full';
-      }
-      if (newStatus === 'Closed' && lead?.quick_incomplete) {
-        updateData.quick_incomplete = false;
-        updateData.capture_type = 'Full';
-      }
       await Lead.update(leadId, updateData);
       // Optimistic update — update local state instead of full reload
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...updateData } : l));
@@ -484,10 +466,6 @@ export default function AgentDashboard() {
     try {
       const lead = leads.find(l => l.id === leadId);
       const updateData = { reminder_done: true };
-      if (lead?.quick_incomplete) {
-        updateData.quick_incomplete = false;
-        updateData.capture_type = 'Full';
-      }
       await Lead.update(leadId, updateData);
       // Optimistic update
       setReminders(prev => prev.filter(l => l.id !== leadId));
@@ -637,6 +615,7 @@ export default function AgentDashboard() {
       {/* Quick Leads to Complete */}
       <QuickLeadsToComplete
         leads={quickLeads}
+        employees={employees}
         onComplete={handleOpenEdit}
         onProcess={(id) => handleStatusChange(id, 'InProgress')}
         onClose={(id) => handleStatusChange(id, 'Closed')}
