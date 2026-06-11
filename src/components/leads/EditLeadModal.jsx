@@ -74,6 +74,13 @@ export default function EditLeadModal({ isOpen, onClose, lead, onLeadUpdated }) 
         sla_due_at: formData.sla_due_at || lead.sla_due_at
       };
 
+      if ((formData.reminder_at || '') !== (lead.reminder_at ? lead.reminder_at.slice(0, 16) : '')) {
+        updateData.reminder_done = false;
+        updateData.reminder_sms_sent_at = null;
+        updateData.reminder_sms_status = '';
+        updateData.reminder_sms_error = '';
+      }
+
       // Check if we should mark as complete
       if (lead.quick_incomplete && shouldMarkComplete(updateData)) {
         updateData.quick_incomplete = false;
