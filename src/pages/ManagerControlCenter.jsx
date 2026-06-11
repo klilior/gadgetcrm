@@ -19,7 +19,6 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import useSuppliers from "../components/hooks/useSuppliers";
 import UndeliveredOrdersWidget from "../components/dashboard/UndeliveredOrdersWidget";
-import QuickLeadsToComplete from "../components/dashboard/QuickLeadsToComplete";
 import RepSalesDrilldown from "../components/dashboard/RepSalesDrilldown";
 import { getInvoiceClassification } from "../components/utils/invoiceClassification";
 
@@ -35,7 +34,6 @@ export default function ManagerControlCenter() {
   const [pendingInvoicesCount, setPendingInvoicesCount] = useState(0);
   const { suppliersMap, suppliersList } = useSuppliers();
   const [isLoading, setIsLoading] = useState(true);
-  const [quickLeads, setQuickLeads] = useState([]);
   const [lastSync, setLastSync] = useState(null);
   const [callStats, setCallStats] = useState({ incoming: 0, missed: 0 });
 
@@ -68,12 +66,11 @@ export default function ManagerControlCenter() {
     const salesQuery = { issue_date: { $gte: dateFrom, $lte: dateTo } };
     const invoiceQuery = { doc_date: { $gte: dateFrom, $lte: dateTo }, extraction_status: 'אושר' };
 
-    const [salesData, mappingsData, invoicesData, pendingInvoices, allLeads, syncLogs, activities] = await Promise.all([
+    const [salesData, mappingsData, invoicesData, pendingInvoices, syncLogs, activities] = await Promise.all([
       base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 2000).catch(() => []),
       mappings.length > 0 ? Promise.resolve(mappings) : base44.entities.CommissionGroupMapping.filter({ is_active: true }).catch(() => []),
       base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000).catch(() => []),
       base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200).catch(() => []),
-      base44.entities.Lead.filter({ status: { $ne: 'Deleted' } }).catch(() => []),
       base44.entities.SyncLog.filter({ sync_key: 'linet_main_sync' }, '-run_started_at', 1).catch(() => []),
       base44.entities.Activity.filter({
         activity_type: { $in: ['שיחה נכנסת', 'שיחה יוצאת'] }
@@ -102,12 +99,6 @@ export default function ManagerControlCenter() {
       inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
     );
     setPendingInvoicesCount(filtered.length);
-
-    // Quick leads
-    const quickIncomplete = (allLeads || [])
-      .filter(l => (l.capture_type === 'Quick' || l.quick_incomplete === true) && l.status !== 'Closed')
-      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-    setQuickLeads(quickIncomplete);
 
     setIsLoading(false);
   };
@@ -262,18 +253,6 @@ export default function ManagerControlCenter() {
     if (val < RATIO_THRESHOLDS.good) return 'text-green-600 bg-green-100';
     if (val < RATIO_THRESHOLDS.warning) return 'text-orange-600 bg-orange-100';
     return 'text-red-600 bg-red-100';
-  };
-
-  const handleLeadStatusChange = async (leadId, newStatus) => {
-    const lead = quickLeads.find(l => l.id === leadId);
-    const updateData = { status: newStatus };
-    if (newStatus === 'Deleted') updateData.deleted_at = new Date().toISOString();
-    if ((newStatus === 'InProgress' || newStatus === 'Closed') && lead?.quick_incomplete) {
-      updateData.quick_incomplete = false;
-      updateData.capture_type = 'Full';
-    }
-    await base44.entities.Lead.update(leadId, updateData);
-    loadAllData();
   };
 
   const openDrilldown = (rep, groupCode, label) => {
@@ -543,15 +522,8 @@ export default function ManagerControlCenter() {
         </CardContent>
       </Card>
 
-      {/* Undelivered orders + Quick notes */}
+      {/* Undelivered orders */}
       <UndeliveredOrdersWidget currentUser={currentUser} isManager={true} employees={[]} compact={false} />
-
-      <QuickLeadsToComplete
-        leads={quickLeads}
-        onProcess={(id) => handleLeadStatusChange(id, 'InProgress')}
-        onClose={(id) => handleLeadStatusChange(id, 'Closed')}
-        onDelete={(id) => handleLeadStatusChange(id, 'Deleted')}
-      />
 
       {/* Purchases Dashboard */}
       <Card className="glass-card border-0">
