@@ -33,6 +33,11 @@ Deno.serve(async (req) => {
         .filter(e => !!e.employee_name)
         .map(e => [norm(e.employee_name), e])
     );
+    const empByLinetCode = new Map(
+      employees
+        .filter(e => !!e.linet_employee_code)
+        .map(e => [norm(e.linet_employee_code), e])
+    );
 
     // Optional: LinetUsersMap to map external names -> employee_id
     let linetMap = [];
@@ -86,7 +91,12 @@ Deno.serve(async (req) => {
         const byLinet = empByLinet.get(norm(linetName));
         if (byLinet) return byLinet;
       }
-      // 3) Email
+      // 3) Linet employee code from Employee
+      if (linetName) {
+        const byCode = empByLinetCode.get(norm(linetName));
+        if (byCode) return byCode.id;
+      }
+      // 4) Email
       if (email) {
         const byEmail = empByEmail.get(norm(email));
         if (byEmail) return byEmail.id;

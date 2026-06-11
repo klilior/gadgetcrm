@@ -30,6 +30,7 @@ export function buildEmployeeMap(employees, linetUsersMap = []) {
       firstName.toLowerCase(),
       emp.username?.toLowerCase(),
       emp.email?.toLowerCase(),
+      String(emp.linet_employee_code || '').toLowerCase(),
     ]);
     
     // הוסף את השם מ-Linet אם קיים

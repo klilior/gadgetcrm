@@ -85,9 +85,19 @@ async function loadCaches(base44) {
   const usersMap = {};
   usersList.forEach((u) => (usersMap[String(u.user_id)] = u.user_name));
 
-  console.log(`✅ Loaded ${Object.keys(productCache).length} products, ${Object.keys(categoryTranslationMap).length} categories, ${Object.keys(usersMap).length} users`);
+  const employeesList = await base44.asServiceRole.entities.Employee.list(null, 1000);
+  const employeeByLinetCode = {};
+  const employeeNameByLinetCode = {};
+  employeesList.forEach((emp) => {
+    const code = String(emp.linet_employee_code || '').trim();
+    if (!code) return;
+    employeeByLinetCode[code] = emp.id;
+    employeeNameByLinetCode[code] = emp.employee_name;
+  });
 
-  return { categoryTranslationMap, productCache, usersMap };
+  console.log(`✅ Loaded ${Object.keys(productCache).length} products, ${Object.keys(categoryTranslationMap).length} categories, ${Object.keys(usersMap).length} Linet users, ${Object.keys(employeeByLinetCode).length} employee codes`);
+
+  return { categoryTranslationMap, productCache, usersMap, employeeByLinetCode, employeeNameByLinetCode };
 }
 
 async function fetchDocuments(credentials, dateFrom, dateTo, limit, offset) {
@@ -421,7 +431,7 @@ export async function executeLinetSync(base44, body = {}) {
     }
 
     const credentials = await getLinetCredentials(base44);
-    const { categoryTranslationMap, productCache, usersMap } = await loadCaches(base44);
+    const { categoryTranslationMap, productCache, usersMap, employeeByLinetCode, employeeNameByLinetCode } = await loadCaches(base44);
 
     const carrierMappings = createLineContracts ? await base44.asServiceRole.entities.CarrierProductMapping.filter({ is_active: true }, '-priority', 200) : [];
     const carrierPolicies = {};
@@ -460,7 +470,9 @@ export async function executeLinetSync(base44, body = {}) {
         const linet_doc_id = String(doc.id);
         const doc_number = String(doc.docnum);
         const issue_date = doc.issue_date ? doc.issue_date.split(' ')[0] : null;
-        const sales_rep_name = usersMap[String(doc.owner)] || String(doc.owner);
+        const ownerCode = String(doc.owner || '').trim();
+        const sales_rep_name = employeeNameByLinetCode[ownerCode] || usersMap[ownerCode] || ownerCode;
+        const employee_id = employeeByLinetCode[ownerCode] || null;
         const customer_name = doc.company_name || doc.account_name || doc.company || 'General Customer';
         const linet_account_id = doc.account_id ? Number(doc.account_id) : null;
         const is_credit = raw_doctype === 4;
@@ -517,6 +529,7 @@ export async function executeLinetSync(base44, body = {}) {
               doc_type: doc_type_name,
               issue_date,
               sales_rep: sales_rep_name,
+              employee_id,
               customer_name,
               linet_account_id,
               client_id: linked_client_id || null,
