@@ -36,6 +36,16 @@ Deno.serve(async (req) => {
     const docNumbers = new Set();
     const categories = {};
     const docTypes = {};
+    const docTypeTotals = {};
+    let positiveIncVat = 0;
+    let negativeIncVat = 0;
+    let rawTotalIncVat = 0;
+    let rawTotalExVat = 0;
+    const dashboardSeen = new Set();
+    let dashboardDedupTotalIncVat = 0;
+    let dashboardDedupTotalExVat = 0;
+    const duplicateRows = [];
+    const byDoc = {};
 
     for (const rec of allRecords) {
       const rep = rec.sales_rep || 'לא ידוע';
@@ -44,6 +54,35 @@ Deno.serve(async (req) => {
       const qty = rec.quantity || 0;
       const totalRow = rec.total_row_amount || 0;
       const priceExVat = rec.price_ex_vat || 0;
+      rawTotalIncVat += totalRow;
+      rawTotalExVat += priceExVat;
+      if (totalRow >= 0) positiveIncVat += totalRow;
+      else negativeIncVat += totalRow;
+      if (!docTypeTotals[docType]) docTypeTotals[docType] = { rows: 0, inc_vat: 0, ex_vat: 0 };
+      docTypeTotals[docType].rows++;
+      docTypeTotals[docType].inc_vat += totalRow;
+      docTypeTotals[docType].ex_vat += priceExVat;
+
+      const dashboardKey = `${rec.linet_doc_id || rec.id}_${rec.sku || ''}_${rec.product_name || ''}`;
+      if (dashboardSeen.has(dashboardKey)) {
+        duplicateRows.push({
+          id: rec.id,
+          doc_number: rec.doc_number,
+          linet_doc_id: rec.linet_doc_id,
+          sku: rec.sku || '',
+          product_name: rec.product_name || '',
+          total_row_amount: totalRow
+        });
+      } else {
+        dashboardSeen.add(dashboardKey);
+        dashboardDedupTotalIncVat += totalRow;
+        dashboardDedupTotalExVat += priceExVat;
+      }
+
+      const docKey = rec.linet_doc_id || rec.doc_number || 'unknown';
+      if (!byDoc[docKey]) byDoc[docKey] = { doc_number: rec.doc_number, total_inc_vat: 0, rows: 0 };
+      byDoc[docKey].total_inc_vat += totalRow;
+      byDoc[docKey].rows++;
 
       // Per rep
       if (!repStats[rep]) {
@@ -108,6 +147,26 @@ Deno.serve(async (req) => {
       period: { from: from_date, to: to_date },
       total_rows: allRecords.length,
       unique_documents: docNumbers.size,
+      totals: {
+        raw_inc_vat: Math.round(rawTotalIncVat * 100) / 100,
+        raw_ex_vat: Math.round(rawTotalExVat * 100) / 100,
+        positive_inc_vat: Math.round(positiveIncVat * 100) / 100,
+        negative_inc_vat: Math.round(negativeIncVat * 100) / 100,
+        dashboard_dedup_inc_vat: Math.round(dashboardDedupTotalIncVat * 100) / 100,
+        dashboard_dedup_ex_vat: Math.round(dashboardDedupTotalExVat * 100) / 100,
+        duplicate_rows_count: duplicateRows.length,
+        duplicate_rows_inc_vat: Math.round(duplicateRows.reduce((sum, row) => sum + (row.total_row_amount || 0), 0) * 100) / 100
+      },
+      doc_type_totals: Object.fromEntries(Object.entries(docTypeTotals).map(([key, value]) => [key, {
+        rows: value.rows,
+        inc_vat: Math.round(value.inc_vat * 100) / 100,
+        ex_vat: Math.round(value.ex_vat * 100) / 100
+      }])),
+      duplicate_rows_sample: duplicateRows.slice(0, 20),
+      top_documents_by_amount: Object.values(byDoc)
+        .sort((a, b) => Math.abs(b.total_inc_vat) - Math.abs(a.total_inc_vat))
+        .slice(0, 20)
+        .map(doc => ({ ...doc, total_inc_vat: Math.round(doc.total_inc_vat * 100) / 100 })),
       by_rep: repSummary,
       by_category: categories,
       by_doc_type: docTypes
