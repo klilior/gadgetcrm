@@ -117,16 +117,26 @@ async function fetchProductCategory(credentials, sku, categoryTranslationMap) {
 
 async function upsertTransaction(base44, txData) {
   return retryOnRateLimit(async () => {
-    const existing = await base44.asServiceRole.entities.SalesTransaction.filter(
-      { linet_doc_id: txData.linet_doc_id, sku: txData.sku || '' }, null, 1,
-    );
-    if (existing.length > 0) {
-      await base44.asServiceRole.entities.SalesTransaction.update(existing[0].id, txData);
-      return 'updated';
-    } else {
-      await base44.asServiceRole.entities.SalesTransaction.create(txData);
-      return 'created';
+    const { sku_occurrence, ...persistedData } = txData;
+    let existing = [];
+
+    if (persistedData.line_key) {
+      existing = await base44.asServiceRole.entities.SalesTransaction.filter({ line_key: persistedData.line_key }, null, 1);
     }
+
+    if (existing.length === 0 && sku_occurrence === 0) {
+      existing = await base44.asServiceRole.entities.SalesTransaction.filter(
+        { linet_doc_id: persistedData.linet_doc_id, sku: persistedData.sku || '' }, null, 1,
+      );
+    }
+
+    if (existing.length > 0) {
+      await base44.asServiceRole.entities.SalesTransaction.update(existing[0].id, persistedData);
+      return 'updated';
+    }
+
+    await base44.asServiceRole.entities.SalesTransaction.create(persistedData);
+    return 'created';
   });
 }
 
@@ -426,9 +436,12 @@ async function executeLinetSync(base44, body = {}) {
             } catch (_e) {}
           }
 
-          for (const line of doc.docDetailes) {
+          const skuOccurrences = {};
+          for (const [lineIndex, line] of doc.docDetailes.entries()) {
             const sku = line.sku || '';
             const product_name = line.name || '';
+            const skuOccurrence = skuOccurrences[sku] || 0;
+            skuOccurrences[sku] = skuOccurrence + 1;
             let quantity = parseNum(line.qty);
             let total_row_amount = parseNum(line.iTotalVat);
             let price_ex_vat = parseNum(line.iTotal);
@@ -451,7 +464,7 @@ async function executeLinetSync(base44, body = {}) {
             }
 
             const txData = {
-              linet_doc_id, doc_number, doc_type: is_credit ? 'חשבונית זיכוי' : 'חשבונית מס קבלה',
+              linet_doc_id, line_key: `${linet_doc_id}:${lineIndex}`, line_index: lineIndex, sku_occurrence: skuOccurrence, doc_number, doc_type: is_credit ? 'חשבונית זיכוי' : 'חשבונית מס קבלה',
               issue_date, sales_rep: sales_rep_name, customer_name, linet_account_id,
               client_id: linked_client_id || null, sku, product_name, quantity, unit_price,
               total_row_amount, price_ex_vat, category: category_name, sync_timestamp: new Date().toISOString(),
@@ -505,7 +518,7 @@ async function executeLinetSync(base44, body = {}) {
 
     let deviceSyncStats = null;
     try {
-      if (allDocuments.length > 0) {
+      if (body.disable_device_sync !== true && allDocuments.length > 0) {
         const enrichedDocs = allDocuments.map(doc => {
           if (Array.isArray(doc.docDetailes)) {
             for (const line of doc.docDetailes) {

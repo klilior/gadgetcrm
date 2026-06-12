@@ -6,6 +6,15 @@
       "type": "string",
       "description": "Unique ID from Linet"
     },
+    "line_key": {
+      "type": "string",
+      "description": "Stable unique key for a specific Linet document line",
+      "index": true
+    },
+    "line_index": {
+      "type": "number",
+      "description": "Line index inside the Linet document"
+    },
     "doc_number": {
       "type": "string",
       "description": "Visual invoice number"

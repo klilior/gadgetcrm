@@ -246,7 +246,7 @@ Output JSON keys must be English.
 TASKS
 1) Validate math consistency:
    subtotal_before_vat + vat_amount ≈ total_with_vat
-   tolerance: 5.0 (up to 5 NIS difference is acceptable due to rounding)
+   tolerance: 1.0 (up to 1 NIS difference is acceptable due to rounding)
 2) Validate critical fields presence:
    supplier_name, doc_type_he, doc_number, doc_date, total_with_vat
 3) Recommend invoice extraction status in Hebrew.
@@ -280,6 +280,10 @@ const VALIDATE_SCHEMA = {
   },
   required: ['is_math_consistent', 'missing_critical_fields', 'recommended_extraction_status_he', 'display_validation_he']
 };
+
+function roundMoney(value) {
+  return typeof value === 'number' && !Number.isNaN(value) ? Math.round(value * 100) / 100 : undefined;
+}
 
 Deno.serve(async (req) => {
     // Read body BEFORE creating base44 client (body can only be read once)
@@ -519,14 +523,14 @@ Deno.serve(async (req) => {
       const vat = extraction.vat_amount;
       const total = extraction.total_with_vat;
       
-      // Math consistency: subtotal + vat ≈ total (tolerance 5 NIS for rounding)
+      // Math consistency: subtotal + vat ≈ total (tolerance 1 NIS for rounding)
       let isMathConsistent = true;
       let mathDelta = null;
       
       if (typeof sub === 'number' && typeof vat === 'number' && typeof total === 'number') {
         mathDelta = Math.abs((sub + vat) - total);
         mathDelta = Math.round(mathDelta * 100) / 100;
-        isMathConsistent = mathDelta <= 5.0;
+        isMathConsistent = mathDelta <= 1.0;
       } else if (typeof total === 'number') {
         // If only total exists, consider it consistent (we just don't have the breakdown)
         isMathConsistent = true;
@@ -744,9 +748,9 @@ Deno.serve(async (req) => {
           doc_number: extractedDocNumber,
           doc_date: extraction.doc_date || undefined,
           currency: extraction.currency || undefined,
-          subtotal_before_vat: extraction.subtotal_before_vat ?? undefined,
-          vat_amount: extraction.vat_amount ?? undefined,
-          total_with_vat: extraction.total_with_vat ?? undefined,
+          subtotal_before_vat: roundMoney(extraction.subtotal_before_vat),
+          vat_amount: roundMoney(extraction.vat_amount),
+          total_with_vat: roundMoney(extraction.total_with_vat),
           confidence_score: extraction.overall_confidence ?? undefined,
           extraction_status: 'נדחה',
           duplicate_key: dupKey,
@@ -770,11 +774,10 @@ Deno.serve(async (req) => {
     // Determine final status and notes
     const fieldsComplete = !!(extraction.doc_type_he && extraction.doc_number && extraction.doc_date && (typeof extraction.total_with_vat === 'number'));
     // Auto-approve if: deterministic validation passed (math OK + all fields present) AND
-    // AI confidence >= 75 (lowered from 90 because GPT-4o gives more conservative/honest scores;
-    // the real safety net is the deterministic math + fields check above)
+    // AI confidence >= 90 because supplier expenses require strict numerical accuracy.
     const canAutoApprove = (
       validation.recommended_extraction_status_he === 'נקרא בהצלחה' &&
-      (typeof extraction.overall_confidence === 'number' ? extraction.overall_confidence >= 75 : false) &&
+      (typeof extraction.overall_confidence === 'number' ? extraction.overall_confidence >= 90 : false) &&
       validation.is_math_consistent === true &&
       fieldsComplete
     );
@@ -812,8 +815,9 @@ Deno.serve(async (req) => {
         sku: item.sku,
         product_name: item.product_name,
         quantity: item.quantity || 1,
-        unit_price_before_vat: item.unit_price_before_vat || null,
-        line_total_before_vat: item.line_total_before_vat || null,
+        unit_price_before_vat: roundMoney(item.unit_price_before_vat) || null,
+        line_total_before_vat: roundMoney(item.line_total_before_vat) || null,
+        line_total_with_vat: roundMoney(item.line_total_with_vat) || null,
         supplier_id: supplierId
       });
       
@@ -823,7 +827,7 @@ Deno.serve(async (req) => {
         sku: item.sku
       }, undefined, 1);
       
-      const newPrice = item.unit_price_before_vat || (item.line_total_before_vat && item.quantity ? item.line_total_before_vat / item.quantity : null);
+      const newPrice = roundMoney(item.unit_price_before_vat || (item.line_total_before_vat && item.quantity ? item.line_total_before_vat / item.quantity : null));
       
       if (existingPrice && existingPrice.length > 0) {
         const oldPriceRecord = existingPrice[0];
