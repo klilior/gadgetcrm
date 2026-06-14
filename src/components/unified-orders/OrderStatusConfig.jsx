@@ -62,6 +62,23 @@ export function isOpenStatus(source, status) {
   return false;
 }
 
+export function getShipmentBlockReason(source, status) {
+  if (source === 'woocommerce') {
+    if (status === 'on-hold') return '⚠️ הזמנה מושהית — נדרש תשלום לפני יצירת משלוח';
+    if (status === 'pending') return '⚠️ הזמנה ממתינה לתשלום — אין ליצור משלוח לפני שהתשלום התקבל';
+    if (status === 'cancelled') return '⚠️ הזמנה בוטלה — אין ליצור משלוח להזמנה מבוטלת';
+  }
+  if (source === 'mirakl') {
+    if (status === 'WAITING_DEBIT' || status === 'WAITING_DEBIT_PAYMENT') return '⚠️ הזמנה ממתינה לתשלום — אין ליצור משלוח לפני שהתשלום התקבל';
+    if (status === 'CANCELED') return '⚠️ הזמנה בוטלה — אין ליצור משלוח להזמנה מבוטלת';
+  }
+  return null;
+}
+
+export function isShipmentBlocked(source, status) {
+  return Boolean(getShipmentBlockReason(source, status));
+}
+
 export function getStatusColor(source, status) {
   if (source === 'woocommerce') {
     const map = {

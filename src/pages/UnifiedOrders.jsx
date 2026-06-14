@@ -17,7 +17,7 @@ import OrderFilters from "../components/unified-orders/OrderFilters";
 import UnifiedOrderRow from "../components/unified-orders/UnifiedOrderRow";
 import PendingProductsSummary from "../components/unified-orders/PendingProductsSummary";
 import SendSmsOrderModal from "../components/unified-orders/SendSmsOrderModal";
-import { isClosedStatus, LINET_ORDER_SKUS } from "../components/unified-orders/OrderStatusConfig";
+import { isClosedStatus, getShipmentBlockReason, LINET_ORDER_SKUS } from "../components/unified-orders/OrderStatusConfig";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import SPShipDialog from "../components/superpharm/SPShipDialog";
 import SPShipmentSuccessScreen from "../components/superpharm/SPShipmentSuccessScreen";
@@ -470,6 +470,24 @@ export default function UnifiedOrders() {
     setPage(1);
   };
 
+  const openShipmentSafely = (order) => {
+    const reason = getShipmentBlockReason(order.source, order.status);
+    if (reason) {
+      alert(reason);
+      return;
+    }
+    setShipmentOrder(order);
+  };
+
+  const openCargoShipmentSafely = (order) => {
+    const reason = getShipmentBlockReason(order.source, order.status);
+    if (reason) {
+      alert(reason);
+      return;
+    }
+    setCargoOrder(order);
+  };
+
   return (
     <div className="p-3 md:p-6 space-y-5">
       {/* Header */}
@@ -601,9 +619,9 @@ export default function UnifiedOrders() {
                                 order={order}
                                 onSms={(o) => setSmsOrder(o)}
                                 onStatusChange={handleStatusChange}
-                                onShipment={(o) => setShipmentOrder(o)}
+                                onShipment={(o) => openShipmentSafely(o)}
                                 onCreateInvoice={(o) => setInvoiceOrder(o)}
-                                onCargoShipment={(o) => setCargoOrder(o)}
+                                onCargoShipment={(o) => openCargoShipmentSafely(o)}
                                 onGetPackageShipment={() => {
                                   // Scroll to GetPackage card within the expanded detail
                                   setTimeout(() => {
@@ -634,9 +652,9 @@ export default function UnifiedOrders() {
                     onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
                     onSms={() => setSmsOrder(order)}
                     onStatusChange={handleStatusChange}
-                    onShipment={() => setShipmentOrder(order)}
+                    onShipment={() => openShipmentSafely(order)}
                     onCreateInvoice={() => setInvoiceOrder(order)}
-                    onCargoShipment={() => setCargoOrder(order)}
+                    onCargoShipment={() => openCargoShipmentSafely(order)}
                     onGetPackageShipment={() => {
                       setTimeout(() => {
                         const el = document.querySelector('[data-getpackage-card]');

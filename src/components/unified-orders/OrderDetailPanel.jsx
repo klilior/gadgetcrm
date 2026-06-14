@@ -8,7 +8,7 @@ import GetPackageOrderCard from "../getpackage/GetPackageOrderCard";
 import TrackingSection from "./TrackingSection";
 import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
-import { getStatusLabel, getStatusOptions, getStatusColor } from "./OrderStatusConfig";
+import { getStatusLabel, getStatusOptions, getStatusColor, getShipmentBlockReason } from "./OrderStatusConfig";
 import { detectShippingType, getShippingTypeBadge } from "./ShippingTypeHelper";
 import ProductMetaBadges from "./ProductMetaBadges";
 import OrderTreatmentTimeline from "./OrderTreatmentTimeline";
@@ -89,6 +89,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const statusOptions = getStatusOptions(order.source);
   const shippingType = detectShippingType(order);
   const shippingBadge = getShippingTypeBadge(shippingType);
+  const shipmentBlockReason = getShipmentBlockReason(order.source, order.status);
 
   const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
@@ -279,11 +280,11 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </Button>
         )}
 
-        {/* 3 Shipping Buttons - hidden for on-hold orders */}
-        {order.source === 'woocommerce' && order.status === 'on-hold' ? (
+        {/* Shipping buttons - blocked when the order was not paid or was cancelled */}
+        {shipmentBlockReason ? (
           <div className="bg-yellow-50 border border-yellow-300 rounded-full px-4 py-2 flex items-center gap-2 text-yellow-800 text-sm font-medium">
             <Truck className="w-4 h-4" />
-            ⚠️ הזמנה מושהית — יש לשנות סטטוס ל״בטיפול״ לפני משלוח
+            {shipmentBlockReason}
           </div>
         ) : (
         <div className="flex flex-wrap items-center gap-2">
