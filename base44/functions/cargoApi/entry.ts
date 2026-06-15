@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     if (action === 'create_shipment') {
       const config = await getCargoConfig();
       const { shipment_type, to_name, to_phone, to_street, to_city, to_floor, to_apartment, to_entrance,
-              notes, number_of_parcels, cash_on_delivery, order_id, order_number } = body;
+              notes, number_of_parcels, cash_on_delivery, order_id, order_number, client_id } = body;
 
       const customer_code = parseInt(config.customer_code) || 7625;
       const from_address = {
@@ -155,6 +155,7 @@ Deno.serve(async (req) => {
       const shipmentRecord = await base44.asServiceRole.entities.Shipment.create({
         order_id: order_id || '',
         external_order_number: order_number || '',
+        client_id: client_id || '',
         shipment_type: shipment_type === 'delivery' ? 'cargo_delivery' : shipment_type === 'return' ? 'cargo_return' : 'cargo_exchange',
         tracking_number: String(shipment_id),
         status: 'created',

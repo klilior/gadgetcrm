@@ -25,8 +25,8 @@ const CARGO_STATUS_MAP = {
   51: 'בדרך לנקודת חלוקה', 52: 'נקודת חלוקה', 55: 'בנקודת חלוקה',
 };
 
-export default function CargoShipmentModal({ open, onClose, order, client }) {
-  const [shipmentType, setShipmentType] = useState('delivery');
+export default function CargoShipmentModal({ open, onClose, order, client, initialShipmentType = 'delivery' }) {
+  const [shipmentType, setShipmentType] = useState(initialShipmentType);
   const [toName, setToName] = useState('');
   const [toPhone, setToPhone] = useState('');
   const [toStreet, setToStreet] = useState('');
@@ -69,11 +69,12 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
     }
     setToCity(order?.shipping_city || client?.city || '');
     setNotes(order?.notes || order?.customer_note || '');
+    setShipmentType(initialShipmentType);
     setResult(null);
     setError(null);
     setExistingShipmentId(null);
     setConfirmedDuplicate(false);
-  }, [open, order, client]);
+  }, [open, order, client, initialShipmentType]);
 
   // Check for existing cargo shipment on this order
   useEffect(() => {
@@ -116,6 +117,7 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
         cash_on_delivery: showCOD ? codAmount : 0,
         order_id: order?.raw_id || order?.id || '',
         order_number: order?.order_number || order?.external_order_number || '',
+        client_id: order?.client_id || client?.id || '',
       });
       
       const data = res.data || res;
@@ -125,7 +127,7 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
         
         // Auto-update order status in external platform
         if (data.shipment_id) {
-          if (order?.source === 'mirakl') {
+          if (shipmentType === 'delivery' && order?.source === 'mirakl') {
             try {
               const miraklId = order.mirakl_order_id || order.order_number;
               await updateSuperPharmOrder({
@@ -140,7 +142,7 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
               console.error('[Cargo] Failed to update Mirakl:', e.message);
               toast.error('משלוח נוצר אך עדכון Mirakl נכשל - יעודכן בסנכרון הבא');
             }
-          } else if (order?.source === 'woocommerce') {
+          } else if (shipmentType === 'delivery' && order?.source === 'woocommerce') {
             try {
               await updateWooOrderStatus({ order_id: order.raw_id, new_status: 'completed' });
               toast.success('הזמנה עודכנה ל-"הושלמה" בווקומרס');
@@ -149,7 +151,7 @@ export default function CargoShipmentModal({ open, onClose, order, client }) {
             }
           }
 
-          if (order?.source === 'mirakl') {
+          if (shipmentType === 'delivery' && order?.source === 'mirakl') {
             try {
               const products = order.products || [];
               const productDesc = products.map(p => p.name).filter(Boolean).join(', ') || `הזמנת סופר-פארם ${order.mirakl_order_id || order.order_number}`;

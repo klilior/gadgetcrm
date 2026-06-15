@@ -19,6 +19,15 @@ const CARRIER_NAMES = {
   ups: 'UPS', velo: 'Velo', cargo: 'קארגו', other: 'אחר',
 };
 
+const SHIPMENT_TYPE_LABELS = {
+  pickup_point: 'משלוח UPS לנקודת איסוף',
+  standard: 'משלוח UPS',
+  pickup_drop: 'החזרת UPS PICKUP DROP',
+  cargo_delivery: 'משלוח קארגו',
+  cargo_return: 'החזרת קארגו',
+  cargo_exchange: 'החלפת קארגו',
+};
+
 function formatDate(d) {
   if (!d) return '';
   try { return format(new Date(d), 'dd/MM/yyyy HH:mm', { locale: he }); }
@@ -37,7 +46,8 @@ function ShipmentCard({ shipment }) {
               <span className="font-semibold text-sm">
                 {shipment.reference ? `הזמנה #${shipment.reference}` : `משלוח #${shipment.id?.slice(-6)}`}
               </span>
-              <Badge className={`text-[10px] ${st.color}`}>{st.label}</Badge>
+              <Badge variant="outline" className="text-[10px] bg-gray-50 text-gray-700">{SHIPMENT_TYPE_LABELS[shipment.shipment_type] || 'משלוח'}</Badge>
+              <Badge className={`text-[10px] ${st.color}`}>{shipment.cargo_status_text || st.label}</Badge>
               {shipment.carrier && (
                 <Badge variant="outline" className="text-[10px]">{CARRIER_NAMES[shipment.carrier] || shipment.carrier}</Badge>
               )}

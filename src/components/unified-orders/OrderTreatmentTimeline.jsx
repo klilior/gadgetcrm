@@ -1,6 +1,6 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { Clock, PackageCheck, Hash, Send, Receipt, ShoppingCart } from "lucide-react";
+import { Clock, PackageCheck, Hash, Send, Receipt, ShoppingCart, RotateCcw, Repeat } from "lucide-react";
 import { format } from "date-fns";
 
 function formatDate(date) {
@@ -13,15 +13,40 @@ function item(key, icon, title, date, description, color) {
   return { key, icon, title, date, description, color };
 }
 
+function shipmentTypeInfo(type) {
+  const map = {
+    pickup_point: { title: "משלוח UPS לנקודת איסוף", icon: PackageCheck, color: "bg-blue-50 text-blue-600" },
+    standard: { title: "משלוח UPS", icon: PackageCheck, color: "bg-blue-50 text-blue-600" },
+    pickup_drop: { title: "החזרת UPS PICKUP DROP", icon: RotateCcw, color: "bg-orange-50 text-orange-600" },
+    cargo_delivery: { title: "משלוח קארגו", icon: PackageCheck, color: "bg-blue-50 text-blue-600" },
+    cargo_return: { title: "החזרת קארגו", icon: RotateCcw, color: "bg-orange-50 text-orange-600" },
+    cargo_exchange: { title: "החלפת קארגו", icon: Repeat, color: "bg-purple-50 text-purple-600" },
+  };
+  return map[type] || { title: "נוצר משלוח", icon: PackageCheck, color: "bg-blue-50 text-blue-600" };
+}
+
 export default function OrderTreatmentTimeline({ order }) {
   const invoiceNumber = order.linet_invoice_doc_number || order.linet_doc_number || order.order_number;
   const invoiceDate = order.linet_invoice_created_at || order.invoice_created_at || (order.source === "linet" ? order.order_date : null);
   const shipmentDate = order.shipment_created_at || order.shipped_at || null;
   const trackingDate = order.tracking_created_at || shipmentDate;
 
+  const shipmentEvents = (order.related_shipments || []).map((shipment, index) => {
+    const info = shipmentTypeInfo(shipment.shipment_type);
+    const progress = shipment.cargo_status_text || shipment.status || "נוצר";
+    return item(
+      `shipment-${shipment.id || index}`,
+      info.icon,
+      info.title,
+      shipment.created_date,
+      [shipment.carrier || order.tracking_carrier, shipment.tracking_number && `מעקב ${shipment.tracking_number}`, progress].filter(Boolean).join(" • "),
+      info.color
+    );
+  });
+
   const events = [
     item("order", ShoppingCart, "ההזמנה נוצרה", order.order_date, `מס׳ הזמנה ${order.order_number || ""}`, "bg-slate-50 text-slate-600"),
-    item("shipment", PackageCheck, "נוצר משלוח", shipmentDate, [order.tracking_carrier, order.tracking_number && `מעקב ${order.tracking_number}`].filter(Boolean).join(" • "), "bg-blue-50 text-blue-600"),
+    ...(shipmentEvents.length ? shipmentEvents : [item("shipment", PackageCheck, "נוצר משלוח", shipmentDate, [order.tracking_carrier, order.tracking_number && `מעקב ${order.tracking_number}`].filter(Boolean).join(" • "), "bg-blue-50 text-blue-600")]),
     item("tracking", Hash, "מספר מעקב", trackingDate, order.tracking_number || "", "bg-green-50 text-green-600"),
     item("sms", Send, "נשלח SMS", order.sms_sent_at, [order.sms_event_type || "עדכון ללקוח", order.sms_status].filter(Boolean).join(" • "), "bg-teal-50 text-teal-600"),
     item("invoice", Receipt, "יצאה חשבונית", invoiceDate, invoiceNumber ? `מס׳ חשבונית ${invoiceNumber}` : "", "bg-purple-50 text-purple-600"),

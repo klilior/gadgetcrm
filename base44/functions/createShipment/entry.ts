@@ -216,8 +216,8 @@ Deno.serve(async (req) => {
     api_response: response
   });
 
-  // If there's an order, update its status and add WooCommerce note with tracking
-  if (order_id) {
+  // If there's an order, update its status and add WooCommerce note with tracking for regular outbound shipments only
+  if (order_id && shipment_type !== 'pickup_drop') {
     try {
       const order = await base44.asServiceRole.entities.Order.get(order_id);
       await base44.asServiceRole.entities.Order.update(order_id, { status: 'completed' });

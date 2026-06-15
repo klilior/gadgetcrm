@@ -2,7 +2,7 @@ import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Receipt, Store } from "lucide-react";
+import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Receipt, Store, RotateCcw, Repeat } from "lucide-react";
 import { toast } from "sonner";
 import GetPackageOrderCard from "../getpackage/GetPackageOrderCard";
 import TrackingSection from "./TrackingSection";
@@ -90,6 +90,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const shippingType = detectShippingType(order);
   const shippingBadge = getShippingTypeBadge(shippingType);
   const shipmentBlockReason = getShipmentBlockReason(order.source, order.status);
+  const hasShipment = Boolean(order.tracking_number || order.shipment_created_at || order.status === 'completed' || order.status === 'SHIPPED' || order.status === 'נוצר משלוח');
 
   const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
@@ -335,6 +336,35 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
             {shippingType === 'getpackage' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
           </Button>
         </div>
+        )}
+
+        {hasShipment && !shipmentBlockReason && (
+          <div className="flex flex-wrap items-center gap-2 border-r border-gray-200 pr-2 mr-1">
+            <Button
+              variant="outline"
+              className="rounded-full border-purple-300 text-purple-700 hover:bg-purple-50 hover:shadow-md transition-all"
+              onClick={() => onCargoShipment ? onCargoShipment({ ...order, _cargoShipmentType: 'exchange' }) : undefined}
+            >
+              <Repeat className="w-4 h-4 ml-1" />
+              🔄 החלפה קארגו
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-full border-orange-300 text-orange-700 hover:bg-orange-50 hover:shadow-md transition-all"
+              onClick={() => onCargoShipment ? onCargoShipment({ ...order, _cargoShipmentType: 'return' }) : undefined}
+            >
+              <RotateCcw className="w-4 h-4 ml-1" />
+              החזרת קארגו
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-full border-amber-300 text-amber-700 hover:bg-amber-50 hover:shadow-md transition-all"
+              onClick={() => onShipment({ ...order, _shipCarrier: 'ups', _upsShipmentType: 'pickup_drop' })}
+            >
+              <Package className="w-4 h-4 ml-1" />
+              PICKUP DROP UPS
+            </Button>
+          </div>
         )}
 
         {/* Invoice button */}

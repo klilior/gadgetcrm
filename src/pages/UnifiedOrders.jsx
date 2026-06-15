@@ -86,10 +86,12 @@ export default function UnifiedOrders() {
 
     // Pre-fetch shipments, GetPackage shipments and SMS logs for tracking/timeline enrichment
     let shipmentsByOrder = {};
+    let allShipments = [];
     let gpShipmentsByOrder = {};
     let smsLogs = [];
     try {
       const recentShipments = await base44.entities.Shipment.list('-created_date', 300);
+      allShipments = recentShipments;
       for (const s of recentShipments) {
         if (s.tracking_number && s.external_order_number) {
           if (!shipmentsByOrder[s.external_order_number] || s.created_date > shipmentsByOrder[s.external_order_number].created_date) {
@@ -111,6 +113,15 @@ export default function UnifiedOrders() {
     try {
       smsLogs = await base44.entities.NotificationLog.list('-sent_at', 300);
     } catch (_) {}
+
+    const getRelatedShipments = (order) => {
+      const keys = [order.order_number, order.external_order_number, order.mirakl_order_id, order.raw_id, order.id, order.client_id]
+        .filter(Boolean)
+        .map(String);
+      return allShipments
+        .filter(s => keys.includes(String(s.external_order_number || '')) || keys.includes(String(s.order_id || '')) || keys.includes(String(s.reference || '')) || (order.client_id && s.client_id === order.client_id && keys.includes(String(s.external_order_number || s.reference || ''))))
+        .sort((a, b) => new Date(a.created_date || 0) - new Date(b.created_date || 0));
+    };
 
     const findOrderSms = (orderNumber, phone) => {
       const candidates = smsLogs.filter(s => {
@@ -190,6 +201,7 @@ export default function UnifiedOrders() {
           sms_sent_at: smsLog?.sent_at || smsLog?.created_date || '',
           sms_status: smsLog?.status || '',
           sms_event_type: smsLog?.event_type || '',
+          related_shipments: getRelatedShipments({ order_number: extNum, external_order_number: extNum, raw_id: o.id, client_id: o.client_id }),
         });
       }
     } catch (e) { errs.push({source: 'woocommerce', message: e.message}); }
@@ -231,6 +243,7 @@ export default function UnifiedOrders() {
           linet_invoice_pdf_url: o.linet_invoice_pdf_url || '',
           linet_invoice_email_sent: o.linet_invoice_email_sent || false,
           order_lines_json: o.order_lines_json || '[]',
+          related_shipments: getRelatedShipments({ order_number: o.mirakl_order_id || '', external_order_number: o.mirakl_order_id || '', mirakl_order_id: o.mirakl_order_id || '' }),
         });
       }
     } catch (e) { errs.push({source: 'mirakl', message: e.message}); }
@@ -309,7 +322,8 @@ export default function UnifiedOrders() {
           linet_doc_number: dn,
           invoice_created_at: meta.issue_date || '',
           client_id: meta.client_id || '',
-          sales_rep: meta.sales_rep || '', currency: 'ILS'
+          sales_rep: meta.sales_rep || '', currency: 'ILS',
+          related_shipments: getRelatedShipments({ order_number: dn, external_order_number: dn, client_id: meta.client_id })
         });
       }
     } catch (e) { errs.push({source: 'linet', message: e.message}); }
@@ -488,6 +502,18 @@ export default function UnifiedOrders() {
     setCargoOrder(order);
   };
 
+  const openGetPackageSafely = (order) => {
+    const reason = getShipmentBlockReason(order.source, order.status);
+    if (reason) {
+      alert(reason);
+      return;
+    }
+    setTimeout(() => {
+      const el = document.querySelector('[data-getpackage-card]');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  };
+
   return (
     <div className="p-3 md:p-6 space-y-5">
       {/* Header */}
@@ -622,13 +648,7 @@ export default function UnifiedOrders() {
                                 onShipment={(o) => openShipmentSafely(o)}
                                 onCreateInvoice={(o) => setInvoiceOrder(o)}
                                 onCargoShipment={(o) => openCargoShipmentSafely(o)}
-                                onGetPackageShipment={() => {
-                                  // Scroll to GetPackage card within the expanded detail
-                                  setTimeout(() => {
-                                    const el = document.querySelector('[data-getpackage-card]');
-                                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  }, 100);
-                                }}
+                                onGetPackageShipment={(o) => openGetPackageSafely(o || order)}
                                 activeProviders={activeProviders}
                                 isManager={isManager}
                                 isShiftManager={isShiftManager}
@@ -655,12 +675,7 @@ export default function UnifiedOrders() {
                     onShipment={() => openShipmentSafely(order)}
                     onCreateInvoice={() => setInvoiceOrder(order)}
                     onCargoShipment={() => openCargoShipmentSafely(order)}
-                    onGetPackageShipment={() => {
-                      setTimeout(() => {
-                        const el = document.querySelector('[data-getpackage-card]');
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }, 100);
-                    }}
+                    onGetPackageShipment={(o) => openGetPackageSafely(o || order)}
                     activeProviders={activeProviders}
                   />
                 ))}
@@ -744,16 +759,17 @@ export default function UnifiedOrders() {
             shipping_method: 'איסוף מנקודת איסוף',
             pickup_point_data: shipmentOrder.pickup_point_data,
             id: shipmentOrder.source === 'woocommerce' ? shipmentOrder.raw_id : null,
-            client_id: shipmentOrder.source === 'woocommerce' ? shipmentOrder.client_id : null,
+            client_id: shipmentOrder.client_id || null,
           }}
           client={{
             full_name: shipmentOrder.customer_name,
             phone: shipmentOrder.customer_phone,
             city: shipmentOrder.shipping_city || '',
           }}
+          initialType={shipmentOrder._upsShipmentType}
           onSuccess={({ tracking_number }) => {
-            if (tracking_number && shipmentOrder.source === 'mirakl') {
-              // Only show Mirakl update + Linet invoice screen for Mirakl orders
+            if (tracking_number && shipmentOrder.source === 'mirakl' && !shipmentOrder._upsShipmentType) {
+              // Only show Mirakl update + Linet invoice screen for regular Mirakl shipments
               const spOrder = {
                 mirakl_order_id: shipmentOrder.mirakl_order_id || shipmentOrder.order_number,
                 customer_first_name: shipmentOrder.customer_first_name || shipmentOrder.customer_name?.split(' ')[0] || '',
@@ -768,9 +784,14 @@ export default function UnifiedOrders() {
               };
               setUpsSuccessData({ trackingNumber: tracking_number, order: spOrder });
             } else {
-              // WooCommerce / Linet - show post-shipment confirmation dialog
-              setPostShipmentData({ order: shipmentOrder, trackingNumber: tracking_number, carrierHint: 'ups' });
-              setShipmentOrder(null);
+              if (shipmentOrder._upsShipmentType) {
+                setShipmentOrder(null);
+                loadData(true);
+              } else {
+                // WooCommerce / Linet - show post-shipment confirmation dialog
+                setPostShipmentData({ order: shipmentOrder, trackingNumber: tracking_number, carrierHint: 'ups' });
+                setShipmentOrder(null);
+              }
             }
           }}
         />
@@ -806,9 +827,12 @@ export default function UnifiedOrders() {
             phone: shipmentOrder.customer_phone,
             city: shipmentOrder.shipping_city || '',
           }}
+          initialType={shipmentOrder._upsShipmentType}
           onSuccess={({ tracking_number }) => {
-            if (tracking_number && (shipmentOrder.source === 'woocommerce' || shipmentOrder.source === 'mirakl')) {
+            if (tracking_number && !shipmentOrder._upsShipmentType && (shipmentOrder.source === 'woocommerce' || shipmentOrder.source === 'mirakl')) {
               setPostShipmentData({ order: shipmentOrder, trackingNumber: tracking_number, carrierHint: 'ups' });
+            } else if (shipmentOrder._upsShipmentType) {
+              loadData(true);
             }
             setShipmentOrder(null);
           }}
@@ -825,7 +849,8 @@ export default function UnifiedOrders() {
             setCargoOrder(null);
           }}
           order={cargoOrder}
-          client={{ full_name: cargoOrder.customer_name, phone: cargoOrder.customer_phone, city: cargoOrder.shipping_city || '', full_address: cargoOrder.shipping_street || cargoOrder.shipping_address_full || '' }}
+          client={{ id: cargoOrder.client_id || '', full_name: cargoOrder.customer_name, phone: cargoOrder.customer_phone, city: cargoOrder.shipping_city || '', full_address: cargoOrder.shipping_street || cargoOrder.shipping_address_full || '' }}
+          initialShipmentType={cargoOrder._cargoShipmentType || 'delivery'}
         />
       )}
 

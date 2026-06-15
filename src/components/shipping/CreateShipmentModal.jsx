@@ -43,8 +43,8 @@ function parsePickupPointData(order) {
   }
 }
 
-export default function CreateShipmentModal({ open, onClose, order, client, onSuccess }) {
-  const [tab, setTab] = useState("pickup_point");
+export default function CreateShipmentModal({ open, onClose, order, client, onSuccess, initialType }) {
+  const [tab, setTab] = useState(initialType || "pickup_point");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -65,6 +65,7 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
   // Pre-fill from order/client
   useEffect(() => {
     if (!open) {
+      setTab(initialType || "pickup_point");
       setResult(null);
       setSelectedPoint(null);
       setPickupPoints([]);
@@ -79,10 +80,10 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
       billing = order.billing;
     }
 
-    const fullName = client?.full_name || `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
-    const phoneNum = client?.phone || billing.phone || '';
-    const cityName = billing.city || client?.city || '';
-    const streetName = billing.address_1 || '';
+    const fullName = client?.full_name || `${billing.first_name || ''} ${billing.last_name || ''}`.trim() || order?.customer_name || '';
+    const phoneNum = client?.phone || billing.phone || order?.customer_phone || '';
+    const cityName = billing.city || client?.city || order?.shipping_city || '';
+    const streetName = billing.address_1 || order?.shipping_street || order?.shipping_address_full || '';
     const zipCode = billing.postcode || '';
 
     setName(fullName);
@@ -91,6 +92,14 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
     setStreet(streetName);
     setHouse('');
     setZip(zipCode);
+
+    if (initialType) {
+      setTab(initialType);
+      setWooPickupPoint(null);
+      setPickupPoints([]);
+      setSelectedPoint(null);
+      return;
+    }
 
     // Parse pickup point from WooCommerce order
     const pp = parsePickupPointData(order);
@@ -117,7 +126,7 @@ export default function CreateShipmentModal({ open, onClose, order, client, onSu
         setTab("standard");
       }
     }
-  }, [open, order, client]);
+  }, [open, order, client, initialType]);
 
   // Auto search function (called on mount for pickup orders)
   const autoSearchPickupPoints = async (searchCity, searchStreet) => {

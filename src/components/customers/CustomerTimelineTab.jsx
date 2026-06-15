@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Calendar, ShoppingCart, FileText, Wrench, MessageCircle, Send, Truck, Package } from 'lucide-react';
+import { Calendar, ShoppingCart, FileText, Wrench, MessageCircle, Send, Truck, Package, RotateCcw, Repeat } from 'lucide-react';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 
@@ -11,6 +11,18 @@ function formatDate(dateString) {
     } catch {
         return 'תאריך לא תקין';
     }
+}
+
+function shipmentTypeInfo(type) {
+    const map = {
+        pickup_drop: { title: 'החזרת UPS PICKUP DROP', icon: RotateCcw, color: 'text-orange-600 bg-orange-50' },
+        cargo_return: { title: 'החזרת קארגו', icon: RotateCcw, color: 'text-orange-600 bg-orange-50' },
+        cargo_exchange: { title: 'החלפת קארגו', icon: Repeat, color: 'text-purple-600 bg-purple-50' },
+        cargo_delivery: { title: 'משלוח קארגו', icon: Truck, color: 'text-cyan-600 bg-cyan-50' },
+        pickup_point: { title: 'משלוח UPS לנקודת איסוף', icon: Truck, color: 'text-cyan-600 bg-cyan-50' },
+        standard: { title: 'משלוח UPS', icon: Truck, color: 'text-cyan-600 bg-cyan-50' },
+    };
+    return map[type] || { title: 'משלוח', icon: Truck, color: 'text-cyan-600 bg-cyan-50' };
 }
 
 export default function CustomerTimelineTab({ orders, tickets, repairs, activities, smsLogs, invoices, shipments, spOrders }) {
@@ -93,11 +105,12 @@ export default function CustomerTimelineTab({ orders, tickets, repairs, activiti
 
         // Shipments
         (shipments || []).forEach(s => {
+            const info = shipmentTypeInfo(s.shipment_type);
             events.push({
                 type: 'shipment', date: s.created_date,
-                title: `משלוח ${s.tracking_number || '#' + (s.id?.slice(-6) || '')}`,
-                description: `${s.carrier || ''} → ${s.consignee_city || ''} • ${s.status || ''}`,
-                icon: Truck, color: 'text-cyan-600 bg-cyan-50'
+                title: `${info.title} ${s.tracking_number || '#' + (s.id?.slice(-6) || '')}`,
+                description: `${s.carrier || ''} → ${s.consignee_city || ''} • ${s.cargo_status_text || s.status || ''}`,
+                icon: info.icon, color: info.color
             });
         });
 
