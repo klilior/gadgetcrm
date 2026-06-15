@@ -19,7 +19,7 @@ import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut, Dow
 
 export default function InvoicesToReview() {
   const [rows, setRows] = useState([]);
-  const { suppliersMap, suppliersList } = useSuppliers();
+  const { suppliersMap, suppliersList, reloadSuppliers } = useSuppliers();
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -82,7 +82,12 @@ export default function InvoicesToReview() {
   }, [rows]);
 
   const openRecord = async (row) => {
-    setSelected({ ...row });
+    const currentSupplier = suppliersMap[row.supplier] || {};
+    setSelected({
+      ...row,
+      _supplierName: currentSupplier.name || '',
+      _editedVatId: currentSupplier.vat_id || ''
+    });
     setIntakeFile(null);
     setIntakeRecord(null);
     setPreviewFailed(false);
@@ -109,6 +114,44 @@ export default function InvoicesToReview() {
     setPreviewFailed(false);
   };
 
+  const learnSupplierPattern = async (pattern_type, pattern_value) => {
+    if (!selected?.supplier || !pattern_value?.trim()) return;
+    const existing = await base44.entities.SupplierPattern.filter({ pattern_type, pattern_value: pattern_value.trim() });
+    if (!existing || existing.length === 0) {
+      await base44.entities.SupplierPattern.create({
+        supplier_id: selected.supplier,
+        pattern_type,
+        pattern_value: pattern_value.trim(),
+        confidence: 100,
+        learned_from_invoice: selected.id,
+        is_active: true
+      });
+    } else if (existing[0].supplier_id !== selected.supplier) {
+      await base44.entities.SupplierPattern.update(existing[0].id, {
+        supplier_id: selected.supplier,
+        confidence: 100,
+        learned_from_invoice: selected.id,
+        is_active: true
+      });
+    }
+  };
+
+  const saveSupplierEdits = async () => {
+    if (!selected?.supplier) return;
+    const currentSupplier = suppliersMap[selected.supplier] || {};
+    const supplierName = (selected._supplierName || '').trim();
+    const vatId = (selected._editedVatId || '').trim();
+    const updates = {};
+    if (supplierName && supplierName !== currentSupplier.name) updates.name = supplierName;
+    if (vatId && vatId !== currentSupplier.vat_id) updates.vat_id = vatId;
+    if (Object.keys(updates).length > 0) {
+      await base44.entities.Suppliers.update(selected.supplier, updates);
+      await reloadSuppliers();
+    }
+    await learnSupplierPattern('name_pattern', supplierName || currentSupplier.name);
+    await learnSupplierPattern('vat_id', vatId || currentSupplier.vat_id);
+  };
+
   const saveRecord = async () => {
     if (!selected) return;
     setSaving(true);
@@ -129,6 +172,7 @@ export default function InvoicesToReview() {
         is_recurring_expense: !!selected.is_recurring_expense,
         classification_status: 'manually_corrected',
       };
+      await saveSupplierEdits();
       await base44.entities.Invoices.update(selected.id, updatePayload);
       
       // Learn from corrections: save supplier name pattern and original extracted name
@@ -200,6 +244,7 @@ export default function InvoicesToReview() {
         is_recurring_expense: !!selected.is_recurring_expense,
         classification_status: 'manually_corrected',
       };
+      await saveSupplierEdits();
       await base44.entities.Invoices.update(selected.id, updatePayload);
 
       const result = await updateInvoiceStatus({ 
@@ -508,8 +553,13 @@ export default function InvoicesToReview() {
                   <div className="bg-blue-50 rounded-lg p-3 space-y-2">
                     <div className="font-medium text-blue-800 text-sm">פרטי ספק</div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-gray-500">שם ספק</Label>
-                      <Select value={selected.supplier || ""} onValueChange={(v) => setSelected({ ...selected, supplier: v })}>
+                      <Label className="text-xs text-gray-500">בחר ספק קיים</Label>
+                      <Select value={selected.supplier || ""} onValueChange={(v) => setSelected({
+                        ...selected,
+                        supplier: v,
+                        _supplierName: suppliersMap[v]?.name || '',
+                        _editedVatId: suppliersMap[v]?.vat_id || ''
+                      })}>
                         <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="בחר ספק" /></SelectTrigger>
                         <SelectContent>
                           {suppliersList.map((s) => (
@@ -518,25 +568,33 @@ export default function InvoicesToReview() {
                         </SelectContent>
                       </Select>
                     </div>
-                      {(() => {
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">תיקון שם ספק</Label>
+                      <Input
+                        className="h-9 bg-white"
+                        value={selected._supplierName || ""}
+                        onChange={(e) => setSelected({ ...selected, _supplierName: e.target.value })}
+                        placeholder="שם הספק כפי שצריך להופיע"
+                      />
+                    </div>
+                    {(() => {
                       try {
                         const extraction = selected.ai_debug_last_extraction_json ? JSON.parse(selected.ai_debug_last_extraction_json) : null;
                         const extractedVatId = extraction?.supplier_vat_id;
-                        const supplierVatId = suppliersMap[selected.supplier]?.vat_id;
-                        const OUR_VAT_ID = '040638660'; // מספר העוסק שלנו
+                        const OUR_VAT_ID = '040638660';
                         const isOurVatId = extractedVatId === OUR_VAT_ID;
-                        
                         return (
                           <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500">ח.פ. ספק:</span>
-                              <Input 
-                                className="h-7 w-32 font-mono text-sm" 
-                                value={selected._editedVatId ?? extractedVatId ?? supplierVatId ?? ""} 
-                                onChange={(e) => setSelected({ ...selected, _editedVatId: e.target.value })}
-                                placeholder="הזן ח.פ."
-                              />
-                            </div>
+                            <Label className="text-xs text-gray-500">ח.פ. ספק</Label>
+                            <Input 
+                              className="h-9 bg-white font-mono text-sm" 
+                              value={selected._editedVatId || ""} 
+                              onChange={(e) => setSelected({ ...selected, _editedVatId: e.target.value })}
+                              placeholder="הזן ח.פ. ספק"
+                            />
+                            {extractedVatId && extractedVatId !== selected._editedVatId && (
+                              <div className="text-[11px] text-gray-500">זוהה במסמך: {extractedVatId}</div>
+                            )}
                             {isOurVatId && (
                               <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
                                 ⚠️ זהו מספר העוסק שלנו - כנראה הח.פ. של הספק לא זוהה נכון
@@ -732,7 +790,7 @@ export default function InvoicesToReview() {
                       problems.push({ type: 'supplier', label: 'ספק לא זוהה', critical: true });
                     }
                     if (selected.confidence_score != null && selected.confidence_score < 90) {
-                      problems.push({ type: 'confidence', label: `ציון ודאות מתחת לאישור אוטומטי (${selected.confidence_score}%)`, critical: selected.confidence_score < 50 });
+                      problems.push({ type: 'confidence', label: `ציון ודאות מתחת לסף אישור אוטומטי של 90% (${selected.confidence_score}%)`, critical: selected.confidence_score < 50 });
                     }
                     if (validation?.is_math_consistent === false) {
                       problems.push({ type: 'math', label: 'חישוב מתמטי לא תקין', critical: true });
