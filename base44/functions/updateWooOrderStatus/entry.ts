@@ -11,16 +11,18 @@ Deno.serve(async (req) => {
 
   const sr = base44.asServiceRole.entities;
 
-  // Get the order to find external_order_number
+  // Get the order to find external_order_number. Some flows may pass an external order number,
+  // so fall back to searching before returning a soft error instead of an Axios 404.
   let order;
   try {
     order = await sr.Order.get(order_id);
   } catch (e) {
-    return Response.json({ error: 'הזמנה לא נמצאה: ' + e.message }, { status: 404 });
+    const matches = await sr.Order.filter({ external_order_number: String(order_id) });
+    order = matches?.[0] || null;
   }
 
   if (!order) {
-    return Response.json({ error: 'הזמנה לא נמצאה' }, { status: 404 });
+    return Response.json({ success: false, updated_local: false, updated_woo: false, error: 'הזמנה לא נמצאה' });
   }
   const externalOrderNumber = order.external_order_number;
 

@@ -66,10 +66,10 @@ export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, on
           order={order}
           onSms={() => onSms()}
           onStatusChange={onStatusChange}
-          onShipment={() => onShipment()}
+          onShipment={(nextOrder) => onShipment(nextOrder || order)}
           onCreateInvoice={onCreateInvoice}
-          onCargoShipment={onCargoShipment ? () => onCargoShipment() : undefined}
-          onGetPackageShipment={onGetPackageShipment ? () => onGetPackageShipment() : undefined}
+          onCargoShipment={onCargoShipment ? (nextOrder) => onCargoShipment(nextOrder || order) : undefined}
+          onGetPackageShipment={onGetPackageShipment ? (nextOrder) => onGetPackageShipment(nextOrder || order) : undefined}
           activeProviders={activeProviders}
         />
       )}

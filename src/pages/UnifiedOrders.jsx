@@ -672,9 +672,9 @@ export default function UnifiedOrders() {
                     onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
                     onSms={() => setSmsOrder(order)}
                     onStatusChange={handleStatusChange}
-                    onShipment={() => openShipmentSafely(order)}
+                    onShipment={(nextOrder) => openShipmentSafely(nextOrder || order)}
                     onCreateInvoice={() => setInvoiceOrder(order)}
-                    onCargoShipment={() => openCargoShipmentSafely(order)}
+                    onCargoShipment={(nextOrder) => openCargoShipmentSafely(nextOrder || order)}
                     onGetPackageShipment={(o) => openGetPackageSafely(o || order)}
                     activeProviders={activeProviders}
                   />
