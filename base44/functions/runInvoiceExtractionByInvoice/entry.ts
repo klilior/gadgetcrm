@@ -338,10 +338,37 @@ Deno.serve(async (req) => {
     }
 
     // Idempotency: run only if doc_number OR total_with_vat missing (unless force re-run)
+    // If older records already have extracted data but kept an outdated review status, normalize them here.
     const hasDocNumber = !!(invoice.doc_number && String(invoice.doc_number).trim());
     const hasTotal = typeof invoice.total_with_vat === 'number' && !Number.isNaN(invoice.total_with_vat);
     if (hasDocNumber && hasTotal && !body.force) {
-      return Response.json({ success: true, skipped: true, reason: 'Already populated' });
+      let parsedValidation = null;
+      try { parsedValidation = invoice.ai_debug_last_validation_json ? JSON.parse(invoice.ai_debug_last_validation_json) : null; } catch (_) {}
+      const missingFields = parsedValidation?.missing_critical_fields || [];
+      const validationOk = !parsedValidation || (
+        parsedValidation.is_math_consistent !== false &&
+        missingFields.length === 0 &&
+        parsedValidation.recommended_extraction_status_he !== 'ממתין לאימות'
+      );
+      const confidence = Number(invoice.confidence_score || 0);
+      const canAutoApproveExisting = validationOk && confidence >= 90 && !!invoice.supplier;
+      const normalizedStatus = canAutoApproveExisting ? 'אושר' : (validationOk ? 'נקרא בהצלחה' : 'ממתין לאימות');
+
+      if (invoice.extraction_status !== normalizedStatus) {
+        await base44.asServiceRole.entities.Invoices.update(invoice.id, {
+          extraction_status: normalizedStatus,
+          notes: canAutoApproveExisting && !(invoice.notes || '').includes('אושר אוטומטית')
+            ? `${invoice.notes || ''}\nאושר אוטומטית (ודאות גבוהה).`.trim()
+            : invoice.notes
+        });
+      }
+      if (invoice.source_intake) {
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(invoice.source_intake, {
+          status: 'עובד',
+          status_reason: 'החשבונית כבר נותחה; הסטטוס סונכרן לפי תוצאות הניתוח.'
+        });
+      }
+      return Response.json({ success: true, skipped: true, reason: 'Already populated', normalized_status: normalizedStatus });
     }
 
     // Step 1: Extraction - with automatic PDF to image conversion fallback
@@ -911,16 +938,14 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     try {
-      const text2 = await req.text().catch(() => null);
-      const body2 = text2 ? JSON.parse(text2) : {};
-      const invoiceId = body2?.invoice_id;
+      const invoiceId = body?.invoice_id;
       if (invoiceId) {
-        const invList = await createClientFromRequest(req).asServiceRole.entities.Invoices.filter({ id: invoiceId });
+        const invList = await base44.asServiceRole.entities.Invoices.filter({ id: invoiceId });
         const invoice = invList?.[0];
         if (invoice?.source_intake) {
-          await createClientFromRequest(req).asServiceRole.entities.InvoiceIntakeRaw.update(invoice.source_intake, {
-            status: 'דולג',
-            status_reason: 'שגיאת ניתוח מסמך. נדרש טיפול ידני.'
+          await base44.asServiceRole.entities.InvoiceIntakeRaw.update(invoice.source_intake, {
+            status: 'מוכן לניתוח',
+            status_reason: `שגיאת ניתוח אוטומטי: ${error?.message || String(error)}`
           });
         }
       }

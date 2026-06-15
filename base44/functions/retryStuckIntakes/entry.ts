@@ -62,15 +62,13 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Skip if already processed successfully (has data)
+        // If already processed successfully (has data), let the extraction function normalize old statuses
         const hasData = invoice.doc_number && invoice.total_with_vat;
         if (hasData && (invoice.extraction_status === 'ממתין לאימות' || invoice.extraction_status === 'נקרא בהצלחה')) {
-          // Update intake status to match
-          await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
-            status: 'עובד',
-            status_reason: 'החשבונית נותחה בהצלחה וממתינה לאימות.'
+          const syncResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', {
+            invoice_id: intake.linked_invoice
           });
-          results.push({ intake_id: intake.id, status: 'synced', reason: 'Invoice already has data, waiting for review' });
+          results.push({ intake_id: intake.id, invoice_id: intake.linked_invoice, status: 'synced', extraction_result: syncResult?.data || syncResult });
           continue;
         }
 

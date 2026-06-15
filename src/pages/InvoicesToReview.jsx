@@ -36,7 +36,7 @@ export default function InvoicesToReview() {
     try {
       const invoices = await base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200);
       const filtered = (invoices || []).filter(inv => 
-        inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
+        !inv.reviewed_at && (inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date)
       );
       setRows(filtered);
     } finally {
@@ -300,7 +300,7 @@ export default function InvoicesToReview() {
 
       <Card className="glass-card border-0">
         <CardHeader>
-          <CardTitle>רשימת חשבוניות ממתינות ({sorted.length})</CardTitle>
+          <CardTitle>חשבוניות לאישור / אימות ({sorted.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -731,10 +731,10 @@ export default function InvoicesToReview() {
                     if (!selected.supplier) {
                       problems.push({ type: 'supplier', label: 'ספק לא זוהה', critical: true });
                     }
-                    if (selected.confidence_score != null && selected.confidence_score < 85) {
-                      problems.push({ type: 'confidence', label: `ציון ודאות נמוך (${selected.confidence_score}%)`, critical: selected.confidence_score < 50 });
+                    if (selected.confidence_score != null && selected.confidence_score < 90) {
+                      problems.push({ type: 'confidence', label: `ציון ודאות מתחת לאישור אוטומטי (${selected.confidence_score}%)`, critical: selected.confidence_score < 50 });
                     }
-                    if (validation?.math_consistent === false) {
+                    if (validation?.is_math_consistent === false) {
                       problems.push({ type: 'math', label: 'חישוב מתמטי לא תקין', critical: true });
                     }
                     if (validation?.missing_critical_fields?.length > 0) {
