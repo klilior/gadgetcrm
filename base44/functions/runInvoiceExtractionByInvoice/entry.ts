@@ -285,6 +285,21 @@ function roundMoney(value) {
   return typeof value === 'number' && !Number.isNaN(value) ? Math.round(value * 100) / 100 : undefined;
 }
 
+function getLineItemsCheck(extraction) {
+  const items = extraction?.line_items || [];
+  const subtotal = typeof extraction?.subtotal_before_vat === 'number' ? extraction.subtotal_before_vat : null;
+  if (!items.length || subtotal === null) return { hasMismatch: false, delta: 0 };
+  const lineSum = items.reduce((sum, item) => {
+    const total = typeof item.line_total_before_vat === 'number'
+      ? item.line_total_before_vat
+      : (typeof item.unit_price_before_vat === 'number' && typeof item.quantity === 'number' ? item.unit_price_before_vat * item.quantity : 0);
+    return sum + total;
+  }, 0);
+  const delta = Math.round(Math.abs(lineSum - subtotal) * 100) / 100;
+  const hasBadQuantity = items.some(item => typeof item.quantity !== 'number' || item.quantity <= 0);
+  return { hasMismatch: delta > 1, delta, lineSum: roundMoney(lineSum), hasBadQuantity };
+}
+
 Deno.serve(async (req) => {
     // Read body BEFORE creating base44 client (body can only be read once)
     let body = {};
@@ -343,23 +358,31 @@ Deno.serve(async (req) => {
     const hasTotal = typeof invoice.total_with_vat === 'number' && !Number.isNaN(invoice.total_with_vat);
     if (hasDocNumber && hasTotal && !body.force) {
       let parsedValidation = null;
+      let parsedExtraction = null;
       try { parsedValidation = invoice.ai_debug_last_validation_json ? JSON.parse(invoice.ai_debug_last_validation_json) : null; } catch (_) {}
+      try { parsedExtraction = invoice.ai_debug_last_extraction_json ? JSON.parse(invoice.ai_debug_last_extraction_json) : null; } catch (_) {}
+      const lineCheck = getLineItemsCheck(parsedExtraction);
       const missingFields = parsedValidation?.missing_critical_fields || [];
       const validationOk = !parsedValidation || (
         parsedValidation.is_math_consistent !== false &&
         missingFields.length === 0 &&
-        parsedValidation.recommended_extraction_status_he !== 'ממתין לאימות'
+        parsedValidation.recommended_extraction_status_he !== 'ממתין לאימות' &&
+        !lineCheck.hasMismatch &&
+        !lineCheck.hasBadQuantity
       );
       const confidence = Number(invoice.confidence_score || 0);
       const canAutoApproveExisting = validationOk && confidence >= 90 && !!invoice.supplier;
       const normalizedStatus = canAutoApproveExisting ? 'אושר' : (validationOk ? 'נקרא בהצלחה' : 'ממתין לאימות');
 
       if (invoice.extraction_status !== normalizedStatus) {
+        const lineNote = lineCheck.hasMismatch
+          ? `נדרש אימות שורות מוצרים: סכום השורות לפני מע״מ (${lineCheck.lineSum}) לא תואם לסכום החשבונית לפני מע״מ (${parsedExtraction?.subtotal_before_vat}), הפרש ${lineCheck.delta} ש״ח.`
+          : '';
         await base44.asServiceRole.entities.Invoices.update(invoice.id, {
           extraction_status: normalizedStatus,
-          notes: canAutoApproveExisting && !(invoice.notes || '').includes('אושר אוטומטית')
+          notes: lineNote || (canAutoApproveExisting && !(invoice.notes || '').includes('אושר אוטומטית')
             ? `${invoice.notes || ''}\nאושר אוטומטית (ודאות גבוהה).`.trim()
-            : invoice.notes
+            : invoice.notes)
         });
       }
       if (invoice.source_intake) {
@@ -571,10 +594,14 @@ Deno.serve(async (req) => {
         return val === null || val === undefined || val === '' || val === 'null';
       });
       
+      const lineCheck = getLineItemsCheck(extraction);
+      
       // Determine status
-      const allGood = missing.length === 0 && isMathConsistent;
+      const allGood = missing.length === 0 && isMathConsistent && !lineCheck.hasMismatch && !lineCheck.hasBadQuantity;
       const reviewReasons = [];
       if (!isMathConsistent) reviewReasons.push(`סכום כולל אינו תואם לסכום לפני מע"מ וסכום המע"מ (הפרש: ${mathDelta} ש"ח).`);
+      if (lineCheck.hasMismatch) reviewReasons.push(`סכום שורות המוצרים לפני מע״מ (${lineCheck.lineSum}) אינו תואם לסכום החשבונית לפני מע״מ (${extraction.subtotal_before_vat}), הפרש: ${lineCheck.delta} ש"ח.`);
+      if (lineCheck.hasBadQuantity) reviewReasons.push('קיימות שורות מוצר עם כמות חסרה או לא תקינה.');
       if (missing.length > 0) reviewReasons.push(`שדות חסרים: ${missing.join(', ')}`);
       
       const displayValidation = allGood ? 'חשבונית תקנית' : `חשבונית לא תקנית: ${reviewReasons.join('; ')}`;

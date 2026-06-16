@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import useSuppliers from "../components/hooks/useSuppliers";
 import InvoiceSourceInfo from "../components/invoices/InvoiceSourceInfo";
-import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut, Download, ChevronUp, ChevronDown, Eye, AlertCircle } from "lucide-react";
+import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut, Download, ChevronUp, ChevronDown, Eye, AlertCircle, Plus, Trash2 } from "lucide-react";
 
 export default function InvoicesToReview() {
   const [rows, setRows] = useState([]);
@@ -83,10 +83,26 @@ export default function InvoicesToReview() {
 
   const openRecord = async (row) => {
     const currentSupplier = suppliersMap[row.supplier] || {};
+    let lineItems = [];
+    try {
+      const extraction = row.ai_debug_last_extraction_json ? JSON.parse(row.ai_debug_last_extraction_json) : null;
+      lineItems = extraction?.line_items || [];
+      const savedLines = await base44.entities.InvoiceLine.filter({ invoice_id: row.id }, 'line_number', 100);
+      if (savedLines?.length > 0) lineItems = savedLines;
+    } catch (_) {}
     setSelected({
       ...row,
       _supplierName: currentSupplier.name || '',
-      _editedVatId: currentSupplier.vat_id || ''
+      _editedVatId: currentSupplier.vat_id || '',
+      _lineItems: lineItems.map((item, idx) => ({
+        line_number: item.line_number || idx + 1,
+        sku: item.sku || '',
+        product_name: item.product_name || '',
+        quantity: item.quantity ?? 1,
+        unit_price_before_vat: item.unit_price_before_vat ?? '',
+        line_total_before_vat: item.line_total_before_vat ?? '',
+        line_total_with_vat: item.line_total_with_vat ?? ''
+      }))
     });
     setIntakeFile(null);
     setIntakeRecord(null);
@@ -152,6 +168,39 @@ export default function InvoicesToReview() {
     await learnSupplierPattern('vat_id', vatId || currentSupplier.vat_id);
   };
 
+  const cleanLineItems = () => (selected?._lineItems || []).map((item, idx) => ({
+    line_number: Number(item.line_number || idx + 1),
+    sku: String(item.sku || '').trim(),
+    product_name: String(item.product_name || '').trim(),
+    quantity: Number(item.quantity || 0),
+    unit_price_before_vat: item.unit_price_before_vat === '' ? null : Number(item.unit_price_before_vat),
+    line_total_before_vat: item.line_total_before_vat === '' ? null : Number(item.line_total_before_vat),
+    line_total_with_vat: item.line_total_with_vat === '' ? null : Number(item.line_total_with_vat)
+  })).filter(item => item.sku || item.product_name);
+
+  const saveLineItemEdits = async () => {
+    const lineItems = cleanLineItems();
+    let extraction = {};
+    try { extraction = selected.ai_debug_last_extraction_json ? JSON.parse(selected.ai_debug_last_extraction_json) : {}; } catch (_) {}
+    extraction.line_items = lineItems;
+    const existingLines = await base44.entities.InvoiceLine.filter({ invoice_id: selected.id }, undefined, 200);
+    await Promise.all((existingLines || []).map(line => base44.entities.InvoiceLine.delete(line.id)));
+    for (const item of lineItems) {
+      await base44.entities.InvoiceLine.create({
+        invoice_id: selected.id,
+        line_number: item.line_number,
+        sku: item.sku || item.product_name,
+        product_name: item.product_name || item.sku,
+        quantity: item.quantity || 1,
+        unit_price_before_vat: item.unit_price_before_vat,
+        line_total_before_vat: item.line_total_before_vat,
+        line_total_with_vat: item.line_total_with_vat,
+        supplier_id: selected.supplier
+      });
+    }
+    return JSON.stringify(extraction);
+  };
+
   const saveRecord = async () => {
     if (!selected) return;
     setSaving(true);
@@ -173,6 +222,10 @@ export default function InvoicesToReview() {
         classification_status: 'manually_corrected',
       };
       await saveSupplierEdits();
+      updatePayload.ai_debug_last_extraction_json = await saveLineItemEdits();
+      if (selected.is_goods_invoice) {
+        updatePayload.notes = `${selected.notes || ''}\n[manual_classification_override] סווג ידנית כסחורה`.trim();
+      }
       await base44.entities.Invoices.update(selected.id, updatePayload);
       
       // Learn from corrections: save supplier name pattern and original extracted name
@@ -245,6 +298,10 @@ export default function InvoicesToReview() {
         classification_status: 'manually_corrected',
       };
       await saveSupplierEdits();
+      updatePayload.ai_debug_last_extraction_json = await saveLineItemEdits();
+      if (selected.is_goods_invoice) {
+        updatePayload.notes = `${selected.notes || ''}\n[manual_classification_override] סווג ידנית כסחורה`.trim();
+      }
       await base44.entities.Invoices.update(selected.id, updatePayload);
 
       const result = await updateInvoiceStatus({ 
@@ -688,79 +745,63 @@ export default function InvoicesToReview() {
                   </div>
 
                   {/* Line Items Section */}
-                  {(() => {
-                    try {
-                      const extraction = selected.ai_debug_last_extraction_json ? JSON.parse(selected.ai_debug_last_extraction_json) : null;
-                      const lineItems = extraction?.line_items || [];
-                      const totalWithVat = Number(selected.total_with_vat) || 0;
-                      const VAT_RATE = 0.18;
-                      
-                      if (lineItems.length > 0) {
-                        return (
-                          <div className="border-t pt-3 mt-3">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Label className="text-xs text-gray-500">פריטים ({lineItems.length})</Label>
-                              {extraction.prices_include_vat && (
-                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">מחירים כוללים מע״מ</Badge>
-                              )}
-                            </div>
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {lineItems.map((item, idx) => {
-                                // Calculate prices - if one is missing, derive from the other using VAT
-                                let unitPriceBeforeVat = item.unit_price_before_vat;
-                                let lineTotalBeforeVat = item.line_total_before_vat;
-                                let lineTotalWithVat = item.line_total_with_vat;
-                                const qty = item.quantity || 1;
-                                
-                                // If we have total with VAT but not before VAT
-                                if (lineTotalWithVat && !lineTotalBeforeVat) {
-                                  lineTotalBeforeVat = lineTotalWithVat / (1 + VAT_RATE);
-                                }
-                                // If we have before VAT but not with VAT
-                                if (lineTotalBeforeVat && !lineTotalWithVat) {
-                                  lineTotalWithVat = lineTotalBeforeVat * (1 + VAT_RATE);
-                                }
-                                // Calculate unit price if missing
-                                if (!unitPriceBeforeVat && lineTotalBeforeVat && qty) {
-                                  unitPriceBeforeVat = lineTotalBeforeVat / qty;
-                                }
-                                // If we only have unit price, calculate totals
-                                if (unitPriceBeforeVat && !lineTotalBeforeVat) {
-                                  lineTotalBeforeVat = unitPriceBeforeVat * qty;
-                                  lineTotalWithVat = lineTotalBeforeVat * (1 + VAT_RATE);
-                                }
-                                
-                                const unitPriceWithVat = unitPriceBeforeVat ? unitPriceBeforeVat * (1 + VAT_RATE) : null;
-                                
-                                return (
-                                  <div key={idx} className="bg-gray-50 rounded p-2 text-xs border">
-                                    <div className="flex justify-between items-start mb-1">
-                                      <span className="font-medium text-gray-800 flex-1 truncate" title={item.product_name}>
-                                        {item.product_name || 'ללא שם'}
-                                      </span>
-                                      {item.sku && (
-                                        <span className="text-gray-400 font-mono mr-2 text-[10px]">מק"ט: {item.sku}</span>
-                                      )}
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-gray-600">
-                                      <div>כמות: <span className="font-medium">{qty}</span></div>
-                                      <div>מחיר/יח׳ (לפני מע״מ): <span className="font-medium">{unitPriceBeforeVat ? `₪${unitPriceBeforeVat.toFixed(2)}` : '-'}</span></div>
-                                      {item.unit_price_with_vat && (
-                                        <div>מחיר/יח׳ (כולל מע״מ): <span className="font-medium text-blue-600">{`₪${item.unit_price_with_vat.toFixed(2)}`}</span></div>
-                                      )}
-                                      <div>סה״כ לפני מע״מ: <span className="font-medium">{lineTotalBeforeVat ? `₪${lineTotalBeforeVat.toFixed(2)}` : '-'}</span></div>
-                                      <div>סה״כ כולל מע״מ: <span className="font-medium text-green-700">{lineTotalWithVat ? `₪${lineTotalWithVat.toFixed(2)}` : '-'}</span></div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                  <div className="border-t pt-3 mt-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-gray-500">פריטים לתיקון ולמידה ({selected._lineItems?.length || 0})</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1 text-xs"
+                        onClick={() => setSelected({
+                          ...selected,
+                          _lineItems: [...(selected._lineItems || []), { line_number: (selected._lineItems?.length || 0) + 1, sku: '', product_name: '', quantity: 1, unit_price_before_vat: '', line_total_before_vat: '', line_total_with_vat: '' }]
+                        })}
+                      >
+                        <Plus className="w-3 h-3" /> הוסף שורה
+                      </Button>
+                    </div>
+                    <div className="space-y-2 max-h-72 overflow-y-auto">
+                      {(selected._lineItems || []).map((item, idx) => (
+                        <div key={idx} className="bg-gray-50 rounded p-2 text-xs border space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-gray-700">שורה {idx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelected({ ...selected, _lineItems: selected._lineItems.filter((_, i) => i !== idx) })}
+                              className="text-red-500 hover:text-red-700"
+                              title="מחק שורה"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
-                        );
-                      }
-                    } catch (_) {}
-                    return null;
-                  })()}
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input className="h-8 bg-white" placeholder="מק״ט" value={item.sku || ''} onChange={(e) => {
+                              const next = [...selected._lineItems]; next[idx] = { ...item, sku: e.target.value }; setSelected({ ...selected, _lineItems: next });
+                            }} />
+                            <Input className="h-8 bg-white" placeholder="שם מוצר" value={item.product_name || ''} onChange={(e) => {
+                              const next = [...selected._lineItems]; next[idx] = { ...item, product_name: e.target.value }; setSelected({ ...selected, _lineItems: next });
+                            }} />
+                            <Input className="h-8 bg-white" type="number" placeholder="כמות" value={item.quantity ?? ''} onChange={(e) => {
+                              const next = [...selected._lineItems]; next[idx] = { ...item, quantity: e.target.value }; setSelected({ ...selected, _lineItems: next });
+                            }} />
+                            <Input className="h-8 bg-white" type="number" placeholder="מחיר יח׳ לפני מע״מ" value={item.unit_price_before_vat ?? ''} onChange={(e) => {
+                              const next = [...selected._lineItems]; next[idx] = { ...item, unit_price_before_vat: e.target.value }; setSelected({ ...selected, _lineItems: next });
+                            }} />
+                            <Input className="h-8 bg-white" type="number" placeholder="סה״כ לפני מע״מ" value={item.line_total_before_vat ?? ''} onChange={(e) => {
+                              const next = [...selected._lineItems]; next[idx] = { ...item, line_total_before_vat: e.target.value }; setSelected({ ...selected, _lineItems: next });
+                            }} />
+                            <Input className="h-8 bg-white" type="number" placeholder="סה״כ כולל מע״מ" value={item.line_total_with_vat ?? ''} onChange={(e) => {
+                              const next = [...selected._lineItems]; next[idx] = { ...item, line_total_with_vat: e.target.value }; setSelected({ ...selected, _lineItems: next });
+                            }} />
+                          </div>
+                        </div>
+                      ))}
+                      {(!selected._lineItems || selected._lineItems.length === 0) && (
+                        <div className="text-xs text-gray-500 bg-gray-50 border rounded p-3 text-center">אין שורות מזוהות — אפשר להוסיף ידנית כדי ללמד את המערכת.</div>
+                      )}
+                    </div>
+                  </div>
 
                   <div className="space-y-1">
                     <Label className="text-xs text-gray-500">הערות</Label>
