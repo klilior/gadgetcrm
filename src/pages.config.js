@@ -54,6 +54,7 @@ const IntakeInbox = lazy(() => import('./pages/IntakeInbox'));
 const InvoicesOverview = lazy(() => import('./pages/InvoicesOverview'));
 const InvoicesToReview = lazy(() => import('./pages/InvoicesToReview'));
 const MobileInvoiceUpload = lazy(() => import('./pages/MobileInvoiceUpload'));
+const QuickInvoiceUpload = lazy(() => import('./pages/QuickInvoiceUpload'));
 const PurchasesDashboard = lazy(() => import('./pages/PurchasesDashboard'));
 const SuppliersManagement = lazy(() => import('./pages/SuppliersManagement'));
 const PriceAlerts = lazy(() => import('./pages/PriceAlerts'));
@@ -114,6 +115,7 @@ export const PAGES = {
     "ManagerDashboard": ManagerDashboard,
     "MessageCenter": MessageCenter,
     "MobileInvoiceUpload": MobileInvoiceUpload,
+    "QuickInvoiceUpload": QuickInvoiceUpload,
     // "Orders" removed - use UnifiedOrders
     "PaymentReturn": PaymentReturn,
     "PaymentSettings": PaymentSettings,

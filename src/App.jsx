@@ -37,7 +37,8 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
-  const isQuickInvoiceUpload = window.location.pathname === '/QuickInvoiceUpload';
+  const normalizedPath = window.location.pathname.toLowerCase();
+  const isQuickInvoiceUpload = normalizedPath === '/quickinvoiceupload';
 
   if (isQuickInvoiceUpload) {
     return <QuickInvoiceUpload />;
@@ -102,6 +103,8 @@ const AuthenticatedApp = () => {
           <Suspense fallback={<LazyFallback />}><MiraklInvoiceBatch /></Suspense>
         </LayoutWrapper>
       } />
+      <Route path="/QuickInvoiceUpload" element={<QuickInvoiceUpload />} />
+      <Route path="/quickinvoiceupload" element={<QuickInvoiceUpload />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
