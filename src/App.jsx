@@ -6,6 +6,7 @@ import SuperPharmOrdersPage from './pages/SuperPharmOrdersPage';
 import UnifiedOrders from './pages/UnifiedOrders';
 import Shipments from './pages/Shipments';
 import MiraklInvoiceBatch from './pages/MiraklInvoiceBatch';
+import QuickInvoiceUpload from './pages/QuickInvoiceUpload';
 import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
@@ -36,6 +37,11 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
+  const isQuickInvoiceUpload = window.location.pathname === '/QuickInvoiceUpload';
+
+  if (isQuickInvoiceUpload) {
+    return <QuickInvoiceUpload />;
+  }
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
