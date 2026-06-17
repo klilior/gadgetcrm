@@ -312,6 +312,7 @@ Deno.serve(async (req) => {
             const { wo, existing, newShippingMethod, newPickupData, newBilling, hasMissingClientLink } = statusOnlyUpdates[i];
             try {
                 const updateData = {};
+                let linkedClientIdForStats = null;
                 // Update all changed fields
                 if (wo.status !== existing.status) updateData.status = wo.status;
                 if (wo.total !== existing.total) updateData.total = wo.total;
@@ -330,7 +331,10 @@ Deno.serve(async (req) => {
                 }
                 if (hasMissingClientLink) {
                     const linkedClientId = await withRetry(() => findOrCreateClient(sr, wo));
-                    if (linkedClientId) updateData.client_id = linkedClientId;
+                    if (linkedClientId) {
+                        updateData.client_id = linkedClientId;
+                        linkedClientIdForStats = linkedClientId;
+                    }
                 }
                 
                 // Pull tracking info from WooCommerce meta_data
@@ -353,6 +357,16 @@ Deno.serve(async (req) => {
                 }
                 
                 await withRetry(() => sr.Order.update(existing.id, updateData));
+                if (linkedClientIdForStats) {
+                    const clientOrders = await withRetry(() => sr.Order.filter({ client_id: linkedClientIdForStats }));
+                    const totalSpent = clientOrders.reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
+                    const latestOrder = clientOrders.sort((a, b) => new Date(b.order_date || b.created_date) - new Date(a.order_date || a.created_date))[0];
+                    await withRetry(() => sr.Client.update(linkedClientIdForStats, {
+                        total_spent: Math.round(totalSpent * 100) / 100,
+                        total_orders: clientOrders.length,
+                        last_interaction_date: latestOrder?.order_date || latestOrder?.created_date || new Date().toISOString(),
+                    }));
+                }
                 updated++;
             } catch (err) {
                 failed++;
@@ -447,7 +461,7 @@ Deno.serve(async (req) => {
         }
 
         // Phase 3: Check stale open orders not covered by the date range
-        const openStatuses = ['processing', 'on-hold', 'pending'];
+        const openStatuses = ['processing', 'on-hold', 'pending', 'ordered', 'wc-awaiting-serial'];
         const recentWooIds = new Set(wooOrders.map(wo => wo.id.toString()));
         const staleOpenOrders = existingOrders.filter(o => 
             openStatuses.includes(o.status) && !recentWooIds.has(o.external_order_number)
