@@ -325,13 +325,14 @@ async function createLineContractFromSale(base44, sale, carrierCode, carrierName
   return 'created';
 }
 
-async function handleUndeliveredOrderTask(base44, doc, usersMap, triggerSku) {
+async function handleUndeliveredOrderTask(base44, doc, usersMap, triggerSku, linkedClientId = null) {
   const linet_doc_id = String(doc.id);
   const doc_number = String(doc.docnum);
   const issue_date = doc.issue_date ? doc.issue_date.split(' ')[0] : null;
   const sales_rep_name = usersMap[String(doc.owner)] || String(doc.owner);
   const customer_name = doc.company_name || doc.account_name || doc.company || 'General Customer';
   let customer_phone = doc.phone || doc.mobile || doc.account_phone || null;
+  customer_phone = normalizePhoneNumber(customer_phone) || customer_phone;
 
   const products = [];
   if (Array.isArray(doc.docDetailes)) {
@@ -355,10 +356,14 @@ async function handleUndeliveredOrderTask(base44, doc, usersMap, triggerSku) {
     source_doc_id: linet_doc_id,
     source_doc_number: doc_number,
     source_doc_date: issue_date,
+    client_id: linkedClientId || null,
     owner_user_id,
     owner_name: sales_rep_name,
     customer_name,
     customer_phone,
+    customer_email: doc.email || null,
+    customer_city: doc.city || null,
+    customer_address: doc.address || null,
     products_list: JSON.stringify(products),
   };
 
@@ -367,7 +372,11 @@ async function handleUndeliveredOrderTask(base44, doc, usersMap, triggerSku) {
     if (existingTask.status === 'Open') {
       await base44.asServiceRole.entities.UndeliveredOrderTask.update(existingTask.id, {
         customer_name: taskData.customer_name,
+        client_id: taskData.client_id,
         customer_phone: taskData.customer_phone,
+        customer_email: taskData.customer_email,
+        customer_city: taskData.customer_city,
+        customer_address: taskData.customer_address,
         products_list: taskData.products_list,
       });
       return 'updated';
@@ -502,7 +511,7 @@ export async function executeLinetSync(base44, body = {}) {
           const hasUndeliveredTrigger = doc.docDetailes?.some((line) => line.sku === UNDELIVERED_TRIGGER_SKU);
           if (hasUndeliveredTrigger && !is_credit) {
             try {
-              const taskResult = await handleUndeliveredOrderTask(base44, doc, usersMap, UNDELIVERED_TRIGGER_SKU);
+              const taskResult = await handleUndeliveredOrderTask(base44, doc, usersMap, UNDELIVERED_TRIGGER_SKU, linked_client_id);
               if (taskResult === 'created') stats.undelivered_tasks_created++;
               else if (taskResult === 'updated') stats.undelivered_tasks_updated++;
             } catch (_e) {}

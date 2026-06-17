@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { he } from "date-fns/locale";
+import UndeliveredOrderCard from "./UndeliveredOrderCard";
 
 const TRIGGER_SKU = "963258741";
 
@@ -52,10 +53,7 @@ export default function UndeliveredOrdersWidget({
     try {
       let query = { status: "Open" };
       
-      // Non-managers see only their own tasks
-      if (!isManager) {
-        query.owner_user_id = currentUser.id;
-      } else if (selectedRep !== "all") {
+      if (isManager && selectedRep !== "all") {
         query.owner_user_id = selectedRep;
       }
       
@@ -225,123 +223,18 @@ export default function UndeliveredOrdersWidget({
             </div>
           ) : (
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {filteredTasks.map(task => {
-                const products = parseProducts(task.products_list);
-                const ageDays = getAgeDays(task);
-                const isExpanded = expandedTask === task.id;
-                
-                return (
-                  <div 
-                    key={task.id} 
-                    className="bg-white rounded-lg border border-orange-100 p-3 shadow-sm"
-                  >
-                    {/* Header Row */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-sm">#{task.source_doc_number}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {task.source_doc_date ? format(new Date(task.source_doc_date), 'dd/MM/yy') : '-'}
-                          </Badge>
-                          <Badge className={`text-xs ${getAgeColor(ageDays)}`}>
-                            <Clock className="w-3 h-3 ml-1" />
-                            {ageDays} ימים
-                          </Badge>
-                        </div>
-                        
-                        <div className="mt-1 flex items-center gap-2 text-sm text-gray-700">
-                          <span className="font-medium">{task.customer_name || 'לקוח'}</span>
-                          {task.customer_phone && (
-                            <div className="flex gap-1">
-                              <a 
-                                href={`tel:${task.customer_phone}`}
-                                className="p-1 hover:bg-blue-100 rounded"
-                                title="התקשר"
-                              >
-                                <Phone className="w-3 h-3 text-blue-600" />
-                              </a>
-                              <a 
-                                href={`https://wa.me/972${task.customer_phone.replace(/^0/, '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-1 hover:bg-green-100 rounded"
-                                title="וואטסאפ"
-                              >
-                                <MessageCircle className="w-3 h-3 text-green-600" />
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                        
-                        {isManager && task.owner_name && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            נציג: {task.owner_name}
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Products Summary */}
-                      <div className="text-xs text-gray-500">
-                        {products.length} מוצרים
-                      </div>
-                    </div>
-                    
-                    {/* Expanded Products */}
-                    {products.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-gray-100">
-                        <div className="space-y-1 text-xs">
-                          {products.map((p, idx) => (
-                            <div key={idx} className="flex justify-between bg-gray-50 rounded px-2 py-1">
-                              <span>{p.product_name}</span>
-                              <span className="text-gray-500">x{p.qty}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Action Buttons */}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        className="h-7 text-xs border-blue-200 text-blue-700 hover:bg-blue-50"
-                        onClick={() => openCloseModal(task, "Cargo")}
-                      >
-                        <Truck className="w-3 h-3 ml-1" />
-                        קרגו
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        className="h-7 text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
-                        onClick={() => openCloseModal(task, "UPS")}
-                      >
-                        <Truck className="w-3 h-3 ml-1" />
-                        UPS
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        className="h-7 text-xs border-green-200 text-green-700 hover:bg-green-50"
-                        onClick={() => openCloseModal(task, "Pickup")}
-                      >
-                        <Package className="w-3 h-3 ml-1" />
-                        איסוף
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        className="h-7 text-xs border-red-200 text-red-700 hover:bg-red-50"
-                        onClick={() => openCloseModal(task, "Cancelled")}
-                      >
-                        <X className="w-3 h-3 ml-1" />
-                        בוטל
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
+              {filteredTasks.map(task => (
+                <UndeliveredOrderCard
+                  key={task.id}
+                  task={task}
+                  currentUser={currentUser}
+                  isManager={isManager}
+                  onTaskUpdated={() => {
+                    loadTasks();
+                    if (onRefresh) onRefresh();
+                  }}
+                />
+              ))}
             </div>
           )}
         </CardContent>
