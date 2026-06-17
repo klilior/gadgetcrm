@@ -16,6 +16,7 @@ const STATUS_MAPPING = {
     'refunded': 'הוחזר',
     'failed': 'נכשל',
     'wc-awaiting-serial': 'ממתין למספר סידורי',
+    'ordered': 'הוזמנה מהבשמים',
 };
 
 const STATUS_COLORS = {
@@ -27,6 +28,7 @@ const STATUS_COLORS = {
     'refunded': 'bg-purple-100 text-purple-800',
     'failed': 'bg-red-100 text-red-800',
     'wc-awaiting-serial': 'bg-amber-100 text-amber-800',
+    'ordered': 'bg-purple-100 text-purple-800',
 };
 
 const SHIPPING_KEYWORDS = ['משלוח', 'דואר', 'שליח', 'shipping', 'delivery', 'הובלה', 'שילוח'];

@@ -279,10 +279,11 @@ Deno.serve(async (req) => {
         for (const wo of wooOrders) {
             const existing = existingOrderMap[wo.id.toString()];
             if (!existing) {
-                // New order — full processing
-                fullProcessing.push(wo);
+            // New order — full processing
+            fullProcessing.push(wo);
             } else {
-                // Check if any important fields changed
+            const hasMissingClientLink = !existing.client_id && (normalizePhone(wo.billing?.phone) || normalizePhone(wo.shipping?.phone));
+            // Check if any important fields changed
                 const newShippingMethod = wo.shipping_lines?.[0]?.method_title || null;
                 const pickupMeta = (wo.meta_data || []).find(m => m.key === 'pkps_json');
                 const newPickupData = pickupMeta?.value ? (typeof pickupMeta.value === 'string' ? pickupMeta.value : JSON.stringify(pickupMeta.value)) : null;
@@ -295,8 +296,8 @@ Deno.serve(async (req) => {
                 const hasNoteChange = wo.customer_note && wo.customer_note !== existing.customer_note;
                 const hasBillingChange = newBilling !== (existing.raw_data_billing || '{}');
 
-                if (hasStatusChange || hasShippingChange || hasPickupChange || hasTotalChange || hasNoteChange || hasBillingChange) {
-                    statusOnlyUpdates.push({ wo, existing, newShippingMethod, newPickupData, newBilling });
+                if (hasStatusChange || hasShippingChange || hasPickupChange || hasTotalChange || hasNoteChange || hasBillingChange || hasMissingClientLink) {
+                    statusOnlyUpdates.push({ wo, existing, newShippingMethod, newPickupData, newBilling, hasMissingClientLink });
                 }
                 // Otherwise: unchanged, skip
             }
@@ -308,7 +309,7 @@ Deno.serve(async (req) => {
 
         // Phase 1: Fast status-only updates (lightweight, no client/product operations)
         for (let i = 0; i < statusOnlyUpdates.length; i++) {
-            const { wo, existing, newShippingMethod, newPickupData, newBilling } = statusOnlyUpdates[i];
+            const { wo, existing, newShippingMethod, newPickupData, newBilling, hasMissingClientLink } = statusOnlyUpdates[i];
             try {
                 const updateData = {};
                 // Update all changed fields
@@ -326,6 +327,10 @@ Deno.serve(async (req) => {
                 }
                 if (newBilling && newBilling !== (existing.raw_data_billing || '{}')) {
                     updateData.raw_data_billing = newBilling;
+                }
+                if (hasMissingClientLink) {
+                    const linkedClientId = await withRetry(() => findOrCreateClient(sr, wo));
+                    if (linkedClientId) updateData.client_id = linkedClientId;
                 }
                 
                 // Pull tracking info from WooCommerce meta_data
@@ -363,7 +368,7 @@ Deno.serve(async (req) => {
         for (let i = 0; i < fullProcessing.length; i++) {
             const wo = fullProcessing[i];
             try {
-                const isPaidOrPending = ['processing', 'completed', 'on-hold', 'pending'].includes(wo.status);
+                const isPaidOrPending = ['processing', 'completed', 'on-hold', 'pending', 'ordered', 'wc-awaiting-serial'].includes(wo.status);
                 let clientId = null;
                 if (isPaidOrPending) {
                     clientId = await withRetry(() => findOrCreateClient(sr, wo));

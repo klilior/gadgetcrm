@@ -30,6 +30,31 @@ function delay(ms) {
     return new Promise(r => setTimeout(r, ms));
 }
 
+function normalizePhone(phone) {
+    if (!phone) return null;
+    let digits = String(phone).replace(/[^\d]/g, '');
+    if (digits.length === 13 && digits.startsWith('9720')) digits = digits.slice(3);
+    else if (digits.length === 12 && digits.startsWith('972')) digits = '0' + digits.slice(3);
+    else if (digits.startsWith('0972') && digits.length > 12) digits = '0' + digits.slice(4);
+    if (digits.length === 10 && digits.startsWith('0')) return digits;
+    if (digits.length === 9 && !digits.startsWith('0')) return '0' + digits;
+    if (digits.length >= 9 && digits.length <= 11) {
+        if (!digits.startsWith('0')) digits = '0' + digits;
+        return digits.slice(0, 10);
+    }
+    return null;
+}
+
+function getOrderPhone(order) {
+    if (!order?.raw_data_billing) return null;
+    try {
+        const billing = JSON.parse(order.raw_data_billing);
+        return normalizePhone(billing.phone);
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Load all data for a customer card.
  * Uses phased loading with small delays between phases to avoid rate limits.
@@ -37,7 +62,7 @@ function delay(ms) {
 export async function loadAllCustomerData(customerId, customerData) {
     if (!customerId) return null;
 
-    const phone = customerData?.phone;
+    const phone = normalizePhone(customerData?.phone);
     const linetAccountId = customerData?.linet_account_id;
 
     // Build phone variants for activity search
@@ -52,11 +77,20 @@ export async function loadAllCustomerData(customerId, customerData) {
     }
 
     // === PHASE 1: Core data (3 parallel queries) ===
-    const [orders, tickets, repairs] = await Promise.all([
+    const [ordersByClient, tickets, repairs] = await Promise.all([
         safeQuery('Orders', () => base44.entities.Order.filter({ client_id: customerId }, '-order_date', 200)),
         safeQuery('Tickets', () => base44.entities.Ticket.filter({ customer_id: customerId }, '-created_date', 200)),
         safeQuery('Repairs', () => base44.entities.Repair.filter({ client_id: customerId }, '-created_date', 200)),
     ]);
+
+    let orders = ordersByClient;
+    if (phone) {
+        const recentOrders = await safeQuery('Orders-phone', () => base44.entities.Order.list('-order_date', 1000));
+        const phoneOrders = recentOrders.filter(o => getOrderPhone(o) === phone);
+        const orderMap = {};
+        [...ordersByClient, ...phoneOrders].forEach(o => { orderMap[o.id] = o; });
+        orders = Object.values(orderMap).sort((a, b) => new Date(b.order_date || b.created_date) - new Date(a.order_date || a.created_date));
+    }
 
     await delay(300);
 
@@ -75,7 +109,11 @@ export async function loadAllCustomerData(customerId, customerData) {
     // === PHASE 2b: SuperPharm orders (by phone or name) ===
     let spOrders = [];
     if (phone) {
-        spOrders = await safeQuery('SP-Orders', () => base44.entities.SuperPharmOrder.filter({ customer_phone: phone }, '-created_at_mirakl', 100));
+        const exactSP = await safeQuery('SP-Orders', () => base44.entities.SuperPharmOrder.filter({ customer_phone: phone }, '-created_at_mirakl', 100));
+        const recentSP = await safeQuery('SP-Orders-phone', () => base44.entities.SuperPharmOrder.list('-created_at_mirakl', 1000));
+        const spMap = {};
+        [...exactSP, ...recentSP.filter(sp => normalizePhone(sp.customer_phone) === phone)].forEach(sp => { spMap[sp.id] = sp; });
+        spOrders = Object.values(spMap).sort((a, b) => new Date(b.created_at_mirakl || b.created_date) - new Date(a.created_at_mirakl || a.created_date));
     }
     if (spOrders.length === 0 && customerData?.full_name) {
         // Try matching by first name from full_name
