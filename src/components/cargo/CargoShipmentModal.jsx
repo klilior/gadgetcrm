@@ -25,6 +25,20 @@ const CARGO_STATUS_MAP = {
   51: 'בדרך לנקודת חלוקה', 52: 'נקודת חלוקה', 55: 'בנקודת חלוקה',
 };
 
+function CompletionRow({ label, status, detail }) {
+  if (!status) return null;
+  const ok = status === 'success';
+  return (
+    <div className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+      {ok ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+      <div>
+        <div className="font-semibold">{label}</div>
+        {detail && <div className="text-xs opacity-80 mt-0.5">{detail}</div>}
+      </div>
+    </div>
+  );
+}
+
 export default function CargoShipmentModal({ open, onClose, order, client, initialShipmentType = 'delivery' }) {
   const [shipmentType, setShipmentType] = useState(initialShipmentType);
   const [toName, setToName] = useState('');
@@ -122,8 +136,16 @@ export default function CargoShipmentModal({ open, onClose, order, client, initi
       
       const data = res.data || res;
       if (data.success) {
-        setResult(data);
         toast.success(`משלוח קארגו נוצר בהצלחה! #${data.shipment_id}`);
+        const completion = {
+          ...data,
+          orderStatus: null,
+          orderStatusDetail: '',
+          smsStatus: null,
+          smsDetail: '',
+          invoiceStatus: null,
+          invoiceDetail: '',
+        };
         
         // Auto-update order status in external platform
         if (data.shipment_id) {
@@ -137,16 +159,24 @@ export default function CargoShipmentModal({ open, onClose, order, client, initi
                 carrier_code: 'deliv_cargoexp',
                 carrier_name: 'Cargo-Ship',
               });
+              completion.orderStatus = 'success';
+              completion.orderStatusDetail = 'ההזמנה עודכנה לנשלחה ב-Mirakl';
               toast.success('הזמנה עודכנה ל-"נשלחה" ב-Mirakl');
             } catch (e) {
+              completion.orderStatus = 'failed';
+              completion.orderStatusDetail = e.message || 'עדכון Mirakl נכשל';
               console.error('[Cargo] Failed to update Mirakl:', e.message);
               toast.error('משלוח נוצר אך עדכון Mirakl נכשל - יעודכן בסנכרון הבא');
             }
           } else if (shipmentType === 'delivery' && order?.source === 'woocommerce') {
             try {
               await updateWooOrderStatus({ order_id: order.raw_id, new_status: 'completed' });
+              completion.orderStatus = 'success';
+              completion.orderStatusDetail = 'ההזמנה סומנה כהושלמה בווקומרס';
               toast.success('הזמנה עודכנה ל-"הושלמה" בווקומרס');
             } catch (e) {
+              completion.orderStatus = 'failed';
+              completion.orderStatusDetail = e.message || 'עדכון WooCommerce נכשל';
               console.error('[Cargo] Failed to update WooCommerce:', e.message);
             }
           }
@@ -173,19 +203,25 @@ export default function CargoShipmentModal({ open, onClose, order, client, initi
               });
 
               if (invoiceData?.success || invoiceData?.duplicate) {
+                completion.invoiceStatus = 'success';
+                completion.invoiceDetail = invoiceData?.duplicate ? 'חשבונית כבר קיימת בלינט' : 'חשבונית לינט נוצרה';
                 toast.success(invoiceData?.duplicate ? 'חשבונית כבר קיימת בלינט' : 'חשבונית לינט נוצרה');
               } else {
+                completion.invoiceStatus = 'failed';
+                completion.invoiceDetail = invoiceData?.error || 'יצירת חשבונית נכשלה';
                 toast.error('משלוח נוצר, אבל יצירת חשבונית נכשלה');
                 console.error('[Cargo] Failed to create Linet invoice:', invoiceData?.error || invoiceData);
               }
             } catch (invoiceErr) {
+              completion.invoiceStatus = 'failed';
+              completion.invoiceDetail = invoiceErr.message || 'יצירת חשבונית נכשלה';
               console.error('[Cargo] Failed to create Linet invoice:', invoiceErr.message);
               toast.error('משלוח נוצר, אבל יצירת חשבונית נכשלה');
             }
           }
 
           try {
-            await sendTrackingSms({
+            const smsRes = await sendTrackingSms({
               order_id: order?.raw_id || order?.id || order?.mirakl_order_id || order?.order_number || '',
               customer_phone: toPhone,
               customer_name: toName,
@@ -193,12 +229,17 @@ export default function CargoShipmentModal({ open, onClose, order, client, initi
               tracking_carrier: 'cargo',
               order_number: order?.order_number || order?.external_order_number || order?.mirakl_order_id || '',
             });
+            completion.smsStatus = 'success';
+            completion.smsDetail = smsRes?.data?.message || 'SMS מעקב נשלח ללקוח';
             toast.success('SMS מעקב נשלח לפי משלוח קארגו');
           } catch (smsErr) {
+            completion.smsStatus = 'failed';
+            completion.smsDetail = smsErr?.response?.data?.error || smsErr.message || 'שליחת SMS נכשלה';
             console.error('[Cargo] Failed to send tracking SMS:', smsErr.message);
             toast.error('משלוח נוצר, אבל שליחת SMS נכשלה');
           }
         }
+        setResult(completion);
       } else {
         setError(data.error || 'שגיאה ביצירת משלוח');
       }
@@ -299,6 +340,12 @@ export default function CargoShipmentModal({ open, onClose, order, client, initi
                   <Copy className="w-4 h-4 text-green-600" />
                 </button>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <CompletionRow label="סטטוס הזמנה" status={result.orderStatus} detail={result.orderStatusDetail} />
+              <CompletionRow label="שליחת SMS מעקב" status={result.smsStatus} detail={result.smsDetail} />
+              <CompletionRow label="חשבונית לינט" status={result.invoiceStatus} detail={result.invoiceDetail} />
             </div>
 
             <div className="flex gap-2">
