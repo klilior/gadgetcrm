@@ -94,9 +94,9 @@ export default function ManagerControlCenter() {
     const missed = callsInRange.filter(a => a.activity_type === 'שיחה נכנסת' && a.content && (a.content.includes('לא נענתה') || a.content.includes('missed') || a.content.includes('משך: 0 שניות'))).length;
     setCallStats({ incoming, missed });
 
-    // Pending invoices
+    // Pending invoices — same filter as the review screen
     const filtered = (pendingInvoices || []).filter(inv =>
-      inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date
+      !inv.reviewed_at && (inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date)
     );
     setPendingInvoicesCount(filtered.length);
 
