@@ -174,18 +174,21 @@ Deno.serve(async (req) => {
           } catch (_) {}
         }
 
-        if ((!resolvedProductDescription || !resolvedUnitPrice) && existingOrder.order_lines_json) {
+        if (existingOrder.order_lines_json) {
           try {
             const lines = JSON.parse(existingOrder.order_lines_json || '[]');
             if (Array.isArray(lines) && lines.length > 0) {
-              resolvedProductDescription = resolvedProductDescription || lines.map(function(line) {
+              resolvedProductDescription = lines.map(function(line) {
                 return line.product_title || line.offer_sku || 'פריט סופר-פארם';
               }).join(', ');
               resolvedQuantity = 1;
-              const productsTotal = lines.reduce(function(sum, line) { return sum + (Number(line.total_price) || Number(line.price) || 0); }, 0);
-              if (!resolvedUnitPrice && productsTotal > 0) resolvedUnitPrice = productsTotal;
-              if (!resolvedShippingAmount && existingOrder.total_price > productsTotal && productsTotal > 0) {
-                resolvedShippingAmount = Number(existingOrder.total_price) - productsTotal;
+              const productsTotal = lines.reduce(function(sum, line) { return sum + (Number(line.price) || Number(line.total_price) || 0); }, 0);
+              const orderTotal = Number(existingOrder.total_price) || 0;
+              if (productsTotal > 0) resolvedUnitPrice = productsTotal;
+              if (orderTotal > productsTotal && productsTotal > 0) {
+                resolvedShippingAmount = orderTotal - productsTotal;
+              } else {
+                resolvedShippingAmount = 0;
               }
             }
           } catch (linesErr) {
