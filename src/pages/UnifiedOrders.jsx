@@ -302,13 +302,10 @@ export default function UnifiedOrders() {
         const meta = docMeta[dn];
         const existing = statusMap[dn];
         const status = existing?.status || 'ממתינה לאספקה';
-        // Auto-create status record if missing
-        if (!existing) {
-          base44.entities.LinetOrderStatus.create({
-            doc_number: dn, linet_doc_id: meta.linet_doc_id,
-            status: 'ממתינה לאספקה', customer_name: meta.customer_name, client_id: meta.client_id
-          }).catch(() => {});
-        }
+        // NOTE: do NOT auto-create a status record here. This loop runs on every load and
+        // every 5-minute auto-refresh; firing a create per missing doc on each pass races
+        // with itself and floods the backend. Missing status simply defaults to "ממתינה לאספקה"
+        // in the UI, and the real record is created lazily on the first status change.
         if (!showClosed && status === 'טופל') continue;
         const client = meta.client_id ? cM[meta.client_id] : null;
         lin.push({
