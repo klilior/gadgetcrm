@@ -34,8 +34,15 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
     setLoading(true);
     try {
       const existing = await base44.entities.OrderItemSerial.filter({ order_id: String(orderId) });
+      // Keep the OLDEST record per item key. Concurrent panel mounts used to each
+      // create a line for the same key, leaving duplicate rows whose newer copies
+      // get cleaned up — leaving stale ids that 404 on later get/update. Always
+      // bind to the earliest-created row so the id we hold stays valid.
       const byItemKey = {};
-      existing.forEach((l) => { byItemKey[l.order_item_id] = l; });
+      existing
+        .slice()
+        .sort((a, b) => new Date(a.created_date || 0) - new Date(b.created_date || 0))
+        .forEach((l) => { if (!byItemKey[l.order_item_id]) byItemKey[l.order_item_id] = l; });
 
       const products = order.products || [];
       const built = [];
