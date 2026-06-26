@@ -451,15 +451,27 @@ export default function UnifiedOrders() {
           setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
         }
       } else if (order.source === 'linet') {
-        // Update LinetOrderStatus entity
-        if (order.raw_id) {
-          await base44.entities.LinetOrderStatus.update(order.raw_id, { status: newStatus });
-        } else {
-          // Find or create
+        // Update LinetOrderStatus entity. raw_id may reference a record that was
+        // removed/replaced (e.g. during a sync), so fall back to find-or-create on 404.
+        const upsertByDocNumber = async () => {
           const existing = await base44.entities.LinetOrderStatus.filter({ doc_number: order.order_number });
           if (existing.length > 0) {
             await base44.entities.LinetOrderStatus.update(existing[0].id, { status: newStatus });
+          } else {
+            await base44.entities.LinetOrderStatus.create({
+              doc_number: order.order_number, linet_doc_id: order.linet_doc_id || '',
+              status: newStatus, customer_name: order.customer_name || '', client_id: order.client_id || ''
+            });
           }
+        };
+        if (order.raw_id) {
+          try {
+            await base44.entities.LinetOrderStatus.update(order.raw_id, { status: newStatus });
+          } catch (_) {
+            await upsertByDocNumber();
+          }
+        } else {
+          await upsertByDocNumber();
         }
         setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
       }
