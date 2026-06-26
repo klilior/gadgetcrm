@@ -188,7 +188,7 @@ export default function UnifiedOrders() {
           order_number: extNum, order_date: o.order_date || '',
           customer_name: c?.full_name || '', customer_phone: c?.phone || '',
           customer_email: billing.email || c?.email || '',
-          products: pr.map(x => ({name: x.name||'', quantity: x.quantity||1, total: parseFloat(x.total)||0, meta_data: x.meta_data || ''})),
+          products: pr.map(x => ({name: x.name||'', sku: x.sku || (x.product_id != null ? String(x.product_id) : ''), product_id: x.product_id != null ? String(x.product_id) : '', quantity: x.quantity||1, total: parseFloat(x.total)||0, meta_data: x.meta_data || ''})),
           total: parseFloat(o.total) || 0, shipping_method: o.shipping_method || '',
           status: o.status || '', notes: o.customer_note || '',
           raw_id: o.id, client_id: o.client_id || '', pickup_point_data: o.pickup_point_data, currency: 'ILS',
