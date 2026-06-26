@@ -8,6 +8,7 @@ import { serialInvoice } from "@/functions/serialInvoice";
 import { toast } from "sonner";
 import LinetItemMapper from "./LinetItemMapper";
 import SerialPicker from "./SerialPicker";
+import MarkSerialMenu from "./MarkSerialMenu";
 
 const STATUS_META = {
   not_required: { label: "לא נדרש סריאלי", cls: "bg-gray-100 text-gray-600" },
@@ -76,8 +77,9 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
         }
         built.push(line);
       }
-      // Only show lines that require serial
-      setLines(built.filter((l) => l.requires_serial));
+      // Show ALL product lines so the agent can manually mark items as serial
+      // even when Linet didn't auto-detect them (e.g. missing/mismatched SKU).
+      setLines(built);
     } catch (e) {
       toast.error("שגיאה בטעינת טיפול סריאלי: " + e.message);
     } finally {
@@ -88,8 +90,9 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
   useEffect(() => { init(); }, [init]);
 
   // Report blocking state to parent: blocked while any serial-required line isn't verified/invoiced.
-  const hasSerialLines = lines.length > 0;
-  const allLinesReady = lines.every(
+  const serialLines = lines.filter((l) => l.requires_serial);
+  const hasSerialLines = serialLines.length > 0;
+  const allLinesReady = serialLines.every(
     (l) => l.mapped_linet_item_id &&
       (l.assigned_serials || []).length >= (l.serials_required_count || 1) &&
       (l.serial_status === "verified" || l.serial_status === "invoiced")
@@ -163,13 +166,15 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
         <h4 className="font-bold text-[#7D0F82] flex items-center gap-2">
           <Package2 className="w-5 h-5" /> טיפול סריאלי
         </h4>
-        <Badge className="bg-amber-50 text-amber-700 border border-amber-200 gap-1">
-          <FlaskConical className="w-3 h-3" /> מצב בדיקה
-        </Badge>
+        {hasSerialLines && (
+          <Badge className="bg-amber-50 text-amber-700 border border-amber-200 gap-1">
+            <FlaskConical className="w-3 h-3" /> מצב בדיקה
+          </Badge>
+        )}
       </div>
 
       {lines.map((line) => {
-        const meta = STATUS_META[line.serial_status] || STATUS_META.required_missing;
+        const meta = STATUS_META[line.serial_status] || STATUS_META.not_required;
         const need = line.serials_required_count || line.quantity || 1;
         return (
           <div key={line.id} className="border border-gray-100 rounded-xl p-3 space-y-3 bg-slate-50/50">
@@ -184,45 +189,60 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
               <Badge className={`${meta.cls} text-[11px] shadow-none flex-shrink-0`}>{meta.label}</Badge>
             </div>
 
-            {/* Mapping (Step 6) */}
-            {!line.mapped_linet_item_id && (
-              <div className="bg-red-50 border border-red-100 rounded-lg p-2 space-y-2">
-                <p className="text-xs text-red-700 font-medium flex items-center gap-1">
-                  <AlertTriangle className="w-3.5 h-3.5" /> חסר מיפוי לפריט Linet. בחר פריט לפני הנפקת חשבונית.
-                </p>
-                <LinetItemMapper currentMappedId={line.mapped_linet_item_id} onMapped={(item) => onMapped(line, item)} />
-              </div>
-            )}
-
-            {/* Serial picker (Step 7) */}
-            {line.mapped_linet_item_id && (
-              <SerialPicker
-                linetItemId={line.mapped_linet_item_id}
-                requiredCount={need}
-                value={line.assigned_serials || []}
-                onChange={(serials) => onSerialsChange(line, serials)}
+            {/* Manual mark/unmark — always available so agents can fix mis-detected items */}
+            <div className="flex justify-end">
+              <MarkSerialMenu
+                sku={line.source_sku}
+                orderItemId={line.order_item_id}
+                currentlySerial={line.requires_serial}
+                onChanged={() => refreshLine(line.id)}
               />
+            </div>
+
+            {/* Mapping + serial picker only for serial-required lines */}
+            {line.requires_serial && (
+              <>
+                {!line.mapped_linet_item_id && (
+                  <div className="bg-red-50 border border-red-100 rounded-lg p-2 space-y-2">
+                    <p className="text-xs text-red-700 font-medium flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" /> חסר מיפוי לפריט Linet. בחר פריט לפני הנפקת חשבונית.
+                    </p>
+                    <LinetItemMapper currentMappedId={line.mapped_linet_item_id} onMapped={(item) => onMapped(line, item)} />
+                  </div>
+                )}
+
+                {line.mapped_linet_item_id && (
+                  <SerialPicker
+                    linetItemId={line.mapped_linet_item_id}
+                    requiredCount={need}
+                    value={line.assigned_serials || []}
+                    onChange={(serials) => onSerialsChange(line, serials)}
+                  />
+                )}
+              </>
             )}
           </div>
         );
       })}
 
-      {/* Primary action (Step 10) — dry-run */}
-      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-        <Button
-          disabled={!allReady || issuing}
-          onClick={issueInvoiceDryRun}
-          className="bg-[#7D0F82] hover:bg-[#6a0c6f] text-white rounded-xl"
-        >
-          {issuing ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Receipt className="w-4 h-4 ml-1" />}
-          הנפק חשבונית עם סריאלי
-        </Button>
-        {allReady ? (
-          <span className="text-xs text-emerald-700 flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" /> מוכן לבדיקה</span>
-        ) : (
-          <span className="text-xs text-gray-400">השלם מיפוי ובחירת סריאלי כדי להמשיך</span>
-        )}
-      </div>
+      {/* Primary action (Step 10) — dry-run — only when there are serial lines */}
+      {hasSerialLines && (
+        <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+          <Button
+            disabled={!allReady || issuing}
+            onClick={issueInvoiceDryRun}
+            className="bg-[#7D0F82] hover:bg-[#6a0c6f] text-white rounded-xl"
+          >
+            {issuing ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Receipt className="w-4 h-4 ml-1" />}
+            הנפק חשבונית עם סריאלי
+          </Button>
+          {allReady ? (
+            <span className="text-xs text-emerald-700 flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" /> מוכן לבדיקה</span>
+          ) : (
+            <span className="text-xs text-gray-400">השלם מיפוי ובחירת סריאלי כדי להמשיך</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

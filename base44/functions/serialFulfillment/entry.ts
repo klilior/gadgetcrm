@@ -161,7 +161,9 @@ Deno.serve(async (req) => {
       case "markSerial":
       case "unmarkSerial": {
         const { sku, scope } = params; // scope: 'always' | 'order'
-        if (!sku) return Response.json({ success: false, error: "Missing sku" });
+        // Permanent ('always') changes need a SKU to store on LinetProductMap.
+        // Order-only changes update the OrderItemSerial line by order_item_id, so SKU is optional.
+        if (!sku && scope === "always") return Response.json({ success: false, error: "Missing sku" });
         const wantSerial = action === "markSerial";
 
         let mapping = (await sr.LinetProductMap.filter({ sku: String(sku) }))?.[0] || null;
