@@ -102,14 +102,16 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
   const [serialRefreshKey, setSerialRefreshKey] = React.useState(0);
+  const [serialBlocked, setSerialBlocked] = React.useState(false);
   const orderIdForSerial = order.id || order.order_number || order.external_order_number;
+  const isBlockedForShipping = Boolean(shipmentBlockReason) || isSerialWaiting(order) || serialBlocked;
 
   const runPrimaryAction = () => {
     if (isMiraklNew) {
       onStatusChange(order, 'accept_mirakl');
       return;
     }
-    if (shipmentBlockReason || isSerialWaiting(order)) return;
+    if (isBlockedForShipping) return;
     if (shippingType === 'cargo') {
       onCargoShipment ? onCargoShipment(order) : onShipment({ ...order, _shipCarrier: 'velo' });
       return;
@@ -296,11 +298,15 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
       <OrderTreatmentTimeline order={order} />
 
       {/* Serial handling area (Steps 7,10,12) — only renders if a line requires a serial */}
-      <SerialFulfillmentPanel key={serialRefreshKey} order={order} />
+      <SerialFulfillmentPanel key={serialRefreshKey} order={order} onBlockChange={setSerialBlocked} />
 
-      {(shipmentBlockReason || blockingItems.length > 0) && (
+      {(shipmentBlockReason || blockingItems.length > 0 || serialBlocked) && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-3 text-sm text-red-800">
-          <div className="font-bold mb-1">כדי להמשיך חסר: {blockingItems.length > 0 ? blockingItems.join(' / ') : shipmentBlockReason}</div>
+          <div className="font-bold mb-1">כדי להמשיך חסר: {[
+            ...(blockingItems || []),
+            ...(serialBlocked ? ['מספר סידורי מאומת'] : []),
+            ...(shipmentBlockReason ? [shipmentBlockReason] : []),
+          ].join(' / ') || shipmentBlockReason}</div>
           {shipmentBlockReason && <div className="text-xs text-red-700">{shipmentBlockReason}</div>}
         </div>
       )}
@@ -309,7 +315,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
         <Button
           className="bg-[#7D0F82] hover:bg-[#6a0c6f] text-white rounded-xl px-5 shadow-sm"
-          disabled={Boolean(shipmentBlockReason) || isSerialWaiting(order) || (hasShipment && primaryActionLabel === 'השלם הזמנה')}
+          disabled={isBlockedForShipping || (hasShipment && primaryActionLabel === 'השלם הזמנה')}
           onClick={runPrimaryAction}
         >
           <CheckCircle className="w-4 h-4 ml-1" />
@@ -351,11 +357,11 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </Button>
         )}
 
-        {/* Shipping buttons - blocked when the order was not paid or was cancelled */}
-        {shipmentBlockReason ? (
+        {/* Shipping buttons - blocked when not paid / cancelled / serial pending */}
+        {(shipmentBlockReason || serialBlocked) ? (
           <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 flex items-center gap-2 text-red-800 text-sm font-medium">
             <Truck className="w-4 h-4" />
-            {shipmentBlockReason}
+            {shipmentBlockReason || "חסום — יש להשלים ולאמת מספר סידורי לפני יצירת משלוח"}
           </div>
         ) : (
         <div className="flex flex-wrap items-center gap-2">

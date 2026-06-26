@@ -22,7 +22,7 @@ const STATUS_META = {
  * Renders one card per serial-required product line: Linet mapping + serial picker + status.
  * Issuing is DRY-RUN by default (pilot safety).
  */
-export default function SerialFulfillmentPanel({ order }) {
+export default function SerialFulfillmentPanel({ order, onBlockChange }) {
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [issuing, setIssuing] = useState(false);
@@ -87,6 +87,18 @@ export default function SerialFulfillmentPanel({ order }) {
 
   useEffect(() => { init(); }, [init]);
 
+  // Report blocking state to parent: blocked while any serial-required line isn't verified/invoiced.
+  const hasSerialLines = lines.length > 0;
+  const allLinesReady = lines.every(
+    (l) => l.mapped_linet_item_id &&
+      (l.assigned_serials || []).length >= (l.serials_required_count || 1) &&
+      (l.serial_status === "verified" || l.serial_status === "invoiced")
+  );
+  useEffect(() => {
+    if (!onBlockChange) return;
+    onBlockChange(loading ? false : (hasSerialLines && !allLinesReady));
+  }, [loading, hasSerialLines, allLinesReady, onBlockChange]);
+
   const refreshLine = async (lineId) => {
     const fresh = await base44.entities.OrderItemSerial.get(lineId);
     setLines((prev) => prev.map((l) => (l.id === lineId ? fresh : l)));
@@ -138,7 +150,7 @@ export default function SerialFulfillmentPanel({ order }) {
 
   if (lines.length === 0) return null;
 
-  const allReady = lines.every((l) => l.mapped_linet_item_id && (l.assigned_serials || []).length >= (l.serials_required_count || 1) && (l.serial_status === "verified" || l.serial_status === "invoiced"));
+  const allReady = allLinesReady;
 
   return (
     <div className="bg-white rounded-2xl border-2 border-purple-100 p-4 space-y-4 shadow-sm">
