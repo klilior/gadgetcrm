@@ -498,21 +498,13 @@ async function createDedupedAlert(base44, alertData) {
   return await base44.asServiceRole.entities.PriceAlert.create(alertData);
 }
 
-// ─── AI alert message ───
-async function generateAlertMessage(base44, alertType, facts) {
-  try {
-    const prompt = `כתוב הודעת התראה בעברית (1–2 משפטים), עובדתית וקצרה.
-אל תחשב מספרים ואל תשנה מספרים.
-הצג: מה השתנה ומה ההשפעה, ומה כדאי לעשות.
-
-סוג התראה: ${alertType}
-עובדות: ${JSON.stringify(facts)}
-
-Output ONLY Hebrew text.`;
-    const r = await base44.asServiceRole.integrations.Core.InvokeLLM({ prompt });
-    if (typeof r === 'string' && r.length > 5) return r;
-  } catch (_) {}
-  return null;
+// ─── Deterministic alert message (no integration credits) ───
+function generateAlertMessage(_base44, alertType, facts) {
+  const details = Object.entries(facts || {})
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(', ');
+  return `${alertType}${details ? ` — ${details}` : ''}. מומלץ לבדוק ולעדכן מחיר בהתאם.`;
 }
 
 // ─── Price war detection ───
@@ -674,34 +666,8 @@ async function processProduct(base44, product, runMode) {
     status: "חדש",
   });
 
-  // 9. AI text for recommendation
-  let aiText = rec.recommendation_type;
-  try {
-    const aiPrompt = `You are writing a pricing recommendation in Hebrew for an Israeli electronics retailer.
-IMPORTANT: All numbers are already calculated. Do NOT change numbers. Do NOT perform calculations.
-
-Data:
-- מוצר: ${product.product_name}
-- מיקום נוכחי: ${zap.my_position} מתוך ${zap.total_competitors}
-- יעד: ${desired_pos}
-- מחיר נוכחי באתר: ₪${my_price}
-- מחיר מומלץ: ₪${rec.new_suggested_price}
-- רווח צפוי ליחידה: ₪${rec.profit_at_suggested_price}
-- מרווח רווח צפוי: ${rec.margin_at_suggested_price}%
-- מחיר מינימלי מותר: ₪${rec.min_allowed_price}
-- סוג המלצה: ${rec.recommendation_type}
-${zap.position_above_me_price ? `- מתחרה מעל: ₪${zap.position_above_me_price} (${zap.position_above_me_store})` : ''}
-${zap.position_below_me_price ? `- מתחרה מתחת: ₪${zap.position_below_me_price} (${zap.position_below_me_store})` : ''}
-${position_delta != null ? `- שינוי מיקום: ${position_delta > 0 ? '+' : ''}${position_delta}` : ''}
-
-Write 2-4 sentences in Hebrew:
-1) מה לעשות עכשיו
-2) למה זה נכון ביחס ליעד ולמתחרים
-3) אזהרה קצרה אם יש חריגה
-Tone: ברור, ישיר, מקצועי. Output ONLY Hebrew text.`;
-    const aiResult = await base44.asServiceRole.integrations.Core.InvokeLLM({ prompt: aiPrompt });
-    if (typeof aiResult === 'string' && aiResult.length > 5) aiText = aiResult;
-  } catch (_) {}
+  // 9. Deterministic recommendation text (no integration credits)
+  const aiText = `${rec.recommendation_type}. מחיר נוכחי: ₪${my_price}, מחיר מומלץ: ₪${rec.new_suggested_price}, יעד מיקום: ${desired_pos}, מיקום נוכחי: ${zap.my_position}.`;
 
   await base44.asServiceRole.entities.PriceRecommendation.update(recommendation.id, { recommended_action: aiText });
 
@@ -788,7 +754,7 @@ Tone: ברור, ישיר, מקצועי. Output ONLY Hebrew text.`;
   let alertsCreated = 0;
 
   for (const ac of topAlerts) {
-    const msg = await generateAlertMessage(base44, ac.alert_type, ac.facts) || `${ac.alert_type}: ${JSON.stringify(ac.facts)}`;
+    const msg = generateAlertMessage(base44, ac.alert_type, ac.facts) || `${ac.alert_type}: ${JSON.stringify(ac.facts)}`;
     const alert = await createDedupedAlert(base44, {
       linked_product: productId,
       linked_recommendation: recommendation.id,

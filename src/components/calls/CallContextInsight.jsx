@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Loader2 } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
 
 function buildContextPrompt(customer, orders, repairs, tickets, devices, invoices) {
   const lines = [];
@@ -78,31 +77,37 @@ export default function CallContextInsight({ customer, orders, repairs, tickets,
   useEffect(() => {
     let cancelled = false;
 
-    async function generate() {
-      const context = buildContextPrompt(customer, orders || [], repairs || [], tickets || [], devices || [], invoices || []);
-      
-      // If there's basically no data, skip
-      if (!orders?.length && !repairs?.length && !tickets?.length && !devices?.length && !invoices?.length) {
-        setInsight('לקוח חדש - אין היסטוריה קודמת');
-        setLoading(false);
+    function generate() {
+      const safeOrders = orders || [];
+      const safeRepairs = repairs || [];
+      const safeTickets = tickets || [];
+      const safeDevices = devices || [];
+      const safeInvoices = invoices || [];
+
+      if (!safeOrders.length && !safeRepairs.length && !safeTickets.length && !safeDevices.length && !safeInvoices.length) {
+        if (!cancelled) setInsight('לקוח חדש - אין היסטוריה קודמת');
+        if (!cancelled) setLoading(false);
         return;
       }
 
-      try {
-        const result = await base44.integrations.Core.InvokeLLM({
-          prompt: `אתה עוזר לנציג שירות לקוחות. לקוח מתקשר כרגע. תן תקציר קצר מאוד (2-3 משפטים) של מה שכנראה הלקוח צריך, על סמך הפעילות האחרונה שלו. התמקד בדבר הכי רלוונטי - הזמנה פעילה? תיקון? רכישת מכשיר אחרונה? פנייה פתוחה? תן לנציג הכנה מהירה.
+      const activeOrder = safeOrders.find(o => ['processing', 'on-hold', 'pending'].includes(o.status));
+      const openRepair = safeRepairs.find(r => !['תיקון נסגר', 'לא ניתן לתיקון', 'נמסר', 'הושלם', 'בוטל'].includes(r.status));
+      const openTicket = safeTickets.find(t => !['נסגר', 'נסגר ללא מענה', 'בוטל'].includes(t.status));
+      const recentInvoice = safeInvoices[0];
+      let text = 'אין אירוע דחוף מזוהה, כדאי לפתוח כרטיס לקוח ולעבור על הפעילות האחרונה.';
 
-נתוני לקוח:
-${context}
-
-כתוב בעברית, קצר ותכליתי. אל תחזור על כל הנתונים - רק מה שהנציג צריך לדעת ברגע השיחה.`,
-        });
-        if (!cancelled) setInsight(result);
-      } catch (e) {
-        if (!cancelled) setInsight('לא ניתן ליצור תקציר');
-      } finally {
-        if (!cancelled) setLoading(false);
+      if (activeOrder) {
+        text = `יש הזמנה פעילה #${activeOrder.external_order_number || activeOrder.id} בסטטוס ${activeOrder.status}. כדאי לבדוק תשלום, משלוח או סטטוס טיפול.`;
+      } else if (openRepair) {
+        text = `יש תיקון פתוח בסטטוס ${openRepair.status}. כדאי לבדוק עדכון מעבדה וזמן טיפול משוער.`;
+      } else if (openTicket) {
+        text = `יש פנייה פתוחה: ${openTicket.subject || 'ללא נושא'}. כדאי להמשיך מאותה פנייה כדי לא לאבד הקשר.`;
+      } else if (recentInvoice) {
+        text = `יש רכישה/חשבונית אחרונה עבור ${recentInvoice.product_name || 'מוצר'}. ייתכן שהשיחה קשורה למוצר, אחריות או משלוח.`;
       }
+
+      if (!cancelled) setInsight(text);
+      if (!cancelled) setLoading(false);
     }
 
     generate();
