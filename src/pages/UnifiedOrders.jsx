@@ -117,6 +117,17 @@ export default function UnifiedOrders() {
       smsLogs = await base44.entities.NotificationLog.list('-sent_at', 300);
     } catch (_) {}
 
+    // Pre-fetch serial lines to flag orders that still have a serial pending action
+    const pendingSerialByOrder = {};
+    try {
+      const serialLines = await base44.entities.OrderItemSerial.list('-created_date', 5000);
+      for (const sl of serialLines) {
+        if (sl.requires_serial && !['verified', 'invoiced', 'not_required'].includes(sl.serial_status)) {
+          if (sl.order_id) pendingSerialByOrder[String(sl.order_id)] = true;
+        }
+      }
+    } catch (_) {}
+
     const getRelatedShipments = (order) => {
       const keys = [order.order_number, order.external_order_number, order.mirakl_order_id, order.raw_id, order.id, order.client_id]
         .filter(Boolean)
@@ -205,6 +216,7 @@ export default function UnifiedOrders() {
           sms_status: smsLog?.status || '',
           sms_event_type: smsLog?.event_type || '',
           related_shipments: getRelatedShipments({ order_number: extNum, external_order_number: extNum, raw_id: o.id, client_id: o.client_id }),
+          has_pending_serial: !!pendingSerialByOrder['woo_' + o.id],
         });
       }
     } catch (e) { errs.push({source: 'woocommerce', message: e.message}); }
@@ -247,6 +259,7 @@ export default function UnifiedOrders() {
           linet_invoice_email_sent: o.linet_invoice_email_sent || false,
           order_lines_json: o.order_lines_json || '[]',
           related_shipments: getRelatedShipments({ order_number: o.mirakl_order_id || '', external_order_number: o.mirakl_order_id || '', mirakl_order_id: o.mirakl_order_id || '' }),
+          has_pending_serial: !!pendingSerialByOrder['mirakl_' + o.id],
         });
       }
     } catch (e) { errs.push({source: 'mirakl', message: e.message}); }

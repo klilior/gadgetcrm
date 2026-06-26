@@ -1,6 +1,7 @@
 import { getShipmentBlockReason, isClosedStatus } from "./OrderStatusConfig";
 
 export function isSerialWaiting(order) {
+  if (order?.has_pending_serial) return true;
   return order?.status === "wc-awaiting-serial" || String(order?.status || "").includes("סידורי");
 }
 
