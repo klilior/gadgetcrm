@@ -100,8 +100,13 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
   }, [loading, hasSerialLines, allLinesReady, onBlockChange]);
 
   const refreshLine = async (lineId) => {
-    const fresh = await base44.entities.OrderItemSerial.get(lineId);
-    setLines((prev) => prev.map((l) => (l.id === lineId ? fresh : l)));
+    try {
+      const fresh = await base44.entities.OrderItemSerial.get(lineId);
+      setLines((prev) => prev.map((l) => (l.id === lineId ? fresh : l)));
+    } catch (_) {
+      // Record may have been removed/replaced — re-init the panel instead of crashing on a 404.
+      init();
+    }
   };
 
   const onMapped = async (line, item) => {
