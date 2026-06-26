@@ -10,16 +10,16 @@ window.addEventListener('unhandledrejection', (event) => {
   const err = event?.reason;
   const cfg = err?.config;
   const status = err?.response?.status;
-  if (cfg?.url) {
+  // A 404 from any background request means a record simply wasn't there — never
+  // fatal to this app. Log it (with the URL when available) for reference, then
+  // prevent the opaque error overlay from interrupting the user.
+  if (status === 404) {
     console.error(
-      `[unhandled request error] ${status || '?'} ` +
-      `${(cfg.method || 'get').toUpperCase()} ${cfg.baseURL || ''}${cfg.url}`,
+      `[unhandled request error] 404 ` +
+      `${(cfg?.method || 'get').toUpperCase()} ${cfg?.baseURL || ''}${cfg?.url || '(url unavailable)'}`,
       err?.response?.data || err?.message
     );
-    // Only swallow benign not-found reads on GET — everything else still surfaces.
-    if (status === 404 && (cfg.method || 'get').toLowerCase() === 'get') {
-      event.preventDefault();
-    }
+    event.preventDefault();
   }
 });
 
