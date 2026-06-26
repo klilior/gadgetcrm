@@ -320,9 +320,8 @@ export default function TicketsPage() {
                         {isDeleting ? 'מוחק...' : `מחק ${selectedTicketIds.length} נבחרים`}
                     </Button>
                 )}
-                <Button onClick={() => setIsNewTicketModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md w-full sm:w-auto text-sm">
-                    <PlusCircle className="w-4 h-4 ml-2" />
-                    צור טיקט חדש
+                <Button disabled variant="outline" className="w-full sm:w-auto text-sm text-gray-500">
+                    יצירת טיקטים מוקפאת
                 </Button>
             </div>
         </div>

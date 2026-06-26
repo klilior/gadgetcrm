@@ -106,105 +106,16 @@ Deno.serve(async (req) => {
         }
         // --- End De-duplication Logic ---
 
-        // **מנגנון למניעת כפלים - בדיקה אם כבר קיים טיקט דומה באותו יום**
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
-        const existingTodayTickets = await base44.asServiceRole.entities.Ticket.filter({
-            customer_id: customer.id,
-            created_date: {
-                $gte: today.toISOString(),
-                $lt: tomorrow.toISOString()
-            }
-        });
-
-        // בדיקה אם יש טיקט עם תוכן דומה שנוצר בשעה האחרונה
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-        const recentSimilarTickets = existingTodayTickets.filter(ticket => {
-            const ticketCreated = new Date(ticket.created_date);
-            const isSameSubject = ticket.subject === (inquirySubjectRaw === 'sales' ? 'מכירות' : 'שירות'); // Simplified based on later logic
-            const isRecent = ticketCreated > oneHourAgo;
-            const hasSimilarContent = ticket.description && message && 
-                (ticket.description.includes(message.substring(0, Math.min(message.length, 50))) || 
-                 message.includes(ticket.description.substring(0, Math.min(ticket.description.length, 50))));
-            
-            return isSameSubject && isRecent && (hasSimilarContent || message.length < 10);
-        });
-
-        if (recentSimilarTickets.length > 0) {
-            console.log(`מניעת כפל טיקט: נמצא טיקט דומה שנוצר לאחרונה עבור ${customerName}. מזהה טיקט: ${recentSimilarTickets[0].id}`);
-            return new Response(JSON.stringify({ 
-                success: true, 
-                message: "הטופס התקבל במערכת (זוהה כטיקט קיים).",
-                duplicate_prevented: true,
-                existing_ticket_id: recentSimilarTickets[0].id
-            }), { status: 200 });
-        }
-
-        // NEW UNIFIED LOGIC: Determine if it's Sales or Service
-        let ticketSubject = "שירות";
-        let inquiryType = "שירות לקוחות";
-        let priority = "בינונית";
-        
-        const subjectAndMessage = `${inquirySubjectRaw} ${message}`.toLowerCase();
-        
-        // Check for sales indicators
-        if (inquirySubjectRaw === 'sales' || 
-            subjectAndMessage.includes("מכירה") || 
-            subjectAndMessage.includes("רכישה") || 
-            subjectAndMessage.includes("מחיר") ||
-            subjectAndMessage.includes("קנייה") ||
-            subjectAndMessage.includes("הצעת מחיר")) {
-            ticketSubject = "מכירות";
-            inquiryType = "חקירת מכירה";
-            priority = "גבוהה";
-        }
-        
-        // Check for service indicators  
-        if (inquirySubjectRaw === 'service' ||
-            subjectAndMessage.includes("שירות") ||
-            subjectAndMessage.includes("תיקון") ||
-            subjectAndMessage.includes("בעיה") ||
-            subjectAndMessage.includes("לא עובד")) {
-            ticketSubject = "שירות";
-            inquiryType = "שירות ואחריות";  
-            priority = "גבוהה";
-        }
-
-        console.log(`Final ticket subject: ${ticketSubject}, Type: ${inquiryType}`);
-
-        // Get the highest ticket number and add 1
-        const lastTickets = await base44.asServiceRole.entities.Ticket.filter({}, "-ticket_number", 1);
-        const newTicketNumber = (lastTickets[0]?.ticket_number || 1000) + 1;
-
-        // Create ticket
-        const slaHours = 4;
-        const newTicket = await base44.asServiceRole.entities.Ticket.create({
-            ticket_number: newTicketNumber,
-            subject: ticketSubject,
-            customer_id: customer.id,
-            contact_channel: "website",
-            source: "אתר",
-            inquiry_type: inquiryType,
-            priority: priority,
-            status: "חדש",
-            description: message || `פנייה דרך טופס: ${inquirySubjectRaw}`,
-            sla_target: new Date(Date.now() + slaHours * 60 * 60 * 1000).toISOString()
-        });
-        console.log('Ticket created successfully:', newTicket.id);
-
-        // Create associated activity
+        // Ticket creation is temporarily frozen. Keep the lead/contact as a customer activity only.
         await base44.asServiceRole.entities.Activity.create({
-            summary: `טופס מהאתר: ${ticketSubject}`,
+            summary: `טופס מהאתר: ${inquirySubjectRaw}`,
             activity_type: 'מייל נכנס',
             content: `שם: ${customerName}\nטלפון: ${customerPhone}\nאימייל: ${customerEmail}\n\nבחירה בטופס: ${inquirySubjectRaw}\nהודעה:\n${message}`,
-            ticket_id: newTicket.id
+            order_id: customer.id
         });
-        console.log('Activity logged for new ticket.');
+        console.log('Ticket creation frozen; activity logged only.');
 
-        return new Response(JSON.stringify({ success: true, message: "הטופס נשלח וטיקט נוצר בהצלחה!" }), { status: 200 });
+        return new Response(JSON.stringify({ success: true, message: "הטופס התקבל. יצירת טיקטים מוקפאת כרגע." }), { status: 200 });
 
     } catch (error) {
         console.error('!!! CRITICAL ERROR in elementorWebhook !!!', error.message, error.stack);

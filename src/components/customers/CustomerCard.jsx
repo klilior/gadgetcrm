@@ -171,9 +171,6 @@ export default function CustomerCard({ customerId, isOpen, onClose, onEdit }) {
                                 </div>
                             </div>
                             <div className="flex gap-1 flex-shrink-0">
-                                <Button variant="ghost" size="sm" onClick={handleCreateTicket} className="text-white hover:bg-white/20 gap-1 hidden sm:flex h-8 text-xs">
-                                    <PlusCircle className="w-3.5 h-3.5" />טיקט
-                                </Button>
                                 <Button variant="ghost" size="icon" onClick={() => onEdit(customer)} className="text-white hover:bg-white/20 h-8 w-8">
                                     <Edit className="w-4 h-4" />
                                 </Button>

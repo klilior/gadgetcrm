@@ -181,21 +181,7 @@ Deno.serve(async (req) => {
                 last_channel: "whatsapp" 
             });
         } else {
-            console.log(`ℹ️ No open ticket found. Creating a new one.`);
-            const newTicketNumber = ((await service.entities.Ticket.filter({}, "-ticket_number", 1))[0]?.ticket_number || 1000) + 1;
-            
-            ticket = await service.entities.Ticket.create({
-                subject: `פניית וואטסאפ מ-${customer.full_name}`,
-                customer_id: customer.id,
-                ticket_number: newTicketNumber,
-                status: "חדש",
-                priority: "בינונית",
-                contact_channel: "whatsapp",
-                source: "whatsapp",
-                description: messageData.messageContent || `${messageData.messageType} received`,
-                last_channel: "whatsapp"
-            });
-            console.log("🎫 Created new ticket:", newTicketNumber);
+            console.log('ℹ️ Ticket creation is frozen. Logging WhatsApp activity without creating a ticket.');
         }
 
         // Create activity record
@@ -223,7 +209,7 @@ Deno.serve(async (req) => {
         }
 
         await service.entities.Activity.create({
-            ticket_id: ticket.id,
+            ticket_id: ticket?.id || null,
             order_id: customer.id,
             activity_type: "וואטסאפ נכנס",
             summary: `הודעה מ-${customer.full_name}`,

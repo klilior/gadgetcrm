@@ -42,6 +42,9 @@ export default function NewTicketModal({ isOpen, onClose, onTicketCreated, initi
   }, [isOpen, initialClient]);
 
   const handleCreateTicket = async () => {
+    alert('יצירת טיקטים מוקפאת כרגע.');
+    return;
+
     if (!clientDetails.full_name || !ticketDetails.inquiry_type || !ticketDetails.subject) {
         alert("יש למלא שם לקוח, נושא וסוג פנייה.");
         return;
@@ -230,17 +233,10 @@ export default function NewTicketModal({ isOpen, onClose, onTicketCreated, initi
                 <Button variant="ghost" onClick={onClose} disabled={isCreating}>ביטול</Button>
                 <Button 
                     onClick={handleCreateTicket} 
-                    className="glass-button bg-blue-500/20"
-                    disabled={isCreating}
+                    className="glass-button bg-gray-100 text-gray-500"
+                    disabled={true}
                 >
-                    {isCreating ? (
-                        <>
-                            <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                            יוצר...
-                        </>
-                    ) : (
-                        'צור טיקט'
-                    )}
+                    יצירת טיקטים מוקפאת
                 </Button>
             </div>
         </div>

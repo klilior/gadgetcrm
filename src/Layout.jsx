@@ -184,14 +184,12 @@ function AppContent({ children, currentPageName }) {
     { title: "תיקונים", url: createPageUrl("RepairDashboard"), icon: Wrench },
     { title: "הזמנות מרוכזות", url: "/UnifiedOrders", icon: Package },
     ...(isManager ? [{ title: "דוח התחשבנות מעבדה", url: createPageUrl("VendorReport"), icon: FileText }] : []),
-    ...((isManager || isShiftManager) ? [{ title: "ניטור מחירים Zap", url: createPageUrl("PriceMonitor"), icon: BarChart3 }] : []),
     { title: "קווים לטיפול", url: createPageUrl("LinesToWorkOn"), icon: Phone },
     { title: "ביצועי נציגים", url: createPageUrl("AgentPerformanceDashboard"), icon: Trophy },
     { title: "יומן שיחות", url: createPageUrl("CallLog"), icon: Phone },
   ];
 
   const workItems = !isTechnicianRole ? [
-    { title: "טיקטים", url: createPageUrl("Tickets"), icon: Ticket },
     { title: "הודעות", url: createPageUrl("MessageCenter"), icon: MessageCircle },
     { title: "לקוחות", url: createPageUrl("Customers"), icon: Users },
     { title: "משלוחים", url: "/Shipments", icon: Truck },

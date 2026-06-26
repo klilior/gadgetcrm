@@ -320,17 +320,6 @@ export default function CustomersPage() {
                                         <div className="flex gap-2 mt-3">
                                             <Button
                                                 onClick={() => {
-                                                    const url = createPageUrl('MessageCenter') + `?createTicketFor=${client.id}`;
-                                                    navigate(url);
-                                                }}
-                                                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                                                size="sm"
-                                            >
-                                                <PlusCircle className="w-4 h-4 ml-2" />
-                                                צור טיקט
-                                            </Button>
-                                            <Button
-                                                onClick={() => {
                                                     setSelectedClient(client);
                                                     setShowEditModal(true);
                                                 }}
