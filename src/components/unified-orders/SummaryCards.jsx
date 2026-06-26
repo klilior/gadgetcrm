@@ -1,29 +1,29 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Globe, Pill, FileText, Layers } from "lucide-react";
+import { Layers, Clock3, ScanLine, Truck } from "lucide-react";
 
-export default function SummaryCards({ counts }) {
+export default function SummaryCards({ stats }) {
   const cards = [
-    { label: "הזמנות אתר", count: counts.woocommerce || 0, gradient: "from-purple-500 via-purple-600 to-violet-700", icon: Globe, glow: "shadow-purple-500/20" },
-    { label: "סופר פארם", count: counts.mirakl || 0, gradient: "from-blue-500 via-blue-600 to-cyan-600", icon: Pill, glow: "shadow-blue-500/20" },
-    { label: "הזמנות לינט", count: counts.linet || 0, gradient: "from-amber-400 via-orange-500 to-orange-600", icon: FileText, glow: "shadow-orange-500/20" },
-    { label: 'סה"כ פתוחות', count: counts.total || 0, gradient: "from-slate-700 via-slate-800 to-slate-900", icon: Layers, glow: "shadow-slate-500/20" },
+    { label: 'סה"כ פתוחות', count: stats?.open || 0, icon: Layers, className: "bg-slate-50 text-slate-700 border-slate-100" },
+    { label: "ממתינות לטיפול", count: stats?.pending || 0, icon: Clock3, className: "bg-amber-50 text-amber-700 border-amber-100" },
+    { label: "ממתינות לסריאלי", count: stats?.serial || 0, icon: ScanLine, className: "bg-purple-50 text-[#7D0F82] border-purple-100" },
+    { label: "מוכנות למשלוח", count: stats?.ready || 0, icon: Truck, className: "bg-emerald-50 text-emerald-700 border-emerald-100" },
   ];
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {cards.map((c) => (
-        <Card key={c.label} className={`border-0 shadow-xl ${c.glow} bg-gradient-to-br ${c.gradient} text-white rounded-2xl overflow-hidden relative group hover:scale-[1.02] transition-transform duration-200`}>
-          <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <CardContent className="p-4 relative">
-            <div className="flex items-center justify-between mb-2">
-              <c.icon className="w-5 h-5 text-white/60" />
-              <div className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center">
-                <span className="text-sm font-bold">{c.count}</span>
+        <Card key={c.label} className={`rounded-2xl border shadow-sm ${c.className}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-3xl font-black tracking-tight text-gray-900">{c.count}</p>
+                <p className="text-xs font-semibold mt-1">{c.label}</p>
+              </div>
+              <div className="w-9 h-9 rounded-xl bg-white/70 border border-white flex items-center justify-center">
+                <c.icon className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-3xl font-black tracking-tight">{c.count}</p>
-            <p className="text-xs text-white/70 mt-1 font-medium">{c.label}</p>
           </CardContent>
         </Card>
       ))}

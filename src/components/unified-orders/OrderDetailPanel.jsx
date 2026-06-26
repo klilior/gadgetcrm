@@ -2,7 +2,8 @@ import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Receipt, Store, RotateCcw, Repeat } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Receipt, Store, RotateCcw, Repeat, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import GetPackageOrderCard from "../getpackage/GetPackageOrderCard";
 import TrackingSection from "./TrackingSection";
@@ -10,6 +11,7 @@ import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusOptions, getStatusColor, getShipmentBlockReason } from "./OrderStatusConfig";
 import { detectShippingType, getShippingTypeBadge } from "./ShippingTypeHelper";
+import { getBlockingItems, getNextActionLabel, getPrimaryActionLabel, getSourceLabel, isSerialWaiting } from "./orderUiHelpers";
 import ProductMetaBadges from "./ProductMetaBadges";
 import OrderTreatmentTimeline from "./OrderTreatmentTimeline";
 
@@ -91,27 +93,42 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const shippingBadge = getShippingTypeBadge(shippingType);
   const shipmentBlockReason = getShipmentBlockReason(order.source, order.status);
   const hasShipment = Boolean(order.tracking_number || order.shipment_created_at || order.status === 'completed' || order.status === 'SHIPPED' || order.status === 'נוצר משלוח');
+  const blockingItems = getBlockingItems(order);
+  const nextActionLabel = getNextActionLabel(order);
+  const primaryActionLabel = getPrimaryActionLabel(order);
 
   const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
 
-  const sourceBg = {
-    woocommerce: 'from-purple-50/80 via-white to-white border-purple-100',
-    mirakl: 'from-blue-50/80 via-white to-white border-blue-100',
-    linet: 'from-amber-50/80 via-white to-white border-amber-100',
+  const runPrimaryAction = () => {
+    if (isMiraklNew) {
+      onStatusChange(order, 'accept_mirakl');
+      return;
+    }
+    if (shipmentBlockReason || isSerialWaiting(order)) return;
+    if (shippingType === 'cargo') {
+      onCargoShipment ? onCargoShipment(order) : onShipment({ ...order, _shipCarrier: 'velo' });
+      return;
+    }
+    if (shippingType === 'getpackage' && onGetPackageShipment) {
+      onGetPackageShipment(order);
+      window.dispatchEvent(new CustomEvent('openGetPackageQuoteForm'));
+      return;
+    }
+    onShipment({ ...order, _shipCarrier: 'ups' });
   };
 
   return (
-    <div dir="rtl" className={`bg-gradient-to-br ${sourceBg[order.source] || 'from-slate-50 to-white border-gray-100'} p-4 md:p-5 space-y-4 border-t`}>
+    <div dir="rtl" className="bg-slate-50/70 p-4 md:p-5 space-y-4 border-t border-gray-100">
       {/* Self-pickup alert banner */}
       {shippingType === 'self_pickup' && (
-        <div className="bg-green-100 border-2 border-green-500 rounded-2xl p-4 flex items-center gap-3 animate-pulse shadow-lg shadow-green-200">
-          <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-            <Store className="w-6 h-6 text-white" />
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+            <Store className="w-5 h-5 text-emerald-700" />
           </div>
           <div>
-            <p className="text-green-900 font-black text-lg">🏪 איסוף עצמי מהחנות!</p>
-            <p className="text-green-700 text-sm font-medium">
+            <p className="text-emerald-900 font-bold text-base">איסוף עצמי מהחנות</p>
+            <p className="text-emerald-700 text-sm font-medium">
               {order.shipping_method || 'הלקוח בחר איסוף עצמי — אין צורך במשלוח'}
             </p>
           </div>
@@ -128,14 +145,15 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           {hoursSince > 0 && <span className="text-gray-400">(לפני {hoursSince > 48 ? `${Math.round(hoursSince/24)} ימים` : `${hoursSince} שעות`})</span>}
         </div>
         {hoursSince > 24 && (
-          <Badge className="bg-red-100 text-red-700 text-[10px]">⚠ ישנה</Badge>
+          <Badge className="bg-red-50 text-red-700 border border-red-100 text-[10px] shadow-none">ישנה</Badge>
         )}
+        <Badge className="bg-white text-gray-700 border border-gray-200 text-[10px] shadow-none">הפעולה הבאה: {nextActionLabel}</Badge>
       </div>
 
       {/* Main info grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Customer */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2 hover:shadow-md transition-shadow">
+        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2">
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">לקוח</h4>
           <p className="font-bold text-gray-900 text-base">{order.customer_name || 'לא ידוע'}</p>
           {order.customer_phone && (
@@ -148,6 +166,9 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
               </button>
             </div>
           )}
+          <div className="text-xs text-gray-500">
+            <span className="font-semibold">מקור הזמנה:</span> {getSourceLabel(order.source)}
+          </div>
           {(order.shipping_address_full || order.shipping_street || order.shipping_city) && (
             <div className="flex items-start gap-1 text-xs text-gray-500">
               <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
@@ -160,7 +181,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         </div>
 
         {/* Products */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2 hover:shadow-md transition-shadow">
+        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2">
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1">
             <Package className="w-3 h-3" /> מוצרים ({order.products?.length || 0})
           </h4>
@@ -168,7 +189,11 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
             {(order.products || []).map((p, i) => (
               <div key={i} className="text-sm">
                 <div className="flex justify-between items-start gap-2">
-                  <span className="text-gray-800 break-words flex-1">{p.name}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-gray-800 break-words">{p.name}</span>
+                    {p.sku && <div className="text-[11px] text-gray-400 font-mono">SKU: {p.sku}</div>}
+                    {isSerialWaiting(order) && <Badge className="mt-1 bg-purple-50 text-[#7D0F82] border border-purple-100 text-[10px] shadow-none">סריאלי בהמשך</Badge>}
+                  </div>
                   <div className="flex items-center gap-2 flex-shrink-0 mr-2">
                     <span className="text-gray-500">×{p.quantity}</span>
                     {p.total > 0 && <span className="font-mono text-gray-700">₪{p.total.toLocaleString()}</span>}
@@ -188,8 +213,8 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         </div>
 
         {/* Status + Shipping */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2 hover:shadow-md transition-shadow">
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">סטטוס ומשלוח</h4>
+        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2">
+          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">טיפול</h4>
           <div className="flex items-center gap-2">
             <Badge className={`${statusColor} text-sm px-3`}>{statusLabel}</Badge>
           </div>
@@ -205,6 +230,26 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
             <div className="flex items-center gap-1 text-sm text-gray-600">
               <Truck className="w-3.5 h-3.5" />
               {order.shipping_method}
+            </div>
+          )}
+          {order.tracking_number && (
+            <div className="text-xs text-gray-500">
+              <span className="font-semibold">מספר מעקב:</span> {order.tracking_number}
+            </div>
+          )}
+          {(order.linet_invoice_doc_number || order.linet_invoice_doc_id) && (
+            <div className="text-xs text-gray-500">
+              <span className="font-semibold">חשבונית:</span> {order.linet_invoice_doc_number || order.linet_invoice_doc_id}
+            </div>
+          )}
+          {blockingItems.length > 0 && (
+            <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg p-2">
+              <span className="font-semibold">חסימות:</span> {blockingItems.join(' / ')}
+            </div>
+          )}
+          {isSerialWaiting(order) && (
+            <div className="text-xs text-[#7D0F82] bg-purple-50 border border-purple-100 rounded-lg p-2">
+              רכיב סריאלי עתידי יוצג כאן.
             </div>
           )}
           {order.sales_rep && (
@@ -236,20 +281,28 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
 
       <OrderTreatmentTimeline order={order} />
 
+      {(shipmentBlockReason || blockingItems.length > 0) && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-3 text-sm text-red-800">
+          <div className="font-bold mb-1">כדי להמשיך חסר: {blockingItems.length > 0 ? blockingItems.join(' / ') : shipmentBlockReason}</div>
+          {shipmentBlockReason && <div className="text-xs text-red-700">{shipmentBlockReason}</div>}
+        </div>
+      )}
+
       {/* Actions row */}
       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
-        {isMiraklNew ? (
-          <Button
-            className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-full px-5 shadow-lg shadow-green-200 animate-pulse"
-            onClick={() => onStatusChange(order, 'accept_mirakl')}
-          >
-            <CheckCircle className="w-4 h-4 ml-1" />
-            אשר הזמנה
-          </Button>
-        ) : (
+        <Button
+          className="bg-[#7D0F82] hover:bg-[#6a0c6f] text-white rounded-xl px-5 shadow-sm"
+          disabled={Boolean(shipmentBlockReason) || isSerialWaiting(order) || (hasShipment && primaryActionLabel === 'השלם הזמנה')}
+          onClick={runPrimaryAction}
+        >
+          <CheckCircle className="w-4 h-4 ml-1" />
+          {isMiraklNew ? 'אשר הזמנה' : primaryActionLabel}
+        </Button>
+
+        {!isMiraklNew && (
           <Select value={order.status} onValueChange={(val) => onStatusChange(order, val)}>
-            <SelectTrigger className="h-9 w-[160px] text-sm rounded-full border-gray-200">
-              <SelectValue placeholder="שנה סטטוס" />
+            <SelectTrigger className="h-9 w-[160px] text-sm rounded-xl border-gray-200 bg-white">
+              <SelectValue placeholder="שינוי סטטוס" />
             </SelectTrigger>
             <SelectContent>
               {statusOptions.map(([value, label]) => (
@@ -259,13 +312,13 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </Select>
         )}
 
-        <Button variant="outline" className="rounded-full hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-colors" onClick={() => onSms(order)}>
+        <Button variant="outline" className="rounded-xl border-gray-200 bg-white hover:bg-purple-50 hover:border-purple-200 hover:text-[#7D0F82] transition-colors" onClick={() => onSms(order)}>
           <MessageCircle className="w-4 h-4 ml-1" />
           שלח SMS
         </Button>
 
         {order.customer_phone && (
-          <Button variant="outline" className="rounded-full hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors" asChild>
+          <Button variant="outline" className="rounded-xl border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors" asChild>
             <a href={`tel:${order.customer_phone}`}>
               <Phone className="w-4 h-4 ml-1" />
               התקשר
@@ -274,7 +327,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         )}
 
         {order.customer_phone && (
-          <Button variant="outline" className="rounded-full text-green-700 border-green-200 hover:bg-green-50 hover:shadow-md transition-all" asChild>
+          <Button variant="outline" className="rounded-xl text-emerald-700 border-gray-200 bg-white hover:bg-emerald-50 hover:border-emerald-200 transition-colors" asChild>
             <a href={`https://wa.me/972${order.customer_phone.replace(/^0/, '')}`} target="_blank" rel="noopener noreferrer">
               💬 וואטסאפ
             </a>
@@ -283,7 +336,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
 
         {/* Shipping buttons - blocked when the order was not paid or was cancelled */}
         {shipmentBlockReason ? (
-          <div className="bg-yellow-50 border border-yellow-300 rounded-full px-4 py-2 flex items-center gap-2 text-yellow-800 text-sm font-medium">
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 flex items-center gap-2 text-red-800 text-sm font-medium">
             <Truck className="w-4 h-4" />
             {shipmentBlockReason}
           </div>
@@ -291,10 +344,11 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         <div className="flex flex-wrap items-center gap-2">
           {/* Cargo - Blue - שליח עד הבית */}
           <Button
-            className={`rounded-full transition-all ${
+            variant="outline"
+            className={`rounded-xl bg-white transition-colors ${
               shippingType === 'cargo'
-                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200 ring-2 ring-blue-400 ring-offset-1'
-                : 'bg-blue-500/80 hover:bg-blue-600 text-white'
+                ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50'
+                : 'border-gray-200 text-gray-700 hover:bg-slate-50'
             }`}
             onClick={() => onCargoShipment ? onCargoShipment(order) : onShipment({ ...order, _shipCarrier: 'velo' })}
           >
@@ -305,10 +359,11 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
 
           {/* UPS - Brown/Amber - נקודות איסוף */}
           <Button
-            className={`rounded-full transition-all ${
+            variant="outline"
+            className={`rounded-xl bg-white transition-colors ${
               shippingType === 'ups'
-                ? 'bg-amber-700 hover:bg-amber-800 text-white shadow-lg shadow-amber-200 ring-2 ring-amber-400 ring-offset-1'
-                : 'bg-amber-600/80 hover:bg-amber-700 text-white'
+                ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50'
+                : 'border-gray-200 text-gray-700 hover:bg-slate-50'
             }`}
             onClick={() => onShipment({ ...order, _shipCarrier: 'ups' })}
           >
@@ -319,10 +374,11 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
 
           {/* GetPackage - Red - מהיום להיום */}
           <Button
-            className={`rounded-full transition-all ${
+            variant="outline"
+            className={`rounded-xl bg-white transition-colors ${
               shippingType === 'getpackage'
-                ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 ring-2 ring-red-400 ring-offset-1'
-                : 'bg-red-500/80 hover:bg-red-600 text-white'
+                ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50'
+                : 'border-gray-200 text-gray-700 hover:bg-slate-50'
             }`}
             onClick={() => {
               // Scroll to the GetPackage card and auto-open the quote form
@@ -338,59 +394,50 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         </div>
         )}
 
-        {hasShipment && !shipmentBlockReason && (
-          <div className="flex flex-wrap items-center gap-2 border-r border-gray-200 pr-2 mr-1">
-            <Button
-              variant="outline"
-              className="rounded-full border-purple-300 text-purple-700 hover:bg-purple-50 hover:shadow-md transition-all"
-              onClick={() => onCargoShipment ? onCargoShipment({ ...order, _cargoShipmentType: 'exchange' }) : undefined}
-            >
-              <Repeat className="w-4 h-4 ml-1" />
-              🔄 החלפה קארגו
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-full border-orange-300 text-orange-700 hover:bg-orange-50 hover:shadow-md transition-all"
-              onClick={() => onCargoShipment ? onCargoShipment({ ...order, _cargoShipmentType: 'return' }) : undefined}
-            >
-              <RotateCcw className="w-4 h-4 ml-1" />
-              החזרת קארגו
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-full border-amber-300 text-amber-700 hover:bg-amber-50 hover:shadow-md transition-all"
-              onClick={() => onShipment({ ...order, _shipCarrier: 'ups', _upsShipmentType: 'pickup_drop' })}
-            >
-              <Package className="w-4 h-4 ml-1" />
-              PICKUP DROP UPS
-            </Button>
-          </div>
-        )}
-
-        {/* Invoice button */}
-        {onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id) && (
-          <Button
-            variant="outline"
-            className={`rounded-full ${order.linet_invoice_doc_id ? 'border-green-300 text-green-700 hover:bg-green-50' : 'border-purple-300 text-purple-700 hover:bg-purple-50'}`}
-            onClick={() => {
-              const spOrder = {
-                mirakl_order_id: order.mirakl_order_id || order.order_number,
-                customer_first_name: order.customer_first_name || order.customer_name?.split(' ')[0] || '',
-                customer_last_name: order.customer_last_name || order.customer_name?.split(' ').slice(1).join(' ') || '',
-                customer_phone: order.customer_phone || '',
-                order_lines_json: order.order_lines_json || JSON.stringify(order.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
-                total_price: order.total || 0,
-                linet_invoice_doc_id: order.linet_invoice_doc_id || '',
-                linet_invoice_doc_number: order.linet_invoice_doc_number || '',
-                linet_invoice_pdf_url: order.linet_invoice_pdf_url || '',
-                linet_invoice_email_sent: order.linet_invoice_email_sent || false,
-              };
-              onCreateInvoice(spOrder);
-            }}
-          >
-            <Receipt className="w-4 h-4 ml-1" />
-            {order.linet_invoice_doc_id ? `✅ חשבונית #${order.linet_invoice_doc_number || order.linet_invoice_doc_id}` : '💳 חשבונית לינט'}
-          </Button>
+        {((hasShipment && !shipmentBlockReason) || (onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id))) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="rounded-xl border-gray-200 bg-white text-gray-700 hover:bg-slate-50">
+                <MoreHorizontal className="w-4 h-4 ml-1" />
+                עוד פעולות
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              {hasShipment && !shipmentBlockReason && (
+                <>
+                  <DropdownMenuItem onSelect={() => onCargoShipment ? onCargoShipment({ ...order, _cargoShipmentType: 'exchange' }) : undefined}>
+                    <Repeat className="w-4 h-4 ml-2" /> החלפה קארגו
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onCargoShipment ? onCargoShipment({ ...order, _cargoShipmentType: 'return' }) : undefined}>
+                    <RotateCcw className="w-4 h-4 ml-2" /> החזרת קארגו
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onShipment({ ...order, _shipCarrier: 'ups', _upsShipmentType: 'pickup_drop' })}>
+                    <Package className="w-4 h-4 ml-2" /> PICKUP DROP UPS
+                  </DropdownMenuItem>
+                </>
+              )}
+              {onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id) && (
+                <DropdownMenuItem onSelect={() => {
+                  const spOrder = {
+                    mirakl_order_id: order.mirakl_order_id || order.order_number,
+                    customer_first_name: order.customer_first_name || order.customer_name?.split(' ')[0] || '',
+                    customer_last_name: order.customer_last_name || order.customer_name?.split(' ').slice(1).join(' ') || '',
+                    customer_phone: order.customer_phone || '',
+                    order_lines_json: order.order_lines_json || JSON.stringify(order.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
+                    total_price: order.total || 0,
+                    linet_invoice_doc_id: order.linet_invoice_doc_id || '',
+                    linet_invoice_doc_number: order.linet_invoice_doc_number || '',
+                    linet_invoice_pdf_url: order.linet_invoice_pdf_url || '',
+                    linet_invoice_email_sent: order.linet_invoice_email_sent || false,
+                  };
+                  onCreateInvoice(spOrder);
+                }}>
+                  <Receipt className="w-4 h-4 ml-2" />
+                  {order.linet_invoice_doc_id ? `חשבונית #${order.linet_invoice_doc_number || order.linet_invoice_doc_id}` : 'חשבונית לינט'}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
     </div>

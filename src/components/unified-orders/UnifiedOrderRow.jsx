@@ -7,6 +7,7 @@ import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusColor, isClosedStatus } from "./OrderStatusConfig";
 import { detectShippingType, getShippingTypeBadge, isUrgentSameDay } from "./ShippingTypeHelper";
+import { getNextActionLabel, getOrderVisualState, isSerialWaiting } from "./orderUiHelpers";
 
 export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect, isSelected, canBulk }) {
   const isClosed = isClosedStatus(order.source, order.status);
@@ -15,6 +16,8 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
   const shippingType = detectShippingType(order);
   const shippingBadge = getShippingTypeBadge(shippingType);
   const isUrgent = isUrgentSameDay(order);
+  const visual = getOrderVisualState(order);
+  const nextAction = getNextActionLabel(order);
 
   const productsList = order.products || [];
   const productSummary = productsList.length > 0
@@ -29,63 +32,57 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
     try { return format(new Date(d), "dd/MM HH:mm"); } catch { return '-'; }
   };
 
-  const sourceGlow = {
-    woocommerce: 'hover:bg-purple-50/60',
-    mirakl: 'hover:bg-blue-50/60',
-    linet: 'hover:bg-amber-50/60',
-  };
-
   return (
     <TableRow
       onClick={onToggle}
-      className={`cursor-pointer transition-all duration-200 select-none
-        ${isUrgent ? 'animate-pulse border-r-4 border-r-red-500 bg-red-50/40' : ''}
-        ${!isUrgent && isOld ? 'border-r-4 border-r-red-400 bg-red-50/30' : ''}
-        ${isClosed ? 'opacity-40' : ''}
-        ${isExpanded ? 'bg-gradient-to-l from-purple-50/60 to-transparent border-b-0 shadow-sm' : (sourceGlow[order.source] || 'hover:bg-gray-50/80')}
+      className={`cursor-pointer select-none border-r-4 ${visual.border} ${visual.bg} hover:bg-slate-50 transition-colors
+        ${isClosed ? 'opacity-60' : ''}
+        ${isExpanded ? 'bg-purple-50/40 border-b-0' : ''}
       `}
     >
+      <TableCell className="font-mono text-sm font-bold whitespace-nowrap text-gray-900">
+        #{order.order_number}
+        {(isOld || isUrgent) && <AlertTriangle className="w-3 h-3 text-red-500 inline mr-1" />}
+      </TableCell>
+      <TableCell><SourceBadge source={order.source} /></TableCell>
+      <TableCell className="text-xs text-gray-600 whitespace-nowrap">{formatDate(order.order_date)}</TableCell>
+      <TableCell className="font-medium text-sm text-gray-900 max-w-[150px] truncate">{order.customer_name || '-'}</TableCell>
+      <TableCell className="text-xs text-gray-600 max-w-[220px] truncate">{productSummary}</TableCell>
+      <TableCell className="font-mono text-sm font-bold whitespace-nowrap text-gray-900">₪{(order.total || 0).toLocaleString()}</TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Badge className={`${statusColor} text-xs shadow-none`}>{statusLabel}</Badge>
+          {isSerialWaiting(order) && <Badge className="bg-purple-50 text-[#7D0F82] border border-purple-100 text-xs shadow-none">חסר סריאלי</Badge>}
+          {shippingBadge && (
+            <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-medium ${shippingBadge.className}`}>
+              {shippingType === 'self_pickup' && <Store className="w-3 h-3" />}
+              {shippingType === 'ups' && <Package className="w-3 h-3" />}
+              {shippingType === 'cargo' && <Truck className="w-3 h-3" />}
+              {shippingType === 'getpackage' && <span>⚡</span>}
+              {shippingType === 'self_pickup' ? 'איסוף עצמי' : shippingType === 'cargo' ? 'שליח' : shippingType === 'ups' ? 'איסוף' : 'היום'}
+            </span>
+          )}
+          {order.tracking_number && (
+            <span className="inline-flex items-center gap-0.5 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-md border border-emerald-100 text-[10px] font-medium">
+              {order.tracking_number.length > 12 ? order.tracking_number.slice(0, 12) + '...' : order.tracking_number}
+            </span>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        <span className={`inline-flex items-center gap-1 text-xs font-bold ${visual.text}`}>
+          <span className={`w-2 h-2 rounded-full ${visual.dot}`} />
+          {nextAction}
+        </span>
+      </TableCell>
+      <TableCell className="w-8 px-2">
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+      </TableCell>
       {canBulk && (
         <TableCell onClick={(e) => e.stopPropagation()}>
           <Checkbox checked={isSelected} onCheckedChange={() => onSelect(order.id)} />
         </TableCell>
       )}
-      <TableCell className="w-8 px-2">
-        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-      </TableCell>
-      <TableCell><SourceBadge source={order.source} /></TableCell>
-      <TableCell className="font-mono text-sm font-bold whitespace-nowrap">
-        #{order.order_number}
-        {isOld && <AlertTriangle className="w-3 h-3 text-red-500 inline mr-1" />}
-      </TableCell>
-      <TableCell className="text-xs text-gray-600 whitespace-nowrap">{formatDate(order.order_date)}</TableCell>
-      <TableCell className="font-medium text-sm">{order.customer_name || '-'}</TableCell>
-      <TableCell className="text-xs text-gray-600 max-w-[180px] truncate">{productSummary}</TableCell>
-      <TableCell className="font-mono text-sm font-bold whitespace-nowrap">₪{(order.total || 0).toLocaleString()}</TableCell>
-      <TableCell>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Badge className={`${statusColor} text-xs`}>{statusLabel}</Badge>
-          {shippingBadge && (
-            <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${shippingBadge.className}`}>
-              {shippingType === 'self_pickup' && <Store className="w-3 h-3" />}
-              {shippingType === 'ups' && <Package className="w-3 h-3" />}
-              {shippingType === 'cargo' && <Truck className="w-3 h-3" />}
-              {shippingType === 'getpackage' && <span>⚡</span>}
-              {shippingType === 'self_pickup' ? '🏪 איסוף עצמי' : shippingType === 'cargo' ? 'שליח' : shippingType === 'ups' ? 'איסוף' : 'היום'}
-            </span>
-          )}
-          {isUrgent && (
-            <span className="inline-flex items-center gap-0.5 bg-red-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold animate-pulse">
-              🔥 דחוף
-            </span>
-          )}
-          {order.tracking_number && (
-            <span className="inline-flex items-center gap-0.5 bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
-              📦 {order.tracking_number.length > 12 ? order.tracking_number.slice(0, 12) + '...' : order.tracking_number}
-            </span>
-          )}
-        </div>
-      </TableCell>
     </TableRow>
   );
 }

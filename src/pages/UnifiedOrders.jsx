@@ -18,6 +18,7 @@ import UnifiedOrderRow from "../components/unified-orders/UnifiedOrderRow";
 import PendingProductsSummary from "../components/unified-orders/PendingProductsSummary";
 import SendSmsOrderModal from "../components/unified-orders/SendSmsOrderModal";
 import { isClosedStatus, getShipmentBlockReason, LINET_ORDER_SKUS } from "../components/unified-orders/OrderStatusConfig";
+import { isBlockedOrder, isReadyForAction, isSerialWaiting, isVisuallyClosed } from "../components/unified-orders/orderUiHelpers";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import SPShipDialog from "../components/superpharm/SPShipDialog";
 import SPShipmentSuccessScreen from "../components/superpharm/SPShipmentSuccessScreen";
@@ -47,6 +48,8 @@ export default function UnifiedOrders() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showClosed, setShowClosed] = useState(false);
+  const [showBlocked, setShowBlocked] = useState(false);
+  const [readyOnly, setReadyOnly] = useState(false);
 
   // Selection
   const [selectedIds, setSelectedIds] = useState([]);
@@ -393,13 +396,27 @@ export default function UnifiedOrders() {
     return false;
   };
 
+  const summaryStats = useMemo(() => {
+    const openOrders = orders.filter(o => !isVisuallyClosed(o));
+    return {
+      open: openOrders.length,
+      pending: openOrders.filter(o => isPendingOrder(o) && !isReadyForAction(o) && !isSerialWaiting(o)).length,
+      serial: openOrders.filter(isSerialWaiting).length,
+      ready: openOrders.filter(isReadyForAction).length,
+    };
+  }, [orders]);
+
   // Filtered + searched orders
   const filteredOrders = useMemo(() => {
     const search = searchTerm.toLowerCase().trim();
     return orders.filter(o => {
       if (sourceFilter !== 'all' && o.source !== sourceFilter) return false;
-      if (!showClosed && isClosedStatus(o.source, o.status)) return false;
+      if (!showClosed && isVisuallyClosed(o)) return false;
       if (statusFilter === 'pending' && !isPendingOrder(o)) return false;
+      if (statusFilter === 'serial' && !isSerialWaiting(o)) return false;
+      if (statusFilter === 'ready' && !isReadyForAction(o)) return false;
+      if (showBlocked && !isBlockedOrder(o)) return false;
+      if (readyOnly && !isReadyForAction(o)) return false;
       if (!search) return true;
       return (
         o.order_number?.toLowerCase().includes(search) ||
@@ -409,7 +426,7 @@ export default function UnifiedOrders() {
         o.products?.some(p => p.name?.toLowerCase().includes(search))
       );
     });
-  }, [orders, searchTerm, sourceFilter, statusFilter, showClosed]);
+  }, [orders, searchTerm, sourceFilter, statusFilter, showClosed, showBlocked, readyOnly]);
 
   // Pagination
   const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
@@ -481,6 +498,8 @@ export default function UnifiedOrders() {
     setSourceFilter("all");
     setStatusFilter("all");
     setShowClosed(false);
+    setShowBlocked(false);
+    setReadyOnly(false);
     setPage(1);
   };
 
@@ -515,21 +534,21 @@ export default function UnifiedOrders() {
   };
 
   return (
-    <div className="p-3 md:p-6 space-y-5">
+    <div className="p-3 md:p-6 space-y-5 bg-slate-50/70 min-h-full">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-gray-900 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shadow-lg shadow-purple-200">
+            <div className="w-10 h-10 rounded-2xl bg-[#7D0F82] flex items-center justify-center shadow-sm">
               <Package className="w-5 h-5 text-white" />
             </div>
-            מסך הזמנות מרוכז
+            הזמנות מרוכזות
           </h1>
-          <p className="text-gray-400 text-sm mt-1 mr-[52px]">
+          <p className="text-gray-500 text-sm mt-1 mr-[52px]">
             {lastRefresh && <span>עדכון אחרון: {lastRefresh.toLocaleTimeString('he-IL')}</span>}
           </p>
         </div>
-        <Button onClick={() => loadData(true)} disabled={isRefreshing} className="rounded-full bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700 text-white shadow-lg shadow-purple-200 px-5">
+        <Button onClick={() => loadData(true)} disabled={isRefreshing} className="rounded-xl bg-[#7D0F82] hover:bg-[#6a0c6f] text-white shadow-sm px-5">
           <RefreshCw className={`w-4 h-4 ml-2 ${isRefreshing ? 'animate-spin' : ''}`} />
           רענן עכשיו
         </Button>
@@ -550,17 +569,21 @@ export default function UnifiedOrders() {
       )}
 
       {/* Summary Cards */}
-      <SummaryCards counts={counts} />
+      <SummaryCards stats={summaryStats} />
 
       {/* Filters */}
-      <Card className="border-0 shadow-lg rounded-2xl bg-white/70 backdrop-blur-sm">
+      <Card className="border border-gray-100 shadow-sm rounded-2xl bg-white">
         <CardContent className="p-4">
           <OrderFilters
             searchTerm={searchTerm} setSearchTerm={setSearchTerm}
             sourceFilter={sourceFilter} setSourceFilter={setSourceFilter}
             statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             showClosed={showClosed} setShowClosed={setShowClosed}
+            showBlocked={showBlocked} setShowBlocked={setShowBlocked}
+            readyOnly={readyOnly} setReadyOnly={setReadyOnly}
             onReset={resetFilters}
+            onRefresh={() => loadData(true)}
+            isRefreshing={isRefreshing}
           />
         </CardContent>
       </Card>
@@ -570,9 +593,9 @@ export default function UnifiedOrders() {
 
       {/* Bulk actions */}
       {canBulk && selectedIds.length > 0 && (
-        <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-r from-purple-50 to-violet-50">
+        <Card className="border border-purple-100 shadow-sm rounded-2xl bg-purple-50/60">
           <CardContent className="p-3 flex items-center gap-3 flex-wrap">
-            <Badge className="bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-full px-3">{selectedIds.length} נבחרו</Badge>
+            <Badge className="bg-[#7D0F82] text-white rounded-full px-3">{selectedIds.length} נבחרו</Badge>
             <Button size="sm" variant="outline" className="h-8 text-xs rounded-full" onClick={() => {
               const msg = prompt("הקלד את ההודעה לשליחה מרוכזת:");
               if (msg) handleBulkSms(msg);
@@ -587,8 +610,8 @@ export default function UnifiedOrders() {
       )}
 
       {/* Table */}
-      <Card className="border-0 shadow-xl rounded-2xl overflow-hidden">
-        <CardHeader className="pb-2 bg-gradient-to-l from-purple-50/30 to-transparent">
+      <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden bg-white">
+        <CardHeader className="pb-2 bg-white border-b border-gray-100">
           <CardTitle className="text-base font-bold">הזמנות ({filteredOrders.length})</CardTitle>
         </CardHeader>
         <CardContent>
@@ -608,7 +631,16 @@ export default function UnifiedOrders() {
               <div className="overflow-x-auto hidden md:block">
                 <Table>
                   <TableHeader>
-                    <TableRow>
+                    <TableRow className="bg-slate-50/80">
+                      <TableHead>מס' הזמנה</TableHead>
+                      <TableHead>מקור</TableHead>
+                      <TableHead>שעה/תאריך</TableHead>
+                      <TableHead>לקוח</TableHead>
+                      <TableHead>מוצרים</TableHead>
+                      <TableHead>סכום</TableHead>
+                      <TableHead>סטטוס</TableHead>
+                      <TableHead>פעולה הבאה</TableHead>
+                      <TableHead className="w-10"></TableHead>
                       {canBulk && (
                         <TableHead className="w-10">
                           <Checkbox
@@ -617,14 +649,6 @@ export default function UnifiedOrders() {
                           />
                         </TableHead>
                       )}
-                      <TableHead></TableHead>
-                      <TableHead>מקור</TableHead>
-                      <TableHead>מס' הזמנה</TableHead>
-                      <TableHead>תאריך</TableHead>
-                      <TableHead>שם לקוח</TableHead>
-                      <TableHead>מוצרים</TableHead>
-                      <TableHead>סכום</TableHead>
-                      <TableHead>סטטוס</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -696,7 +720,7 @@ export default function UnifiedOrders() {
 
       {/* Refresh indicator */}
       {isRefreshing && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-purple-500 to-violet-600 backdrop-blur shadow-xl shadow-purple-200 rounded-full px-5 py-2.5 flex items-center gap-2">
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-[#7D0F82] backdrop-blur shadow-lg rounded-full px-5 py-2.5 flex items-center gap-2">
           <RefreshCw className="w-4 h-4 animate-spin text-white" />
           <span className="text-xs text-white font-medium">מרענן...</span>
         </div>

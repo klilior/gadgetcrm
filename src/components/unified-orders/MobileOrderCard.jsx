@@ -6,6 +6,7 @@ import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusColor, isClosedStatus } from "./OrderStatusConfig";
 import { detectShippingType, getShippingTypeBadge, isUrgentSameDay } from "./ShippingTypeHelper";
+import { getNextActionLabel, getOrderVisualState } from "./orderUiHelpers";
 import OrderDetailPanel from "./OrderDetailPanel";
 
 export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment, onGetPackageShipment, activeProviders }) {
@@ -16,6 +17,8 @@ export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, on
   const isOld = hoursSince > 24 && !isClosed;
   const isUrgent = isUrgentSameDay(order);
   const shippingBadge = getShippingTypeBadge(detectShippingType(order));
+  const visual = getOrderVisualState(order);
+  const nextAction = getNextActionLabel(order);
 
   const formatDate = (d) => {
     if (!d) return '';
@@ -24,14 +27,8 @@ export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, on
 
   const productSummary = (order.products || []).slice(0, 2).map(p => p.name).join(', ');
 
-  const sourceBorder = {
-    woocommerce: 'border-r-purple-500',
-    mirakl: 'border-r-blue-500',
-    linet: 'border-r-amber-500',
-  };
-
   return (
-    <Card className={`border-0 shadow-lg rounded-2xl overflow-hidden border-r-4 ${sourceBorder[order.source] || 'border-r-gray-300'} ${isUrgent ? 'ring-2 ring-red-400 animate-pulse' : ''} ${!isUrgent && isOld ? 'ring-2 ring-red-200' : ''} ${isClosed ? 'opacity-40' : ''} transition-all duration-200 hover:shadow-xl`}>
+    <Card className={`border border-gray-100 shadow-sm rounded-2xl overflow-hidden border-r-4 ${visual.border} ${visual.bg} ${isUrgent ? 'ring-2 ring-red-200' : ''} ${!isUrgent && isOld ? 'ring-2 ring-red-100' : ''} ${isClosed ? 'opacity-60' : ''} transition-all duration-200`}>
       {/* Clickable header */}
       <div
         onClick={onToggle}
@@ -44,9 +41,9 @@ export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, on
             {isOld && <AlertTriangle className="w-3 h-3 text-red-500" />}
           </div>
           <div className="flex items-center gap-2">
-            {isUrgent && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold">🔥 דחוף</span>}
+            {isUrgent && <span className="bg-red-50 text-red-700 border border-red-100 px-1.5 py-0.5 rounded text-[10px] font-bold">דחוף</span>}
             {shippingBadge && <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${shippingBadge.className}`}>{shippingBadge.label}</span>}
-            <Badge className={`${statusColor} text-[10px]`}>{statusLabel}</Badge>
+            <Badge className={`${statusColor} text-[10px] shadow-none`}>{statusLabel}</Badge>
             <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
           </div>
         </div>
@@ -57,7 +54,10 @@ export default function MobileOrderCard({ order, isExpanded, onToggle, onSms, on
           </div>
           <span className="font-mono font-bold text-sm mr-2">₪{(order.total || 0).toLocaleString()}</span>
         </div>
-        <div className="text-[10px] text-gray-400 mt-0.5">{formatDate(order.order_date)}</div>
+        <div className="flex items-center justify-between mt-1">
+          <div className="text-[10px] text-gray-400">{formatDate(order.order_date)}</div>
+          <div className={`text-[10px] font-bold ${visual.text}`}>פעולה הבאה: {nextAction}</div>
+        </div>
       </div>
 
       {/* Expanded detail */}
