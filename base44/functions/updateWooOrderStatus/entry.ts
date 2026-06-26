@@ -1,9 +1,10 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 Deno.serve(async (req) => {
-  const base44 = createClientFromRequest(req);
+  try {
+    const base44 = createClientFromRequest(req);
 
-  const { order_id, new_status } = await req.json();
+    const { order_id, external_order_number, new_status } = await req.json();
 
   if (!order_id || !new_status) {
     return Response.json({ error: 'חסרים order_id או new_status' }, { status: 400 });
@@ -11,24 +12,26 @@ Deno.serve(async (req) => {
 
   const sr = base44.asServiceRole.entities;
 
-  // Get the order to find external_order_number. Some flows may pass an external order number,
-  // so fall back to searching before returning a soft error instead of an Axios 404.
+  // Get the order to find external_order_number. Some flows may pass a local ID,
+  // while others may pass the WooCommerce order number.
   let order;
   try {
     order = await sr.Order.get(order_id);
   } catch (e) {
-    const matches = await sr.Order.filter({ external_order_number: String(order_id) });
+    const searchKey = String(external_order_number || order_id || '');
+    const matches = searchKey ? await sr.Order.filter({ external_order_number: searchKey }) : [];
     order = matches?.[0] || null;
   }
 
   if (!order) {
     return Response.json({ success: false, updated_local: false, updated_woo: false, error: 'הזמנה לא נמצאה' });
   }
-  const externalOrderNumber = order.external_order_number;
+  const localOrderId = order.id;
+  const externalOrderNumber = order.external_order_number || external_order_number;
 
   if (!externalOrderNumber) {
     // Just update locally if no WooCommerce order number
-    await sr.Order.update(order_id, { status: new_status });
+    await sr.Order.update(localOrderId, { status: new_status });
     return Response.json({ success: true, updated_local: true, updated_woo: false });
   }
 
@@ -45,7 +48,7 @@ Deno.serve(async (req) => {
 
   if (!wooUrl || !consumerKey || !consumerSecret) {
     // Update locally only
-    await sr.Order.update(order_id, { status: new_status });
+    await sr.Order.update(localOrderId, { status: new_status });
     return Response.json({ success: true, updated_local: true, updated_woo: false, warning: 'פרטי WooCommerce חסרים' });
   }
 
@@ -71,7 +74,7 @@ Deno.serve(async (req) => {
     const errorText = await wooRes.text();
     console.error(`❌ WooCommerce update failed: ${wooRes.status} - ${errorText}`);
     // Still update locally
-    await sr.Order.update(order_id, { status: new_status });
+    await sr.Order.update(localOrderId, { status: new_status });
     return Response.json({ 
       success: true, 
       updated_local: true, 
@@ -84,7 +87,7 @@ Deno.serve(async (req) => {
   console.log(`✅ WooCommerce order #${externalOrderNumber} updated to: ${wooData.status}`);
 
   // Update locally
-  await sr.Order.update(order_id, { status: new_status });
+  await sr.Order.update(localOrderId, { status: new_status });
 
   return Response.json({ 
     success: true, 
@@ -92,4 +95,8 @@ Deno.serve(async (req) => {
     updated_woo: true,
     woo_status: wooData.status 
   });
+  } catch (error) {
+    console.error('[WooCommerce Status Update] Error:', error.message);
+    return Response.json({ success: false, updated_local: false, updated_woo: false, error: error.message });
+  }
 });

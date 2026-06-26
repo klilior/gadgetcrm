@@ -438,7 +438,7 @@ export default function UnifiedOrders() {
   const handleStatusChange = async (order, newStatus) => {
     try {
       if (order.source === 'woocommerce') {
-        await updateWooOrderStatus({ order_id: order.raw_id, new_status: newStatus });
+        await updateWooOrderStatus({ order_id: order.raw_id, external_order_number: order.external_order_number || order.order_number, new_status: newStatus });
         setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
       } else if (order.source === 'mirakl') {
         if (newStatus === 'accept_mirakl') {

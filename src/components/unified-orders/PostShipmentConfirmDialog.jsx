@@ -41,7 +41,7 @@ export default function PostShipmentConfirmDialog({ open, onClose, order, tracki
     setStatusError(null);
     try {
       if (isWoo) {
-        await updateWooOrderStatus({ order_id: order.raw_id, new_status: 'completed' });
+        await updateWooOrderStatus({ order_id: order.raw_id, external_order_number: order.external_order_number || order.order_number, new_status: 'completed' });
         toast.success('הזמנה עודכנה ל-"הושלמה" בווקומרס');
       } else if (isMirakl) {
         const miraklOrderId = order.mirakl_order_id || order.order_number;

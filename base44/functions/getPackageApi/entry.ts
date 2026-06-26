@@ -349,9 +349,11 @@ Deno.serve(async (req) => {
       const shipmentId = body.shipment_id;
       if (!shipmentId) return Response.json({ error: 'חסר מזהה משלוח' }, { status: 400 });
 
-      const shipments = await sr.entities.GetPackageShipment.filter({ id: shipmentId });
-      const shipment = shipments?.[0];
-      if (!shipment) return Response.json({ error: 'משלוח לא נמצא' }, { status: 404 });
+      let shipment = null;
+      try {
+        shipment = await sr.entities.GetPackageShipment.get(shipmentId);
+      } catch (_) {}
+      if (!shipment) return Response.json({ success: false, error: 'משלוח לא נמצא' });
       if (shipment.status !== 'quote_received') {
         return Response.json({ error: 'ניתן לאשר רק משלוח שקיבל הצעת מחיר' }, { status: 400 });
       }
@@ -502,9 +504,11 @@ Deno.serve(async (req) => {
       const shipmentId = body.shipment_id;
       if (!shipmentId) return Response.json({ error: 'חסר מזהה משלוח' }, { status: 400 });
 
-      const shipments = await sr.entities.GetPackageShipment.filter({ id: shipmentId });
-      const shipment = shipments?.[0];
-      if (!shipment) return Response.json({ error: 'משלוח לא נמצא' }, { status: 404 });
+      let shipment = null;
+      try {
+        shipment = await sr.entities.GetPackageShipment.get(shipmentId);
+      } catch (_) {}
+      if (!shipment) return Response.json({ success: false, error: 'משלוח לא נמצא' });
 
       const deliveryId = shipment.delivery_id || shipment.quote_id;
       if (!deliveryId) return Response.json({ error: 'חסר מזהה משלוח ב-GetPackage' }, { status: 400 });
@@ -550,9 +554,11 @@ Deno.serve(async (req) => {
       const shipmentId = body.shipment_id;
       if (!shipmentId) return Response.json({ error: 'חסר מזהה משלוח' }, { status: 400 });
 
-      const shipments = await sr.entities.GetPackageShipment.filter({ id: shipmentId });
-      const shipment = shipments?.[0];
-      if (!shipment) return Response.json({ error: 'משלוח לא נמצא' }, { status: 404 });
+      let shipment = null;
+      try {
+        shipment = await sr.entities.GetPackageShipment.get(shipmentId);
+      } catch (_) {}
+      if (!shipment) return Response.json({ success: false, error: 'משלוח לא נמצא' });
 
       const deliveryId = shipment.delivery_id || shipment.quote_id;
       if (!deliveryId) {
@@ -582,9 +588,11 @@ Deno.serve(async (req) => {
       const shipmentId = body.shipment_id;
       if (!shipmentId) return Response.json({ error: 'חסר מזהה משלוח' }, { status: 400 });
 
-      const shipments = await sr.entities.GetPackageShipment.filter({ id: shipmentId });
-      const shipment = shipments?.[0];
-      if (!shipment) return Response.json({ error: 'משלוח לא נמצא' }, { status: 404 });
+      let shipment = null;
+      try {
+        shipment = await sr.entities.GetPackageShipment.get(shipmentId);
+      } catch (_) {}
+      if (!shipment) return Response.json({ success: false, error: 'משלוח לא נמצא' });
       if (!shipment.tracking_url) return Response.json({ error: 'אין קישור מעקב זמין למשלוח זה' }, { status: 400 });
       if (!shipment.customer_phone) return Response.json({ error: 'חסר טלפון לקוח' }, { status: 400 });
 

@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     // Get local order
     const orders = await sr.SuperPharmOrder.filter({ mirakl_order_id: order_id }, null, 1);
     if (orders.length === 0) {
-      return Response.json({ error: 'הזמנה לא נמצאה' }, { status: 404 });
+      return Response.json({ success: false, error: 'הזמנה לא נמצאה' });
     }
     const localOrder = orders[0];
 
