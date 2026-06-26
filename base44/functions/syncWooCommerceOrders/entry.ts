@@ -427,6 +427,7 @@ Deno.serve(async (req) => {
                         order_id: createdOrder.id,
                         external_order_id: wo.id,
                         product_id: item.product_id,
+                        sku: item.sku || '',
                         name: item.name,
                         quantity: item.quantity,
                         total: item.total,

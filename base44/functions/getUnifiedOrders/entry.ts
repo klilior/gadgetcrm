@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
           customer_email: c ? (c.email || '') : '',
           shipping_city: c ? (c.city || '') : '',
           shipping_street: c ? (c.full_address || '') : '',
-          products: prods.map(function(x) { return {name: x.name || '', quantity: x.quantity || 1, total: parseFloat(x.total) || 0}; }),
+          products: prods.map(function(x) { return {name: x.name || '', sku: x.sku || (x.product_id != null ? String(x.product_id) : ''), product_id: x.product_id != null ? String(x.product_id) : '', quantity: x.quantity || 1, total: parseFloat(x.total) || 0, meta_data: x.meta_data || ''}; }),
           total: parseFloat(o.total) || 0,
           shipping_method: o.shipping_method || '',
           status: o.status || '', notes: o.customer_note || '',
