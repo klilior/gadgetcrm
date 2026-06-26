@@ -18,7 +18,7 @@ export function isBlockedOrder(order) {
 
 export function isReadyForAction(order) {
   if (!order || isBlockedOrder(order) || isVisuallyClosed(order) || isSerialWaiting(order)) return false;
-  if (order.source === "woocommerce") return order.status === "processing";
+  if (order.source === "woocommerce") return ["processing", "ordered"].includes(order.status);
   if (order.source === "mirakl") return ["WAITING_ACCEPTANCE", "SHIPPING"].includes(order.status);
   if (order.source === "linet") return order.status !== "טופל";
   return false;

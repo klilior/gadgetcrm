@@ -8,6 +8,7 @@ export const WOO_STATUSES = {
   'cancelled': 'בוטלה',
   'refunded': 'הוחזרה',
   'failed': 'נכשלה',
+  'ordered': 'הוזמנה מהבשמים',
   'wc-awaiting-serial': 'ממתין למספר סידורי'
 };
 
@@ -56,7 +57,7 @@ export function isClosedStatus(source, status) {
 }
 
 export function isOpenStatus(source, status) {
-  if (source === 'woocommerce') return ['processing', 'on-hold'].includes(status);
+  if (source === 'woocommerce') return ['processing', 'on-hold', 'ordered', 'wc-awaiting-serial'].includes(status);
   if (source === 'mirakl') return ['WAITING_ACCEPTANCE', 'WAITING_DEBIT', 'WAITING_DEBIT_PAYMENT', 'SHIPPING', 'TO_COLLECT'].includes(status);
   if (source === 'linet') return status !== 'טופל';
   return false;
@@ -90,6 +91,7 @@ export function getStatusColor(source, status) {
       'refunded': 'bg-pink-100 text-pink-800 border border-pink-200',
       'failed': 'bg-red-200 text-red-900 border border-red-300',
       'wc-awaiting-serial': 'bg-violet-100 text-violet-800 border border-violet-200',
+      'ordered': 'bg-indigo-100 text-indigo-800 border border-indigo-200',
     };
     return map[status] || 'bg-gray-100 text-gray-700';
   }

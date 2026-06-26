@@ -10,7 +10,7 @@ export default function PendingProductsSummary({ orders }) {
 
   const pendingOrders = useMemo(() => {
     return orders.filter(o => {
-      if (o.source === 'woocommerce') return ['processing', 'on-hold', 'wc-awaiting-serial'].includes(o.status);
+      if (o.source === 'woocommerce') return ['processing', 'on-hold', 'ordered', 'wc-awaiting-serial'].includes(o.status);
       if (o.source === 'mirakl') return ['WAITING_ACCEPTANCE', 'SHIPPING'].includes(o.status);
       if (o.source === 'linet') return o.status !== 'טופל';
       return false;

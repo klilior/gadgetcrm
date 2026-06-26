@@ -75,7 +75,7 @@ export default function UnifiedOrders() {
     if (!silent) setIsLoading(true);
     else setIsRefreshing(true);
     const errs = [];
-    const openWoo = new Set(['processing','on-hold']);
+    const openWoo = new Set(['processing','on-hold','ordered','wc-awaiting-serial']);
     const openMirakl = new Set(['WAITING_ACCEPTANCE','SHIPPING']);
     const closedWoo = new Set(['refunded','failed']);
     const closedMirakl = new Set(['CLOSED','REFUSED','CANCELED','RECEIVED']);
@@ -260,13 +260,15 @@ export default function UnifiedOrders() {
         const txns = await base44.entities.SalesTransaction.filter({ sku }, '-issue_date', 200);
         allTxns.push(...txns);
       }
-      // Only include invoices from today (2026-03-28) onwards
-      const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      // Include invoices from the last 14 days onwards
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 14);
+      const cutoffStr = cutoff.toISOString().slice(0, 10); // YYYY-MM-DD
       const orderDocNumbers = new Set();
       const docMeta = {};
       for (const t of allTxns) {
         if (t.doc_type === 'חשבונית זיכוי') continue; // skip credit notes
-        if (t.issue_date && t.issue_date < todayStr) continue; // only from today onwards
+        if (t.issue_date && t.issue_date < cutoffStr) continue; // only recent invoices
         orderDocNumbers.add(t.doc_number);
         if (!docMeta[t.doc_number]) {
           docMeta[t.doc_number] = {
@@ -390,7 +392,7 @@ export default function UnifiedOrders() {
 
   // Helper: is order pending/needs action
   const isPendingOrder = (o) => {
-    if (o.source === 'woocommerce') return ['processing', 'on-hold', 'wc-awaiting-serial'].includes(o.status);
+    if (o.source === 'woocommerce') return ['processing', 'on-hold', 'ordered', 'wc-awaiting-serial'].includes(o.status);
     if (o.source === 'mirakl') return ['WAITING_ACCEPTANCE', 'SHIPPING'].includes(o.status);
     if (o.source === 'linet') return o.status !== 'טופל';
     return false;
