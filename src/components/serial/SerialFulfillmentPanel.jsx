@@ -113,23 +113,33 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
   };
 
   const onMapped = async (line, item) => {
-    await base44.entities.OrderItemSerial.update(line.id, {
-      mapped_linet_item_id: String(item.id),
-      mapped_linet_sku: item.sku,
-      mapped_linet_item_name: item.name,
-    });
-    await base44.entities.SerialAuditLog.create({
-      order_id: String(orderId), order_item_id: line.order_item_id, sku: line.source_sku,
-      linet_item_id: String(item.id), action: "map_linet_item", new_value: item.name, result: "success",
-    });
-    toast.success("הפריט מופה ללינט");
-    refreshLine(line.id);
+    try {
+      await base44.entities.OrderItemSerial.update(line.id, {
+        mapped_linet_item_id: String(item.id),
+        mapped_linet_sku: item.sku,
+        mapped_linet_item_name: item.name,
+      });
+      await base44.entities.SerialAuditLog.create({
+        order_id: String(orderId), order_item_id: line.order_item_id, sku: line.source_sku,
+        linet_item_id: String(item.id), action: "map_linet_item", new_value: item.name, result: "success",
+      });
+      toast.success("הפריט מופה ללינט");
+      refreshLine(line.id);
+    } catch (e) {
+      // Line record may have been replaced — rebuild the panel instead of throwing a 404.
+      toast.error("שגיאה במיפוי הפריט, מרענן...");
+      init();
+    }
   };
 
   const onSerialsChange = async (line, serials) => {
-    const { data } = await serialInvoice({ action: "reserveSerials", params: { order_item_id: line.order_item_id, serials } });
-    if (!data?.success) { toast.error(data?.error || "שגיאה בשמירת סריאליים"); return; }
-    refreshLine(line.id);
+    try {
+      const { data } = await serialInvoice({ action: "reserveSerials", params: { order_item_id: line.order_item_id, serials } });
+      if (!data?.success) { toast.error(data?.error || "שגיאה בשמירת סריאליים"); return; }
+      refreshLine(line.id);
+    } catch (e) {
+      toast.error("שגיאה בשמירת סריאליים: " + (e?.message || ""));
+    }
   };
 
   const issueInvoiceDryRun = async () => {
