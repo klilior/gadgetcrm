@@ -17,6 +17,7 @@ import { format, startOfDay, endOfDay, startOfMonth, differenceInDays } from 'da
 import { he } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import { linetHourlySync } from "@/functions/linetHourlySync";
 
 import SalesVsTarget from '../components/dashboard/SalesVsTarget';
 import PersonalSalesPulse from '../components/dashboard/PersonalSalesPulse';
@@ -68,6 +69,7 @@ export default function AgentDashboard() {
   const [reminders, setReminders] = useState([]);
   const [quickLeads, setQuickLeads] = useState([]);
   const [editingLead, setEditingLead] = useState(null);
+  const [isSyncingLinet, setIsSyncingLinet] = useState(false);
 
   // Determine role: prefer app_role (set by UserAuth from Employee.role), then currentUser.role
   const appRole = currentUser?.app_role || currentUser?.role || currentUser?.data?.app_role;
@@ -442,6 +444,16 @@ export default function AgentDashboard() {
     return () => clearInterval(interval);
   }, [loadData]);
 
+  const handleManualLinetSync = async () => {
+    setIsSyncingLinet(true);
+    try {
+      await linetHourlySync({ manual: true, trigger_type: 'MANUAL' });
+      await loadData();
+    } finally {
+      setIsSyncingLinet(false);
+    }
+  };
+
   const handleStatusChange = async (leadId, newStatus) => {
     try {
       const lead = leads.find(l => l.id === leadId);
@@ -602,8 +614,9 @@ export default function AgentDashboard() {
             </Button>
           )}
 
-          <Button variant="outline" onClick={loadData} disabled={isLoading}>
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <Button variant="outline" onClick={handleManualLinetSync} disabled={isLoading || isSyncingLinet}>
+            <RefreshCw className={`w-4 h-4 ml-2 ${isLoading || isSyncingLinet ? 'animate-spin' : ''}`} />
+            {isSyncingLinet ? 'מסנכרן...' : 'רענן'}
           </Button>
         </div>
       </div>

@@ -21,6 +21,7 @@ import useSuppliers from "../components/hooks/useSuppliers";
 import UndeliveredOrdersWidget from "../components/dashboard/UndeliveredOrdersWidget";
 import RepSalesDrilldown from "../components/dashboard/RepSalesDrilldown";
 import { getInvoiceClassification } from "../components/utils/invoiceClassification";
+import { linetHourlySync } from "@/functions/linetHourlySync";
 
 const RATIO_THRESHOLDS = { good: 40, warning: 60 };
 
@@ -36,6 +37,7 @@ export default function ManagerControlCenter() {
   const [isLoading, setIsLoading] = useState(true);
   const [lastSync, setLastSync] = useState(null);
   const [callStats, setCallStats] = useState({ incoming: 0, missed: 0 });
+  const [isSyncingLinet, setIsSyncingLinet] = useState(false);
 
   const [datePreset, setDatePreset] = useState("thisMonth");
   const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
@@ -101,6 +103,16 @@ export default function ManagerControlCenter() {
     setPendingInvoicesCount(filtered.length);
 
     setIsLoading(false);
+  };
+
+  const handleManualLinetSync = async () => {
+    setIsSyncingLinet(true);
+    try {
+      await linetHourlySync({ manual: true, trigger_type: 'MANUAL' });
+      await loadAllData();
+    } finally {
+      setIsSyncingLinet(false);
+    }
   };
 
   const handleDatePreset = (preset) => {
@@ -290,9 +302,9 @@ export default function ManagerControlCenter() {
             )}
           </div>
         </div>
-        <Button onClick={loadAllData} disabled={isLoading} variant="outline" size="sm">
-          <RefreshCw className={`w-4 h-4 ml-2 ${isLoading ? 'animate-spin' : ''}`} />
-          רענן
+        <Button onClick={handleManualLinetSync} disabled={isLoading || isSyncingLinet} variant="outline" size="sm">
+          <RefreshCw className={`w-4 h-4 ml-2 ${isLoading || isSyncingLinet ? 'animate-spin' : ''}`} />
+          {isSyncingLinet ? 'מסנכרן...' : 'רענן'}
         </Button>
       </div>
 
