@@ -24,10 +24,19 @@ Deno.serve(async (req) => {
         pM[p.order_id].push(p);
       }
       const closedSet = new Set(['completed', 'cancelled', 'refunded', 'failed']);
+      // SKU 180948 = "תוספת דמי משלוח" (אפסייל), לא מוצר אמיתי
+      const SHIPPING_UPSELL_SKU = '180948';
+      const isShippingUpsell = function(x) {
+        return String(x.sku || '') === SHIPPING_UPSELL_SKU || String(x.product_id != null ? x.product_id : '') === SHIPPING_UPSELL_SKU;
+      };
       for (const o of raw) {
         if (closedSet.has(o.status)) continue;
         const c = cM[o.client_id];
-        const prods = pM[o.id] || [];
+        const allProds = pM[o.id] || [];
+        // מסתירים את שורת האפסייל מהמוצרים
+        const prods = allProds.filter(function(x) { return !isShippingUpsell(x); });
+        // אם אחרי הסינון לא נשאר אף מוצר אמיתי — מדובר בהזמנת אפסייל בלבד, מדלגים
+        if (allProds.length > 0 && prods.length === 0) continue;
         woo.push({
           id: 'woo_' + o.id, source: 'woocommerce',
           order_number: o.external_order_number || '',
