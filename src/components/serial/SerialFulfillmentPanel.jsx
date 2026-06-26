@@ -58,24 +58,30 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
               }
             } catch (_) {}
           }
-          line = await base44.entities.OrderItemSerial.create({
-            order_id: String(orderId),
-            external_order_number: order.external_order_number || order.order_number || "",
-            order_item_id: itemKey,
-            source: order.source === "mirakl" ? "superpharm" : (order.source === "woo" ? "woo" : "manual"),
-            source_sku: p.sku || "",
-            source_product_name: p.name || "",
-            mapped_linet_item_id: mappedId,
-            mapped_linet_sku: mappedSku,
-            mapped_linet_item_name: mappedName,
-            quantity: p.quantity || 1,
-            requires_serial: requires,
-            serials_required_count: requires ? (p.quantity || 1) : 0,
-            assigned_serials: [],
-            serial_status: requires ? "required_missing" : "not_required",
-          });
+          try {
+            line = await base44.entities.OrderItemSerial.create({
+              order_id: String(orderId),
+              external_order_number: order.external_order_number || order.order_number || "",
+              order_item_id: itemKey,
+              source: order.source === "mirakl" ? "superpharm" : (order.source === "woo" ? "woo" : "manual"),
+              source_sku: p.sku || "",
+              source_product_name: p.name || "",
+              mapped_linet_item_id: mappedId,
+              mapped_linet_sku: mappedSku,
+              mapped_linet_item_name: mappedName,
+              quantity: p.quantity || 1,
+              requires_serial: requires,
+              serials_required_count: requires ? (p.quantity || 1) : 0,
+              assigned_serials: [],
+              serial_status: requires ? "required_missing" : "not_required",
+            });
+          } catch (_) {
+            // A concurrent create may have already inserted this line — re-fetch it.
+            const again = await base44.entities.OrderItemSerial.filter({ order_id: String(orderId), order_item_id: itemKey }).catch(() => []);
+            line = again?.[0] || null;
+          }
         }
-        built.push(line);
+        if (line) built.push(line);
       }
       // Show ALL product lines so the agent can manually mark items as serial
       // even when Linet didn't auto-detect them (e.g. missing/mismatched SKU).
