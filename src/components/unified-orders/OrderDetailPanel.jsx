@@ -14,6 +14,8 @@ import { detectShippingType, getShippingTypeBadge } from "./ShippingTypeHelper";
 import { getBlockingItems, getNextActionLabel, getPrimaryActionLabel, getSourceLabel, isSerialWaiting } from "./orderUiHelpers";
 import ProductMetaBadges from "./ProductMetaBadges";
 import OrderTreatmentTimeline from "./OrderTreatmentTimeline";
+import MarkSerialMenu from "../serial/MarkSerialMenu";
+import SerialFulfillmentPanel from "../serial/SerialFulfillmentPanel";
 
 function copyText(text) {
   navigator.clipboard.writeText(text);
@@ -99,6 +101,8 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
 
   const isMiraklNew = order.source === 'mirakl' && order.status === 'WAITING_ACCEPTANCE';
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
+  const [serialRefreshKey, setSerialRefreshKey] = React.useState(0);
+  const orderIdForSerial = order.id || order.order_number || order.external_order_number;
 
   const runPrimaryAction = () => {
     if (isMiraklNew) {
@@ -193,6 +197,16 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
                     <span className="text-gray-800 break-words">{p.name}</span>
                     {p.sku && <div className="text-[11px] text-gray-400 font-mono">SKU: {p.sku}</div>}
                     {isSerialWaiting(order) && <Badge className="mt-1 bg-purple-50 text-[#7D0F82] border border-purple-100 text-[10px] shadow-none">סריאלי בהמשך</Badge>}
+                    {p.sku && (
+                      <div className="mt-0.5">
+                        <MarkSerialMenu
+                          sku={p.sku}
+                          orderItemId={`${orderIdForSerial}__${p.sku || i}`}
+                          currentlySerial={false}
+                          onChanged={() => setSerialRefreshKey((k) => k + 1)}
+                        />
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 mr-2">
                     <span className="text-gray-500">×{p.quantity}</span>
@@ -280,6 +294,9 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
       <GetPackageOrderCardWrapper order={order} isManager={isManager} isShiftManager={isShiftManager} />
 
       <OrderTreatmentTimeline order={order} />
+
+      {/* Serial handling area (Steps 7,10,12) — only renders if a line requires a serial */}
+      <SerialFulfillmentPanel key={serialRefreshKey} order={order} />
 
       {(shipmentBlockReason || blockingItems.length > 0) && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-3 text-sm text-red-800">
