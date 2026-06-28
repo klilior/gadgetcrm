@@ -53,7 +53,7 @@ function detectFromCategory(categoryName) {
 
 async function resolveSerialRequirement(base44, creds, sku, userName) {
   const sr = base44.asServiceRole.entities;
-  let mapping = (await sr.LinetProductMap.filter({ sku: String(sku) }))?.[0] || null;
+  let mapping = (await sr.LinetProductMap.filter({ sku: String(sku) }).catch(() => []))?.[0] || null;
 
   // 1. Manual override always wins
   if (mapping && mapping.manual_override === true) {
@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
         if (!sku && scope === "always") return Response.json({ success: false, error: "Missing sku" });
         const wantSerial = action === "markSerial";
 
-        let mapping = (await sr.LinetProductMap.filter({ sku: String(sku) }))?.[0] || null;
+        let mapping = (await sr.LinetProductMap.filter({ sku: String(sku) }).catch(() => []))?.[0] || null;
 
         // Guard: cannot permanently unmark a Linet serial item without admin (Step 5.4)
         if (!wantSerial && scope === "always") {
@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
           // order's panel reflects the new serial requirement immediately (without a full re-init).
           const { order_item_id } = params;
           if (order_item_id) {
-            const lines = await sr.OrderItemSerial.filter({ order_item_id: String(order_item_id) });
+            const lines = await sr.OrderItemSerial.filter({ order_item_id: String(order_item_id) }).catch(() => []);
             const line = lines?.[0];
             if (line) {
               await sr.OrderItemSerial.update(line.id, {
@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
         // scope === 'order' -> only update the order item line
         const { order_item_id } = params;
         if (order_item_id) {
-          const lines = await sr.OrderItemSerial.filter({ order_item_id: String(order_item_id) });
+          const lines = await sr.OrderItemSerial.filter({ order_item_id: String(order_item_id) }).catch(() => []);
           const line = lines?.[0];
           if (line) {
             await sr.OrderItemSerial.update(line.id, {
