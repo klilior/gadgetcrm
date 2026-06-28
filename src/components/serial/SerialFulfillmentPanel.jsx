@@ -27,13 +27,14 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [issuing, setIssuing] = useState(false);
-  const orderId = order.id || order.order_number || order.external_order_number;
+  const orderId = String(order.id || order.order_number || order.external_order_number || "");
 
   // Build/refresh OrderItemSerial lines for this order based on its products.
   const init = useCallback(async () => {
+    if (!orderId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const existing = await base44.entities.OrderItemSerial.filter({ order_id: String(orderId) });
+      const existing = await base44.entities.OrderItemSerial.filter({ order_id: orderId });
       // Keep the OLDEST record per item key. Concurrent panel mounts used to each
       // create a line for the same key, leaving duplicate rows whose newer copies
       // get cleaned up — leaving stale ids that 404 on later get/update. Always
@@ -137,13 +138,15 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
       await base44.entities.SerialAuditLog.create({
         order_id: String(orderId), order_item_id: line.order_item_id, sku: line.source_sku,
         linet_item_id: String(item.id), action: "map_linet_item", new_value: item.name, result: "success",
-      });
+      }).catch(() => {});
       toast.success("הפריט מופה ללינט");
       refreshLine(line.id);
     } catch (e) {
-      // Line record may have been replaced — rebuild the panel instead of throwing a 404.
-      toast.error("שגיאה במיפוי הפריט, מרענן...");
-      init();
+      if (e?.response?.status === 404 || e?.status === 404) {
+        init();
+      } else {
+        toast.error("שגיאה במיפוי הפריט: " + (e?.message || ""));
+      }
     }
   };
 

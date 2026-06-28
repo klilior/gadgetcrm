@@ -62,6 +62,7 @@ function GetPackageCardLazy({ order, isManager, isShiftManager }) {
   React.useEffect(() => {
     let cancelled = false;
     const check = async () => {
+      if (!orderId) { if (!cancelled) setChecked(true); return; }
       try {
         const { getPackageApi } = await import("@/functions/getPackageApi");
         const { data } = await getPackageApi({ action: "getShipmentsForOrder", order_id: orderId });

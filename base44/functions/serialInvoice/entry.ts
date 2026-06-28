@@ -48,11 +48,13 @@ Deno.serve(async (req) => {
 
         // Ensure no serial is reserved/assigned on another active line
         for (const s of serials) {
-          const others = await sr.OrderItemSerial.filter({});
+          // Filter by serial status to avoid loading all records
+          const othersVerified = await sr.OrderItemSerial.filter({ serial_status: "verified" });
+          const othersSelected = await sr.OrderItemSerial.filter({ serial_status: "selected" });
+          const others = [...othersVerified, ...othersSelected];
           const conflict = others.find((l) =>
             l.order_item_id !== String(order_item_id) &&
-            (l.assigned_serials || []).includes(String(s)) &&
-            l.serial_status !== "not_required"
+            (l.assigned_serials || []).includes(String(s))
           );
           if (conflict) {
             await audit(base44, { order_item_id, serial: String(s), action: "select_serial", result: "blocked", error_message: "serial already used in another order", user: userName });
