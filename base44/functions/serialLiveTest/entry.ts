@@ -12,11 +12,6 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    // Use isAuthenticated instead of me() to avoid "Authentication required to view users" error in production
-    const authenticated = await base44.auth.isAuthenticated();
-    if (!authenticated) {
-      return Response.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     const body = await req.json();
     const linet_item_id = body.linet_item_id ?? 53;
