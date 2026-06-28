@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { serialLiveTest } from "@/functions/serialLiveTest";
 import { debugIdcodeSearch } from "@/functions/debugIdcodeSearch";
+import { debugLinetDocStructure } from "@/functions/debugLinetDocStructure";
 
 export default function SerialLiveTest() {
   const [itemId, setItemId] = useState("53");
@@ -14,6 +15,26 @@ export default function SerialLiveTest() {
   const [idcodeLoading, setIdcodeLoading] = useState(false);
   const [idcodeError, setIdcodeError] = useState(null);
   const [idcodeSerial, setIdcodeSerial] = useState("190199098572");
+
+  // Doc Structure probe
+  const [docLog, setDocLog] = useState(null);
+  const [docLoading, setDocLoading] = useState(false);
+  const [docError, setDocError] = useState(null);
+  const [docId, setDocId] = useState("");
+
+  const runDocProbe = async () => {
+    setDocLoading(true);
+    setDocLog(null);
+    setDocError(null);
+    try {
+      const res = await debugLinetDocStructure({ doc_id: docId.trim() || undefined });
+      setDocLog(res.data ?? res);
+    } catch (e) {
+      setDocError(e?.response?.data?.error ?? e?.message ?? String(e));
+    } finally {
+      setDocLoading(false);
+    }
+  };
 
   const runIdcodeTest = async () => {
     setIdcodeLoading(true);
@@ -86,6 +107,103 @@ export default function SerialLiveTest() {
               className="bg-gray-900 border border-green-800 text-green-200 rounded px-3 py-2 text-sm w-52 focus:outline-none focus:border-green-500"
             />
           </div>
+        </div>
+
+        {/* Doc Structure Probe */}
+        <div className="mb-8 border border-cyan-800 rounded-lg p-4 bg-cyan-950/20">
+          <h2 className="text-cyan-400 font-bold text-sm mb-1">🔬 אבחון מבנה מסמך Linet (idcode בחשבונית)</h2>
+          <p className="text-cyan-700 text-xs mb-3">קריאה בלבד · לא מפיק מסמך · מחפש איפה הסריאלי יושב בתוך שורת מסמך קיים</p>
+          <div className="flex flex-wrap gap-3 mb-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-cyan-600 text-xs uppercase tracking-widest">Doc ID (אופציונלי)</label>
+              <input
+                type="text"
+                value={docId}
+                onChange={e => setDocId(e.target.value)}
+                placeholder="ריק = ראשון שיחזור"
+                className="bg-gray-900 border border-cyan-800 text-cyan-200 rounded px-3 py-2 text-sm w-52 focus:outline-none focus:border-cyan-500 font-mono"
+              />
+            </div>
+            <button
+              onClick={runDocProbe}
+              disabled={docLoading}
+              className="px-6 py-2 bg-cyan-700 hover:bg-cyan-600 disabled:bg-cyan-900 disabled:text-cyan-800 text-white font-bold rounded-lg text-sm transition-colors"
+            >
+              {docLoading ? "⏳ בודק..." : "▶ הרץ אבחון מסמך"}
+            </button>
+          </div>
+          {docError && (
+            <div className="p-3 bg-red-950 border border-red-700 rounded text-red-300 text-xs mb-2">
+              <span className="font-bold">EXCEPTION: </span>{docError}
+            </div>
+          )}
+          {docLog && (
+            <div className="space-y-3 text-xs">
+              {/* Step 1 */}
+              <div className="border border-cyan-900 rounded p-3 bg-gray-900">
+                <div className="font-bold text-cyan-400 mb-1">שלב 1 — probe מודלים (docs / document)</div>
+                <div>working model: <span className="text-white font-bold">{docLog.step1_working_model ?? "—"}</span></div>
+                <div>docs: HTTP {docLog.step1_model_probe?.docs?.http_status} · rows {docLog.step1_model_probe?.docs?.row_count}</div>
+                <div>document: HTTP {docLog.step1_model_probe?.document?.http_status} · rows {docLog.step1_model_probe?.document?.row_count}</div>
+                {docLog.note && <div className="text-yellow-400 mt-1">⚠️ {docLog.note}</div>}
+              </div>
+              {/* Step 2 */}
+              {docLog.step2_doc_top_level_keys && (
+                <div className="border border-cyan-900 rounded p-3 bg-gray-900">
+                  <div className="font-bold text-cyan-400 mb-1">שלב 2 — מבנה מסמך ראשון</div>
+                  <div>שדות עליונים: <span className="text-white">{docLog.step2_doc_top_level_keys.join(", ")}</span></div>
+                  {docLog.step2_array_fields_in_doc?.length > 0 && (
+                    <div className="mt-1">
+                      מערכים בתוך המסמך:
+                      {docLog.step2_array_fields_in_doc.map(af => (
+                        <div key={af.field} className="mr-3 text-yellow-300">
+                          [{af.field}] len={af.length} · keys: {af.first_item_keys.join(", ")}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <details className="mt-2">
+                    <summary className="text-cyan-600 cursor-pointer">מסמך מלא גולמי</summary>
+                    <pre className="mt-1 text-gray-400 overflow-auto max-h-48 whitespace-pre-wrap break-all">{JSON.stringify(docLog.step2_doc_sample, null, 2)}</pre>
+                  </details>
+                </div>
+              )}
+              {/* Step 3 */}
+              <div className="border border-cyan-900 rounded p-3 bg-gray-900">
+                <div className="font-bold text-cyan-400 mb-1">שלב 3 — שורת פריט סריאלית</div>
+                {docLog.step3_serial_doc_found ? (
+                  <>
+                    <div>doc_id: <span className="text-white">{docLog.step3_serial_doc_id}</span> · שדה שורות: <span className="text-yellow-300">{docLog.step3_serial_line_field}</span></div>
+                    <div className="mt-1">שדות בשורה: <span className="text-white">{docLog.step3_serial_line_keys?.join(", ")}</span></div>
+                    <pre className="mt-1 text-green-300 overflow-auto max-h-48 whitespace-pre-wrap break-all">{JSON.stringify(docLog.step3_serial_line_full, null, 2)}</pre>
+                  </>
+                ) : (
+                  <div className="text-yellow-400">לא נמצאה שורה עם פריט סריאלי ידוע ב-20 המסמכים הראשונים.</div>
+                )}
+              </div>
+              {/* Step 4 */}
+              {docLog.step4_single_doc_probe && (
+                <div className="border border-cyan-900 rounded p-3 bg-gray-900">
+                  <div className="font-bold text-cyan-400 mb-1">שלב 4 — מסמך בודד + חיפוש סריאלי עמוק</div>
+                  <div>HTTP: {docLog.step4_single_doc_probe.http_status} · rows: {docLog.step4_single_doc_probe.row_count}</div>
+                  {docLog.step4_serial_candidates_in_doc?.length > 0 ? (
+                    <div className="mt-1">
+                      <div className="text-green-400 font-bold">🔑 מועמדים לסריאלי שנמצאו:</div>
+                      {docLog.step4_serial_candidates_in_doc.map((c, i) => (
+                        <div key={i} className="mr-3 font-mono text-yellow-200">{c.path}: <span className="text-white">{c.value}</span></div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-gray-500 mt-1">לא נמצאו מחרוזות בפורמט סריאלי.</div>
+                  )}
+                  <details className="mt-2">
+                    <summary className="text-cyan-600 cursor-pointer">מסמך מלא גולמי</summary>
+                    <pre className="mt-1 text-gray-400 overflow-auto max-h-48 whitespace-pre-wrap break-all">{JSON.stringify(docLog.step4_single_doc_probe.full_doc, null, 2)}</pre>
+                  </details>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Idcode Search Diagnostic */}
