@@ -72,8 +72,7 @@ Deno.serve(async (req) => {
 
         const status = uniqueSerials.length >= need ? "verified" : "selected";
         const expires = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-
-        await sr.OrderItemSerial.update(line.id, {
+        const updatePayload = {
           assigned_serials: uniqueSerials,
           serial_status: status,
           serial_verified_at: status === "verified" ? new Date().toISOString() : null,
@@ -82,7 +81,17 @@ Deno.serve(async (req) => {
           reserved_by: userName,
           reserved_at: new Date().toISOString(),
           reservation_expires_at: expires,
-        });
+        };
+
+        try {
+          await sr.OrderItemSerial.update(line.id, updatePayload);
+        } catch (updateErr) {
+          // Record may have been replaced (stale id) — re-fetch and retry once
+          const fresh = await sr.OrderItemSerial.filter({ order_id: String(line.order_id), order_item_id: String(order_item_id) });
+          const freshLine = fresh?.[0];
+          if (!freshLine) return Response.json({ success: false, error: "שורת מוצר לא נמצאה אחרי ניסיון חוזר" });
+          await sr.OrderItemSerial.update(freshLine.id, updatePayload);
+        }
 
         await audit(base44, { order_id: line.order_id, order_item_id, sku: line.source_sku, linet_item_id: line.mapped_linet_item_id, serial: uniqueSerials.join(","), action: "select_serial", new_value: status, user: userName, result: "success" });
         return Response.json({ success: true, status, assigned_serials: uniqueSerials });
