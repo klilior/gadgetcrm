@@ -121,11 +121,8 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
       const fresh = await base44.entities.OrderItemSerial.get(lineId);
       setLines((prev) => prev.map((l) => (l.id === lineId ? fresh : l)));
     } catch (e) {
-      // Any 404 (stale/deleted record) — re-init to get current state
-      const status = e?.response?.status || e?.status || (e?.message?.includes('404') ? 404 : 0);
-      if (status === 404) {
-        init();
-      }
+      // Any error (404 stale/deleted record, or other) — re-init to get current state
+      init();
     }
   };
 
