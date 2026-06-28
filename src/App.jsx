@@ -8,6 +8,7 @@ import Shipments from './pages/Shipments';
 import MiraklInvoiceBatch from './pages/MiraklInvoiceBatch';
 import QuickInvoiceUpload from './pages/QuickInvoiceUpload';
 import LinetDebug from './pages/LinetDebug';
+import SerialLiveTest from './pages/SerialLiveTest';
 import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
@@ -107,6 +108,7 @@ const AuthenticatedApp = () => {
       <Route path="/QuickInvoiceUpload" element={<QuickInvoiceUpload />} />
       <Route path="/quickinvoiceupload" element={<QuickInvoiceUpload />} />
       <Route path="/LinetDebug" element={<LinetDebug />} />
+      <Route path="/SerialLiveTest" element={<SerialLiveTest />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
