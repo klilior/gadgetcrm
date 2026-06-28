@@ -51,10 +51,13 @@ export default function TrackingSection({ order }) {
     const checkSms = async () => {
       setLoadingSmsStatus(true);
       try {
-        const orderId = order.raw_id || order.id || '';
+        const rawId = order.raw_id || '';
+        const orderId = rawId || '';
         if (!orderId) { setLoadingSmsStatus(false); return; }
+        const cleanOrderId = orderId.replace(/^(woo_|mirakl_|linet_)/, '');
+        if (!cleanOrderId) { setLoadingSmsStatus(false); return; }
         const activities = await base44.entities.Activity.filter(
-          { order_id: orderId.replace(/^(woo_|mirakl_|linet_)/, ''), activity_type: 'הודעה' },
+          { order_id: cleanOrderId, activity_type: 'הודעה' },
           '-created_date', 10
         );
         if (cancelled) return;

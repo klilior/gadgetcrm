@@ -57,7 +57,7 @@ function GetPackageOrderCardWrapper({ order, isManager, isShiftManager }) {
 function GetPackageCardLazy({ order, isManager, isShiftManager }) {
   const [hasShipments, setHasShipments] = React.useState(false);
   const [checked, setChecked] = React.useState(false);
-  const orderId = order.id || order.order_number || order.external_order_number;
+  const orderId = order.raw_id || order.id || order.order_number || order.external_order_number;
 
   React.useEffect(() => {
     let cancelled = false;
