@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
       });
       const itemText = await itemRes.text();
       const itemJson = safeJson(itemText, "item");
-      const body = itemJson.parsed?.data?.body;
+      const body = itemJson.parsed?.body;
 
       result.item = {
         http_status: itemRes.status,
@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
       });
       const mutexText = await mutexRes.text();
       const mutexJson = safeJson(mutexText, "mutex");
-      const body = mutexJson.parsed?.data?.body;
+      const body = mutexJson.parsed?.body;
 
       result.mutex = {
         http_status: mutexRes.status,
