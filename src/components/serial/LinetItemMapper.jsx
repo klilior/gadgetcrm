@@ -20,7 +20,7 @@ export default function LinetItemMapper({ currentMappedId, onMapped }) {
     try {
       const { data } = await serialFulfillment({ action: "searchLinetItems", params: { term: term.trim() } });
       if (data?.success) setResults(data.items || []);
-      else toast.error(data?.error || "חיפוש נכשל");
+      else toast.error("לינט: " + (data?.error || "חיפוש נכשל"));
     } catch (e) {
       toast.error("שגיאה: " + e.message);
     } finally {

@@ -23,9 +23,14 @@ export default function SerialPicker({ linetItemId, requiredCount, value = [], o
     setLoading(true);
     try {
       const { data } = await serialFulfillment({ action: "getAvailableSerials", params: { linet_item_id: linetItemId } });
-      if (data?.success) setAvailable(data.serials || []);
+      if (data?.success) {
+        setAvailable(data.serials || []);
+      } else {
+        setAvailable([]);
+        toast.error("לינט: " + (data?.error || "לא ניתן לטעון סריאליים"));
+      }
     } catch (e) {
-      toast.error("שגיאה בטעינת סריאליים: " + e.message);
+      toast.error("שגיאה בחיבור ללינט: " + e.message);
     } finally {
       setLoading(false);
     }
@@ -54,12 +59,14 @@ export default function SerialPicker({ linetItemId, requiredCount, value = [], o
     setVerifying(true);
     try {
       const { data } = await serialFulfillment({ action: "verifySerial", params: { linet_item_id: linetItemId, serial: code } });
-      if (data?.success && data.valid) {
+      if (!data?.success) {
+        toast.error("לינט: " + (data?.error || "שגיאה באימות סריאלי"));
+      } else if (data.valid) {
         onChange([...value, code]);
         setManual("");
         toast.success("סריאלי אומת מול לינט");
       } else {
-        toast.error("הסריאלי לא נמצא כזמין במלאי עבור פריט זה");
+        toast.error("הסריאלי לא נמצא כזמין במלאי עבור פריט זה בלינט");
       }
     } catch (e) {
       toast.error("שגיאה באימות: " + e.message);

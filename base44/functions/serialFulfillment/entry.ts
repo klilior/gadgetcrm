@@ -41,6 +41,12 @@ async function linetSearch(creds, resource, query, limit = 100, offset = 0) {
   const text = await res.text();
   let json = null;
   try { json = JSON.parse(text); } catch (_) {}
+  // Check for Linet error indicators — the API can return non-200 or error-filled bodies.
+  if (!res.ok) {
+    const errorMsg = json?.error || json?.message || text.slice(0, 300);
+    throw new Error(`Linet API error (${res.status}) on ${resource}: ${errorMsg}`);
+  }
+  if (json?.error) throw new Error(`Linet API error on ${resource}: ${json.error}`);
   const body = json?.data?.body ?? json?.body ?? [];
   return Array.isArray(body) ? body : [];
 }
@@ -120,7 +126,13 @@ async function resolveSerialRequirement(base44, creds, sku, userName) {
 // ---------- Available serials ----------
 async function getAvailableSerials(creds, linetItemId, warehouseId = null) {
   const query = { item_id: Number(linetItemId) };
-  const rows = await linetSearch(creds, "inventory", query, 500, 0);
+  let rows = [];
+  try {
+    rows = await linetSearch(creds, "inventory", query, 500, 0);
+  } catch (e) {
+    console.error(`[getAvailableSerials] Linet failure for item ${linetItemId}: ${e.message}`);
+    throw e; // let callers handle
+  }
 
   // Net availability per idcode: sum of ammount. >0 means currently in stock.
   const byCode = {};
