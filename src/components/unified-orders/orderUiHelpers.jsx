@@ -1,10 +1,5 @@
 import { getShipmentBlockReason, isClosedStatus } from "./OrderStatusConfig";
 
-export function isSerialWaiting(order) {
-  if (order?.has_pending_serial) return true;
-  return order?.status === "wc-awaiting-serial" || String(order?.status || "").includes("סידורי");
-}
-
 export function isVisuallyClosed(order) {
   if (!order) return false;
   // 'completed' orders younger than 48h stay visible so agents can track them
@@ -23,7 +18,7 @@ export function isBlockedOrder(order) {
 }
 
 export function isReadyForAction(order) {
-  if (!order || isBlockedOrder(order) || isVisuallyClosed(order) || isSerialWaiting(order)) return false;
+  if (!order || isBlockedOrder(order) || isVisuallyClosed(order)) return false;
   if (order.source === "woocommerce") return ["processing", "ordered"].includes(order.status);
   if (order.source === "mirakl") return ["WAITING_ACCEPTANCE", "SHIPPING"].includes(order.status);
   if (order.source === "linet") return order.status !== "טופל";
@@ -33,7 +28,6 @@ export function isReadyForAction(order) {
 export function getNextActionLabel(order) {
   if (!order) return "לטיפול ידני";
   if (isVisuallyClosed(order)) return order.status === "cancelled" || order.status === "CANCELED" ? "לביטול" : "הושלם";
-  if (isSerialWaiting(order)) return "בחר סריאלי";
   if (["on-hold", "pending", "WAITING_DEBIT", "WAITING_DEBIT_PAYMENT"].includes(order.status)) return "ממתין לתשלום";
   if (["cancelled", "failed", "CANCELED", "REFUSED"].includes(order.status)) return "לביטול";
   if (order.tracking_number || order.status === "נוצר משלוח" || order.status === "SHIPPED") return "הושלם";
@@ -48,9 +42,6 @@ export function getOrderVisualState(order) {
   if (isBlockedOrder(order)) {
     return { key: "blocked", border: "border-r-red-400", bg: "bg-red-50/30", dot: "bg-red-500", text: "text-red-700" };
   }
-  if (isSerialWaiting(order)) {
-    return { key: "serial", border: "border-r-[#7D0F82]", bg: "bg-purple-50/30", dot: "bg-[#7D0F82]", text: "text-[#7D0F82]" };
-  }
   if (isReadyForAction(order)) {
     return { key: "ready", border: "border-r-emerald-400", bg: "bg-emerald-50/30", dot: "bg-emerald-500", text: "text-emerald-700" };
   }
@@ -60,7 +51,6 @@ export function getOrderVisualState(order) {
 export function getBlockingItems(order) {
   if (!order) return [];
   const items = [];
-  if (isSerialWaiting(order)) items.push("מספר סידורי");
   if (["on-hold", "pending", "WAITING_DEBIT", "WAITING_DEBIT_PAYMENT"].includes(order.status)) items.push("תשלום");
   if (["cancelled", "failed", "CANCELED", "REFUSED"].includes(order.status)) items.push("טיפול בסטטוס הזמנה");
   return items;
@@ -69,7 +59,7 @@ export function getBlockingItems(order) {
 export function getPrimaryActionLabel(order) {
   if (!order) return "המשך טיפול";
   if (isVisuallyClosed(order)) return "השלם הזמנה";
-  if (isBlockedOrder(order) || isSerialWaiting(order) || order.source === "mirakl" && order.status === "WAITING_ACCEPTANCE") return "המשך טיפול";
+  if (isBlockedOrder(order) || order.source === "mirakl" && order.status === "WAITING_ACCEPTANCE") return "המשך טיפול";
   if (order.tracking_number || order.status === "נוצר משלוח" || order.status === "SHIPPED") return "השלם הזמנה";
   return "צור משלוח";
 }

@@ -7,7 +7,7 @@ import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
 import { getStatusLabel, getStatusColor, isClosedStatus } from "./OrderStatusConfig";
 import { detectShippingType, getShippingTypeBadge, isUrgentSameDay } from "./ShippingTypeHelper";
-import { getNextActionLabel, getOrderVisualState, isSerialWaiting } from "./orderUiHelpers";
+import { getNextActionLabel, getOrderVisualState } from "./orderUiHelpers";
 
 export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect, isSelected, canBulk }) {
   const isClosed = isClosedStatus(order.source, order.status);
@@ -67,7 +67,7 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
       <TableCell>
         <div className="flex items-center gap-1.5 flex-wrap">
           <Badge className={`${statusColor} text-xs shadow-none`}>{statusLabel}</Badge>
-          {isSerialWaiting(order) && <Badge className="bg-purple-50 text-[#7D0F82] border border-purple-100 text-xs shadow-none">חסר סריאלי</Badge>}
+
           {shippingBadge && (
             <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-medium ${isUrgent && !order.tracking_number ? 'bg-red-600 text-white border border-red-700 animate-pulse font-bold' : shippingBadge.className}`}>
               {shippingType === 'self_pickup' && <Store className="w-3 h-3" />}

@@ -18,7 +18,7 @@ import UnifiedOrderRow from "../components/unified-orders/UnifiedOrderRow";
 import PendingProductsSummary from "../components/unified-orders/PendingProductsSummary";
 import SendSmsOrderModal from "../components/unified-orders/SendSmsOrderModal";
 import { isClosedStatus, getShipmentBlockReason, LINET_ORDER_SKUS } from "../components/unified-orders/OrderStatusConfig";
-import { isBlockedOrder, isReadyForAction, isSerialWaiting, isVisuallyClosed } from "../components/unified-orders/orderUiHelpers";
+import { isBlockedOrder, isReadyForAction, isVisuallyClosed } from "../components/unified-orders/orderUiHelpers";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import SPShipDialog from "../components/superpharm/SPShipDialog";
 import SPShipmentSuccessScreen from "../components/superpharm/SPShipmentSuccessScreen";
@@ -118,17 +118,6 @@ export default function UnifiedOrders() {
       smsLogs = await base44.entities.NotificationLog.list('-sent_at', 300).catch(() => []);
     } catch (_) {}
 
-    // Pre-fetch serial lines to flag orders that still have a serial pending action
-    const pendingSerialByOrder = {};
-    try {
-      const serialLines = await base44.entities.OrderItemSerial.list('-created_date', 5000).catch(() => []);
-      for (const sl of serialLines) {
-        if (sl.requires_serial && !['verified', 'invoiced', 'not_required'].includes(sl.serial_status)) {
-          if (sl.order_id) pendingSerialByOrder[String(sl.order_id)] = true;
-        }
-      }
-    } catch (_) {}
-
     const getRelatedShipments = (order) => {
       const keys = [order.order_number, order.external_order_number, order.mirakl_order_id, order.raw_id, order.id, order.client_id]
         .filter(Boolean)
@@ -218,7 +207,6 @@ export default function UnifiedOrders() {
           sms_status: smsLog?.status || '',
           sms_event_type: smsLog?.event_type || '',
           related_shipments: getRelatedShipments({ order_number: extNum, external_order_number: extNum, raw_id: o.id, client_id: o.client_id }),
-          has_pending_serial: !!pendingSerialByOrder['woo_' + o.id],
         });
       }
     } catch (e) { errs.push({source: 'woocommerce', message: e.message}); }
@@ -262,7 +250,6 @@ export default function UnifiedOrders() {
           linet_invoice_email_sent: o.linet_invoice_email_sent || false,
           order_lines_json: o.order_lines_json || '[]',
           related_shipments: getRelatedShipments({ order_number: o.mirakl_order_id || '', external_order_number: o.mirakl_order_id || '', mirakl_order_id: o.mirakl_order_id || '' }),
-          has_pending_serial: !!pendingSerialByOrder['mirakl_' + o.id],
         });
       }
     } catch (e) { errs.push({source: 'mirakl', message: e.message}); }
@@ -415,8 +402,8 @@ export default function UnifiedOrders() {
     const openOrders = orders.filter(o => !isVisuallyClosed(o));
     return {
       open: openOrders.length,
-      pending: openOrders.filter(o => isPendingOrder(o) && !isReadyForAction(o) && !isSerialWaiting(o)).length,
-      serial: openOrders.filter(isSerialWaiting).length,
+      pending: openOrders.filter(o => isPendingOrder(o) && !isReadyForAction(o)).length,
+      serial: 0,
       ready: openOrders.filter(isReadyForAction).length,
     };
   }, [orders]);
@@ -428,7 +415,6 @@ export default function UnifiedOrders() {
       if (sourceFilter !== 'all' && o.source !== sourceFilter) return false;
       if (!showClosed && isVisuallyClosed(o)) return false;
       if (statusFilter === 'pending' && !isPendingOrder(o)) return false;
-      if (statusFilter === 'serial' && !isSerialWaiting(o)) return false;
       if (statusFilter === 'ready' && !isReadyForAction(o)) return false;
       if (showBlocked && !isBlockedOrder(o)) return false;
       if (readyOnly && !isReadyForAction(o)) return false;
