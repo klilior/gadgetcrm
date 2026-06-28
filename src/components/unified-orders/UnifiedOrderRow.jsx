@@ -34,16 +34,27 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
   };
 
   return (
+    <>
+    {isUrgent && !order.tracking_number && (
+      <tr className="animate-pulse">
+        <td colSpan={10} className="px-3 py-1 bg-red-600 text-white text-xs font-bold text-center">
+          🚨 משלוח מהיום להיום! — יש לטפל בהזמנה #{order.order_number} בדחיפות לפני שתוקף השליח יפוג 🚨
+        </td>
+      </tr>
+    )}
     <TableRow
       onClick={onToggle}
-      className={`cursor-pointer select-none border-r-4 ${visual.border} ${visual.bg} hover:bg-slate-50 transition-colors
+      className={`cursor-pointer select-none border-r-4 ${visual.border} ${isUrgent && !order.tracking_number ? 'bg-red-50' : visual.bg} hover:bg-slate-50 transition-colors
         ${isClosed ? 'opacity-60' : ''}
         ${isExpanded ? 'bg-purple-50/40 border-b-0' : ''}
       `}
     >
       <TableCell className="font-mono text-sm font-bold whitespace-nowrap text-gray-900">
         #{order.order_number}
-        {(isOld || isUrgent) && <AlertTriangle className="w-3 h-3 text-red-500 inline mr-1" />}
+        {isUrgent && !order.tracking_number
+          ? <span className="inline-block animate-bounce mr-1 text-base">🚨</span>
+          : (isOld || isUrgent) && <AlertTriangle className="w-3 h-3 text-red-500 inline mr-1" />
+        }
       </TableCell>
       <TableCell><SourceBadge source={order.source} /></TableCell>
       <TableCell className="text-xs text-gray-600 whitespace-nowrap">{formatDate(order.order_date)}</TableCell>
@@ -58,12 +69,12 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
           <Badge className={`${statusColor} text-xs shadow-none`}>{statusLabel}</Badge>
           {isSerialWaiting(order) && <Badge className="bg-purple-50 text-[#7D0F82] border border-purple-100 text-xs shadow-none">חסר סריאלי</Badge>}
           {shippingBadge && (
-            <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-medium ${shippingBadge.className}`}>
+            <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-medium ${isUrgent && !order.tracking_number ? 'bg-red-600 text-white border border-red-700 animate-pulse font-bold' : shippingBadge.className}`}>
               {shippingType === 'self_pickup' && <Store className="w-3 h-3" />}
               {shippingType === 'ups' && <Package className="w-3 h-3" />}
               {shippingType === 'cargo' && <Truck className="w-3 h-3" />}
-              {shippingType === 'getpackage' && <span>⚡</span>}
-              {shippingType === 'self_pickup' ? 'איסוף עצמי' : shippingType === 'cargo' ? 'שליח' : shippingType === 'ups' ? 'איסוף' : 'היום'}
+              {shippingType === 'getpackage' && <span>{isUrgent && !order.tracking_number ? '🚨' : '⚡'}</span>}
+              {shippingType === 'self_pickup' ? 'איסוף עצמי' : shippingType === 'cargo' ? 'שליח' : shippingType === 'ups' ? 'איסוף' : isUrgent && !order.tracking_number ? 'דחוף - היום!' : 'היום'}
             </span>
           )}
           {order.tracking_number && (
@@ -88,5 +99,6 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
         </TableCell>
       )}
     </TableRow>
+    </>
   );
 }
