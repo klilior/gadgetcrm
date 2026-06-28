@@ -141,7 +141,7 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
         linet_item_id: String(item.id), action: "map_linet_item", new_value: item.name, result: "success",
       }).catch(() => {});
       toast.success("הפריט מופה ללינט");
-      refreshLine(line.id);
+      await refreshLine(line.id);
     } catch (e) {
       const status = e?.response?.status || e?.status || (e?.message?.includes('404') ? 404 : 0);
       if (status === 404) {
@@ -156,7 +156,7 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
     try {
       const { data } = await serialInvoice({ action: "reserveSerials", params: { order_item_id: line.order_item_id, serials } });
       if (!data?.success) { toast.error(data?.error || "שגיאה בשמירת סריאליים"); return; }
-      refreshLine(line.id);
+      await refreshLine(line.id);
     } catch (e) {
       const status = e?.response?.status || e?.status || (e?.message?.includes('404') ? 404 : 0);
       if (status === 404) { init(); return; }
