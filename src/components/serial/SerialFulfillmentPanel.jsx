@@ -100,7 +100,7 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
             });
           } catch (_) {
             // A concurrent create may have already inserted this line — re-fetch it.
-            const again = await base44.entities.OrderItemSerial.filter({ order_id: String(orderId), order_item_id: itemKey }).catch(() => []);
+            const again = await base44.entities.OrderItemSerial.filter({ order_id: String(orderId) }).catch(() => []);
             line = again?.[0] || null;
           }
         }

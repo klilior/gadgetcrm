@@ -65,7 +65,7 @@ export default function CargoShipmentsList() {
   const loadShipments = useCallback(async () => {
     setLoading(true);
     try {
-      const all = await base44.entities.Shipment.filter({ carrier: "cargo" }, "-created_date", 200);
+      const all = await base44.entities.Shipment.filter({ carrier: "cargo" }, "-created_date", 200).catch(() => []);
       setShipments(all);
     } catch (e) {
       toast.error("שגיאה בטעינת משלוחים");
