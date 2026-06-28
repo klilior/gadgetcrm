@@ -57,7 +57,7 @@ export default function UndeliveredOrdersWidget({
         query.owner_user_id = selectedRep;
       }
       
-      const data = await base44.entities.UndeliveredOrderTask.filter(query, '-created_date', 100);
+      const data = await base44.entities.UndeliveredOrderTask.filter(query, '-created_date', 100).catch(() => []);
       setTasks(data);
     } catch (e) {
       console.error("Error loading undelivered orders:", e);
