@@ -7,6 +7,11 @@ export function isSerialWaiting(order) {
 
 export function isVisuallyClosed(order) {
   if (!order) return false;
+  // 'completed' orders younger than 48h stay visible so agents can track them
+  if (order.status === "completed" && order.order_date) {
+    const ageHours = (Date.now() - new Date(order.order_date).getTime()) / (1000 * 60 * 60);
+    if (ageHours < 48) return false;
+  }
   return isClosedStatus(order.source, order.status) || ["completed", "SHIPPED", "RECEIVED", "CLOSED", "טופל"].includes(order.status);
 }
 
