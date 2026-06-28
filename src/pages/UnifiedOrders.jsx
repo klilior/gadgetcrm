@@ -28,7 +28,8 @@ import OrderDetailPanel from "../components/unified-orders/OrderDetailPanel";
 import CargoShipmentModal from "../components/cargo/CargoShipmentModal";
 import PostShipmentConfirmDialog from "../components/unified-orders/PostShipmentConfirmDialog";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 15;
+const THIRTY_DAYS_AGO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
 export default function UnifiedOrders() {
   const { currentUser } = useUser();
@@ -161,6 +162,7 @@ export default function UnifiedOrders() {
       for (const p of rawProducts) { if (!pM[p.order_id]) pM[p.order_id] = []; pM[p.order_id].push(p); }
       for (const o of rawOrders) {
         if (!showClosed && closedWoo.has(o.status)) continue;
+        if (o.order_date && new Date(o.order_date) < THIRTY_DAYS_AGO) continue;
         const c = cM[o.client_id];
         const pr = pM[o.id] || [];
         let billing = {};
@@ -227,6 +229,7 @@ export default function UnifiedOrders() {
       const spOrders = await base44.entities.SuperPharmOrder.list('-created_at_mirakl', 200);
       for (const o of spOrders) {
         if (!showClosed && closedMirakl.has(o.order_state)) continue;
+        if (o.created_at_mirakl && new Date(o.created_at_mirakl) < THIRTY_DAYS_AGO) continue;
         let lines = []; try { lines = JSON.parse(o.order_lines_json || '[]'); } catch(e) {}
         const smsLog = findOrderSms(o.mirakl_order_id || '', o.customer_phone || '');
         mk.push({
