@@ -34,7 +34,7 @@ export default function MessageCenter() {
             console.log('🔄 Loading message center data...');
 
             // 1. Load Conversations (employees come from EmployeeProvider)
-            const conversationsData = await base44.entities.Conversation.list('-last_message_date', 200);
+            const conversationsData = await base44.entities.Conversation.list('-last_message_date', 200).catch(() => []);
 
             // 2. Extract Customer IDs and fetch ONLY them (much more efficient)
             const customerIds = [...new Set(conversationsData.map(c => c.customer_id).filter(Boolean))];
@@ -46,7 +46,7 @@ export default function MessageCenter() {
             customerIds.length > 0 
                 ? customersService.getByIds(customerIds)
                 : [],
-            base44.entities.Activity.list('-created_date', 1000)
+            base44.entities.Activity.list('-created_date', 1000).catch(() => [])
             ]);
 
             console.log(`✅ Loaded ${customersData.length} customers, ${activitiesData.length} activities, ${conversationsData.length} conversations`);
