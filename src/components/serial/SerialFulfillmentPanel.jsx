@@ -10,6 +10,21 @@ import LinetItemMapper from "./LinetItemMapper";
 import SerialPicker from "./SerialPicker";
 import MarkSerialMenu from "./MarkSerialMenu";
 
+// Extract HTTP status from Axios/fetch errors reliably
+function getErrStatus(e) {
+  return e?.response?.status || e?.status || (typeof e?.message === 'string' && e.message.includes('404') ? 404 : 0);
+}
+
+// Safe entity update — re-inits on 404 instead of crashing
+async function safeUpdate(entityClass, id, data, onNotFound) {
+  try {
+    return await entityClass.update(id, data);
+  } catch (e) {
+    if (getErrStatus(e) === 404) { onNotFound?.(); return null; }
+    throw e;
+  }
+}
+
 const STATUS_META = {
   not_required: { label: "לא נדרש סריאלי", cls: "bg-gray-100 text-gray-600" },
   required_missing: { label: "חסר סריאלי", cls: "bg-red-50 text-red-700 border border-red-100" },
@@ -127,26 +142,19 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
   };
 
   const onMapped = async (line, item) => {
-    try {
-      await base44.entities.OrderItemSerial.update(line.id, {
-        mapped_linet_item_id: String(item.id),
-        mapped_linet_sku: item.sku,
-        mapped_linet_item_name: item.name,
-      });
-      await base44.entities.SerialAuditLog.create({
-        order_id: String(orderId), order_item_id: line.order_item_id, sku: line.source_sku,
-        linet_item_id: String(item.id), action: "map_linet_item", new_value: item.name, result: "success",
-      }).catch(() => {});
-      toast.success("הפריט מופה ללינט");
-      await refreshLine(line.id);
-    } catch (e) {
-      const status = e?.response?.status || e?.status || (e?.message?.includes('404') ? 404 : 0);
-      if (status === 404) {
-        init();
-      } else {
-        toast.error("שגיאה במיפוי הפריט: " + (e?.message || ""));
-      }
-    }
+    const result = await safeUpdate(
+      base44.entities.OrderItemSerial,
+      line.id,
+      { mapped_linet_item_id: String(item.id), mapped_linet_sku: item.sku, mapped_linet_item_name: item.name },
+      () => init()
+    );
+    if (!result) return; // 404 — init() already called
+    base44.entities.SerialAuditLog.create({
+      order_id: String(orderId), order_item_id: line.order_item_id, sku: line.source_sku,
+      linet_item_id: String(item.id), action: "map_linet_item", new_value: item.name, result: "success",
+    }).catch(() => {});
+    toast.success("הפריט מופה ללינט");
+    await refreshLine(line.id);
   };
 
   const onSerialsChange = async (line, serials) => {
@@ -155,8 +163,7 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
       if (!data?.success) { toast.error(data?.error || "שגיאה בשמירת סריאליים"); return; }
       await refreshLine(line.id);
     } catch (e) {
-      const status = e?.response?.status || e?.status || (e?.message?.includes('404') ? 404 : 0);
-      if (status === 404) { init(); return; }
+      if (getErrStatus(e) === 404) { init(); return; }
       toast.error("שגיאה בשמירת סריאליים: " + (e?.message || ""));
     }
   };
