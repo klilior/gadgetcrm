@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
 import { getAvailableSerials } from "@/functions/getAvailableSerials";
+import { updateOrderSerialLine } from "@/functions/updateOrderSerialLine";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, CheckCircle2, AlertCircle, PackageSearch } from "lucide-react";
 
@@ -83,10 +83,7 @@ export default function SerialPicker({ line, onUpdated }) {
     setSaving(true);
     try {
       const newStatus = nextSelected.length >= required ? "selected" : "required_missing";
-      await base44.asServiceRole.entities.OrderSerialLine.update(line.id, {
-        assigned_serials: nextSelected,
-        serial_status: newStatus,
-      });
+      await updateOrderSerialLine({ line_id: line.id, assigned_serials: nextSelected, serial_status: newStatus });
       if (onUpdated) {
         onUpdated({ ...line, assigned_serials: nextSelected, serial_status: newStatus });
       }
