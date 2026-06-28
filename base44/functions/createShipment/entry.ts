@@ -217,14 +217,17 @@ Deno.serve(async (req) => {
   });
 
   // If there's an order, update its status and add WooCommerce note with tracking for regular outbound shipments only
-  if (order_id && shipment_type !== 'pickup_drop') {
+  // Guard: order_id must be a non-empty, non-"undefined" string to avoid 404 on .get()
+  const safeOrderId = order_id && String(order_id) !== 'undefined' && String(order_id) !== 'null' ? String(order_id) : null;
+  if (safeOrderId && shipment_type !== 'pickup_drop') {
     try {
-      const order = await base44.asServiceRole.entities.Order.get(order_id);
-      await base44.asServiceRole.entities.Order.update(order_id, { status: 'completed' });
+      let order = null;
+      try { order = await base44.asServiceRole.entities.Order.get(safeOrderId); } catch (_) {}
+      if (order) await base44.asServiceRole.entities.Order.update(safeOrderId, { status: 'completed' });
       console.log(`✅ Order ${order_id} marked as completed`);
 
       // Add tracking number as note in WooCommerce
-      if (order?.external_order_number) {
+      if (order && order.external_order_number) {
         try {
           const [urlSetting, keySetting, secretSetting] = await Promise.all([
             base44.asServiceRole.entities.Settings.filter({ setting_name: "WOOCOMMERCE_SITE_URL" }),
