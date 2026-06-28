@@ -41,9 +41,14 @@ const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
   const normalizedPath = window.location.pathname.toLowerCase();
   const isQuickInvoiceUpload = normalizedPath === '/quickinvoiceupload';
+  const isSerialLiveTest = normalizedPath === '/seriallivetest';
 
   if (isQuickInvoiceUpload) {
     return <QuickInvoiceUpload />;
+  }
+
+  if (isSerialLiveTest) {
+    return <SerialLiveTest />;
   }
 
   // Show loading spinner while checking app public settings or auth
@@ -108,7 +113,9 @@ const AuthenticatedApp = () => {
       <Route path="/QuickInvoiceUpload" element={<QuickInvoiceUpload />} />
       <Route path="/quickinvoiceupload" element={<QuickInvoiceUpload />} />
       <Route path="/LinetDebug" element={<LinetDebug />} />
+      <Route path="/linетdebug" element={<LinetDebug />} />
       <Route path="/SerialLiveTest" element={<SerialLiveTest />} />
+      <Route path="/seriallivetest" element={<SerialLiveTest />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
