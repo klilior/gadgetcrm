@@ -367,14 +367,14 @@ export default function UnifiedOrders() {
     const loadProviders = async () => {
       const map = { velo: false, cargo: false, getpackage: false };
       try {
-        const providers = await base44.entities.ShippingProvider.list();
+        const providers = await base44.entities.ShippingProvider.list().catch(() => []);
         for (const p of providers) {
           if (p.provider_type === 'velo' && p.is_active) map.velo = true;
           if (p.provider_type === 'cargo' && p.is_active) map.cargo = true;
         }
       } catch (_) {}
       try {
-        const gpSettings = await base44.entities.GetPackageSettings.list('-created_date', 1);
+        const gpSettings = await base44.entities.GetPackageSettings.list('-created_date', 1).catch(() => []);
         if (gpSettings?.[0]?.is_active) map.getpackage = true;
       } catch (_) {}
       setActiveProviders(map);
