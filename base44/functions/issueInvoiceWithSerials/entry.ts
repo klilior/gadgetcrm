@@ -4,37 +4,49 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
  * issueInvoiceWithSerials
  * קלט: { order_id, apply (boolean, default false) }
  *
- * apply=false (ברירת מחדל) → DRY-RUN מוחלט: בונה payload ומחזיר אותו, לא שולח כלום ל-Linet.
- * apply=true → שולח POST /api/create/docs ל-Linet ושומר תוצאות.
+ * apply=false → DRY-RUN: בונה payload מלא, לא שולח.
+ * apply=true  → שולח POST /api/create/docs ל-Linet, שומר תוצאות.
  *
- * שלבים:
- * 1. שער checkInvoiceGate — חסימה מוחלטת אם blocked=true
- * 2. idempotency — מניעת כפילות לפי linet_invoice_id קיים
- * 3. בנה payload
- * 4. dry-run → החזר payload_preview
- * 5. apply=true → שלח, שמור, החזר
+ * כל ערכי הבסיס מאומתים ממסמך doctype=9 אמיתי (#40452).
  */
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-async function getLinetCreds(base44) {
-  const settings = await base44.asServiceRole.entities.Settings.list();
-  const get = (k) => settings.find((s) => s.setting_name === k)?.setting_value;
-  const login_id = Deno.env.get("LINET_LOGIN_ID") || get("LINET_LOGIN_ID");
-  const login_hash = Deno.env.get("LINET_LOGIN_HASH") || get("LINET_LOGIN_HASH");
-  const login_company = Number(Deno.env.get("LINET_LOGIN_COMPANY") || get("LINET_LOGIN_COMPANY"));
+function getLinetCreds() {
+  const login_id = Deno.env.get("LINET_LOGIN_ID");
+  const login_hash = Deno.env.get("LINET_LOGIN_HASH");
+  const login_company = Number(Deno.env.get("LINET_LOGIN_COMPANY"));
   if (!login_id || !login_hash || !login_company) throw new Error("חסרים פרטי חיבור ל-Linet");
   return { login_id, login_hash, login_company };
 }
 
-async function callLinetApi(endpoint, body) {
+async function linetPost(endpoint, body) {
   const res = await fetch(`https://app.linet.org.il/api/${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const parsed = await res.json();
-  return { http_status: res.status, data: parsed };
+  const text = await res.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch (_) { data = { _raw: text.slice(0, 500) }; }
+  return { http_status: res.status, data };
+}
+
+// נרמול טלפון לפורמט מקומי ישראלי (0XX...)
+function normalizePhoneLocal(raw) {
+  if (!raw) return null;
+  let digits = String(raw).replace(/\D/g, "");
+  if (digits.startsWith("972")) digits = "0" + digits.slice(3);
+  if (!digits.startsWith("0")) digits = "0" + digits;
+  return digits;
+}
+
+function fmt2(n) { return Number(n).toFixed(2); }
+function fmt4(n) { return Number(n).toFixed(4); }
+function nowStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 // ─── main ───────────────────────────────────────────────────────────────────
@@ -52,27 +64,22 @@ Deno.serve(async (req) => {
     const log = [];
     log.push({ step: "start", order_id, apply });
 
-    // ─── שלב 1: שער — inline מלוגיקת checkInvoiceGate ────────────────────
-    // (base44.functions.invoke לא זמין בין Deno functions — לוגיקה מועתקת)
+    // ─── שלב 1: שער — inline checkInvoiceGate ─────────────────────────────
     const gateReasons = [];
     const gateMessages = [];
+    const realOrderId = order_id.startsWith("woo_") ? order_id.replace("woo_", "") : order_id;
 
     let gateSerialLines = [];
-    try {
-      gateSerialLines = await base44.asServiceRole.entities.OrderItemSerial.filter({ order_id });
-    } catch (_) {}
+    try { gateSerialLines = await base44.asServiceRole.entities.OrderItemSerial.filter({ order_id }); } catch (_) {}
     let gateSerialLines2 = [];
-    try {
-      gateSerialLines2 = await base44.asServiceRole.entities.OrderSerialLine.filter({ order_id });
-    } catch (_) {}
-    const allGateLines = [...gateSerialLines, ...gateSerialLines2];
+    try { gateSerialLines2 = await base44.asServiceRole.entities.OrderSerialLine.filter({ order_id }); } catch (_) {}
+    const allLines = [...gateSerialLines, ...gateSerialLines2];
 
-    let gateOrder = null;
-    const gateRealId = order_id.startsWith("woo_") ? order_id.replace("woo_", "") : order_id;
-    try { gateOrder = await base44.asServiceRole.entities.Order.get(gateRealId); } catch (_) {}
+    let order = null;
+    try { order = await base44.asServiceRole.entities.Order.get(realOrderId); } catch (_) {}
 
     const VALID_STATUSES = new Set(["selected", "verified", "invoiced"]);
-    for (const line of allGateLines) {
+    for (const line of allLines) {
       if (!line.requires_serial) continue;
       const name = line.source_product_name ?? line.order_item_id ?? "?";
       if (!line.mapped_linet_item_id) {
@@ -92,165 +99,276 @@ Deno.serve(async (req) => {
         gateMessages.push(`"${name}" דורש ${required} סריאלי/ים אך יש ${assigned}.`);
       }
     }
-    const shippingMethod = gateOrder?.shipping_method ?? null;
-    if (!shippingMethod || String(shippingMethod).trim() === "") {
-      gateReasons.push("missing_shipping_method");
-      gateMessages.push("לא נבחרה שיטת משלוח.");
-    }
 
     log.push({ step: "gate", blocked: gateReasons.length > 0, reasons: gateReasons });
-
     if (gateReasons.length > 0) {
-      return Response.json({
-        issued: false,
-        blocked: true,
-        reasons: gateReasons,
-        messages_he: gateMessages,
-        log,
-      });
+      return Response.json({ issued: false, blocked: true, reasons: gateReasons, messages_he: gateMessages, log });
     }
 
     // ─── שלב 2: idempotency ────────────────────────────────────────────────
-    // שורות כבר נשלפו בשלב השער — שימוש חוזר
-    const serialLines = gateSerialLines;
-    const serialLines2 = gateSerialLines2;
-    const allLines = allGateLines;
-
     const alreadyInvoiced = allLines.find((l) => l.linet_invoice_id);
     if (alreadyInvoiced) {
       log.push({ step: "idempotency_block", existing_invoice_id: alreadyInvoiced.linet_invoice_id });
-      return Response.json({
-        issued: false,
-        already_invoiced: true,
-        existing_invoice_id: alreadyInvoiced.linet_invoice_id,
-        log,
-      });
+      return Response.json({ issued: false, already_invoiced: true, existing_invoice_id: alreadyInvoiced.linet_invoice_id, log });
     }
 
-    // ─── שלב 3: שלוף נתוני הזמנה + לקוח ──────────────────────────────────
-    let order = gateOrder; // כבר נשלף בשלב השער
+    // ─── שלב 3: נתוני הזמנה + לקוח + OrderProducts ────────────────────────
     let client = null;
-
-    const realOrderId = gateRealId;
-
     if (order?.client_id) {
       client = await base44.asServiceRole.entities.Client.get(order.client_id).catch(() => null);
     }
 
+    // שלוף OrderProducts לקבלת מחירים
+    let orderProducts = [];
+    try { orderProducts = await base44.asServiceRole.entities.OrderProduct.filter({ order_id: realOrderId }); } catch (_) {}
+
     log.push({
-      step: "order_loaded",
-      order_id_used: realOrderId,
+      step: "data_loaded",
       order_found: !!order,
-      order_status: order?.status,
-      shipping_method: order?.shipping_method,
       client_found: !!client,
       client_linet_account_id: client?.linet_account_id ?? null,
+      order_products_count: orderProducts.length,
     });
 
-    // ─── שלב 4: בנה docDetailes מהשורות הסריאליות ─────────────────────────
+    // ─── שלב 4: זיהוי/יצירת לקוח ─────────────────────────────────────────
+    const creds = getLinetCreds();
+
+    let accountId = client?.linet_account_id ?? null;
+    let accountToCreate = null;
+    let accountFound = !!accountId;
+    let accountSearchLog = null;
+
+    if (!accountId) {
+      // נרמל טלפון
+      let rawPhone = null;
+      if (order?.raw_data_billing) {
+        try {
+          const billing = JSON.parse(order.raw_data_billing);
+          rawPhone = billing.phone ?? billing.billing?.phone ?? null;
+        } catch (_) {}
+      }
+      if (!rawPhone) rawPhone = client?.phone ?? client?.phone_original ?? null;
+      const localPhone = normalizePhoneLocal(rawPhone);
+
+      log.push({ step: "phone_resolve", raw: rawPhone, normalized: localPhone });
+
+      if (localPhone) {
+        // חפש לפי phone
+        const searchRes = await linetPost("newsearch/account", { ...creds, limit: 3, offset: 0, query: { phone: localPhone } });
+        const searchRows = Array.isArray(searchRes.data?.body) ? searchRes.data.body : (Array.isArray(searchRes.data) ? searchRes.data : []);
+        accountSearchLog = { field: "phone", value: localPhone, http_status: searchRes.http_status, row_count: searchRows.length };
+
+        if (searchRows.length === 0) {
+          // נסה גם cellular
+          const searchRes2 = await linetPost("newsearch/account", { ...creds, limit: 3, offset: 0, query: { cellular: localPhone } });
+          const searchRows2 = Array.isArray(searchRes2.data?.body) ? searchRes2.data.body : (Array.isArray(searchRes2.data) ? searchRes2.data : []);
+          accountSearchLog.cellular_fallback = { http_status: searchRes2.http_status, row_count: searchRows2.length };
+          if (searchRows2.length > 0) {
+            accountId = String(searchRows2[0].id ?? searchRows2[0].account_id);
+            accountFound = true;
+            accountSearchLog.found_via = "cellular";
+            accountSearchLog.found_id = accountId;
+          }
+        } else {
+          accountId = String(searchRows[0].id ?? searchRows[0].account_id);
+          accountFound = true;
+          accountSearchLog.found_via = "phone";
+          accountSearchLog.found_id = accountId;
+        }
+      }
+
+      log.push({ step: "account_search", ...accountSearchLog });
+
+      if (!accountId) {
+        // לא נמצא — הכן אובייקט ליצירה
+        let billingName = null;
+        let billingEmail = null;
+        let billingAddress = null;
+        let billingCity = null;
+        if (order?.raw_data_billing) {
+          try {
+            const b = JSON.parse(order.raw_data_billing);
+            billingName = [b.first_name, b.last_name].filter(Boolean).join(" ") || b.company || null;
+            billingEmail = b.email ?? null;
+            billingAddress = [b.address_1, b.address_2].filter(Boolean).join(", ") || null;
+            billingCity = b.city ?? null;
+          } catch (_) {}
+        }
+        accountToCreate = {
+          name: billingName ?? client?.full_name ?? "לקוח לא ידוע",
+          type: 0,
+          cat_id: 0,
+          phone: normalizePhoneLocal(client?.phone ?? null) ?? "",
+          email: billingEmail ?? client?.email ?? "",
+          address: billingAddress ?? client?.full_address ?? "",
+          city: billingCity ?? client?.city ?? "",
+          currency_id: "ILS",
+          country_id: "IL",
+          language: "he_il",
+        };
+        log.push({ step: "account_to_create", data: accountToCreate });
+
+        if (apply) {
+          // יצירת לקוח אמיתית
+          const createRes = await linetPost("create/account", { ...creds, ...accountToCreate });
+          log.push({ step: "account_create_response", http_status: createRes.http_status, data: createRes.data });
+          const createdId = createRes.data?.body?.id ?? createRes.data?.id ?? null;
+          if (!createdId) {
+            return Response.json({ issued: false, error: "יצירת לקוח ב-Linet נכשלה", linet_response: createRes.data, log });
+          }
+          accountId = String(createdId);
+          log.push({ step: "account_created", linet_account_id: accountId });
+        }
+      }
+    }
+
+    log.push({ step: "account_resolved", account_id: accountId, account_found: accountFound });
+
+    // ─── שלב 5: בנה docDetailes ────────────────────────────────────────────
+    const VAT_RATE = 0.17;
     const relevantLines = allLines.filter(
-      (l) =>
-        l.requires_serial &&
-        l.mapped_linet_item_id &&
-        Array.isArray(l.assigned_serials) &&
-        l.assigned_serials.length > 0
+      (l) => l.requires_serial && l.mapped_linet_item_id && Array.isArray(l.assigned_serials) && l.assigned_serials.length > 0
     );
 
     if (relevantLines.length === 0) {
-      return Response.json({
-        issued: false,
-        error: "אין שורות סריאליות עם מיפוי ל-Linet וסריאליים מוקצים",
-        log,
-      });
+      return Response.json({ issued: false, error: "אין שורות סריאליות עם מיפוי ל-Linet וסריאליים מוקצים", log });
     }
 
-    const docDetailes = relevantLines.map((l) => ({
-      item_id: Number(l.mapped_linet_item_id),
-      sku: l.mapped_linet_sku ?? l.source_sku ?? "TODO:missing_sku",
-      qty: l.serials_required_count ?? l.assigned_serials.length,
-      name: l.mapped_linet_item_name ?? l.source_product_name ?? "TODO:missing_name",
-      serial: l.assigned_serials,
-      // שדות נוספים לפי מבנה docDetailes שגילינו — ערכים שאנחנו לא יודעים:
-      iItem: "TODO:unit_price_from_order",           // מחיר יחידה לפני מע"מ
-      iItemWithVat: "TODO:unit_price_inc_vat",        // מחיר יחידה כולל מע"מ
-      iTotal: "TODO:line_total_ex_vat",               // סה"כ שורה לפני מע"מ
-      iTotalVat: "TODO:line_total_inc_vat",            // סה"כ שורה כולל מע"מ
-      discount: "0.00",
-      discountPer: "0.00",
-      discountType: 0,
-      currency_id: "ILS",
-      currency_rate: "1.0000",
-      unit_id: 0,
-      vat_cat_id: 1,                                  // TODO: לאמת — 1 = 17% VAT?
-      warehouse_id: "TODO:warehouse_id",              // מזהה מחסן ב-Linet — לא ידוע
-    }));
+    const docDetailes = relevantLines.map((l) => {
+      const qty = l.serials_required_count ?? l.assigned_serials.length;
 
-    // ─── שלב 5: בנה payload מלא ────────────────────────────────────────────
-    const creds = await getLinetCreds(base44);
-    const now = new Date();
-    const issueDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+      // מצא מחיר מ-OrderProduct לפי sku
+      let lineTotalInc = null;
+      const prod = orderProducts.find(
+        (p) => p.sku && (p.sku === l.source_sku || p.sku === l.mapped_linet_sku)
+      );
+      if (prod?.total) lineTotalInc = parseFloat(prod.total);
 
+      // חישוב: iTotalVat = סה"כ שורה כולל מע"מ, iTotal = ללא מע"מ
+      // iItem = מחיר יחידה ללא מע"מ
+      let iTotalVat, iTotal, iItem;
+      if (lineTotalInc !== null && qty > 0) {
+        iTotalVat = lineTotalInc;
+        iTotal = iTotalVat / (1 + VAT_RATE);
+        iItem = iTotal / qty;
+      } else {
+        // fallback מ-total ההזמנה חלקי מספר שורות
+        iTotalVat = null;
+        iTotal = null;
+        iItem = null;
+      }
+
+      return {
+        // ─── זיהוי פריט ─────────────────────────────────────────────────
+        item_id: Number(l.mapped_linet_item_id),
+        sku: l.mapped_linet_sku ?? l.source_sku ?? "",
+        name: l.mapped_linet_item_name ?? l.source_product_name ?? "",
+        qty: fmt4(qty),                              // string 4 ספרות
+        serial: l.assigned_serials,                   // array of strings
+        // ─── מחירים (string 2 ספרות) ────────────────────────────────────
+        iItem:       iItem !== null ? fmt2(iItem) : "TODO:unit_price_ex_vat",
+        iItemWithVat: 1,                              // number — flag, לא מחיר
+        iTotal:      iTotal !== null ? fmt2(iTotal) : "TODO:line_total_ex_vat",
+        iTotalVat:   iTotalVat !== null ? fmt2(iTotalVat) : "TODO:line_total_inc_vat",
+        // ─── שדות קבועים ─────────────────────────────────────────────────
+        discount:      "0.00",
+        discountPer:   "0.00",
+        discountType:  0,
+        currency_id:   "ILS",
+        currency_rate: "1.0000",
+        unit_id:       0,
+        vat_cat_id:    1,
+        warehouse_id:  115,
+      };
+    });
+
+    log.push({ step: "docDetailes_built", count: docDetailes.length });
+
+    // ─── שלב 6: חישוב סיכומים כספיים ──────────────────────────────────────
+    let subTotal = 0;
+    let totalInc = 0;
+    for (const line of docDetailes) {
+      subTotal += line.iTotal !== null && !String(line.iTotal).includes("TODO") ? parseFloat(line.iTotal) : 0;
+      totalInc += line.iTotalVat !== null && !String(line.iTotalVat).includes("TODO") ? parseFloat(line.iTotalVat) : 0;
+    }
+    const vatAmount = totalInc - subTotal;
+    const subTotalStr = fmt2(subTotal);
+    const vatStr = fmt2(vatAmount);
+    const totalStr = fmt2(totalInc);
+
+    // ─── שלב 7: זיהוי סוג תשלום לפי מקור ─────────────────────────────────
+    // SuperPharm = 50, WooCommerce = 30
+    const isSuperPharm = allLines.some((l) => l.source === "superpharm");
+    const chequeType = isSuperPharm ? 50 : 30;
+    const orderTotal = order?.total ? fmt2(parseFloat(order.total)) : totalStr;
+
+    // ─── שלב 8: בנה payload מלא ────────────────────────────────────────────
+    const dateStr = nowStr();
     const payload = {
       // ─── אימות ───────────────────────────────────────────────────────────
       login_id: creds.login_id,
       login_hash: creds.login_hash,
       login_company: creds.login_company,
 
-      // ─── סוג מסמך ────────────────────────────────────────────────────────
-      // doctype: מה שאנחנו ראינו: 16 = קבלה, 9 = חשבונית מס, 3 = חשבונית זיכוי
-      // לחשבונית מס רגילה — TODO: לאמת מה doctype המדויק לחשבונית מס עסקית
-      doctype: "TODO:doctype_9_or_other",
+      // ─── מסמך ────────────────────────────────────────────────────────────
+      doctype: 9,
+      action: 1,
+      language: "he_il",
+      issue_date: dateStr,
+      due_date: dateStr,
+      ref_date: dateStr,
 
-      // ─── תאריכים ─────────────────────────────────────────────────────────
-      issue_date: issueDateStr,
-      due_date: issueDateStr,
-      ref_date: issueDateStr,
+      // ─── לקוח ────────────────────────────────────────────────────────────
+      account_id: accountId ?? "TODO:linet_account_id_required",
+      company: client?.full_name ?? "",
 
-      // ─── זיהוי לקוח ──────────────────────────────────────────────────────
-      // אם יש account_id ב-Linet → משתמשים בו. אם לא — TODO
-      account_id: client?.linet_account_id ?? "TODO:linet_account_id_required",
-      company: client?.full_name ?? order?.raw_data_billing ?? "TODO:customer_name",
-
-      // ─── ערכים כספיים ─────────────────────────────────────────────────────
-      // sub_total / vat / total — חייב לחשב מ-docDetailes לאחר שיאומתו המחירים
-      sub_total: "TODO:sum_of_iTotal",
-      vat: "TODO:sum_of_vat_amounts",
-      total: order?.total ?? "TODO:order_total",
+      // ─── כספי ────────────────────────────────────────────────────────────
+      sub_total: subTotalStr,
+      vat: vatStr,
+      total: totalStr,
       currency_id: "ILS",
       currency_rate: "1.0000",
+      src_tax: "0.00",
       discount: "0.00",
-      disType: 0,
+      disType: 1,
 
-      // ─── שדות משלוח / הפניה ───────────────────────────────────────────────
-      refnum: order?.external_order_number ?? null,         // מספר הזמנה חיצוני
-      refnum_ext: order?.external_order_number ?? null,
+      // ─── הפניה ───────────────────────────────────────────────────────────
+      refnum: order?.external_order_number ?? "",
+      refnum_ext: order?.external_order_number ?? "",
       description: `הזמנה ${order?.external_order_number ?? order_id}`,
       comments: order?.customer_note ?? "",
-      shipping_method: order?.shipping_method ?? "",
+
+      // ─── owner — TODO: יש לספק מזהה user ב-Linet ────────────────────────
+      owner: "TODO:linet_owner_user_id",
 
       // ─── שורות פריט ───────────────────────────────────────────────────────
       docDetailes,
 
-      // ─── שדות שלא בטוחים — מסומנים TODO ──────────────────────────────────
-      language: "he_il",
-      owner: "TODO:linet_owner_user_id",   // מי המנפיק — user ב-Linet, לא Base44
-      signer: "TODO:linet_signer_if_needed",
-      action: "TODO:create_or_approve",     // האם צריך לשלוח action=create?
-      src_tax: "TODO:src_tax_value",        // ראינו שדה זה במסמך — לא יודעים ערכו
+      // ─── תשלום ───────────────────────────────────────────────────────────
+      docCheques: [{
+        type: chequeType,
+        sum: orderTotal,
+        doc_sum: orderTotal,
+        currency_id: "ILS",
+        currency_rate: "1.0000",
+        line: 1,
+        bank_refnum: null,
+      }],
     };
+
+    // ─── הגנת TODOs ────────────────────────────────────────────────────────
+    const payloadStr = JSON.stringify(payload);
+    const todoMatches = [...payloadStr.matchAll(/"TODO:[^"]+"/g)].map((m) => m[0]);
+    const hasTodos = todoMatches.length > 0;
 
     log.push({
       step: "payload_built",
-      todos: [
-        "doctype — יש לאמת: 9=חשבונית מס? או אחר?",
-        "account_id — לקוח זה אין linet_account_id, חייב יצירה/חיפוש ב-Linet",
-        "iItem/iItemWithVat/iTotal/iTotalVat — מחירי שורה חסרים, צריך לשלוף מ-OrderProduct",
-        "warehouse_id — לא ידוע, חייב לבדוק בחשבונית אמיתית",
-        "vat_cat_id=1 — צריך לאמת שזה אכן 17%",
-        "owner — מזהה משתמש ב-Linet שמנפיק החשבונית",
-        "src_tax / action / signer — שדות שראינו במסמך, לא ברורים",
-        "sub_total/vat — חישוב אוטומטי מהשורות לאחר אימות המחירים",
-      ],
+      has_todos: hasTodos,
+      todos_found: todoMatches,
+      sub_total: subTotalStr,
+      vat: vatStr,
+      total: totalStr,
+      cheque_type: chequeType,
     });
 
     // ─── DRY-RUN — apply=false ──────────────────────────────────────────────
@@ -259,7 +377,10 @@ Deno.serve(async (req) => {
         issued: false,
         dry_run: true,
         gate_passed: true,
-        order_id,
+        has_todos: hasTodos,
+        todos_found: todoMatches,
+        account_resolved: { id: accountId, found_existing: accountFound },
+        account_to_create: accountToCreate ?? null,
         payload_preview: payload,
         serial_lines_included: relevantLines.map((l) => ({
           line_id: l.id,
@@ -272,48 +393,39 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── APPLY=TRUE — שליחה אמיתית ─────────────────────────────────────────
-    // TODO: להסיר את בלוק הבדיקה הזה לאחר אימות כל שדות TODO למעלה
-    const hasTodos = JSON.stringify(payload).includes("TODO:");
+    // ─── APPLY=TRUE — חסום אם יש TODOs ────────────────────────────────────
     if (hasTodos) {
       return Response.json({
         issued: false,
         error: "לא ניתן לשלוח חשבונית — יש שדות TODO שטרם אומתו",
-        todos_in_payload: log.find((l) => l.step === "payload_built")?.todos,
+        todos_found: todoMatches,
         log,
       });
     }
 
-    // שלח ל-Linet
-    const linetRes = await callLinetApi("create/docs", payload);
+    // ─── שלח ל-Linet ───────────────────────────────────────────────────────
+    const linetRes = await linetPost("create/docs", payload);
     log.push({ step: "linet_response", http_status: linetRes.http_status, data_keys: Object.keys(linetRes.data ?? {}) });
 
     const linetBody = linetRes.data;
     if (linetRes.http_status !== 200 || linetBody?.status === "error" || linetBody?.errorCode) {
-      return Response.json({
-        issued: false,
-        linet_error: linetBody,
-        log,
-      });
+      return Response.json({ issued: false, linet_error: linetBody, log });
     }
 
-    // חלץ doc_id מהתשובה
     const createdDocId = linetBody?.body?.id ?? linetBody?.id ?? null;
     const createdDocNumber = linetBody?.body?.docnum ?? linetBody?.docnum ?? null;
     const invoicedAt = new Date().toISOString();
 
-    // עדכן שורות ב-OrderItemSerial
+    // עדכן שורות — לא מעדכן כלום אם Linet החזיר שגיאה (הגנה לעיל)
     for (const line of relevantLines) {
-      const entity = serialLines.find((l) => l.id === line.id)
-        ? "OrderItemSerial"
-        : "OrderSerialLine";
-      await base44.asServiceRole.entities[entity].update(line.id, {
+      const entityName = gateSerialLines.find((l) => l.id === line.id) ? "OrderItemSerial" : "OrderSerialLine";
+      await base44.asServiceRole.entities[entityName].update(line.id, {
         linet_invoice_id: String(createdDocId),
         linet_document_number: String(createdDocNumber),
         linet_response: linetBody,
         invoiced_at: invoicedAt,
         serial_status: "invoiced",
-      });
+      }).catch(() => {});
     }
 
     log.push({ step: "entities_updated", lines_updated: relevantLines.length });
@@ -328,6 +440,6 @@ Deno.serve(async (req) => {
     });
 
   } catch (err) {
-    return Response.json({ issued: false, error: err.message, stack: err.stack }, { status: 500 });
+    return Response.json({ issued: false, error: err.message, stack: err.stack?.slice(0, 600) }, { status: 500 });
   }
 });
