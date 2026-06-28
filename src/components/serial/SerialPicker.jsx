@@ -17,7 +17,7 @@ export default function SerialPicker({ linetItemId, requiredCount, value = [], o
   const [loading, setLoading] = useState(false);
   const [manual, setManual] = useState("");
   const [verifying, setVerifying] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
+  const [retryAttempts, setRetryAttempts] = useState(0);
 
   const retryRef = React.useRef(null);
 
@@ -29,16 +29,22 @@ export default function SerialPicker({ linetItemId, requiredCount, value = [], o
       if (data?.success) {
         const list = data.serials || [];
         setAvailable(list);
-        // Auto-retry once if Linet returned empty the first time (intermittent timeouts)
-        if (list.length === 0 && retryCount === 0) {
-          setRetryCount(1);
-          retryRef.current = setTimeout(() => loadAvailable(), 2500);
+        // Auto-retry with increasing delay if Linet returns empty (intermittent timeouts)
+        if (list.length === 0 && retryAttempts < 4) {
+          setRetryAttempts((a) => a + 1);
+          const delay = 2000 + retryAttempts * 2000; // 2s, 4s, 6s, 8s
+          retryRef.current = setTimeout(() => loadAvailable(), delay);
         }
       } else {
         setAvailable([]);
         toast.error("לינט: " + (data?.error || "לא ניתן לטעון סריאליים"));
       }
     } catch (e) {
+      if (retryAttempts < 4) {
+        setRetryAttempts((a) => a + 1);
+        const delay = 3000 + retryAttempts * 2000;
+        setTimeout(() => loadAvailable(), delay);
+      }
       toast.error("שגיאה בחיבור ללינט: " + e.message);
     } finally {
       setLoading(false);

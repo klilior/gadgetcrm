@@ -126,6 +126,7 @@ async function resolveSerialRequirement(base44, creds, sku, userName) {
 // ---------- Available serials ----------
 async function getAvailableSerials(creds, linetItemId, warehouseId = null) {
   const query = { item_id: Number(linetItemId) };
+  let raw = null;
   let rows = [];
   try {
     rows = await linetSearch(creds, "inventory", query, 500, 0);
@@ -133,6 +134,9 @@ async function getAvailableSerials(creds, linetItemId, warehouseId = null) {
     console.error(`[getAvailableSerials] Linet failure for item ${linetItemId}: ${e.message}`);
     throw e; // let callers handle
   }
+
+  // Capture raw sample for debugging when Linet returns empty
+  raw = Array.isArray(rows) ? rows.slice(0, 3).map((r) => ({ idcode: r.idcode, ammount: r.ammount, account_id: r.account_id, item_id: r.item_id })) : [];
 
   // Net availability per idcode: sum of ammount. >0 means currently in stock.
   const byCode = {};
@@ -144,7 +148,7 @@ async function getAvailableSerials(creds, linetItemId, warehouseId = null) {
     byCode[code].net += parseFloat(r.ammount || "0");
     if (r.created && r.created > byCode[code].created) byCode[code].created = r.created;
   }
-  return Object.values(byCode).filter((c) => c.net > 0);
+  return { serials: Object.values(byCode).filter((c) => c.net > 0), raw };
 }
 
 // ---------- Audit log ----------
@@ -275,15 +279,15 @@ Deno.serve(async (req) => {
       case "getAvailableSerials": {
         const { linet_item_id, warehouse_id } = params;
         if (!linet_item_id) return Response.json({ success: false, error: "Missing linet_item_id" });
-        const serials = await getAvailableSerials(creds, linet_item_id, warehouse_id ?? null);
-        return Response.json({ success: true, serials });
+        const { serials, raw } = await getAvailableSerials(creds, linet_item_id, warehouse_id ?? null);
+        return Response.json({ success: true, serials, debug_captured_raw: serials.length === 0 ? (raw || []) : undefined });
       }
 
       // Verify a typed/scanned serial belongs to the item & is available (Step 7/8)
       case "verifySerial": {
         const { linet_item_id, serial, warehouse_id } = params;
         if (!linet_item_id || !serial) return Response.json({ success: false, error: "Missing linet_item_id or serial" });
-        const serials = await getAvailableSerials(creds, linet_item_id, warehouse_id ?? null);
+        const { serials } = await getAvailableSerials(creds, linet_item_id, warehouse_id ?? null);
         const match = serials.find((s) => String(s.idcode) === String(serial).trim());
         return Response.json({ success: true, valid: !!match, serial: match || null });
       }
