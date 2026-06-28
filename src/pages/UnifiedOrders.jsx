@@ -84,7 +84,7 @@ export default function UnifiedOrders() {
     // Shared client map (used by WooCommerce and Linet)
     let cM = {};
     try {
-      const rawClients = await base44.entities.Client.list(null, 1000);
+      const rawClients = await base44.entities.Client.list(null, 1000).catch(() => []);
       for (const c of rawClients) cM[c.id] = c;
     } catch (e) { /* clients will be empty */ }
 
@@ -155,8 +155,8 @@ export default function UnifiedOrders() {
     let woo = [];
     try {
       const [rawOrders, rawProducts] = await Promise.all([
-        base44.entities.Order.list('-order_date', 500),
-        base44.entities.OrderProduct.list(null, 5000)
+        base44.entities.Order.list('-order_date', 500).catch(() => []),
+        base44.entities.OrderProduct.list(null, 5000).catch(() => [])
       ]);
       const pM = {};
       for (const p of rawProducts) { if (!pM[p.order_id]) pM[p.order_id] = []; pM[p.order_id].push(p); }
@@ -309,7 +309,7 @@ export default function UnifiedOrders() {
         }
       }
       // Fetch existing statuses from LinetOrderStatus entity
-      const existingStatuses = await base44.entities.LinetOrderStatus.list(null, 500);
+      const existingStatuses = await base44.entities.LinetOrderStatus.list(null, 500).catch(() => []);
       const statusMap = {};
       for (const s of existingStatuses) statusMap[s.doc_number] = s;
 
