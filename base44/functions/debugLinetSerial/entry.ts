@@ -67,23 +67,20 @@ Deno.serve(async (req) => {
     // The working endpoints are ALL under /api/newsearch/{model} with POST + JSON body including credentials +
     // JSON.stringify(query), limit, and offset. We use those here.
 
-    // CALL 1 — iPhone item details via newsearch/item with sku filter
+    // CALL 1 — iPhone details via newsearch/item (sku filter)
     const data1 = await newsearch({ creds, model: "item", query: { sku: "190198231642" }, limit: 5 });
-    // CALL 2 — ALL 27 keys of inventory model (no duplicate call2)
-    const data3 = await newsearch({ creds, model: "inventory", query: {}, limit: 3 });
-    let data3AllKeys = null;
-    if (data3.raw?.body?.[0] && typeof data3.raw.body[0] === "object") data3AllKeys = Object.keys(data3.raw.body[0]);
-    // CALL 3 — inventory for item 53, detailed (use this to render full keys in JSON)
-    const data4 = await newsearch({ creds, model: "inventory", query: { item: 53 }, limit: 50 });
-    let data4AllKeys = null;
-    if (data4.raw?.body?.[0] && typeof data4.raw.body[0] === "object") data4AllKeys = Object.keys(data4.raw.body[0]);
-    // CALL 4 — first raw sample of inventory for item 53 (show one record fully)
-    const sampleRec = data4.raw?.body?.[0];
+    // CALL 2 — inventory MODEL keys (empty query, any warehouse)
+    const data2 = await newsearch({ creds, model: "inventory", query: {}, limit: 3 });
+    let d2Keys = null;
+    if (data2.raw?.body?.[0] && typeof data2.raw.body[0] === "object") d2Keys = Object.keys(data2.raw.body[0]);
+    // CALL 3 — inventory FOR item 53; gives both keys AND sample
+    const data3 = await newsearch({ creds, model: "inventory", query: { item: 53 }, limit: 50 });
+    let d3Keys = null;
+    if (data3.raw?.body?.[0] && typeof data3.raw.body[0] === "object") d3Keys = Object.keys(data3.raw.body[0]);
+    const sampleRec = data3.raw?.body?.[0];
 
     // * If counter field is not called "ammount" in inventory,
     // note the serial-field-gap for the user to investigate manually.
-    const serialFieldHint = "ammount" !== "serial" ? "⚠ ammount is the quantity; no 'serial' key found in inventory model keys (call3). Serial might exist in a different model (e.g. /newsearch/mutexrequest, /newsearch/transport)." : "";
-
     const result = {
       notes: [
         "PURE READ-ONLY — no invoices created, no Linet data modified.",
@@ -91,13 +88,12 @@ Deno.serve(async (req) => {
         "The active endpoints are POST /api/newsearch/{model} with JSON + creds + stringified query + limit/offset.",
         "Calls 1-4 use these real endpoints for the iPhone (item 53, SKU 190198231642, stockType 2).",
       ],
-      call1_newsearch_item_brief: { status: data1.status, count: data1.count, keys19: data1.keys?.slice(0, 19), keys_total: data1.keys?.length },
-      call2_inventory_model_27_keys: { status: data3.status, keys: data3AllKeys },
-      call3_inventory_item53_keys_27: { status: data4.status, count: data4.count, keys: data4AllKeys },
-      call4_serial_values_item53: (() => {
+      call1_newsearch_item: { status: data1.status, count: data1.count, keys_total: data1.keys?.length },
+      call2_inventory_model_keys: { status: data2.status, keys_total: d2Keys?.length, note: "same 27 keys as call3" },
+      call3_inventory_item53_keys: { status: data3.status, count: data3.count, keys: d3Keys },
+      call4_eav_ammount_vals: (() => {
         if (!sampleRec) return null;
-        // Show serial-related fields only
-        const serialKeys = data4AllKeys.filter(k => k.includes("serial") || k.includes("imei") || k.includes("eav") || k === "ammount" || k === "acccell_id" || k === "acccell_name" || k === "item_id" || k === "item_sku" || k === "idcode" || k === "instance_id");
+        const serialKeys = d3Keys.filter(k => k.includes("eav") || k === "ammount");
         return Object.fromEntries(serialKeys.map(k => [k, sampleRec[k]]));
       })(),
     };
