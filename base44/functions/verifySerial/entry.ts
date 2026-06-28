@@ -4,6 +4,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
  * verifySerial — READ-ONLY
  * קלט: { linet_item_id: number, serial: string }
  * פלט: { valid: bool, reason: string, ... }
+ *
+ * לוגיקה: קריאה אחת לפי {"idcode": serial}, סינון ידני על item_id בתוצאה.
+ * item_id בquery לא מסנן בצד Linet — חייבים לבדוק בצד הלקוח.
  */
 
 async function getLinetCreds(base44) {
@@ -19,18 +22,6 @@ async function getLinetCreds(base44) {
   }
   if (!login_id || !login_hash || !login_company) throw new Error("Missing Linet credentials");
   return { login_id: String(login_id), login_hash: String(login_hash), login_company: Number(login_company) };
-}
-
-async function searchInventory(creds, query, limit = 500) {
-  const res = await fetch("https://app.linet.org.il/api/newsearch/inventory", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...creds, limit, offset: 0, query: JSON.stringify(query) }),
-  });
-  if (!res.ok) throw new Error(`Linet HTTP ${res.status}`);
-  const parsed = await res.json();
-  const raw = parsed?.data?.body ?? parsed?.body ?? null;
-  return Array.isArray(raw) ? raw : [];
 }
 
 Deno.serve(async (req) => {
@@ -50,46 +41,57 @@ Deno.serve(async (req) => {
       return Response.json({ valid: false, reason: "linet_error", error: e.message });
     }
 
-    // קריאה 1 — חיפוש הסריאלי עבור הפריט הספציפי
-    let rows1;
+    // קריאה אחת בלבד — חיפוש ישיר לפי idcode
+    let rows;
     try {
-      rows1 = await searchInventory(creds, { item_id: Number(linet_item_id) });
+      const res = await fetch("https://app.linet.org.il/api/newsearch/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...creds,
+          limit: 50,
+          offset: 0,
+          query: JSON.stringify({ idcode: String(serial).trim() }),
+        }),
+      });
+      if (!res.ok) throw new Error(`Linet HTTP ${res.status}`);
+      const parsed = await res.json();
+      const raw = parsed?.data?.body ?? parsed?.body ?? null;
+      rows = Array.isArray(raw) ? raw : [];
     } catch (e) {
       return Response.json({ valid: false, reason: "linet_error", error: e.message });
     }
 
-    const serialLower = String(serial).trim().toLowerCase();
-    const foundInItem = rows1.find((r) => r.idcode != null && String(r.idcode).toLowerCase() === serialLower);
+    // סינון ידני — אל תסמוך על Linet לסנן לפי idcode
+    const serialNorm = String(serial).trim().toLowerCase();
+    const matchingRows = rows.filter(
+      (r) => r.idcode != null && String(r.idcode).trim().toLowerCase() === serialNorm
+    );
 
-    if (foundInItem) {
-      return Response.json({
-        valid: true,
-        reason: "found_in_stock",
-        matched_item_id: linet_item_id,
-      });
-    }
-
-    // קריאה 2 — חיפוש הסריאלי בכל המלאי (בלי פילטר פריט)
-    let rows2;
-    try {
-      rows2 = await searchInventory(creds, {}, 2000);
-    } catch (e) {
-      // אם הקריאה השנייה נכשלה — מחזיר not_found (לא קורס)
+    if (matchingRows.length === 0) {
       return Response.json({ valid: false, reason: "not_found_in_stock" });
     }
 
-    const foundElsewhere = rows2.find((r) => r.idcode != null && String(r.idcode).toLowerCase() === serialLower);
+    // בדיקת item_id — הגנה קריטית מפני סריאלי של פריט שגוי
+    const targetItemId = Number(linet_item_id);
+    const correctItemRow = matchingRows.find((r) => Number(r.item_id) === targetItemId);
 
-    if (foundElsewhere) {
+    if (correctItemRow) {
       return Response.json({
-        valid: false,
-        reason: "belongs_to_other_item",
-        found_item_id: foundElsewhere.item_id ?? foundElsewhere.item ?? null,
-        found_item_name: foundElsewhere.item_name ?? foundElsewhere.itemname ?? null,
+        valid: true,
+        reason: "found_in_stock",
+        matched_item_id: targetItemId,
       });
     }
 
-    return Response.json({ valid: false, reason: "not_found_in_stock" });
+    // הסריאלי קיים אבל שייך לפריט אחר — חסימה קריטית
+    const otherRow = matchingRows[0];
+    return Response.json({
+      valid: false,
+      reason: "belongs_to_other_item",
+      found_item_id: Number(otherRow.item_id) || null,
+      found_item_name: otherRow.item_name ?? null,
+    });
 
   } catch (err) {
     console.error("verifySerial fatal:", err);
