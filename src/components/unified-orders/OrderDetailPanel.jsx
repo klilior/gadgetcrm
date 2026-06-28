@@ -281,6 +281,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         <div className="bg-red-50 border border-red-200 rounded-2xl p-3 text-sm text-red-800">
           <div className="font-bold mb-1">כדי להמשיך חסר: {[
             ...(blockingItems || []),
+
             ...(shipmentBlockReason ? [shipmentBlockReason] : []),
           ].join(' / ') || shipmentBlockReason}</div>
           {shipmentBlockReason && <div className="text-xs text-red-700">{shipmentBlockReason}</div>}
