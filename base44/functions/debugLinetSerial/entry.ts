@@ -3,7 +3,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 /**
  * PURE READ-ONLY DIAGNOSTIC PROBE — admin only.
  * Does NOT create invoices, write to Linet, or modify any entity.
- * Returns raw Linet API responses verbatim so field names can be inspected.
+ * NOTE: The Linet API has NO /view/, /search/, /list/ endpoints at the documented paths.
+ * All four return 404. The REAL endpoints are POST /api/newsearch/{model}.
+ * We call those while preserving the READ-ONLY, NO-WRITE requirement.
  */
 
 async function getLinetCreds(base44) {
@@ -27,12 +29,28 @@ async function getLinetCreds(base44) {
   };
 }
 
-function safeJson(text, label) {
-  try {
-    return { parsed: JSON.parse(text), raw: text };
-  } catch (e) {
-    return { parsed: null, raw: text, parse_error: String(e) };
+const BASE = "https://app.linet.org.il/api";
+const HEADERS = { "Content-Type": "application/json" };
+
+async function fetchLinet(path, fullPayload) {
+  const url = `${BASE}${path}`;
+  const res = await fetch(url, { method: "POST", headers: HEADERS, body: JSON.stringify(fullPayload) });
+  return res;
+}
+
+async function newsearch({ creds, model, query, limit = 10, offset = 0 }) {
+  const payload = { ...creds, query: JSON.stringify(query || {}), limit, offset };
+  const res = await fetchLinet(`/newsearch/${model}`, payload);
+  const status = res.status;
+  const text = await res.text();
+  let parsed;
+  let keysList = null;
+  try { parsed = JSON.parse(text); } catch { parsed = null; }
+  const body = parsed?.body;
+  if (Array.isArray(body) && body.length > 0 && typeof body[0] === "object" && body[0] !== null) {
+    keysList = Object.keys(body[0]);
   }
+  return { status, count: Array.isArray(body) ? body.length : (body === null ? 0 : typeof body), keys: keysList, raw: parsed || text };
 }
 
 Deno.serve(async (req) => {
@@ -43,85 +61,46 @@ Deno.serve(async (req) => {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { sku = "663973249", warehouse_id } = await req.json();
     const creds = await getLinetCreds(base44);
-    const BASE_URL = "https://app.linet.org.il/api";
-    const result = {};
 
-    // ============================================
-    // CALL 1 — Item details (POST /newsearch/item)
-    // ============================================
-    try {
-      const itemPayload = {
-        ...creds,
-        query: JSON.stringify({ sku }),
-        limit: 50,
-        offset: 0,
-      };
-      const itemRes = await fetch(`${BASE_URL}/newsearch/item`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(itemPayload),
-      });
-      const itemText = await itemRes.text();
-      const itemJson = safeJson(itemText, "item");
-      const body = itemJson.parsed?.body;
+    // IMPORTANT FINDING: The Linet API does NOT have /view/, /search/, or /list/ paths as documented.
+    // The working endpoints are ALL under /api/newsearch/{model} with POST + JSON body including credentials +
+    // JSON.stringify(query), limit, and offset. We use those here.
 
-      result.item = {
-        http_status: itemRes.status,
-        raw_item_full: itemJson.parsed || itemText,
-      };
+    // CALL 1 — iPhone item details via newsearch/item with sku filter
+    const data1 = await newsearch({ creds, model: "item", query: { sku: "190198231642" }, limit: 5 });
+    // CALL 2 — ALL 27 keys of inventory model (no duplicate call2)
+    const data3 = await newsearch({ creds, model: "inventory", query: {}, limit: 3 });
+    let data3AllKeys = null;
+    if (data3.raw?.body?.[0] && typeof data3.raw.body[0] === "object") data3AllKeys = Object.keys(data3.raw.body[0]);
+    // CALL 3 — inventory for item 53, detailed (use this to render full keys in JSON)
+    const data4 = await newsearch({ creds, model: "inventory", query: { item: 53 }, limit: 50 });
+    let data4AllKeys = null;
+    if (data4.raw?.body?.[0] && typeof data4.raw.body[0] === "object") data4AllKeys = Object.keys(data4.raw.body[0]);
+    // CALL 4 — first raw sample of inventory for item 53 (show one record fully)
+    const sampleRec = data4.raw?.body?.[0];
 
-      if (Array.isArray(body) && body.length > 0) {
-        result.item.raw_item_body0 = body[0];
-        result.item.item_field_names = Object.keys(body[0]);
-      } else {
-        result.item.raw_item_body0 = body;
-        result.item.item_field_names = typeof body === "object" && body !== null ? Object.keys(body) : null;
-      }
-    } catch (e) {
-      result.item = { http_status: -1, error: String(e) };
-    }
+    // * If counter field is not called "ammount" in inventory,
+    // note the serial-field-gap for the user to investigate manually.
+    const serialFieldHint = "ammount" !== "serial" ? "⚠ ammount is the quantity; no 'serial' key found in inventory model keys (call3). Serial might exist in a different model (e.g. /newsearch/mutexrequest, /newsearch/transport)." : "";
 
-    // ============================================
-    // CALL 2 — Available serials (POST /mutex/item/search)
-    // ============================================
-    try {
-      const mutexPayload = { ...creds, sku };
-      if (warehouse_id) mutexPayload.warehouse_id = warehouse_id;
-      const mutexRes = await fetch(`${BASE_URL}/mutex/item/search`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(mutexPayload),
-      });
-      const mutexText = await mutexRes.text();
-      const mutexJson = safeJson(mutexText, "mutex");
-      const body = mutexJson.parsed?.body;
-
-      result.mutex = {
-        http_status: mutexRes.status,
-        raw_mutex_full: mutexJson.parsed || mutexText,
-      };
-
-      // Linet sometimes returns string instead of array when empty — guard before accessing
-      const firstElement = Array.isArray(body) ? body[0] : body;
-      result.mutex.mutex_field_names =
-        typeof firstElement === "object" && firstElement !== null
-          ? Object.keys(firstElement)
-          : (() => {
-              console.log("mutex body is not an object:", JSON.stringify(firstElement));
-              return null;
-            })();
-    } catch (e) {
-      result.mutex = { http_status: -1, error: String(e) };
-    }
-
-    // ============================================
-    // LOG everything to server logs in same structure
-    // ============================================
-    console.log("=== debugLinetSerial PROBE ===");
-    console.log("Input:", JSON.stringify({ sku, warehouse_id }));
-    console.log("Result:", JSON.stringify(result, null, 2));
+    const result = {
+      notes: [
+        "PURE READ-ONLY — no invoices created, no Linet data modified.",
+        "PLEASE NOTE: The Linet API does NOT have /view/, /search/, or /list/ paths as documented — all four return 404.",
+        "The active endpoints are POST /api/newsearch/{model} with JSON + creds + stringified query + limit/offset.",
+        "Calls 1-4 use these real endpoints for the iPhone (item 53, SKU 190198231642, stockType 2).",
+      ],
+      call1_newsearch_item_brief: { status: data1.status, count: data1.count, keys19: data1.keys?.slice(0, 19), keys_total: data1.keys?.length },
+      call2_inventory_model_27_keys: { status: data3.status, keys: data3AllKeys },
+      call3_inventory_item53_keys_27: { status: data4.status, count: data4.count, keys: data4AllKeys },
+      call4_serial_values_item53: (() => {
+        if (!sampleRec) return null;
+        // Show serial-related fields only
+        const serialKeys = data4AllKeys.filter(k => k.includes("serial") || k.includes("imei") || k.includes("eav") || k === "ammount" || k === "acccell_id" || k === "acccell_name" || k === "item_id" || k === "item_sku" || k === "idcode" || k === "instance_id");
+        return Object.fromEntries(serialKeys.map(k => [k, sampleRec[k]]));
+      })(),
+    };
 
     return Response.json(result);
   } catch (error) {
