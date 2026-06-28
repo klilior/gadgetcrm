@@ -60,8 +60,13 @@ async function resolveSerialRequirement(base44, creds, sku, userName) {
     return { mapping, requires_serial: !!mapping.requires_serial, serial_source: mapping.serial_source, suspected: false };
   }
 
-  // 2. Check Linet item master
-  const items = await linetSearch(creds, "item", { sku: String(sku) }, 1, 0);
+  // 2. Check Linet item master — try by SKU first, fall back to searching by id
+  let items = await linetSearch(creds, "item", { sku: String(sku) }, 1, 0);
+  // If SKU lookup returned nothing, the order may store product_id as the SKU — try id search
+  if (!items || items.length === 0) {
+    const byId = await linetSearch(creds, "item", { id: Number(sku) }, 1, 0);
+    if (byId && byId.length > 0) items = byId;
+  }
   const item = items?.[0] || null;
 
   let requires_serial = false;
@@ -193,6 +198,21 @@ Deno.serve(async (req) => {
           };
           if (mapping) mapping = await sr.LinetProductMap.update(mapping.id, mapData);
           else mapping = await sr.LinetProductMap.create({ sku: String(sku), ...mapData });
+
+          // Also update all existing OrderItemSerial lines for this SKU so the current
+          // order's panel reflects the new serial requirement immediately (without a full re-init).
+          const { order_item_id } = params;
+          if (order_item_id) {
+            const lines = await sr.OrderItemSerial.filter({ order_item_id: String(order_item_id) });
+            const line = lines?.[0];
+            if (line) {
+              await sr.OrderItemSerial.update(line.id, {
+                requires_serial: wantSerial,
+                serials_required_count: wantSerial ? (line.quantity || 1) : 0,
+                serial_status: wantSerial ? "required_missing" : "not_required",
+              });
+            }
+          }
 
           await audit(base44, { sku: String(sku), action: wantSerial ? "mark_serial" : "unmark_serial", new_value: "always", user: userName, result: "success" });
           return Response.json({ success: true, scope: "always", mapping });

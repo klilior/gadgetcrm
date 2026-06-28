@@ -218,7 +218,7 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
                 sku={line.source_sku}
                 orderItemId={line.order_item_id}
                 currentlySerial={line.requires_serial}
-                onChanged={() => refreshLine(line.id)}
+                onChanged={(scope) => scope === "always" ? init() : refreshLine(line.id)}
               />
             </div>
 

@@ -28,7 +28,7 @@ export default function MarkSerialMenu({ sku, orderItemId, currentlySerial, onCh
         toast.error(data?.error || "הפעולה נכשלה");
       } else {
         toast.success(scope === "always" ? "נשמר גם להזמנות הבאות" : "עודכן להזמנה זו בלבד");
-        onChanged?.();
+        onChanged?.(scope);
       }
     } catch (e) {
       toast.error("שגיאה: " + e.message);
