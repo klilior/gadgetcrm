@@ -15,7 +15,7 @@ async function audit(base44, data) {
 
 // Gate 1: can we invoice? (Step 9.1)
 async function checkInvoiceBlock(sr, orderId) {
-  const lines = await sr.OrderItemSerial.filter({ order_id: String(orderId) });
+  const lines = await sr.OrderItemSerial.filter({ order_id: String(orderId) }).catch(() => []);
   const serialLines = lines.filter((l) => l.requires_serial);
   const reasons = [];
 
@@ -49,8 +49,8 @@ Deno.serve(async (req) => {
         // Ensure no serial is reserved/assigned on another active line
         for (const s of serials) {
           // Filter by serial status to avoid loading all records
-          const othersVerified = await sr.OrderItemSerial.filter({ serial_status: "verified" });
-          const othersSelected = await sr.OrderItemSerial.filter({ serial_status: "selected" });
+          const othersVerified = await sr.OrderItemSerial.filter({ serial_status: "verified" }).catch(() => []);
+          const othersSelected = await sr.OrderItemSerial.filter({ serial_status: "selected" }).catch(() => []);
           const others = [...othersVerified, ...othersSelected];
           const conflict = others.find((l) =>
             l.order_item_id !== String(order_item_id) &&
@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        const lines = await sr.OrderItemSerial.filter({ order_item_id: String(order_item_id) });
+        const lines = await sr.OrderItemSerial.filter({ order_item_id: String(order_item_id) }).catch(() => []);
         const line = lines?.[0];
         if (!line) return Response.json({ success: false, error: "שורת מוצר לא נמצאה" });
 
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
           await sr.OrderItemSerial.update(line.id, updatePayload);
         } catch (updateErr) {
           // Record may have been replaced (stale id) — re-fetch and retry once
-          const fresh = await sr.OrderItemSerial.filter({ order_id: String(line.order_id), order_item_id: String(order_item_id) });
+          const fresh = await sr.OrderItemSerial.filter({ order_id: String(line.order_id), order_item_id: String(order_item_id) }).catch(() => []);
           const freshLine = fresh?.[0];
           if (!freshLine) return Response.json({ success: false, error: "שורת מוצר לא נמצאה אחרי ניסיון חוזר" });
           await sr.OrderItemSerial.update(freshLine.id, updatePayload);
