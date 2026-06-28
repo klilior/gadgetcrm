@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,9 @@ export default function SerialPicker({ linetItemId, requiredCount, value = [], o
   const [loading, setLoading] = useState(false);
   const [manual, setManual] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+
+  const retryRef = React.useRef(null);
 
   const loadAvailable = async () => {
     if (!linetItemId) return;
@@ -24,7 +27,13 @@ export default function SerialPicker({ linetItemId, requiredCount, value = [], o
     try {
       const { data } = await serialFulfillment({ action: "getAvailableSerials", params: { linet_item_id: linetItemId } });
       if (data?.success) {
-        setAvailable(data.serials || []);
+        const list = data.serials || [];
+        setAvailable(list);
+        // Auto-retry once if Linet returned empty the first time (intermittent timeouts)
+        if (list.length === 0 && retryCount === 0) {
+          setRetryCount(1);
+          retryRef.current = setTimeout(() => loadAvailable(), 2500);
+        }
       } else {
         setAvailable([]);
         toast.error("לינט: " + (data?.error || "לא ניתן לטעון סריאליים"));
@@ -36,7 +45,10 @@ export default function SerialPicker({ linetItemId, requiredCount, value = [], o
     }
   };
 
-  useEffect(() => { loadAvailable(); }, [linetItemId]);
+  useEffect(() => {
+    loadAvailable();
+    return () => { if (retryRef.current) clearTimeout(retryRef.current); };
+  }, [linetItemId]);
 
   const toggle = (idcode) => {
     const code = String(idcode);
