@@ -86,7 +86,7 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
               order_id: String(orderId),
               external_order_number: order.external_order_number || order.order_number || "",
               order_item_id: itemKey,
-              source: order.source === "mirakl" ? "superpharm" : (order.source === "woo" ? "woo" : "manual"),
+              source: order.source === "mirakl" ? "superpharm" : (order.source === "woocommerce" ? "woo" : "manual"),
               source_sku: p.sku || "",
               source_product_name: p.name || "",
               mapped_linet_item_id: mappedId,

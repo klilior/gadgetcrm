@@ -103,7 +103,13 @@ async function resolveSerialRequirement(base44, creds, sku, userName) {
   };
 
   if (mapping) {
-    mapping = await sr.LinetProductMap.update(mapping.id, mapData);
+    try {
+      mapping = await sr.LinetProductMap.update(mapping.id, mapData);
+    } catch (e) {
+      if ((e?.status || e?.response?.status) === 404) {
+        mapping = await sr.LinetProductMap.create(mapData);
+      } else throw e;
+    }
   } else {
     mapping = await sr.LinetProductMap.create(mapData);
   }
