@@ -44,7 +44,7 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
     )}
     <TableRow
       onClick={onToggle}
-      className={`cursor-pointer select-none border-r-4 ${visual.border} ${isUrgent && !order.tracking_number ? 'bg-red-50' : visual.bg} hover:bg-slate-50 transition-colors
+      className={`cursor-pointer select-none border-r-4 ${isUrgent && !order.tracking_number ? 'border-r-green-500' : visual.border} ${isUrgent && !order.tracking_number ? 'bg-green-50' : visual.bg} hover:bg-slate-50 transition-colors
         ${isClosed ? 'opacity-60' : ''}
         ${isExpanded ? 'bg-purple-50/40 border-b-0' : ''}
       `}
