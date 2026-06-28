@@ -23,7 +23,7 @@ export const customersService = {
     let skip = 0;
     const batchSize = 500;
     while (true) {
-      const batch = await base44.entities.Client.list('-created_date', batchSize, skip);
+      const batch = await base44.entities.Client.list('-created_date', batchSize, skip).catch(() => []);
       allClients = allClients.concat(batch);
       if (batch.length < batchSize) break;
       skip += batchSize;
@@ -59,7 +59,7 @@ export const customersService = {
       const idSet = new Set(ids);
       return _cache.filter(c => idSet.has(c.id));
     }
-    return await base44.entities.Client.filter({ id: { $in: ids } });
+    return await base44.entities.Client.filter({ id: { $in: ids } }).catch(() => []);
   },
 
   async search({ query, phone, email }, limit = 50) {
@@ -104,7 +104,7 @@ export const customersService = {
   },
   async findByPhone(phone) {
     if (!phone) return null;
-    const list = await base44.entities.Client.filter({ phone });
+    const list = await base44.entities.Client.filter({ phone }).catch(() => []);
     return (list || [])[0] || null;
   },
 };

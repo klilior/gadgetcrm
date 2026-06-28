@@ -113,11 +113,11 @@ export default function AgentDashboard() {
       // Load data in parallel — employees & linetUsersMap come from EmployeeProvider
       const allEmployees = employees;
       const [allLeads, allTargets, allActivities, allRepairs, allGoals, allGoalProgress, allSalesTransactions, currentMonthSalesTransactions, currentMonthTargets, allCommissionMappings] = await Promise.all([
-        Lead.filter({ status: { $ne: 'Deleted' } }),
+        Lead.filter({ status: { $ne: 'Deleted' } }).catch(() => []),
         Target.filter({ period_start: { $lte: dateToStr }, period_end: { $gte: dateFromStr } }).catch(() => []),
         SalesActivity.filter({ activity_date: { $gte: dateFromStr, $lte: dateToStr } }).catch(() => []),
         isManager ? Repair.filter({ status: { $nin: ['תיקון נסגר', 'Closed'] } }, '-updated_date', 100) : Promise.resolve([]),
-        GoalDefinition.filter({ is_active: true }),
+        GoalDefinition.filter({ is_active: true }).catch(() => []),
         GoalProgress.filter({ period_start: { $lte: dateToStr }, period_end: { $gte: dateFromStr } }).catch(() => []),
         SalesTransaction.filter({ issue_date: { $gte: dateFromStr, $lte: dateToStr } }, '-issue_date', 5000).catch(() => []),
         SalesTransaction.filter({ issue_date: { $gte: monthStartStr, $lte: todayStr } }, '-issue_date', 5000).catch(() => []),
