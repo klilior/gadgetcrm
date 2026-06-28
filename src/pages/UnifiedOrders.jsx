@@ -94,7 +94,7 @@ export default function UnifiedOrders() {
     let gpShipmentsByOrder = {};
     let smsLogs = [];
     try {
-      const recentShipments = await base44.entities.Shipment.list('-created_date', 300);
+      const recentShipments = await base44.entities.Shipment.list('-created_date', 300).catch(() => []);
       allShipments = recentShipments;
       for (const s of recentShipments) {
         if (s.tracking_number && s.external_order_number) {
@@ -105,7 +105,7 @@ export default function UnifiedOrders() {
       }
     } catch (_) {}
     try {
-      const gpShipments = await base44.entities.GetPackageShipment.list('-created_date', 300);
+      const gpShipments = await base44.entities.GetPackageShipment.list('-created_date', 300).catch(() => []);
       for (const s of gpShipments) {
         if (s.order_id && s.delivery_id && !['cancelled', 'failed', 'draft', 'quote_failed'].includes(s.status)) {
           if (!gpShipmentsByOrder[s.order_id] || s.created_date > gpShipmentsByOrder[s.order_id].created_date) {
@@ -115,13 +115,13 @@ export default function UnifiedOrders() {
       }
     } catch (_) {}
     try {
-      smsLogs = await base44.entities.NotificationLog.list('-sent_at', 300);
+      smsLogs = await base44.entities.NotificationLog.list('-sent_at', 300).catch(() => []);
     } catch (_) {}
 
     // Pre-fetch serial lines to flag orders that still have a serial pending action
     const pendingSerialByOrder = {};
     try {
-      const serialLines = await base44.entities.OrderItemSerial.list('-created_date', 5000);
+      const serialLines = await base44.entities.OrderItemSerial.list('-created_date', 5000).catch(() => []);
       for (const sl of serialLines) {
         if (sl.requires_serial && !['verified', 'invoiced', 'not_required'].includes(sl.serial_status)) {
           if (sl.order_id) pendingSerialByOrder[String(sl.order_id)] = true;
@@ -226,7 +226,7 @@ export default function UnifiedOrders() {
     // Mirakl
     let mk = [];
     try {
-      const spOrders = await base44.entities.SuperPharmOrder.list('-created_at_mirakl', 200);
+      const spOrders = await base44.entities.SuperPharmOrder.list('-created_at_mirakl', 200).catch(() => []);
       for (const o of spOrders) {
         if (!showClosed && closedMirakl.has(o.order_state)) continue;
         if (o.created_at_mirakl && new Date(o.created_at_mirakl) < THIRTY_DAYS_AGO) continue;
