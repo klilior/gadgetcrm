@@ -119,9 +119,11 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
     try {
       const fresh = await base44.entities.OrderItemSerial.get(lineId);
       setLines((prev) => prev.map((l) => (l.id === lineId ? fresh : l)));
-    } catch (_) {
-      // Record may have been removed/replaced — re-init the panel instead of crashing on a 404.
-      init();
+    } catch (e) {
+      // 404 = record replaced/removed — re-init to get the current state
+      if (e?.response?.status === 404 || e?.status === 404) {
+        init();
+      }
     }
   };
 
@@ -151,6 +153,7 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
       if (!data?.success) { toast.error(data?.error || "שגיאה בשמירת סריאליים"); return; }
       refreshLine(line.id);
     } catch (e) {
+      if (e?.response?.status === 404 || e?.status === 404) { init(); return; }
       toast.error("שגיאה בשמירת סריאליים: " + (e?.message || ""));
     }
   };
