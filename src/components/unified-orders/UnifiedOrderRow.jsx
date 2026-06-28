@@ -20,8 +20,9 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
   const nextAction = getNextActionLabel(order);
 
   const productsList = order.products || [];
+  const hasMultiQty = productsList.some(p => (p.quantity || 1) > 1);
   const productSummary = productsList.length > 0
-    ? productsList.slice(0, 2).map(p => p.name).join(', ') + (productsList.length > 2 ? ` +${productsList.length - 2}` : '')
+    ? productsList.slice(0, 2).map(p => `${p.name}${(p.quantity || 1) > 1 ? ` ×${p.quantity}` : ''}`).join(', ') + (productsList.length > 2 ? ` +${productsList.length - 2}` : '')
     : '-';
 
   const statusColor = getStatusColor(order.source, order.status);
@@ -47,7 +48,10 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
       <TableCell><SourceBadge source={order.source} /></TableCell>
       <TableCell className="text-xs text-gray-600 whitespace-nowrap">{formatDate(order.order_date)}</TableCell>
       <TableCell className="font-medium text-sm text-gray-900 max-w-[150px] truncate">{order.customer_name || '-'}</TableCell>
-      <TableCell className="text-xs text-gray-600 max-w-[220px] truncate">{productSummary}</TableCell>
+      <TableCell className={`text-xs max-w-[220px] truncate ${hasMultiQty ? 'text-amber-700 font-semibold' : 'text-gray-600'}`}>
+        {hasMultiQty && <span className="inline-block bg-amber-100 text-amber-700 border border-amber-200 rounded px-1 py-0.5 text-[10px] font-bold ml-1">כמות!</span>}
+        {productSummary}
+      </TableCell>
       <TableCell className="font-mono text-sm font-bold whitespace-nowrap text-gray-900">₪{(order.total || 0).toLocaleString()}</TableCell>
       <TableCell>
         <div className="flex items-center gap-1.5 flex-wrap">

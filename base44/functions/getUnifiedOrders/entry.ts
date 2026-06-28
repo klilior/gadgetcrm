@@ -23,14 +23,22 @@ Deno.serve(async (req) => {
         if (!pM[p.order_id]) pM[p.order_id] = [];
         pM[p.order_id].push(p);
       }
-      const closedSet = new Set(['completed', 'cancelled', 'refunded', 'failed']);
+      // 'completed' is included only when the order was closed more than 48h ago AND has a tracking number.
+      // Orders marked 'completed' mid-workflow (e.g. manually by WooCommerce) but recently placed must still appear.
+      const closedSet = new Set(['cancelled', 'refunded', 'failed']);
       // SKU 180948 = "תוספת דמי משלוח" (אפסייל), לא מוצר אמיתי
       const SHIPPING_UPSELL_SKU = '180948';
       const isShippingUpsell = function(x) {
         return String(x.sku || '') === SHIPPING_UPSELL_SKU || String(x.product_id != null ? x.product_id : '') === SHIPPING_UPSELL_SKU;
       };
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
       for (const o of raw) {
         if (closedSet.has(o.status)) continue;
+        // Hide 'completed' orders only if they are older than 48h (recently completed still show)
+        if (o.status === 'completed') {
+          const orderDate = o.order_date ? new Date(o.order_date) : null;
+          if (orderDate && orderDate < fortyEightHoursAgo) continue;
+        }
         const c = cM[o.client_id];
         const allProds = pM[o.id] || [];
         // מסתירים את שורת האפסייל מהמוצרים
