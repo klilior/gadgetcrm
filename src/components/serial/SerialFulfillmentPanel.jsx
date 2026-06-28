@@ -121,8 +121,9 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
       const fresh = await base44.entities.OrderItemSerial.get(lineId);
       setLines((prev) => prev.map((l) => (l.id === lineId ? fresh : l)));
     } catch (e) {
-      // 404 = record replaced/removed — re-init to get the current state
-      if (e?.response?.status === 404 || e?.status === 404) {
+      // Any 404 (stale/deleted record) — re-init to get current state
+      const status = e?.response?.status || e?.status || (e?.message?.includes('404') ? 404 : 0);
+      if (status === 404) {
         init();
       }
     }
@@ -142,7 +143,8 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
       toast.success("הפריט מופה ללינט");
       refreshLine(line.id);
     } catch (e) {
-      if (e?.response?.status === 404 || e?.status === 404) {
+      const status = e?.response?.status || e?.status || (e?.message?.includes('404') ? 404 : 0);
+      if (status === 404) {
         init();
       } else {
         toast.error("שגיאה במיפוי הפריט: " + (e?.message || ""));
@@ -156,7 +158,8 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
       if (!data?.success) { toast.error(data?.error || "שגיאה בשמירת סריאליים"); return; }
       refreshLine(line.id);
     } catch (e) {
-      if (e?.response?.status === 404 || e?.status === 404) { init(); return; }
+      const status = e?.response?.status || e?.status || (e?.message?.includes('404') ? 404 : 0);
+      if (status === 404) { init(); return; }
       toast.error("שגיאה בשמירת סריאליים: " + (e?.message || ""));
     }
   };
