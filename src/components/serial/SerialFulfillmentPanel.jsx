@@ -46,10 +46,10 @@ export default function SerialFulfillmentPanel({ order, onBlockChange }) {
 
   // Build/refresh OrderItemSerial lines for this order based on its products.
   const init = useCallback(async () => {
-    if (!orderId) { setLoading(false); return; }
+    if (!orderId || orderId === 'undefined' || orderId === 'null') { setLoading(false); return; }
     setLoading(true);
     try {
-      const existing = await base44.entities.OrderItemSerial.filter({ order_id: orderId });
+      const existing = await base44.entities.OrderItemSerial.filter({ order_id: orderId }).catch(() => []);
       // Keep the OLDEST record per item key. Concurrent panel mounts used to each
       // create a line for the same key, leaving duplicate rows whose newer copies
       // get cleaned up — leaving stale ids that 404 on later get/update. Always
