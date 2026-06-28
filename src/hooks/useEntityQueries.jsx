@@ -17,7 +17,7 @@ export function useCustomersQuery(options = {}) {
 export function useTicketsQuery(limit = 200, options = {}) {
   return useQuery({
     queryKey: ['tickets', limit],
-    queryFn: () => base44.entities.Ticket.list('-updated_date', limit),
+    queryFn: () => base44.entities.Ticket.list('-updated_date', limit).catch(() => []),
     staleTime: 60 * 1000,         // 1 min
     gcTime: 5 * 60 * 1000,
     ...options,
@@ -28,7 +28,7 @@ export function useTicketsQuery(limit = 200, options = {}) {
 export function useOrdersQuery(limit = 200, options = {}) {
   return useQuery({
     queryKey: ['orders', limit],
-    queryFn: () => base44.entities.Order.list('-order_date', limit),
+    queryFn: () => base44.entities.Order.list('-order_date', limit).catch(() => []),
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
     ...options,
