@@ -273,7 +273,7 @@ export default function UnifiedOrders() {
       // Fetch all transactions that have order-marker SKUs
       const allTxns = [];
       for (const sku of LINET_ORDER_SKUS) {
-        const txns = await base44.entities.SalesTransaction.filter({ sku }, '-issue_date', 200);
+        const txns = await base44.entities.SalesTransaction.filter({ sku }, '-issue_date', 200).catch(() => []);
         allTxns.push(...txns);
       }
       // Include invoices from the last 14 days onwards
@@ -298,7 +298,7 @@ export default function UnifiedOrders() {
       const docProducts = {};
       const docTotals = {};
       for (const dn of orderDocNumbers) {
-        const lines = await base44.entities.SalesTransaction.filter({ doc_number: dn }, null, 50);
+        const lines = await base44.entities.SalesTransaction.filter({ doc_number: dn }, null, 50).catch(() => []);
         docProducts[dn] = [];
         docTotals[dn] = 0;
         for (const l of lines) {
@@ -467,7 +467,7 @@ export default function UnifiedOrders() {
         // Update LinetOrderStatus entity. raw_id may reference a record that was
         // removed/replaced (e.g. during a sync), so fall back to find-or-create on 404.
         const upsertByDocNumber = async () => {
-          const existing = await base44.entities.LinetOrderStatus.filter({ doc_number: order.order_number });
+          const existing = await base44.entities.LinetOrderStatus.filter({ doc_number: order.order_number }).catch(() => []);
           if (existing.length > 0) {
             await base44.entities.LinetOrderStatus.update(existing[0].id, { status: newStatus });
           } else {
