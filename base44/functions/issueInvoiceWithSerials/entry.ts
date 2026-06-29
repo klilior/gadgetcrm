@@ -462,16 +462,45 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ─── הגנת refnum: בדיקה אחרונה לפני שליחה ─────────────────────────────
+    const refnumCheck = await linetPost("newsearch/docs", {
+      ...creds,
+      limit: 5,
+      offset: 0,
+      query: { refnum: order?.external_order_number ?? "" },
+    });
+    const existingDocs = Array.isArray(refnumCheck.data?.body) ? refnumCheck.data.body : (Array.isArray(refnumCheck.data) ? refnumCheck.data : []);
+    if (existingDocs.length > 0) {
+      return Response.json({
+        issued: false,
+        blocked: true,
+        reason: "invoice_already_exists_in_linet",
+        existing: existingDocs.map((d) => ({ doctype: d.doctype, docnum: d.docnum, total: d.total })),
+        messages_he: ["כבר קיימת חשבונית בלינט להזמנה זו. לא הופקה חשבונית כפולה."],
+        log,
+      });
+    }
+    log.push({ step: "refnum_check_passed", docs_found: 0 });
+
     const linetRes = await linetPost("create/docs", payload);
     log.push({ step: "linet_response", http_status: linetRes.http_status, data_keys: Object.keys(linetRes.data ?? {}) });
 
     const linetBody = linetRes.data;
-    if (linetRes.http_status !== 200 || linetBody?.status === "error" || linetBody?.errorCode) {
+    // errorCode !== 0 (או קיים ולא 0) = שגיאה, גם אם HTTP 200
+    const hasError = linetRes.http_status !== 200
+      || linetBody?.status === "error"
+      || (linetBody?.errorCode !== undefined && linetBody?.errorCode !== 0 && linetBody?.errorCode !== null);
+    if (hasError) {
       return Response.json({ issued: false, linet_error: linetBody, log });
     }
 
     const createdDocId     = linetBody?.body?.id ?? linetBody?.id ?? null;
     const createdDocNumber = linetBody?.body?.docnum ?? linetBody?.docnum ?? null;
+
+    // ודא שה-id שהתקבל הוא ערך אמיתי ולא null
+    if (!createdDocId || createdDocId === "null") {
+      return Response.json({ issued: false, error: "Linet החזיר 200 אך ללא document id — ייתכן שהמסמך לא נוצר", linet_body: linetBody, log });
+    }
     const invoicedAt       = new Date().toISOString();
 
     for (const line of serialLines) {
