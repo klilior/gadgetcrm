@@ -407,7 +407,7 @@ Deno.serve(async (req) => {
       description: `הזמנה ${order?.external_order_number ?? order_id}`,
       comments: order?.customer_note ?? "",
 
-      owner: "TODO:linet_owner_user_id",
+      owner: 8669,
 
       docDetailes,
 
