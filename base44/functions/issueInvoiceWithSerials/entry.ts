@@ -7,10 +7,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
  * apply=false → DRY-RUN: בונה payload מלא, לא שולח.
  * apply=true  → שולח POST /api/create/docs ל-Linet, שומר תוצאות.
  *
- * כל ערכי הבסיס מאומתים ממסמך doctype=9 אמיתי (#40452).
+ * docDetailes מכיל: שורות סריאליות + פריטים רגילים + שורת משלוח.
+ * VAT_RATE = 0.18 (אומת מחשבוניות אמיתיות).
  */
-
-// ─── helpers ───────────────────────────────────────────────────────────────
 
 function getLinetCreds() {
   const login_id = Deno.env.get("LINET_LOGIN_ID");
@@ -32,7 +31,6 @@ async function linetPost(endpoint, body) {
   return { http_status: res.status, data };
 }
 
-// נרמול טלפון לפורמט מקומי ישראלי (0XX...)
 function normalizePhoneLocal(raw) {
   if (!raw) return null;
   let digits = String(raw).replace(/\D/g, "");
@@ -49,7 +47,35 @@ function nowStr() {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-// ─── main ───────────────────────────────────────────────────────────────────
+const VAT_RATE = 0.18;
+
+/** בונה שורת docDetailes אחת */
+function buildLine({ item_id, sku, name, qty, totalInc, serials }) {
+  const iTotalVat = totalInc;
+  const iTotal    = totalInc / (1 + VAT_RATE);
+  const iItem     = iTotal / qty;           // מחיר יחידה ללא מע"מ — flag iItemWithVat=1 אומר שהוא כולל
+  // NOTE: iItem מועבר כ-"with vat" (iItemWithVat=1) לכן iItem = מחיר יחידה כולל מע"מ
+  const iItemFinal = iTotalVat / qty;
+  return {
+    item_id: Number(item_id),
+    sku: sku ?? "",
+    name: name ?? "",
+    qty: fmt4(qty),
+    serial: Array.isArray(serials) ? serials : [],
+    iItem:        fmt2(iItemFinal),
+    iItemWithVat: 1,
+    iTotal:       fmt2(iTotal),
+    iTotalVat:    fmt2(iTotalVat),
+    discount:     "0.00",
+    discountPer:  "0.00",
+    discountType: 0,
+    currency_id:  "ILS",
+    currency_rate:"1.0000",
+    unit_id:      0,
+    vat_cat_id:   1,
+    warehouse_id: 115,
+  };
+}
 
 Deno.serve(async (req) => {
   try {
@@ -64,22 +90,45 @@ Deno.serve(async (req) => {
     const log = [];
     log.push({ step: "start", order_id, apply });
 
-    // ─── שלב 1: שער — inline checkInvoiceGate ─────────────────────────────
-    const gateReasons = [];
-    const gateMessages = [];
     const realOrderId = order_id.startsWith("woo_") ? order_id.replace("woo_", "") : order_id;
 
+    // ─── שלב 1: שלוף כל הנתונים ────────────────────────────────────────────
     let gateSerialLines = [];
     try { gateSerialLines = await base44.asServiceRole.entities.OrderItemSerial.filter({ order_id }); } catch (_) {}
     let gateSerialLines2 = [];
     try { gateSerialLines2 = await base44.asServiceRole.entities.OrderSerialLine.filter({ order_id }); } catch (_) {}
-    const allLines = [...gateSerialLines, ...gateSerialLines2];
+    const allSerialLines = [...gateSerialLines, ...gateSerialLines2];
 
     let order = null;
     try { order = await base44.asServiceRole.entities.Order.get(realOrderId); } catch (_) {}
 
+    let orderProducts = [];
+    try { orderProducts = await base44.asServiceRole.entities.OrderProduct.filter({ order_id: realOrderId }); } catch (_) {}
+
+    // LinetProductMap — שלוף כל הרשומות הרלוונטיות לפי sku-ים
+    const skusNeeded = [
+      ...orderProducts.map((p) => p.sku).filter(Boolean),
+      "19034", // משלוח תמיד
+    ];
+    let productMaps = [];
+    try { productMaps = await base44.asServiceRole.entities.LinetProductMap.filter({}); } catch (_) {}
+    const mapBySku = {};
+    for (const m of productMaps) { if (m.sku) mapBySku[m.sku] = m; }
+
+    log.push({
+      step: "data_loaded",
+      order_found: !!order,
+      serial_lines_count: allSerialLines.length,
+      order_products_count: orderProducts.length,
+      product_maps_count: productMaps.length,
+    });
+
+    // ─── שלב 2: שער — serial lines ──────────────────────────────────────────
+    const gateReasons = [];
+    const gateMessages = [];
     const VALID_STATUSES = new Set(["selected", "verified", "invoiced"]);
-    for (const line of allLines) {
+
+    for (const line of allSerialLines) {
       if (!line.requires_serial) continue;
       const name = line.source_product_name ?? line.order_item_id ?? "?";
       if (!line.mapped_linet_item_id) {
@@ -105,47 +154,29 @@ Deno.serve(async (req) => {
       return Response.json({ issued: false, blocked: true, reasons: gateReasons, messages_he: gateMessages, log });
     }
 
-    // ─── שלב 2: idempotency ────────────────────────────────────────────────
-    const alreadyInvoiced = allLines.find((l) => l.linet_invoice_id);
+    // ─── שלב 3: idempotency ─────────────────────────────────────────────────
+    const alreadyInvoiced = allSerialLines.find((l) => l.linet_invoice_id);
     if (alreadyInvoiced) {
       log.push({ step: "idempotency_block", existing_invoice_id: alreadyInvoiced.linet_invoice_id });
       return Response.json({ issued: false, already_invoiced: true, existing_invoice_id: alreadyInvoiced.linet_invoice_id, log });
     }
 
-    // ─── שלב 3: נתוני הזמנה + לקוח + OrderProducts ────────────────────────
+    // ─── שלב 4: לקוח ────────────────────────────────────────────────────────
+    const creds = getLinetCreds();
+
     let client = null;
     if (order?.client_id) {
       client = await base44.asServiceRole.entities.Client.get(order.client_id).catch(() => null);
     }
 
-    // שלוף OrderProducts לקבלת מחירים
-    let orderProducts = [];
-    try { orderProducts = await base44.asServiceRole.entities.OrderProduct.filter({ order_id: realOrderId }); } catch (_) {}
-
-    log.push({
-      step: "data_loaded",
-      order_found: !!order,
-      client_found: !!client,
-      client_linet_account_id: client?.linet_account_id ?? null,
-      order_products_count: orderProducts.length,
-    });
-
-    // ─── שלב 4: זיהוי/יצירת לקוח ─────────────────────────────────────────
-    const creds = getLinetCreds();
-
-    let accountId = client?.linet_account_id ?? null;
-    let accountToCreate = null;
+    let accountId = client?.linet_account_id ? String(client.linet_account_id) : null;
     let accountFound = !!accountId;
-    let accountSearchLog = null;
+    let accountToCreate = null;
 
     if (!accountId) {
-      // נרמל טלפון
       let rawPhone = null;
       if (order?.raw_data_billing) {
-        try {
-          const billing = JSON.parse(order.raw_data_billing);
-          rawPhone = billing.phone ?? billing.billing?.phone ?? null;
-        } catch (_) {}
+        try { const b = JSON.parse(order.raw_data_billing); rawPhone = b.phone ?? b.billing?.phone ?? null; } catch (_) {}
       }
       if (!rawPhone) rawPhone = client?.phone ?? client?.phone_original ?? null;
       const localPhone = normalizePhoneLocal(rawPhone);
@@ -153,38 +184,25 @@ Deno.serve(async (req) => {
       log.push({ step: "phone_resolve", raw: rawPhone, normalized: localPhone });
 
       if (localPhone) {
-        // חפש לפי phone
-        const searchRes = await linetPost("newsearch/account", { ...creds, limit: 3, offset: 0, query: { phone: localPhone } });
-        const searchRows = Array.isArray(searchRes.data?.body) ? searchRes.data.body : (Array.isArray(searchRes.data) ? searchRes.data : []);
-        accountSearchLog = { field: "phone", value: localPhone, http_status: searchRes.http_status, row_count: searchRows.length };
-
-        if (searchRows.length === 0) {
-          // נסה גם cellular
-          const searchRes2 = await linetPost("newsearch/account", { ...creds, limit: 3, offset: 0, query: { cellular: localPhone } });
-          const searchRows2 = Array.isArray(searchRes2.data?.body) ? searchRes2.data.body : (Array.isArray(searchRes2.data) ? searchRes2.data : []);
-          accountSearchLog.cellular_fallback = { http_status: searchRes2.http_status, row_count: searchRows2.length };
-          if (searchRows2.length > 0) {
-            accountId = String(searchRows2[0].id ?? searchRows2[0].account_id);
-            accountFound = true;
-            accountSearchLog.found_via = "cellular";
-            accountSearchLog.found_id = accountId;
-          }
-        } else {
-          accountId = String(searchRows[0].id ?? searchRows[0].account_id);
+        const r1 = await linetPost("newsearch/account", { ...creds, limit: 3, offset: 0, query: { phone: localPhone } });
+        const rows1 = Array.isArray(r1.data?.body) ? r1.data.body : (Array.isArray(r1.data) ? r1.data : []);
+        if (rows1.length > 0) {
+          accountId = String(rows1[0].id ?? rows1[0].account_id);
           accountFound = true;
-          accountSearchLog.found_via = "phone";
-          accountSearchLog.found_id = accountId;
+          log.push({ step: "account_found_phone", id: accountId });
+        } else {
+          const r2 = await linetPost("newsearch/account", { ...creds, limit: 3, offset: 0, query: { cellular: localPhone } });
+          const rows2 = Array.isArray(r2.data?.body) ? r2.data.body : (Array.isArray(r2.data) ? r2.data : []);
+          if (rows2.length > 0) {
+            accountId = String(rows2[0].id ?? rows2[0].account_id);
+            accountFound = true;
+            log.push({ step: "account_found_cellular", id: accountId });
+          }
         }
       }
 
-      log.push({ step: "account_search", ...accountSearchLog });
-
       if (!accountId) {
-        // לא נמצא — הכן אובייקט ליצירה
-        let billingName = null;
-        let billingEmail = null;
-        let billingAddress = null;
-        let billingCity = null;
+        let billingName = null, billingEmail = null, billingAddress = null, billingCity = null;
         if (order?.raw_data_billing) {
           try {
             const b = JSON.parse(order.raw_data_billing);
@@ -196,121 +214,159 @@ Deno.serve(async (req) => {
         }
         accountToCreate = {
           name: billingName ?? client?.full_name ?? "לקוח לא ידוע",
-          type: 0,
-          cat_id: 0,
+          type: 0, cat_id: 0,
           phone: normalizePhoneLocal(client?.phone ?? null) ?? "",
           email: billingEmail ?? client?.email ?? "",
           address: billingAddress ?? client?.full_address ?? "",
           city: billingCity ?? client?.city ?? "",
-          currency_id: "ILS",
-          country_id: "IL",
-          language: "he_il",
+          currency_id: "ILS", country_id: "IL", language: "he_il",
         };
         log.push({ step: "account_to_create", data: accountToCreate });
 
         if (apply) {
-          // יצירת לקוח אמיתית
           const createRes = await linetPost("create/account", { ...creds, ...accountToCreate });
-          log.push({ step: "account_create_response", http_status: createRes.http_status, data: createRes.data });
+          log.push({ step: "account_create_response", http_status: createRes.http_status });
           const createdId = createRes.data?.body?.id ?? createRes.data?.id ?? null;
           if (!createdId) {
             return Response.json({ issued: false, error: "יצירת לקוח ב-Linet נכשלה", linet_response: createRes.data, log });
           }
           accountId = String(createdId);
-          log.push({ step: "account_created", linet_account_id: accountId });
         }
       }
     }
 
     log.push({ step: "account_resolved", account_id: accountId, account_found: accountFound });
 
-    // ─── שלב 5: בנה docDetailes ────────────────────────────────────────────
-    const VAT_RATE = 0.17;
-    const relevantLines = allLines.filter(
+    // ─── שלב 5: בנה docDetailes ─────────────────────────────────────────────
+
+    // 5א. שורות סריאליות
+    const serialLines = allSerialLines.filter(
       (l) => l.requires_serial && l.mapped_linet_item_id && Array.isArray(l.assigned_serials) && l.assigned_serials.length > 0
     );
 
-    if (relevantLines.length === 0) {
+    if (serialLines.length === 0) {
       return Response.json({ issued: false, error: "אין שורות סריאליות עם מיפוי ל-Linet וסריאליים מוקצים", log });
     }
 
-    const docDetailes = relevantLines.map((l) => {
+    // set of skus שכבר מטופלים כסריאליים — לא לכפול בפריטים רגילים
+    const serialSkus = new Set(serialLines.map((l) => l.source_sku ?? l.mapped_linet_sku).filter(Boolean));
+
+    const docDetailes = [];
+
+    for (const l of serialLines) {
       const qty = l.serials_required_count ?? l.assigned_serials.length;
+      const prod = orderProducts.find((p) => p.sku && (p.sku === l.source_sku || p.sku === l.mapped_linet_sku));
+      const totalInc = prod?.total ? parseFloat(prod.total) : null;
 
-      // מצא מחיר מ-OrderProduct לפי sku
-      let lineTotalInc = null;
-      const prod = orderProducts.find(
-        (p) => p.sku && (p.sku === l.source_sku || p.sku === l.mapped_linet_sku)
-      );
-      if (prod?.total) lineTotalInc = parseFloat(prod.total);
-
-      // חישוב: iTotalVat = סה"כ שורה כולל מע"מ, iTotal = ללא מע"מ
-      // iItem = מחיר יחידה ללא מע"מ
-      let iTotalVat, iTotal, iItem;
-      if (lineTotalInc !== null && qty > 0) {
-        iTotalVat = lineTotalInc;
-        iTotal = iTotalVat / (1 + VAT_RATE);
-        iItem = iTotal / qty;
-      } else {
-        // fallback מ-total ההזמנה חלקי מספר שורות
-        iTotalVat = null;
-        iTotal = null;
-        iItem = null;
+      if (totalInc === null || totalInc <= 0) {
+        log.push({ step: "warn_missing_price_serial", sku: l.source_sku, name: l.source_product_name });
       }
 
-      return {
-        // ─── זיהוי פריט ─────────────────────────────────────────────────
-        item_id: Number(l.mapped_linet_item_id),
+      docDetailes.push(buildLine({
+        item_id: l.mapped_linet_item_id,
         sku: l.mapped_linet_sku ?? l.source_sku ?? "",
         name: l.mapped_linet_item_name ?? l.source_product_name ?? "",
-        qty: fmt4(qty),                              // string 4 ספרות
-        serial: l.assigned_serials,                   // array of strings
-        // ─── מחירים (string 2 ספרות) ────────────────────────────────────
-        iItem:       iItem !== null ? fmt2(iItem) : "TODO:unit_price_ex_vat",
-        iItemWithVat: 1,                              // number — flag, לא מחיר
-        iTotal:      iTotal !== null ? fmt2(iTotal) : "TODO:line_total_ex_vat",
-        iTotalVat:   iTotalVat !== null ? fmt2(iTotalVat) : "TODO:line_total_inc_vat",
-        // ─── שדות קבועים ─────────────────────────────────────────────────
-        discount:      "0.00",
-        discountPer:   "0.00",
-        discountType:  0,
-        currency_id:   "ILS",
-        currency_rate: "1.0000",
-        unit_id:       0,
-        vat_cat_id:    1,
-        warehouse_id:  115,
-      };
-    });
-
-    log.push({ step: "docDetailes_built", count: docDetailes.length });
-
-    // ─── שלב 6: חישוב סיכומים כספיים ──────────────────────────────────────
-    let subTotal = 0;
-    let totalInc = 0;
-    for (const line of docDetailes) {
-      subTotal += line.iTotal !== null && !String(line.iTotal).includes("TODO") ? parseFloat(line.iTotal) : 0;
-      totalInc += line.iTotalVat !== null && !String(line.iTotalVat).includes("TODO") ? parseFloat(line.iTotalVat) : 0;
+        qty,
+        totalInc: totalInc ?? 0,
+        serials: l.assigned_serials,
+      }));
     }
-    const vatAmount = totalInc - subTotal;
+
+    // 5ב. פריטים רגילים (לא סריאליים)
+    for (const prod of orderProducts) {
+      if (!prod.sku || serialSkus.has(prod.sku)) continue; // כבר מטופל כסריאלי
+      const map = mapBySku[prod.sku];
+      if (!map?.linet_item_id) {
+        // פריט לא ממופה — חסום
+        return Response.json({
+          issued: false,
+          blocked: true,
+          reason: "unmapped_regular_item",
+          messages_he: [`הפריט "${prod.name}" (מק"ט ${prod.sku}) אינו ממופה ל-Linet. יש למפות אותו לפני הנפקת חשבונית.`],
+          log,
+        });
+      }
+      const totalInc = prod.total ? parseFloat(prod.total) : 0;
+      const qty = prod.quantity ?? 1;
+      docDetailes.push(buildLine({
+        item_id: map.linet_item_id,
+        sku: prod.sku,
+        name: map.linet_item_name ?? prod.name ?? "",
+        qty,
+        totalInc,
+        serials: [],
+      }));
+    }
+
+    // 5ג. שורת משלוח
+    const shippingTotal = order?.shipping_total ? parseFloat(order.shipping_total) : 0;
+    if (shippingTotal > 0) {
+      const shippingMap = mapBySku["19034"];
+      if (!shippingMap?.linet_item_id) {
+        return Response.json({
+          issued: false,
+          blocked: true,
+          reason: "unmapped_shipping_item",
+          messages_he: ["פריט המשלוח (מק\"ט 19034) אינו ממופה ל-Linet."],
+          log,
+        });
+      }
+      docDetailes.push(buildLine({
+        item_id: shippingMap.linet_item_id,
+        sku: "19034",
+        name: order.shipping_method ?? "משלוח",
+        qty: 1,
+        totalInc: shippingTotal,
+        serials: [],
+      }));
+    }
+
+    log.push({ step: "docDetailes_built", count: docDetailes.length, breakdown: { serial: serialLines.length, regular: orderProducts.filter((p) => p.sku && !serialSkus.has(p.sku)).length, shipping: shippingTotal > 0 ? 1 : 0 } });
+
+    // ─── שלב 6: סיכומים כספיים ──────────────────────────────────────────────
+    let subTotal = 0, totalInc = 0;
+    for (const line of docDetailes) {
+      subTotal  += parseFloat(line.iTotal);
+      totalInc  += parseFloat(line.iTotalVat);
+    }
+    const vatAmount   = totalInc - subTotal;
     const subTotalStr = fmt2(subTotal);
-    const vatStr = fmt2(vatAmount);
-    const totalStr = fmt2(totalInc);
+    const vatStr      = fmt2(vatAmount);
+    const totalStr    = fmt2(totalInc);
 
-    // ─── שלב 7: זיהוי סוג תשלום לפי מקור ─────────────────────────────────
-    // SuperPharm = 50, WooCommerce = 30
-    const isSuperPharm = allLines.some((l) => l.source === "superpharm");
-    const chequeType = isSuperPharm ? 50 : 30;
-    const orderTotal = order?.total ? fmt2(parseFloat(order.total)) : totalStr;
+    // ─── שלב 7: בדיקת איזון ─────────────────────────────────────────────────
+    const orderTotalNum = order?.total ? parseFloat(order.total) : null;
+    if (orderTotalNum !== null) {
+      const diff = Math.abs(totalInc - orderTotalNum);
+      if (diff > 0.05) {
+        return Response.json({
+          issued: false,
+          blocked: true,
+          reason: "unbalanced_invoice",
+          expected: fmt2(orderTotalNum),
+          got_doc_total: fmt2(totalInc),
+          diff: fmt2(diff),
+          messages_he: [`סך החשבונית (${fmt2(totalInc)}) אינו תואם לסכום ההזמנה (${fmt2(orderTotalNum)}). לא ניתן להפיק.`],
+          log,
+        });
+      }
+      log.push({ step: "balance_check", status: "passed", order_total: fmt2(orderTotalNum), doc_total: fmt2(totalInc), diff: fmt2(diff) });
+    } else {
+      log.push({ step: "balance_check", status: "skipped_no_order_total" });
+    }
 
-    // ─── שלב 8: בנה payload מלא ────────────────────────────────────────────
+    // ─── שלב 8: סוג תשלום ───────────────────────────────────────────────────
+    const isSuperPharm = allSerialLines.some((l) => l.source === "superpharm");
+    const chequeType   = isSuperPharm ? 50 : 30;
+    const orderTotalStr = order?.total ? fmt2(parseFloat(order.total)) : totalStr;
+
+    // ─── שלב 9: payload ──────────────────────────────────────────────────────
     const dateStr = nowStr();
     const payload = {
-      // ─── אימות ───────────────────────────────────────────────────────────
       login_id: creds.login_id,
       login_hash: creds.login_hash,
       login_company: creds.login_company,
 
-      // ─── מסמך ────────────────────────────────────────────────────────────
       doctype: 9,
       action: 1,
       language: "he_il",
@@ -318,11 +374,9 @@ Deno.serve(async (req) => {
       due_date: dateStr,
       ref_date: dateStr,
 
-      // ─── לקוח ────────────────────────────────────────────────────────────
       account_id: accountId ?? "TODO:linet_account_id_required",
       company: client?.full_name ?? "",
 
-      // ─── כספי ────────────────────────────────────────────────────────────
       sub_total: subTotalStr,
       vat: vatStr,
       total: totalStr,
@@ -332,23 +386,19 @@ Deno.serve(async (req) => {
       discount: "0.00",
       disType: 1,
 
-      // ─── הפניה ───────────────────────────────────────────────────────────
       refnum: order?.external_order_number ?? "",
       refnum_ext: order?.external_order_number ?? "",
       description: `הזמנה ${order?.external_order_number ?? order_id}`,
       comments: order?.customer_note ?? "",
 
-      // ─── owner — TODO: יש לספק מזהה user ב-Linet ────────────────────────
       owner: "TODO:linet_owner_user_id",
 
-      // ─── שורות פריט ───────────────────────────────────────────────────────
       docDetailes,
 
-      // ─── תשלום ───────────────────────────────────────────────────────────
       docCheques: [{
         type: chequeType,
-        sum: orderTotal,
-        doc_sum: orderTotal,
+        sum: orderTotalStr,
+        doc_sum: orderTotalStr,
         currency_id: "ILS",
         currency_rate: "1.0000",
         line: 1,
@@ -356,34 +406,27 @@ Deno.serve(async (req) => {
       }],
     };
 
-    // ─── הגנת TODOs ────────────────────────────────────────────────────────
-    const payloadStr = JSON.stringify(payload);
-    const todoMatches = [...payloadStr.matchAll(/"TODO:[^"]+"/g)].map((m) => m[0]);
-    const hasTodos = todoMatches.length > 0;
+    // ─── הגנת TODOs ─────────────────────────────────────────────────────────
+    const payloadStr   = JSON.stringify(payload);
+    const todoMatches  = [...payloadStr.matchAll(/"TODO:[^"]+"/g)].map((m) => m[0]);
+    const hasTodos     = todoMatches.length > 0;
 
-    log.push({
-      step: "payload_built",
-      has_todos: hasTodos,
-      todos_found: todoMatches,
-      sub_total: subTotalStr,
-      vat: vatStr,
-      total: totalStr,
-      cheque_type: chequeType,
-    });
+    log.push({ step: "payload_built", has_todos: hasTodos, todos_found: todoMatches, sub_total: subTotalStr, vat: vatStr, total: totalStr });
 
-    // ─── DRY-RUN — apply=false ──────────────────────────────────────────────
+    // ─── DRY-RUN ─────────────────────────────────────────────────────────────
     if (!apply) {
       return Response.json({
         issued: false,
         dry_run: true,
         gate_passed: true,
+        balance_check: orderTotalNum !== null && Math.abs(totalInc - orderTotalNum) <= 0.05 ? "passed" : "skipped",
         has_todos: hasTodos,
         todos_found: todoMatches,
         account_resolved: { id: accountId, found_existing: accountFound },
         account_to_create: accountToCreate ?? null,
+        financials: { sub_total: subTotalStr, vat: vatStr, total: totalStr, order_total: orderTotalStr },
         payload_preview: payload,
-        serial_lines_included: relevantLines.map((l) => ({
-          line_id: l.id,
+        serial_lines_included: serialLines.map((l) => ({
           item_name: l.source_product_name,
           linet_item_id: l.mapped_linet_item_id,
           serials: l.assigned_serials,
@@ -393,7 +436,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── APPLY=TRUE — חסום אם יש TODOs ────────────────────────────────────
+    // ─── APPLY=TRUE ──────────────────────────────────────────────────────────
     if (hasTodos) {
       return Response.json({
         issued: false,
@@ -403,7 +446,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── שלח ל-Linet ───────────────────────────────────────────────────────
     const linetRes = await linetPost("create/docs", payload);
     log.push({ step: "linet_response", http_status: linetRes.http_status, data_keys: Object.keys(linetRes.data ?? {}) });
 
@@ -412,12 +454,11 @@ Deno.serve(async (req) => {
       return Response.json({ issued: false, linet_error: linetBody, log });
     }
 
-    const createdDocId = linetBody?.body?.id ?? linetBody?.id ?? null;
+    const createdDocId     = linetBody?.body?.id ?? linetBody?.id ?? null;
     const createdDocNumber = linetBody?.body?.docnum ?? linetBody?.docnum ?? null;
-    const invoicedAt = new Date().toISOString();
+    const invoicedAt       = new Date().toISOString();
 
-    // עדכן שורות — לא מעדכן כלום אם Linet החזיר שגיאה (הגנה לעיל)
-    for (const line of relevantLines) {
+    for (const line of serialLines) {
       const entityName = gateSerialLines.find((l) => l.id === line.id) ? "OrderItemSerial" : "OrderSerialLine";
       await base44.asServiceRole.entities[entityName].update(line.id, {
         linet_invoice_id: String(createdDocId),
@@ -428,14 +469,14 @@ Deno.serve(async (req) => {
       }).catch(() => {});
     }
 
-    log.push({ step: "entities_updated", lines_updated: relevantLines.length });
+    log.push({ step: "entities_updated", lines_updated: serialLines.length });
 
     return Response.json({
       issued: true,
       linet_invoice_id: String(createdDocId),
       linet_document_number: String(createdDocNumber),
       invoiced_at: invoicedAt,
-      lines_updated: relevantLines.length,
+      lines_updated: serialLines.length,
       log,
     });
 
