@@ -198,6 +198,50 @@ async function findOrCreateClient(sr, wooOrder) {
 }
 
 // ─── Fetch all orders with pagination ───
+// ─── Serial line detection (cache-only, idempotent) ───
+async function detectSerialLines(sr, orderId, lineItems) {
+    let created = 0;
+    const unknownSkus = [];
+
+    for (const item of lineItems) {
+        const sku = (item.sku || '').trim();
+        if (!sku) continue;
+
+        const mapEntries = await sr.LinetProductMap.filter({ sku }, null, 1);
+        const entry = mapEntries[0];
+
+        if (!entry || (entry.linet_stock_type !== 2 && !entry.requires_serial)) {
+            unknownSkus.push(sku);
+            continue;
+        }
+
+        // Idempotency: check if serial line already exists
+        const existing = await sr.OrderSerialLine.filter({ order_id: orderId, source_sku: sku }, null, 1);
+        if (existing.length > 0) continue;
+
+        await sr.OrderSerialLine.create({
+            order_id: orderId,
+            order_item_id: `${orderId}_${sku}`,
+            source: 'woo',
+            source_sku: sku,
+            source_product_name: item.name || '',
+            mapped_linet_item_id: entry.linet_item_id || null,
+            mapped_linet_sku: sku,
+            mapped_linet_item_name: entry.linet_item_name || '',
+            requires_serial: true,
+            serials_required_count: item.quantity || 1,
+            serial_status: 'required_missing',
+            assigned_serials: [],
+        });
+        created++;
+    }
+
+    if (created > 0 || unknownSkus.length > 0) {
+        console.log(`🔢 Serial detect [${orderId}]: ${created} created, unknown SKUs: [${unknownSkus.join(', ')}]`);
+    }
+    return { created, unknownSkus };
+}
+
 async function fetchAllOrders(baseUrl, authString, afterDate) {
     let allOrders = [];
     let page = 1;
@@ -436,6 +480,13 @@ Deno.serve(async (req) => {
                 }
 
                 created++;
+
+                // Serial detection — cache-only, non-blocking
+                try {
+                    await detectSerialLines(sr, createdOrder.id, lineItems);
+                } catch (serialErr) {
+                    console.warn(`⚠️ Serial detect failed for #${wo.id}: ${serialErr.message}`);
+                }
 
                 // Update client stats
                 if (clientId) {
