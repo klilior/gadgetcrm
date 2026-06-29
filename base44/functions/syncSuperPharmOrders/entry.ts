@@ -79,6 +79,51 @@ function extractOrderData(miraklOrder) {
   };
 }
 
+// ── detectSerialLinesSP — cache-only, idempotent ──
+async function detectSerialLinesSP(sr, orderId, lineItems) {
+  let created = 0;
+  const unknownSkus = [];
+
+  for (const item of lineItems) {
+    const sku = (item.offer_sku || item.sku || '').trim();
+    if (!sku) continue;
+
+    // Search by superpharm_sku field in LinetProductMap
+    const mapEntries = await sr.LinetProductMap.filter({ superpharm_sku: sku }, null, 1).catch(() => []);
+    const entry = mapEntries[0];
+
+    if (!entry || (entry.linet_stock_type !== 2 && !entry.requires_serial)) {
+      unknownSkus.push(sku);
+      continue;
+    }
+
+    // Idempotency — skip if already exists
+    const existing = await sr.OrderSerialLine.filter({ order_id: orderId, source_sku: sku }, null, 1).catch(() => []);
+    if (existing.length > 0) continue;
+
+    await sr.OrderSerialLine.create({
+      order_id: orderId,
+      order_item_id: `${orderId}_${sku}`,
+      source: 'superpharm',
+      source_sku: sku,
+      source_product_name: item.product_title || item.name || '',
+      mapped_linet_item_id: entry.linet_item_id || null,
+      mapped_linet_sku: entry.sku || null,
+      mapped_linet_item_name: entry.linet_item_name || '',
+      requires_serial: true,
+      serials_required_count: item.quantity || 1,
+      serial_status: 'required_missing',
+      assigned_serials: [],
+    });
+    created++;
+  }
+
+  if (created > 0 || unknownSkus.length > 0) {
+    console.log(`[SP Serial detect] order=${orderId}: ${created} created, unknown SP SKUs: [${unknownSkus.join(', ')}]`);
+  }
+  return { created, unknownSkus };
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -185,6 +230,16 @@ Deno.serve(async (req) => {
       } else {
         await withRetry(() => sr.SuperPharmOrder.create(orderData), `create ${orderData.mirakl_order_id}`);
         created++;
+
+        // ── זיהוי סריאלי לאחר יצירה (cache-only, non-blocking) ──
+        try {
+          const lines = JSON.parse(orderData.order_lines_json || '[]');
+          if (lines.length > 0) {
+            await detectSerialLinesSP(sr, orderData.mirakl_order_id, lines);
+          }
+        } catch (serialErr) {
+          console.warn(`[SP Serial detect] Failed for ${orderData.mirakl_order_id} (non-critical): ${serialErr.message}`);
+        }
       }
 
       // Add a small delay every BATCH_SIZE writes to avoid rate limits

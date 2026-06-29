@@ -81,24 +81,30 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
       if (!sku) throw new Error("אין מק\"ט לסימון");
 
       // עדכן/צור LinetProductMap
-      const maps = await base44.entities.LinetProductMap.filter({ sku }).catch(() => []);
+      const isSuperPharm = order.source === "mirakl" || order.source === "superpharm";
+      const spSku = isSuperPharm ? sku : null; // S###### format
+
+      // לסופר-פארם: חפש לפי superpharm_sku; לשאר: לפי sku
+      const maps = isSuperPharm
+        ? await base44.entities.LinetProductMap.filter({ superpharm_sku: sku }).catch(() => [])
+        : await base44.entities.LinetProductMap.filter({ sku }).catch(() => []);
+
+      const mapData = {
+        requires_serial: true,
+        linet_stock_type: 2,
+        manual_override: true,
+        serial_source: isSuperPharm ? "manual_sp" : "manual_serial",
+        updated_at: new Date().toISOString(),
+        ...(spSku ? { superpharm_sku: spSku } : {}),
+      };
+
       if (maps.length > 0) {
-        await base44.entities.LinetProductMap.update(maps[0].id, {
-          requires_serial: true,
-          linet_stock_type: 2,
-          manual_override: true,
-          serial_source: "manual_serial",
-          updated_at: new Date().toISOString(),
-        });
+        await base44.entities.LinetProductMap.update(maps[0].id, mapData);
       } else {
         await base44.entities.LinetProductMap.create({
-          sku,
-          requires_serial: true,
-          linet_stock_type: 2,
-          manual_override: true,
-          serial_source: "manual_serial",
+          sku: isSuperPharm ? `sp_${sku}` : sku, // sku שדה חובה-ייחודי; SP SKU נשמר ב-superpharm_sku
+          ...mapData,
           linet_item_name: product.name || "",
-          updated_at: new Date().toISOString(),
         });
       }
 
