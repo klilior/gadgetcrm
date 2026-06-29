@@ -18,6 +18,7 @@ import UnifiedOrderRow from "../components/unified-orders/UnifiedOrderRow";
 import PendingProductsSummary from "../components/unified-orders/PendingProductsSummary";
 import SendSmsOrderModal from "../components/unified-orders/SendSmsOrderModal";
 import { isClosedStatus, getShipmentBlockReason, LINET_ORDER_SKUS } from "../components/unified-orders/OrderStatusConfig";
+import { checkShipmentGate } from "@/functions/checkShipmentGate";
 import { isBlockedOrder, isReadyForAction, isVisuallyClosed } from "../components/unified-orders/orderUiHelpers";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import SPShipDialog from "../components/superpharm/SPShipDialog";
@@ -65,6 +66,9 @@ export default function UnifiedOrders() {
 
   // Expanded row
   const [expandedId, setExpandedId] = useState(null);
+
+  // Serial count (lazy, loaded in background)
+  const [serialCount, setSerialCount] = useState(0);
 
   // Active shipping providers
   const [activeProviders, setActiveProviders] = useState({ velo: false, cargo: false, getpackage: false });
@@ -349,6 +353,18 @@ export default function UnifiedOrders() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Load serial count in background (lazy)
+  useEffect(() => {
+    const loadSerialCount = async () => {
+      try {
+        const lines = await base44.entities.OrderSerialLine.filter({ requires_serial: true }).catch(() => []);
+        const open = lines.filter(l => !["invoiced"].includes(l.serial_status));
+        setSerialCount(open.length);
+      } catch (_) {}
+    };
+    loadSerialCount();
+  }, []);
+
   // Load active shipping providers
   useEffect(() => {
     const loadProviders = async () => {
@@ -403,10 +419,10 @@ export default function UnifiedOrders() {
     return {
       open: openOrders.length,
       pending: openOrders.filter(o => isPendingOrder(o) && !isReadyForAction(o)).length,
-      serial: 0,
+      serial: serialCount,
       ready: openOrders.filter(isReadyForAction).length,
     };
-  }, [orders]);
+  }, [orders, serialCount]); // eslint-disable-line
 
   // Filtered + searched orders
   const filteredOrders = useMemo(() => {
@@ -516,30 +532,45 @@ export default function UnifiedOrders() {
     setPage(1);
   };
 
-  const openShipmentSafely = (order) => {
-    const reason = getShipmentBlockReason(order.source, order.status);
-    if (reason) {
-      alert(reason);
-      return;
+  // בדיקת שער סריאלי לפני פתיחת כל modal משלוח
+  const checkSerialGate = async (order) => {
+    const rawId = order.raw_id || (order.id?.startsWith("woo_") ? order.id.replace("woo_", "") : order.id);
+    if (!rawId || order.source === 'linet') return false; // linet orders — no serial gate
+    try {
+      const res = await checkShipmentGate({ order_id: rawId });
+      const data = res?.data ?? res;
+      if (data?.blocked) {
+        const msg = (data.messages_he || []).join("\n") || "יש להשלים טיפול במספר סידורי לפני יצירת משלוח.";
+        alert(msg);
+        return true; // חסום
+      }
+      return false; // לא חסום
+    } catch (_) {
+      return false; // שגיאת רשת — לא חוסמים
     }
+  };
+
+  const openShipmentSafely = async (order) => {
+    const reason = getShipmentBlockReason(order.source, order.status);
+    if (reason) { alert(reason); return; }
+    const blocked = await checkSerialGate(order);
+    if (blocked) return;
     setShipmentOrder(order);
   };
 
-  const openCargoShipmentSafely = (order) => {
+  const openCargoShipmentSafely = async (order) => {
     const reason = getShipmentBlockReason(order.source, order.status);
-    if (reason) {
-      alert(reason);
-      return;
-    }
+    if (reason) { alert(reason); return; }
+    const blocked = await checkSerialGate(order);
+    if (blocked) return;
     setCargoOrder(order);
   };
 
-  const openGetPackageSafely = (order) => {
+  const openGetPackageSafely = async (order) => {
     const reason = getShipmentBlockReason(order.source, order.status);
-    if (reason) {
-      alert(reason);
-      return;
-    }
+    if (reason) { alert(reason); return; }
+    const blocked = await checkSerialGate(order);
+    if (blocked) return;
     setTimeout(() => {
       const el = document.querySelector('[data-getpackage-card]');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });

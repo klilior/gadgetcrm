@@ -14,6 +14,7 @@ import { detectShippingType, getShippingTypeBadge } from "./ShippingTypeHelper";
 import { getBlockingItems, getNextActionLabel, getPrimaryActionLabel, getSourceLabel } from "./orderUiHelpers";
 import ProductMetaBadges from "./ProductMetaBadges";
 import OrderTreatmentTimeline from "./OrderTreatmentTimeline";
+import SerialHandlingZone from "../serials/SerialHandlingZone";
 
 function copyText(text) {
   navigator.clipboard.writeText(text);
@@ -274,6 +275,14 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
 
       {/* GetPackage Shipment Card - shown only when there's an active GP shipment or user clicked GP button */}
       <GetPackageOrderCardWrapper order={order} isManager={isManager} isShiftManager={isShiftManager} />
+
+      {/* Serial Handling Zone — מוצג רק לאתר עם פריטים סריאליים */}
+      {(order.source === 'woocommerce' || order.source === 'mirakl') && (
+        <SerialHandlingZone
+          order={order}
+          onInvoiceIssued={() => {}}
+        />
+      )}
 
       <OrderTreatmentTimeline order={order} />
 
