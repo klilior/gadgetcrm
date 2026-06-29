@@ -93,10 +93,26 @@ Deno.serve(async (req) => {
     const realOrderId = order_id.startsWith("woo_") ? order_id.replace("woo_", "") : order_id;
 
     // ─── שלב 1: שלוף כל הנתונים ────────────────────────────────────────────
+    // חפש בשני פורמטים: עם ובלי "woo_" prefix
+    const wooOrderId = order_id.startsWith("woo_") ? order_id : `woo_${order_id}`;
+    const plainOrderId = order_id.startsWith("woo_") ? order_id.replace("woo_", "") : order_id;
+
     let gateSerialLines = [];
-    try { gateSerialLines = await base44.asServiceRole.entities.OrderItemSerial.filter({ order_id }); } catch (_) {}
+    try {
+      const [r1, r2] = await Promise.all([
+        base44.asServiceRole.entities.OrderItemSerial.filter({ order_id: plainOrderId }).catch(() => []),
+        base44.asServiceRole.entities.OrderItemSerial.filter({ order_id: wooOrderId }).catch(() => []),
+      ]);
+      gateSerialLines = [...r1, ...r2];
+    } catch (_) {}
     let gateSerialLines2 = [];
-    try { gateSerialLines2 = await base44.asServiceRole.entities.OrderSerialLine.filter({ order_id }); } catch (_) {}
+    try {
+      const [r1, r2] = await Promise.all([
+        base44.asServiceRole.entities.OrderSerialLine.filter({ order_id: plainOrderId }).catch(() => []),
+        base44.asServiceRole.entities.OrderSerialLine.filter({ order_id: wooOrderId }).catch(() => []),
+      ]);
+      gateSerialLines2 = [...r1, ...r2];
+    } catch (_) {}
     const allSerialLines = [...gateSerialLines, ...gateSerialLines2];
 
     let order = null;
