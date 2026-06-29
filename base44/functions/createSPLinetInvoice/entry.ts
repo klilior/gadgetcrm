@@ -127,22 +127,21 @@ Deno.serve(async (req) => {
     } = body;
 
     // === Optional: look up serial lines for this Mirakl order (non-blocking) ===
-    // If a serial line exists with assigned serials, we'll inject them into docDet below.
-    // If not found / error → continue exactly as before.
-    let serialLinesByItemId: Record<string, string[]> = {};
+    // Collect ALL assigned_serials from ALL serial lines into one flat array.
+    // If not found / error → continue exactly as before (allSerials stays empty).
+    let allSerials = [];
     if (mirakl_order_id) {
       try {
-        // Try both entity tables
         const [osl, ois] = await Promise.all([
           base44.asServiceRole.entities.OrderSerialLine.filter({ order_id: mirakl_order_id }).catch(() => []),
           base44.asServiceRole.entities.OrderItemSerial.filter({ order_id: mirakl_order_id }).catch(() => []),
         ]);
         for (const l of [...osl, ...ois]) {
-          if (l.requires_serial && Array.isArray(l.assigned_serials) && l.assigned_serials.length > 0 && l.mapped_linet_item_id) {
-            serialLinesByItemId[String(l.mapped_linet_item_id)] = l.assigned_serials;
+          if (l.requires_serial && Array.isArray(l.assigned_serials) && l.assigned_serials.length > 0) {
+            allSerials = allSerials.concat(l.assigned_serials);
           }
         }
-        console.log('[SP Invoice] Serial lines found:', JSON.stringify(serialLinesByItemId));
+        console.log('[SP Invoice] allSerials to inject:', JSON.stringify(allSerials));
       } catch (serialErr) {
         console.warn('[SP Invoice] Could not fetch serial lines (non-critical):', serialErr.message);
       }
@@ -253,8 +252,6 @@ Deno.serve(async (req) => {
     // 2. Build invoice lines (docDet)
     const docDet = [];
 
-    // Inject serials if available for item_id=1 (the generic SP product)
-    const serialsForMainItem = serialLinesByItemId["1"] || [];
     docDet.push({
       item_id: 1,
       name: resolvedProductDescription,
@@ -264,7 +261,7 @@ Deno.serve(async (req) => {
       iItemWithVat: 1,
       currency_id: "ILS",
       vat_cat_id: 1,
-      ...(serialsForMainItem.length > 0 ? { serial: serialsForMainItem } : {}),
+      ...(allSerials.length > 0 ? { serial: allSerials } : {}),
     });
 
     if (resolvedShippingAmount && Number(resolvedShippingAmount) > 0) {
