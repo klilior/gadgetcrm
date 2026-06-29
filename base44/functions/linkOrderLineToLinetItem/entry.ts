@@ -37,9 +37,9 @@ Deno.serve(async (req) => {
           await base44.asServiceRole.entities.LinetProductMap.update(existing[0].id, mapData);
           console.log(`[linkOrderLine] Updated SP mapping: superpharm_sku=${spSku} → linet_item_id=${linet_item_id}`);
         } else {
-          // sku שדה חובה — שים את SP SKU שם גם (ייחודי בתוך LinetProductMap)
-          await base44.asServiceRole.entities.LinetProductMap.create({ ...mapData, sku: spSku });
-          console.log(`[linkOrderLine] Created SP mapping: superpharm_sku=${spSku} → linet_item_id=${linet_item_id}`);
+          // sku = sp_S###### — עקבי עם handleMarkAsSerial ב-SerialHandlingZone
+          await base44.asServiceRole.entities.LinetProductMap.create({ ...mapData, sku: `sp_${spSku}` });
+          console.log(`[linkOrderLine] Created SP mapping: sku=sp_${spSku}, superpharm_sku=${spSku} → linet_item_id=${linet_item_id}`);
         }
       } catch (spErr) {
         console.warn(`[linkOrderLine] Failed to save SP mapping (non-critical): ${spErr.message}`);

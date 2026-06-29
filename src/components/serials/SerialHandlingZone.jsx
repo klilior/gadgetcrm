@@ -85,6 +85,7 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
       const spSku = isSuperPharm ? sku : null; // S###### format
 
       // לסופר-פארם: חפש לפי superpharm_sku; לשאר: לפי sku
+      // חיפוש לפי superpharm_sku (SP) או sku (Woo) — עקבי עם linkOrderLineToLinetItem
       const maps = isSuperPharm
         ? await base44.entities.LinetProductMap.filter({ superpharm_sku: sku }).catch(() => [])
         : await base44.entities.LinetProductMap.filter({ sku }).catch(() => []);
@@ -102,7 +103,7 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
         await base44.entities.LinetProductMap.update(maps[0].id, mapData);
       } else {
         await base44.entities.LinetProductMap.create({
-          sku: isSuperPharm ? `sp_${sku}` : sku, // sku שדה חובה-ייחודי; SP SKU נשמר ב-superpharm_sku
+          sku: isSuperPharm ? `sp_${sku}` : sku, // sp_S###### — עקבי עם linkOrderLineToLinetItem
           ...mapData,
           linet_item_name: product.name || "",
         });
