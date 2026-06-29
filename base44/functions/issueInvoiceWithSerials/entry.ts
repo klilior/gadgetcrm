@@ -49,29 +49,19 @@ function nowStr() {
 
 const VAT_RATE = 0.18;
 
-/** בונה שורת docDetailes אחת */
+/** בונה שורת docDet אחת — תואם ל-/api/create/doc */
 function buildLine({ item_id, sku, name, qty, totalInc, serials }) {
-  const iTotalVat = totalInc;
-  const iTotal    = totalInc / (1 + VAT_RATE);
-  const iItem     = iTotal / qty;           // מחיר יחידה ללא מע"מ — flag iItemWithVat=1 אומר שהוא כולל
-  // NOTE: iItem מועבר כ-"with vat" (iItemWithVat=1) לכן iItem = מחיר יחידה כולל מע"מ
-  const iItemFinal = iTotalVat / qty;
+  const iTotalVat  = totalInc;
+  const iItemFinal = iTotalVat / qty;  // מחיר יחידה כולל מע"מ (iItemWithVat=1)
   return {
-    item_id: Number(item_id),
-    sku: sku ?? "",
-    name: name ?? "",
-    qty: fmt4(qty),
-    serial: Array.isArray(serials) ? serials : [],
-    iItem:        fmt2(iItemFinal),
+    item_id:      Number(item_id),
+    sku:          sku ?? "",
+    name:         name ?? "",
+    qty:          qty,
+    serial:       Array.isArray(serials) ? serials : [],
+    iItem:        Number(iItemFinal.toFixed(2)),
     iItemWithVat: 1,
-    iTotal:       fmt2(iTotal),
-    iTotalVat:    fmt2(iTotalVat),
-    discount:     "0.00",
-    discountPer:  "0.00",
-    discountType: 0,
     currency_id:  "ILS",
-    currency_rate:"1.0000",
-    unit_id:      0,
     vat_cat_id:   1,
     warehouse_id: 115,
   };
@@ -383,24 +373,15 @@ Deno.serve(async (req) => {
       login_hash: creds.login_hash,
       login_company: creds.login_company,
 
-      doctype: 9,
-      action: 1,
+      doctype: "9",
+      status: 2,
       language: "he_il",
-      issue_date: dateStr,
-      due_date: dateStr,
-      ref_date: dateStr,
 
-      account_id: accountId ?? "TODO:linet_account_id_required",
+      account_id: String(accountId ?? ""),
       company: client?.full_name ?? "",
 
-      sub_total: subTotalStr,
-      vat: vatStr,
-      total: totalStr,
       currency_id: "ILS",
       currency_rate: "1.0000",
-      src_tax: "0.00",
-      discount: "0.00",
-      disType: 1,
 
       refnum: order?.external_order_number ?? "",
       refnum_ext: order?.external_order_number ?? "",
@@ -409,16 +390,14 @@ Deno.serve(async (req) => {
 
       owner: 8669,
 
-      docDetailes,
+      docDet: docDetailes,
 
-      docCheques: [{
+      docCheq: [{
         type: chequeType,
-        sum: orderTotalStr,
-        doc_sum: orderTotalStr,
+        sum: Number(orderTotalStr),
+        doc_sum: Number(orderTotalStr),
         currency_id: "ILS",
-        currency_rate: "1.0000",
         line: 1,
-        bank_refnum: null,
       }],
     };
 
@@ -482,7 +461,7 @@ Deno.serve(async (req) => {
     }
     log.push({ step: "refnum_check_passed", docs_found: 0 });
 
-    const linetRes = await linetPost("create/docs", payload);
+    const linetRes = await linetPost("create/doc", payload);
     log.push({ step: "linet_response", http_status: linetRes.http_status, data_keys: Object.keys(linetRes.data ?? {}) });
 
     const linetBody = linetRes.data;
