@@ -534,8 +534,12 @@ export default function UnifiedOrders() {
 
   // בדיקת שער סריאלי לפני פתיחת כל modal משלוח
   const checkSerialGate = async (order) => {
-    const rawId = order.raw_id || (order.id?.startsWith("woo_") ? order.id.replace("woo_", "") : order.id);
-    if (!rawId || order.source === 'linet') return false; // linet orders — no serial gate
+    if (order.source === 'linet') return false; // linet orders — no serial gate
+    // SP: use mirakl_order_id (e.g. 029958952-A), Woo: use entity raw_id
+    const rawId = order.source === 'mirakl'
+      ? (order.mirakl_order_id || order.order_number)
+      : (order.raw_id || (order.id?.startsWith("woo_") ? order.id.replace("woo_", "") : order.id));
+    if (!rawId) return false;
     try {
       const res = await checkShipmentGate({ order_id: rawId });
       const data = res?.data ?? res;
