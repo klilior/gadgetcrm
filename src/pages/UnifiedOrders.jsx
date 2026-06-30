@@ -229,7 +229,7 @@ export default function UnifiedOrders() {
           order_number: o.mirakl_order_id || '', order_date: o.created_at_mirakl || o.created_date || '',
           customer_name: ((o.customer_first_name||'') + ' ' + (o.customer_last_name||'')).trim(),
           customer_phone: o.customer_phone || '',
-          products: lines.map(l => ({name: l.product_title||l.offer_sku||'', quantity: l.quantity||1, total: l.price||0})),
+          products: lines.map(l => ({name: l.product_title||l.offer_sku||'', sku: l.offer_sku||'', quantity: l.quantity||1, total: l.price||0})),
           total: o.total_price || 0, shipping_method: 'superpharm', shipping_city: o.shipping_city || '',
           shipping_street: o.shipping_street || '', shipping_zip: o.shipping_zip || '',
           shipping_address_full: o.shipping_address_full || '',

@@ -37,7 +37,7 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
     ? (order.mirakl_order_id || order.order_number)
     : (order.raw_id || (order.id?.startsWith("woo_") ? order.id.replace("woo_", "") : order.id));
 
-  console.log("[SHZ] render", { source: order.source, orderId, products: order.products, productsLen: order.products?.length });
+
 
   // טעינה lazy — רק כשהכרטיס נפתח
   const load = useCallback(async () => {
@@ -67,7 +67,7 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
       // לא setError — כדי שהכפתור הידני עדיין יופיע
     } finally {
       setLoading(false);
-      console.log("[SHZ] after load", { serialLines: "see next render" });
+
     }
   }, [orderId]);
 
@@ -175,10 +175,7 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
   };
 
   // ═══ תנאי תצוגה ═══
-  console.log("[SHZ] after load state", { loading, serialLines, error });
-
   if (loading) {
-    console.log("[SHZ] returning: loading spinner");
     return (
       <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
         <Loader2 className="w-3 h-3 animate-spin" /> בודק פריטים סריאליים...
@@ -186,10 +183,7 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
     );
   }
 
-  if (error) {
-    console.log("[SHZ] returning null: error", error);
-    return null;
-  }
+  if (error) return null;
 
   // אין שורות סריאליות בכלל — בדוק אם LinetProductMap מסמן מישהו כסריאלי
   const hasSerialLines = (serialLines || []).some(l => l.requires_serial);
@@ -201,11 +195,7 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
     return sku && !serialSkus.has(sku);
   });
 
-  console.log("[SHZ] null check", { hasSerialLines, nonSerialProductsLen: nonSerialProducts.length, nonSerialProducts });
-
   if (!hasSerialLines && nonSerialProducts.length === 0) return null;
-
-  console.log("[SHZ] RENDERING FULL ZONE");
 
   const gateBlocked = gateResult?.blocked ?? true;
   const gateMessages = gateResult?.messages_he || [];

@@ -277,7 +277,6 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
       <GetPackageOrderCardWrapper order={order} isManager={isManager} isShiftManager={isShiftManager} />
 
       {/* Serial Handling Zone — מוצג רק לאתר עם פריטים סריאליים */}
-      {console.log("[ODP] source check", { source: order.source, willRender: order.source === 'woocommerce' || order.source === 'mirakl' })}
       {(order.source === 'woocommerce' || order.source === 'mirakl') && (
         <SerialHandlingZone
           order={order}
