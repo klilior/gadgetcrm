@@ -31,7 +31,11 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
   const [markingProductIdx, setMarkingProductIdx] = useState(null);
   const [markingBusy, setMarkingBusy] = useState(false);
 
-  const orderId = order.raw_id || (order.id?.startsWith("woo_") ? order.id.replace("woo_", "") : order.id);
+  // עבור SP: orderId = mirakl_order_id (029958952-A) — זה מה שנשמר ב-OrderSerialLine.order_id
+  // עבור Woo: orderId = raw_id (entity id בלי prefix woo_)
+  const orderId = order.source === 'mirakl'
+    ? (order.mirakl_order_id || order.order_number)
+    : (order.raw_id || (order.id?.startsWith("woo_") ? order.id.replace("woo_", "") : order.id));
 
   // טעינה lazy — רק כשהכרטיס נפתח
   const load = useCallback(async () => {

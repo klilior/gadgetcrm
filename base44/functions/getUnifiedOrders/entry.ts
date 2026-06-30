@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
           shipping_city: o.shipping_city || '',
           shipping_street: o.shipping_street || '',
           shipping_address_full: o.shipping_address_full || '',
-          products: lines.map(function(l) { return {name: l.product_title || l.offer_sku || '', quantity: l.quantity || 1, total: l.price || 0}; }),
+          products: lines.map(function(l) { return {name: l.product_title || l.offer_sku || '', sku: l.offer_sku || '', quantity: l.quantity || 1, total: l.price || 0}; }),
           total: o.total_price || 0, shipping_method: 'superpharm',
           status: o.order_state || '', notes: o.notes || '',
           raw_id: o.id, mirakl_order_id: o.mirakl_order_id || '',
