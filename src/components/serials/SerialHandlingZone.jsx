@@ -45,20 +45,26 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
     setLoading(true);
     setError(null);
     try {
-      // שלוף שורות סריאליות
+      // שלוף שורות סריאליות — כל כשל שקט
       const [osl, ois] = await Promise.all([
-        base44.entities.OrderSerialLine.filter({ order_id: orderId }).catch(() => []),
-        base44.entities.OrderItemSerial.filter({ order_id: orderId }).catch(() => []),
+        base44.entities.OrderSerialLine.filter({ order_id: orderId }).catch((e) => { console.error("[SHZ] OrderSerialLine.filter FAILED", e?.message, e?.response?.status); return []; }),
+        base44.entities.OrderItemSerial.filter({ order_id: orderId }).catch((e) => { console.error("[SHZ] OrderItemSerial.filter FAILED", e?.message, e?.response?.status); return []; }),
       ]);
       const combined = [...osl, ...ois];
       setSerialLines(combined);
 
-      // קרא gate (כדי לדעת אם חסום + מה חסר)
-      const res = await checkInvoiceGate({ order_id: orderId });
-      setGateResult(res?.data ?? res);
+      // קרא gate — כשל לא שובר את הקומפוננטה, מציגים gateResult=null (unblocked)
+      try {
+        const res = await checkInvoiceGate({ order_id: orderId });
+        setGateResult(res?.data ?? res);
+      } catch (e) {
+        console.error("[SHZ] checkInvoiceGate FAILED", e?.message, e?.response?.status);
+        setGateResult({ blocked: false, reasons: [], messages_he: [] });
+      }
     } catch (e) {
-      setError(e.message);
+      console.error("[SHZ] load FAILED (serial lines fetch)", e?.message);
       setSerialLines([]);
+      // לא setError — כדי שהכפתור הידני עדיין יופיע
     } finally {
       setLoading(false);
       console.log("[SHZ] after load", { serialLines: "see next render" });
