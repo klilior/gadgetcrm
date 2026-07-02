@@ -1,5 +1,12 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
+// Helper: split array into chunks of given size
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -15,8 +22,12 @@ Deno.serve(async (req) => {
     const MAX_PER_CALL = 200; // max records to write per invocation
     const BATCH = 500;
     const MAX_PAGES = 50; // safety cap = 25,000 records
+    const CHUNK_SIZE = 100; // concurrency limit for SP and Linet
 
-    console.log(`🔒 backfillOrderLocks — dry_run=${dryRun}, woo_cursor=${wooCursor}`);
+    // Unique run_id for rollback tracking (ISO timestamp, same across the whole invocation)
+    const runId = body.run_id || new Date().toISOString();
+
+    console.log(`🔒 backfillOrderLocks — dry_run=${dryRun}, woo_cursor=${wooCursor}, run_id=${runId}`);
 
     // ─── WooCommerce — cursor-based pagination ────────────────────────
     let wooTotal = 0;
@@ -53,12 +64,21 @@ Deno.serve(async (req) => {
         }
 
         const results = await Promise.allSettled(
-          toProcess.map(o =>
-            base44.asServiceRole.entities.Order.update(o.id, {
+          toProcess.map(async (o) => {
+            await base44.asServiceRole.entities.Order.update(o.id, {
               order_locked: true,
               shipment_created_at: 'historical',
-            })
-          )
+            });
+            // Write rollback log
+            await base44.asServiceRole.entities.BackfillRunLog.create({
+              run_id: runId,
+              order_id: o.id,
+              source: 'woocommerce',
+              entity_name: 'Order',
+              previous_order_locked: o.order_locked || false,
+              previous_shipment_created_at: o.shipment_created_at || null,
+            }).catch(() => {}); // non-fatal
+          })
         );
 
         for (let i = 0; i < results.length; i++) {
@@ -71,13 +91,12 @@ Deno.serve(async (req) => {
           }
         }
 
-        // If we processed fewer than the batch size we need to continue with cursor
+        // FIX: cursor based on last record actually processed, not last record fetched
         if (wooUpdated + wooFailed >= MAX_PER_CALL) {
-          // Check if there's more to do
           if (batch.length === BATCH) {
             wooHasMore = true;
-            const lastInBatch = batch[batch.length - 1];
-            wooNextCursor = lastInBatch.order_date || null;
+            const lastProcessed = toProcess[toProcess.length - 1];
+            wooNextCursor = lastProcessed?.order_date || null;
           }
           break;
         }
@@ -97,7 +116,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ─── Mirakl / SuperPharmOrder ──────────────────────────────────
+    // ─── Mirakl / SuperPharmOrder ─────────────────────────────────────
     let spTotal = 0;
     let spUpdated = 0;
     let spFailed = 0;
@@ -115,26 +134,37 @@ Deno.serve(async (req) => {
 
     if (!dryRun) {
       const spArr = Array.from(spMap.values());
-      const results = await Promise.allSettled(
-        spArr.map(o =>
-          base44.asServiceRole.entities.SuperPharmOrder.update(o.id, {
-            order_locked: true,
-            shipment_created_at: 'historical',
+      const spChunks = chunk(spArr, CHUNK_SIZE);
+      for (const ch of spChunks) {
+        const results = await Promise.allSettled(
+          ch.map(async (o) => {
+            await base44.asServiceRole.entities.SuperPharmOrder.update(o.id, {
+              order_locked: true,
+              shipment_created_at: 'historical',
+            });
+            await base44.asServiceRole.entities.BackfillRunLog.create({
+              run_id: runId,
+              order_id: o.id,
+              source: 'mirakl',
+              entity_name: 'SuperPharmOrder',
+              previous_order_locked: o.order_locked || false,
+              previous_shipment_created_at: o.shipment_created_at || null,
+            }).catch(() => {});
           })
-        )
-      );
-      for (let i = 0; i < results.length; i++) {
-        if (results[i].status === 'fulfilled') {
-          spUpdated++;
-        } else {
-          spFailed++;
-          if (spFailedIds.length < 20) spFailedIds.push(spArr[i].id);
-          console.warn(`⚠️ SP update failed ${spArr[i].id}: ${results[i].reason?.message}`);
+        );
+        for (let i = 0; i < results.length; i++) {
+          if (results[i].status === 'fulfilled') {
+            spUpdated++;
+          } else {
+            spFailed++;
+            if (spFailedIds.length < 20) spFailedIds.push(ch[i].id);
+            console.warn(`⚠️ SP update failed ${ch[i].id}: ${results[i].reason?.message}`);
+          }
         }
       }
     }
 
-    // ─── Linet (LinetOrderStatus) ──────────────────────────────────
+    // ─── Linet (LinetOrderStatus) ──────────────────────────────────────
     let linetTotal = 0;
     let linetUpdated = 0;
     let linetFailed = 0;
@@ -148,32 +178,44 @@ Deno.serve(async (req) => {
     linetTotal = linetDone.length;
 
     if (!dryRun) {
-      const results = await Promise.allSettled(
-        linetDone.map(o =>
-          base44.asServiceRole.entities.LinetOrderStatus.update(o.id, {
-            order_locked: true,
-            shipment_created_at: 'historical',
+      const linetChunks = chunk(linetDone, CHUNK_SIZE);
+      for (const ch of linetChunks) {
+        const results = await Promise.allSettled(
+          ch.map(async (o) => {
+            await base44.asServiceRole.entities.LinetOrderStatus.update(o.id, {
+              order_locked: true,
+              shipment_created_at: 'historical',
+            });
+            await base44.asServiceRole.entities.BackfillRunLog.create({
+              run_id: runId,
+              order_id: o.id,
+              source: 'linet',
+              entity_name: 'LinetOrderStatus',
+              previous_order_locked: o.order_locked || false,
+              previous_shipment_created_at: o.shipment_created_at || null,
+            }).catch(() => {});
           })
-        )
-      );
-      for (let i = 0; i < results.length; i++) {
-        if (results[i].status === 'fulfilled') {
-          linetUpdated++;
-        } else {
-          linetFailed++;
-          if (linetFailedIds.length < 20) linetFailedIds.push(linetDone[i].id);
-          console.warn(`⚠️ Linet update failed ${linetDone[i].id}: ${results[i].reason?.message}`);
+        );
+        for (let i = 0; i < results.length; i++) {
+          if (results[i].status === 'fulfilled') {
+            linetUpdated++;
+          } else {
+            linetFailed++;
+            if (linetFailedIds.length < 20) linetFailedIds.push(ch[i].id);
+            console.warn(`⚠️ Linet update failed ${ch[i].id}: ${results[i].reason?.message}`);
+          }
         }
       }
     }
 
     const summary = dryRun
-      ? `[DRY RUN] would update ~${wooTotal} woo (cursor-based, one-page scan), ${spTotal} mirakl, ${linetTotal} linet`
+      ? `[DRY RUN] would update ~${wooTotal} woo (this page), ${spTotal} mirakl, ${linetTotal} linet`
       : `Updated: woo=${wooUpdated}/${wooUpdated+wooFailed}, sp=${spUpdated}/${spUpdated+spFailed}, linet=${linetUpdated}/${linetUpdated+linetFailed}`;
     console.log(`✅ ${summary}`);
 
     return Response.json({
       dry_run: dryRun,
+      run_id: runId,
       woo: dryRun
         ? { would_update_this_page: wooTotal }
         : { updated: wooUpdated, failed: wooFailed, failed_ids: wooFailedIds, has_more: wooHasMore, next_cursor: wooNextCursor },

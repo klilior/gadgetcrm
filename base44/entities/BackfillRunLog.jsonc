@@ -1,0 +1,43 @@
+{
+  "name": "BackfillRunLog",
+  "type": "object",
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e8\u05d9\u05e6\u05d4 \u05d9\u05d9\u05d7\u05d5\u05d3\u05d9 (timestamp ISO \u05d1\u05ea\u05d7\u05d9\u05dc\u05ea \u05d4\u05e8\u05d9\u05e6\u05d4)",
+      "index": true
+    },
+    "order_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d4\u05d6\u05de\u05e0\u05d4 \u05e9\u05e0\u05e0\u05e2\u05dc\u05d4",
+      "index": true
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "woocommerce",
+        "mirakl",
+        "linet"
+      ],
+      "description": "\u05de\u05e7\u05d5\u05e8 \u05d4\u05d4\u05d6\u05de\u05e0\u05d4"
+    },
+    "entity_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4-entity \u05e9\u05e2\u05d5\u05d3\u05db\u05df (Order / SuperPharmOrder / LinetOrderStatus)"
+    },
+    "previous_order_locked": {
+      "type": "boolean",
+      "description": "\u05e2\u05e8\u05da order_locked \u05dc\u05e4\u05e0\u05d9 \u05d4\u05e0\u05e2\u05d9\u05dc\u05d4 (\u05dc\u05e6\u05d5\u05e8\u05da rollback)"
+    },
+    "previous_shipment_created_at": {
+      "type": "string",
+      "description": "\u05e2\u05e8\u05da shipment_created_at \u05dc\u05e4\u05e0\u05d9 \u05d4\u05e0\u05e2\u05d9\u05dc\u05d4 (\u05dc\u05e6\u05d5\u05e8\u05da rollback)"
+    }
+  },
+  "required": [
+    "run_id",
+    "order_id",
+    "source",
+    "entity_name"
+  ]
+}
