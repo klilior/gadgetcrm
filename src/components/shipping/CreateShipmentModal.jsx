@@ -252,6 +252,7 @@ iframe{width:100%;height:100%;border:none;}</style></head>
         pickup_point_city: activePoint?.city || null,
         pickup_point_distance: activePoint?.distance ?? null,
         followup_id: order?._followup_id || null,
+        linet_order_status_id: order?.source === 'linet' ? (order?._linet_order_status_id || order?.raw_id || null) : null,
       };
 
       const { data } = await createShipment(payload);

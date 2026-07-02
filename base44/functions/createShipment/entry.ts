@@ -69,6 +69,7 @@ Deno.serve(async (req) => {
     reference,
     notes,
     followup_id,  // optional: if set, update OrderFollowup instead of locking Order
+    linet_order_status_id,  // optional: if set, lock LinetOrderStatus record directly
   } = await req.json();
 
   if (!shipment_type || !consignee_name || !consignee_phone || !consignee_city) {
@@ -253,6 +254,7 @@ Deno.serve(async (req) => {
           });
         } else {
           // Try SuperPharmOrder (Mirakl)
+          let spLocked = false;
           try {
             const spOrders = await base44.asServiceRole.entities.SuperPharmOrder.filter({ mirakl_order_id: safeOrderId }, null, 1);
             if (spOrders.length > 0) {
@@ -261,9 +263,24 @@ Deno.serve(async (req) => {
                 shipment_created_at: new Date().toISOString(),
               });
               console.log(`✅ SuperPharmOrder ${safeOrderId} locked`);
+              spLocked = true;
             }
           } catch (spe) {
             console.error(`❌ Failed to lock SP order ${safeOrderId}: ${spe.message}`);
+          }
+
+          // Try LinetOrderStatus — must be passed explicitly as linet_order_status_id
+          if (!spLocked && linet_order_status_id) {
+            try {
+              await base44.asServiceRole.entities.LinetOrderStatus.update(linet_order_status_id, {
+                order_locked: true,
+                shipment_created_at: new Date().toISOString(),
+                status: 'נוצר משלוח',
+              });
+              console.log(`✅ LinetOrderStatus ${linet_order_status_id} locked`);
+            } catch (le) {
+              console.error(`❌ Failed to lock LinetOrderStatus ${linet_order_status_id}: ${le.message}`);
+            }
           }
         }
       }

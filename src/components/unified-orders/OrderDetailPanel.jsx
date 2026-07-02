@@ -154,16 +154,17 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
       return;
     }
     if (isBlockedForShipping) return;
+    const linetExtra = order.source === 'linet' ? { _linet_order_status_id: order.raw_id || order.id } : {};
     if (shippingType === 'cargo') {
-      onCargoShipment ? onCargoShipment(order) : onShipment({ ...order, _shipCarrier: 'velo' });
+      onCargoShipment ? onCargoShipment({ ...order, ...linetExtra }) : onShipment({ ...order, _shipCarrier: 'velo', ...linetExtra });
       return;
     }
     if (shippingType === 'getpackage' && onGetPackageShipment) {
-      onGetPackageShipment(order);
+      onGetPackageShipment({ ...order, ...linetExtra });
       window.dispatchEvent(new CustomEvent('openGetPackageQuoteForm'));
       return;
     }
-    onShipment({ ...order, _shipCarrier: 'ups' });
+    onShipment({ ...order, _shipCarrier: 'ups', ...linetExtra });
   };
 
   return (
@@ -476,7 +477,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
                 <Button
                   variant="outline"
                   className={`rounded-xl bg-white transition-colors ${shippingType === 'cargo' ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50' : 'border-gray-200 text-gray-700 hover:bg-slate-50'}`}
-                  onClick={() => onCargoShipment ? onCargoShipment(order) : onShipment({ ...order, _shipCarrier: 'velo' })}
+                  onClick={() => { const le = order.source === 'linet' ? { _linet_order_status_id: order.raw_id || order.id } : {}; onCargoShipment ? onCargoShipment({ ...order, ...le }) : onShipment({ ...order, _shipCarrier: 'velo', ...le }); }}
                 >
                   <Truck className="w-4 h-4 ml-1" />
                   🚚 קארגו
@@ -486,7 +487,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
                 <Button
                   variant="outline"
                   className={`rounded-xl bg-white transition-colors ${shippingType === 'ups' ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50' : 'border-gray-200 text-gray-700 hover:bg-slate-50'}`}
-                  onClick={() => onShipment({ ...order, _shipCarrier: 'ups' })}
+                  onClick={() => { const le = order.source === 'linet' ? { _linet_order_status_id: order.raw_id || order.id } : {}; onShipment({ ...order, _shipCarrier: 'ups', ...le }); }}
                 >
                   <Package className="w-4 h-4 ml-1" />
                   📦 UPS
