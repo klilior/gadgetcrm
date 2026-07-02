@@ -63,24 +63,39 @@ Deno.serve(async (req) => {
     };
 
     let totalUndone = 0;
+    let totalSkipped = 0;
     let totalFailed = 0;
     const failedIds = [];
+    const skippedIds = [];
 
     for (const [entityName, entries] of Object.entries(byEntity)) {
       if (!entityMap[entityName]) continue;
       const chunks = chunk(entries, 100);
       for (const ch of chunks) {
         const results = await Promise.allSettled(
-          ch.map(log =>
-            base44.asServiceRole.entities[entityName].update(log.order_id, {
+          ch.map(async (log) => {
+            const entity = base44.asServiceRole.entities[entityName];
+            const current = await entity.get(log.order_id).catch(() => null);
+            if (!current) return { skipped: true, reason: 'not_found' };
+            // If shipment_created_at is no longer 'historical', a real shipment was created — don't overwrite
+            if (current.shipment_created_at !== 'historical') {
+              return { skipped: true, reason: 'already_changed' };
+            }
+            await entity.update(log.order_id, {
               order_locked: log.previous_order_locked || false,
               shipment_created_at: log.previous_shipment_created_at || null,
-            })
-          )
+            });
+            return { skipped: false };
+          })
         );
         for (let i = 0; i < results.length; i++) {
           if (results[i].status === 'fulfilled') {
-            totalUndone++;
+            if (results[i].value.skipped) {
+              totalSkipped++;
+              if (skippedIds.length < 20) skippedIds.push({ id: ch[i].order_id, reason: results[i].value.reason });
+            } else {
+              totalUndone++;
+            }
           } else {
             totalFailed++;
             if (failedIds.length < 20) failedIds.push(ch[i].order_id);
@@ -90,13 +105,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    const summary = `Undone: ${totalUndone}/${totalUndone + totalFailed}, failed: ${totalFailed}`;
+    const summary = `Undone: ${totalUndone}, skipped: ${totalSkipped}, failed: ${totalFailed}`;
     console.log(`✅ ${summary}`);
 
     return Response.json({
       dry_run: false,
       run_id,
       undone: totalUndone,
+      skipped: totalSkipped,
+      skipped_ids: skippedIds,
       failed: totalFailed,
       failed_ids: failedIds,
       summary,

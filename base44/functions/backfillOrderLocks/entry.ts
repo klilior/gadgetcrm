@@ -34,6 +34,8 @@ Deno.serve(async (req) => {
     let wooUpdated = 0;
     let wooFailed = 0;
     const wooFailedIds = [];
+    let wooLogFailed = 0;
+    const wooLogFailedIds = [];
     let wooHasMore = false;
     let wooNextCursor = null;
     let pagesScanned = 0;
@@ -69,21 +71,31 @@ Deno.serve(async (req) => {
               order_locked: true,
               shipment_created_at: 'historical',
             });
-            // Write rollback log
-            await base44.asServiceRole.entities.BackfillRunLog.create({
-              run_id: runId,
-              order_id: o.id,
-              source: 'woocommerce',
-              entity_name: 'Order',
-              previous_order_locked: o.order_locked || false,
-              previous_shipment_created_at: o.shipment_created_at || null,
-            }).catch(() => {}); // non-fatal
+            let logOk = true;
+            try {
+              await base44.asServiceRole.entities.BackfillRunLog.create({
+                run_id: runId,
+                order_id: o.id,
+                source: 'woocommerce',
+                entity_name: 'Order',
+                previous_order_locked: o.order_locked || false,
+                previous_shipment_created_at: o.shipment_created_at || null,
+              });
+            } catch (logErr) {
+              logOk = false;
+              console.warn(`⚠️ BackfillRunLog write failed for woo/${o.id}: ${logErr.message}`);
+            }
+            return { logOk, orderId: o.id };
           })
         );
 
         for (let i = 0; i < results.length; i++) {
           if (results[i].status === 'fulfilled') {
             wooUpdated++;
+            if (!results[i].value.logOk) {
+              wooLogFailed++;
+              if (wooLogFailedIds.length < 20) wooLogFailedIds.push(results[i].value.orderId);
+            }
           } else {
             wooFailed++;
             if (wooFailedIds.length < 20) wooFailedIds.push(toProcess[i].id);
@@ -121,6 +133,8 @@ Deno.serve(async (req) => {
     let spUpdated = 0;
     let spFailed = 0;
     const spFailedIds = [];
+    let spLogFailed = 0;
+    const spLogFailedIds = [];
 
     const [spShipped, spReceived, spClosed] = await Promise.all([
       base44.asServiceRole.entities.SuperPharmOrder.filter({ order_state: 'SHIPPED', order_locked: { $ne: true } }, null, 1000).catch(() => []),
@@ -142,19 +156,30 @@ Deno.serve(async (req) => {
               order_locked: true,
               shipment_created_at: 'historical',
             });
-            await base44.asServiceRole.entities.BackfillRunLog.create({
-              run_id: runId,
-              order_id: o.id,
-              source: 'mirakl',
-              entity_name: 'SuperPharmOrder',
-              previous_order_locked: o.order_locked || false,
-              previous_shipment_created_at: o.shipment_created_at || null,
-            }).catch(() => {});
+            let logOk = true;
+            try {
+              await base44.asServiceRole.entities.BackfillRunLog.create({
+                run_id: runId,
+                order_id: o.id,
+                source: 'mirakl',
+                entity_name: 'SuperPharmOrder',
+                previous_order_locked: o.order_locked || false,
+                previous_shipment_created_at: o.shipment_created_at || null,
+              });
+            } catch (logErr) {
+              logOk = false;
+              console.warn(`⚠️ BackfillRunLog write failed for sp/${o.id}: ${logErr.message}`);
+            }
+            return { logOk, orderId: o.id };
           })
         );
         for (let i = 0; i < results.length; i++) {
           if (results[i].status === 'fulfilled') {
             spUpdated++;
+            if (!results[i].value.logOk) {
+              spLogFailed++;
+              if (spLogFailedIds.length < 20) spLogFailedIds.push(results[i].value.orderId);
+            }
           } else {
             spFailed++;
             if (spFailedIds.length < 20) spFailedIds.push(ch[i].id);
@@ -169,6 +194,8 @@ Deno.serve(async (req) => {
     let linetUpdated = 0;
     let linetFailed = 0;
     const linetFailedIds = [];
+    let linetLogFailed = 0;
+    const linetLogFailedIds = [];
 
     const linetDone = await base44.asServiceRole.entities.LinetOrderStatus.filter(
       { status: 'טופל', order_locked: { $ne: true } },
@@ -186,19 +213,30 @@ Deno.serve(async (req) => {
               order_locked: true,
               shipment_created_at: 'historical',
             });
-            await base44.asServiceRole.entities.BackfillRunLog.create({
-              run_id: runId,
-              order_id: o.id,
-              source: 'linet',
-              entity_name: 'LinetOrderStatus',
-              previous_order_locked: o.order_locked || false,
-              previous_shipment_created_at: o.shipment_created_at || null,
-            }).catch(() => {});
+            let logOk = true;
+            try {
+              await base44.asServiceRole.entities.BackfillRunLog.create({
+                run_id: runId,
+                order_id: o.id,
+                source: 'linet',
+                entity_name: 'LinetOrderStatus',
+                previous_order_locked: o.order_locked || false,
+                previous_shipment_created_at: o.shipment_created_at || null,
+              });
+            } catch (logErr) {
+              logOk = false;
+              console.warn(`⚠️ BackfillRunLog write failed for linet/${o.id}: ${logErr.message}`);
+            }
+            return { logOk, orderId: o.id };
           })
         );
         for (let i = 0; i < results.length; i++) {
           if (results[i].status === 'fulfilled') {
             linetUpdated++;
+            if (!results[i].value.logOk) {
+              linetLogFailed++;
+              if (linetLogFailedIds.length < 20) linetLogFailedIds.push(results[i].value.orderId);
+            }
           } else {
             linetFailed++;
             if (linetFailedIds.length < 20) linetFailedIds.push(ch[i].id);
@@ -208,23 +246,27 @@ Deno.serve(async (req) => {
       }
     }
 
+    const totalLogFailed = wooLogFailed + spLogFailed + linetLogFailed;
     const summary = dryRun
       ? `[DRY RUN] would update ~${wooTotal} woo (this page), ${spTotal} mirakl, ${linetTotal} linet`
       : `Updated: woo=${wooUpdated}/${wooUpdated+wooFailed}, sp=${spUpdated}/${spUpdated+spFailed}, linet=${linetUpdated}/${linetUpdated+linetFailed}`;
     console.log(`✅ ${summary}`);
+    if (!dryRun && totalLogFailed > 0) {
+      console.warn(`🚨 ROLLBACK COVERAGE GAP: ${totalLogFailed} orders locked WITHOUT a BackfillRunLog entry — woo:${wooLogFailed} sp:${spLogFailed} linet:${linetLogFailed}. These IDs cannot be undone via undoBackfillRun!`);
+    }
 
     return Response.json({
       dry_run: dryRun,
       run_id: runId,
       woo: dryRun
         ? { would_update_this_page: wooTotal }
-        : { updated: wooUpdated, failed: wooFailed, failed_ids: wooFailedIds, has_more: wooHasMore, next_cursor: wooNextCursor },
+        : { updated: wooUpdated, failed: wooFailed, failed_ids: wooFailedIds, has_more: wooHasMore, next_cursor: wooNextCursor, log_failed: wooLogFailed, log_failed_ids: wooLogFailedIds },
       mirakl: dryRun
         ? { would_update: spTotal }
-        : { updated: spUpdated, failed: spFailed, failed_ids: spFailedIds },
+        : { updated: spUpdated, failed: spFailed, failed_ids: spFailedIds, log_failed: spLogFailed, log_failed_ids: spLogFailedIds },
       linet: dryRun
         ? { would_update: linetTotal }
-        : { updated: linetUpdated, failed: linetFailed, failed_ids: linetFailedIds },
+        : { updated: linetUpdated, failed: linetFailed, failed_ids: linetFailedIds, log_failed: linetLogFailed, log_failed_ids: linetLogFailedIds },
       summary,
     });
   } catch (e) {
