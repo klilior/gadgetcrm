@@ -36,7 +36,10 @@
         "issue_invoice",
         "issue_invoice_failed",
         "shipment_blocked",
-        "order_complete_blocked"
+        "order_complete_blocked",
+        "followup_opened",
+        "followup_closed",
+        "followup_shipment_created"
       ],
       "description": "\u05e1\u05d5\u05d2 \u05d4\u05e4\u05e2\u05d5\u05dc\u05d4",
       "index": true

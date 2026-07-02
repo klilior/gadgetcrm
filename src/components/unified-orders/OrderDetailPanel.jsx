@@ -116,7 +116,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
     if (!isLocked) { setFollowupLoaded(true); return; }
     const followupIds = order.followup_records || [];
     if (followupIds.length === 0) { setFollowupLoaded(true); return; }
-    base44.entities.OrderFollowup.filter({ original_order_id: order.raw_id || order.id || String(order.order_number || "") })
+    base44.entities.OrderFollowup.filter({ original_order_id: order.raw_id || order.id || String(order.order_number || ""), original_order_source: order.source || "woocommerce" })
       .then(records => {
         const open = records.find(r => r.status !== "closed");
         setActiveFollowup(open || null);
@@ -346,7 +346,9 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
       {isLocked && (
         <div className="flex items-center gap-2 bg-gray-100 border border-gray-300 rounded-xl px-4 py-2 text-sm text-gray-700 font-medium">
           <Lock className="w-4 h-4 text-gray-500 flex-shrink-0" />
-          🔒 משלוח בוצע ב-{formatDate(order.shipment_created_at)}
+          {order.shipment_created_at === 'historical'
+            ? '🔒 הזמנה היסטורית (טופלה לפני הפעלת הנעילה)'
+            : `🔒 משלוח בוצע ב-${formatDate(order.shipment_created_at)}`}
         </div>
       )}
 

@@ -37,7 +37,7 @@ export default function OrderFollowupCard({ followup, currentUser, onClosed, onC
       // Log closure
       await base44.entities.SerialAuditLog.create({
         order_id: followup.original_order_id,
-        action: "select_serial",
+        action: "followup_closed",
         new_value: `טיפול המשך נסגר (${TYPE_LABELS[followup.followup_type]})`,
         user: currentUser?.employee_name || currentUser?.full_name || "לא ידוע",
         result: "success",

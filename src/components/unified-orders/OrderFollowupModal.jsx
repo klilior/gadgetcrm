@@ -50,7 +50,7 @@ export default function OrderFollowupModal({ order, currentUser, onCreated, onCl
       // Activity log
       await base44.entities.SerialAuditLog.create({
         order_id: orderId,
-        action: "select_serial", // reuse closest action; we log as text
+        action: "followup_opened",
         new_value: `טיפול המשך נפתח: ${followupType} — ${reasonNote.trim()}`,
         user: currentUser?.employee_name || currentUser?.full_name || "לא ידוע",
         result: "success",

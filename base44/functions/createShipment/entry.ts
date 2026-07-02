@@ -67,7 +67,8 @@ Deno.serve(async (req) => {
     weight,
     num_packages,
     reference,
-    notes
+    notes,
+    followup_id,  // optional: if set, update OrderFollowup instead of locking Order
   } = await req.json();
 
   if (!shipment_type || !consignee_name || !consignee_phone || !consignee_city) {
@@ -219,21 +220,57 @@ Deno.serve(async (req) => {
   // If there's an order, update its status and add WooCommerce note with tracking for regular outbound shipments only
   // Guard: order_id must be a non-empty, non-"undefined" string to avoid 404 on .get()
   const safeOrderId = order_id && String(order_id) !== 'undefined' && String(order_id) !== 'null' ? String(order_id) : null;
+  let wooOrder = null;
   if (safeOrderId && shipment_type !== 'pickup_drop') {
     try {
-      let order = null;
-      try { order = await base44.asServiceRole.entities.Order.get(safeOrderId); } catch (_) {}
-      if (order) {
-        await base44.asServiceRole.entities.Order.update(safeOrderId, {
-          status: 'completed',
-          shipment_created_at: new Date().toISOString(),
-          order_locked: true,
-        });
+      // If this shipment belongs to a followup — update the followup, not the main order
+      if (followup_id) {
+        try {
+          await base44.asServiceRole.entities.OrderFollowup.update(followup_id, {
+            status: 'shipment_created',
+            new_shipment_created_at: new Date().toISOString(),
+          });
+          console.log(`✅ OrderFollowup ${followup_id} updated to shipment_created`);
+          // Audit log
+          await base44.asServiceRole.entities.SerialAuditLog.create({
+            order_id: safeOrderId,
+            action: 'followup_shipment_created',
+            new_value: `משלוח חדש נוצר בטיפול המשך: ${tracking_number}`,
+            result: 'success',
+          }).catch(() => {});
+        } catch (fe) {
+          console.error(`❌ Failed to update OrderFollowup ${followup_id}: ${fe.message}`);
+        }
+      } else {
+        // Normal shipment — lock the original order
+        wooOrder = null;
+        try { wooOrder = await base44.asServiceRole.entities.Order.get(safeOrderId); } catch (_) {}
+        if (wooOrder) {
+          await base44.asServiceRole.entities.Order.update(safeOrderId, {
+            status: 'completed',
+            shipment_created_at: new Date().toISOString(),
+            order_locked: true,
+          });
+        } else {
+          // Try SuperPharmOrder (Mirakl)
+          try {
+            const spOrders = await base44.asServiceRole.entities.SuperPharmOrder.filter({ mirakl_order_id: safeOrderId }, null, 1);
+            if (spOrders.length > 0) {
+              await base44.asServiceRole.entities.SuperPharmOrder.update(spOrders[0].id, {
+                order_locked: true,
+                shipment_created_at: new Date().toISOString(),
+              });
+              console.log(`✅ SuperPharmOrder ${safeOrderId} locked`);
+            }
+          } catch (spe) {
+            console.error(`❌ Failed to lock SP order ${safeOrderId}: ${spe.message}`);
+          }
+        }
       }
       console.log(`✅ Order ${order_id} marked as completed and locked`);
 
       // Add tracking number as note in WooCommerce
-      if (order && order.external_order_number) {
+      if (wooOrder && wooOrder.external_order_number) {
         try {
           const [urlSetting, keySetting, secretSetting] = await Promise.all([
             base44.asServiceRole.entities.Settings.filter({ setting_name: "WOOCOMMERCE_SITE_URL" }),

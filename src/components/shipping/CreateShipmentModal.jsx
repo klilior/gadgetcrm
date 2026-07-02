@@ -250,7 +250,8 @@ iframe{width:100%;height:100%;border:none;}</style></head>
         pickup_point_name: activePoint?.name || null,
         pickup_point_address: activePoint ? `${activePoint.street || ''}, ${activePoint.city || ''}` : null,
         pickup_point_city: activePoint?.city || null,
-        pickup_point_distance: activePoint?.distance ?? null
+        pickup_point_distance: activePoint?.distance ?? null,
+        followup_id: order?._followup_id || null,
       };
 
       const { data } = await createShipment(payload);
