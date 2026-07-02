@@ -223,8 +223,14 @@ Deno.serve(async (req) => {
     try {
       let order = null;
       try { order = await base44.asServiceRole.entities.Order.get(safeOrderId); } catch (_) {}
-      if (order) await base44.asServiceRole.entities.Order.update(safeOrderId, { status: 'completed' });
-      console.log(`✅ Order ${order_id} marked as completed`);
+      if (order) {
+        await base44.asServiceRole.entities.Order.update(safeOrderId, {
+          status: 'completed',
+          shipment_created_at: new Date().toISOString(),
+          order_locked: true,
+        });
+      }
+      console.log(`✅ Order ${order_id} marked as completed and locked`);
 
       // Add tracking number as note in WooCommerce
       if (order && order.external_order_number) {

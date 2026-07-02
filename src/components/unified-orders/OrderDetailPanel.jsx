@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Receipt, Store, RotateCcw, Repeat, MoreHorizontal } from "lucide-react";
+import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Receipt, Store, RotateCcw, Repeat, MoreHorizontal, Lock } from "lucide-react";
 import { toast } from "sonner";
 import GetPackageOrderCard from "../getpackage/GetPackageOrderCard";
 import TrackingSection from "./TrackingSection";
@@ -15,6 +15,9 @@ import { getBlockingItems, getNextActionLabel, getPrimaryActionLabel, getSourceL
 import ProductMetaBadges from "./ProductMetaBadges";
 import OrderTreatmentTimeline from "./OrderTreatmentTimeline";
 import SerialHandlingZone from "../serials/SerialHandlingZone";
+import OrderFollowupModal from "./OrderFollowupModal";
+import OrderFollowupCard from "./OrderFollowupCard";
+import { base44 } from "@/api/base44Client";
 
 function copyText(text) {
   navigator.clipboard.writeText(text);
@@ -87,7 +90,7 @@ function GetPackageCardLazy({ order, isManager, isShiftManager }) {
   );
 }
 
-export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment, onGetPackageShipment, activeProviders = {}, isManager = false, isShiftManager = false }) {
+export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipment, onCreateInvoice, onCargoShipment, onGetPackageShipment, activeProviders = {}, isManager = false, isShiftManager = false, currentUser = null }) {
   const statusColor = getStatusColor(order.source, order.status);
   const statusLabel = getStatusLabel(order.source, order.status);
   const statusOptions = getStatusOptions(order.source);
@@ -103,9 +106,51 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
   const isBlockedForShipping = Boolean(shipmentBlockReason);
 
+  // ═══ Order lock + Followup state ═══
+  const isLocked = Boolean(order.order_locked || order.shipment_created_at);
+  const [showFollowupModal, setShowFollowupModal] = React.useState(false);
+  const [activeFollowup, setActiveFollowup] = React.useState(null);
+  const [followupLoaded, setFollowupLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isLocked) { setFollowupLoaded(true); return; }
+    const followupIds = order.followup_records || [];
+    if (followupIds.length === 0) { setFollowupLoaded(true); return; }
+    base44.entities.OrderFollowup.filter({ original_order_id: order.raw_id || order.id || String(order.order_number || "") })
+      .then(records => {
+        const open = records.find(r => r.status !== "closed");
+        setActiveFollowup(open || null);
+        setFollowupLoaded(true);
+      })
+      .catch(() => setFollowupLoaded(true));
+  }, [order.raw_id, order.id, order.order_number, isLocked]);
+
+  const handleFollowupCreated = (followup) => {
+    setActiveFollowup(followup);
+    setShowFollowupModal(false);
+  };
+
+  const handleFollowupClosed = () => {
+    setActiveFollowup(null);
+  };
+
   const runPrimaryAction = () => {
     if (isMiraklNew) {
       onStatusChange(order, 'accept_mirakl');
+      return;
+    }
+    // Block shipment creation on locked orders
+    if (isLocked) {
+      // Log the blocked attempt
+      base44.entities.SerialAuditLog.create({
+        order_id: order.raw_id || order.id || String(order.order_number || ""),
+        action: "shipment_blocked",
+        new_value: "ניסיון יצירת משלוח על הזמנה נעולה — נחסם",
+        user: currentUser?.employee_name || currentUser?.full_name || "לא ידוע",
+        result: "blocked",
+        error_message: "ההזמנה נעולה (order_locked=true). יש לפתוח טיפול המשך.",
+      }).catch(() => {});
+      toast.error("ההזמנה נעולה — משלוח כבר בוצע. פתח טיפול המשך כדי ליצור משלוח נוסף.");
       return;
     }
     if (isBlockedForShipping) return;
@@ -297,159 +342,228 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         </div>
       )}
 
+      {/* Lock badge */}
+      {isLocked && (
+        <div className="flex items-center gap-2 bg-gray-100 border border-gray-300 rounded-xl px-4 py-2 text-sm text-gray-700 font-medium">
+          <Lock className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          🔒 משלוח בוצע ב-{formatDate(order.shipment_created_at)}
+        </div>
+      )}
+
+      {/* Active followup card */}
+      {isLocked && followupLoaded && activeFollowup && (
+        <OrderFollowupCard
+          followup={activeFollowup}
+          currentUser={currentUser}
+          onClosed={handleFollowupClosed}
+          onCreateShipment={(fu) => {
+            // Allow shipment within followup — use same handlers
+            if (shippingType === 'cargo') {
+              onCargoShipment ? onCargoShipment({ ...order, _followup_id: fu.id }) : onShipment({ ...order, _shipCarrier: 'velo', _followup_id: fu.id });
+            } else {
+              onShipment({ ...order, _shipCarrier: 'ups', _followup_id: fu.id });
+            }
+          }}
+        />
+      )}
+
       {/* Actions row */}
       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
-        <Button
-          className="bg-[#7D0F82] hover:bg-[#6a0c6f] text-white rounded-xl px-5 shadow-sm"
-          disabled={isBlockedForShipping || (hasShipment && primaryActionLabel === 'השלם הזמנה')}
-          onClick={runPrimaryAction}
-        
-        >
-          <CheckCircle className="w-4 h-4 ml-1" />
-          {isMiraklNew ? 'אשר הזמנה' : primaryActionLabel}
-        </Button>
-
-        {!isMiraklNew && (
-          <Select value={order.status} onValueChange={(val) => onStatusChange(order, val)}>
-            <SelectTrigger className="h-9 w-[160px] text-sm rounded-xl border-gray-200 bg-white">
-              <SelectValue placeholder="שינוי סטטוס" />
-            </SelectTrigger>
-            <SelectContent>
-              {statusOptions.map(([value, label]) => (
-                <SelectItem key={value} value={value}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        <Button variant="outline" className="rounded-xl border-gray-200 bg-white hover:bg-purple-50 hover:border-purple-200 hover:text-[#7D0F82] transition-colors" onClick={() => onSms(order)}>
-          <MessageCircle className="w-4 h-4 ml-1" />
-          שלח SMS
-        </Button>
-
-        {order.customer_phone && (
-          <Button variant="outline" className="rounded-xl border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors" asChild>
-            <a href={`tel:${order.customer_phone}`}>
-              <Phone className="w-4 h-4 ml-1" />
-              התקשר
-            </a>
-          </Button>
-        )}
-
-        {order.customer_phone && (
-          <Button variant="outline" className="rounded-xl text-emerald-700 border-gray-200 bg-white hover:bg-emerald-50 hover:border-emerald-200 transition-colors" asChild>
-            <a href={`https://wa.me/972${order.customer_phone.replace(/^0/, '')}`} target="_blank" rel="noopener noreferrer">
-              💬 וואטסאפ
-            </a>
-          </Button>
-        )}
-
-        {/* Shipping buttons - blocked when not paid / cancelled */}
-        {shipmentBlockReason ? (
-          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 flex items-center gap-2 text-red-800 text-sm font-medium">
-            <Truck className="w-4 h-4" />
-            {shipmentBlockReason}
-          </div>
-        ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Cargo - Blue - שליח עד הבית */}
-          <Button
-            variant="outline"
-            className={`rounded-xl bg-white transition-colors ${
-              shippingType === 'cargo'
-                ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50'
-                : 'border-gray-200 text-gray-700 hover:bg-slate-50'
-            }`}
-            onClick={() => onCargoShipment ? onCargoShipment(order) : onShipment({ ...order, _shipCarrier: 'velo' })}
-          >
-            <Truck className="w-4 h-4 ml-1" />
-            🚚 קארגו
-            {shippingType === 'cargo' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
-          </Button>
-
-          {/* UPS - Brown/Amber - נקודות איסוף */}
-          <Button
-            variant="outline"
-            className={`rounded-xl bg-white transition-colors ${
-              shippingType === 'ups'
-                ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50'
-                : 'border-gray-200 text-gray-700 hover:bg-slate-50'
-            }`}
-            onClick={() => onShipment({ ...order, _shipCarrier: 'ups' })}
-          >
-            <Package className="w-4 h-4 ml-1" />
-            📦 UPS
-            {shippingType === 'ups' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
-          </Button>
-
-          {/* GetPackage - Red - מהיום להיום */}
-          <Button
-            variant="outline"
-            className={`rounded-xl bg-white transition-colors ${
-              shippingType === 'getpackage'
-                ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50'
-                : 'border-gray-200 text-gray-700 hover:bg-slate-50'
-            }`}
-            onClick={() => {
-              // Scroll to the GetPackage card and auto-open the quote form
-              if (onGetPackageShipment) onGetPackageShipment(order);
-              // Dispatch custom event to open the quote form
-              window.dispatchEvent(new CustomEvent('openGetPackageQuoteForm'));
-            }}
-          >
-            <Truck className="w-4 h-4 ml-1" />
-            ⚡ GetPackage
-            {shippingType === 'getpackage' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
-          </Button>
-        </div>
-        )}
-
-        {((hasShipment && !shipmentBlockReason) || (onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id))) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="rounded-xl border-gray-200 bg-white text-gray-700 hover:bg-slate-50">
-                <MoreHorizontal className="w-4 h-4 ml-1" />
-                עוד פעולות
+        {/* When locked — hide primary shipment button, show followup trigger */}
+        {isLocked ? (
+          <>
+            <Button variant="outline" className="rounded-xl border-gray-200 bg-white hover:bg-purple-50 hover:border-purple-200 hover:text-[#7D0F82] transition-colors" onClick={() => onSms(order)}>
+              <MessageCircle className="w-4 h-4 ml-1" />
+              שלח SMS
+            </Button>
+            {order.customer_phone && (
+              <Button variant="outline" className="rounded-xl border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors" asChild>
+                <a href={`tel:${order.customer_phone}`}><Phone className="w-4 h-4 ml-1" />התקשר</a>
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              {hasShipment && !shipmentBlockReason && (
-                <>
-                  <DropdownMenuItem onSelect={() => onCargoShipment ? onCargoShipment({ ...order, _cargoShipmentType: 'exchange' }) : undefined}>
-                    <Repeat className="w-4 h-4 ml-2" /> החלפה קארגו
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => onCargoShipment ? onCargoShipment({ ...order, _cargoShipmentType: 'return' }) : undefined}>
-                    <RotateCcw className="w-4 h-4 ml-2" /> החזרת קארגו
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => onShipment({ ...order, _shipCarrier: 'ups', _upsShipmentType: 'pickup_drop' })}>
-                    <Package className="w-4 h-4 ml-2" /> PICKUP DROP UPS
-                  </DropdownMenuItem>
-                </>
-              )}
-              {onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id) && (
-                <DropdownMenuItem onSelect={() => {
-                  const spOrder = {
-                    mirakl_order_id: order.mirakl_order_id || order.order_number,
-                    customer_first_name: order.customer_first_name || order.customer_name?.split(' ')[0] || '',
-                    customer_last_name: order.customer_last_name || order.customer_name?.split(' ').slice(1).join(' ') || '',
-                    customer_phone: order.customer_phone || '',
-                    order_lines_json: order.order_lines_json || JSON.stringify(order.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
-                    total_price: order.total || 0,
-                    linet_invoice_doc_id: order.linet_invoice_doc_id || '',
-                    linet_invoice_doc_number: order.linet_invoice_doc_number || '',
-                    linet_invoice_pdf_url: order.linet_invoice_pdf_url || '',
-                    linet_invoice_email_sent: order.linet_invoice_email_sent || false,
-                  };
-                  onCreateInvoice(spOrder);
-                }}>
-                  <Receipt className="w-4 h-4 ml-2" />
-                  {order.linet_invoice_doc_id ? `חשבונית #${order.linet_invoice_doc_number || order.linet_invoice_doc_id}` : 'חשבונית לינט'}
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            )}
+            {order.customer_phone && (
+              <Button variant="outline" className="rounded-xl text-emerald-700 border-gray-200 bg-white hover:bg-emerald-50 hover:border-emerald-200 transition-colors" asChild>
+                <a href={`https://wa.me/972${order.customer_phone.replace(/^0/, '')}`} target="_blank" rel="noopener noreferrer">💬 וואטסאפ</a>
+              </Button>
+            )}
+            {onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id) && (
+              <Button variant="outline" className="rounded-xl border-gray-200 bg-white text-gray-700" onClick={() => {
+                const spOrder = {
+                  mirakl_order_id: order.mirakl_order_id || order.order_number,
+                  customer_first_name: order.customer_first_name || order.customer_name?.split(' ')[0] || '',
+                  customer_last_name: order.customer_last_name || order.customer_name?.split(' ').slice(1).join(' ') || '',
+                  customer_phone: order.customer_phone || '',
+                  order_lines_json: order.order_lines_json || JSON.stringify(order.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
+                  total_price: order.total || 0,
+                  linet_invoice_doc_id: order.linet_invoice_doc_id || '',
+                  linet_invoice_doc_number: order.linet_invoice_doc_number || '',
+                  linet_invoice_pdf_url: order.linet_invoice_pdf_url || '',
+                  linet_invoice_email_sent: order.linet_invoice_email_sent || false,
+                };
+                onCreateInvoice(spOrder);
+              }}>
+                <Receipt className="w-4 h-4 ml-1" />
+                {order.linet_invoice_doc_id ? `חשבונית #${order.linet_invoice_doc_number || order.linet_invoice_doc_id}` : 'חשבונית לינט'}
+              </Button>
+            )}
+            {/* Followup trigger — only when no open followup */}
+            {followupLoaded && !activeFollowup && (
+              <Button
+                variant="outline"
+                className="rounded-xl border-orange-300 text-orange-800 bg-orange-50 hover:bg-orange-100 hover:border-orange-400 transition-colors mr-auto"
+                onClick={() => setShowFollowupModal(true)}
+              >
+                🔁 טיפול המשך (החזרה / החלפה / תקלה)
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            <Button
+              className="bg-[#7D0F82] hover:bg-[#6a0c6f] text-white rounded-xl px-5 shadow-sm"
+              disabled={isBlockedForShipping || (hasShipment && primaryActionLabel === 'השלם הזמנה')}
+              onClick={runPrimaryAction}
+            >
+              <CheckCircle className="w-4 h-4 ml-1" />
+              {isMiraklNew ? 'אשר הזמנה' : primaryActionLabel}
+            </Button>
+
+            {!isMiraklNew && (
+              <Select value={order.status} onValueChange={(val) => onStatusChange(order, val)}>
+                <SelectTrigger className="h-9 w-[160px] text-sm rounded-xl border-gray-200 bg-white">
+                  <SelectValue placeholder="שינוי סטטוס" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            <Button variant="outline" className="rounded-xl border-gray-200 bg-white hover:bg-purple-50 hover:border-purple-200 hover:text-[#7D0F82] transition-colors" onClick={() => onSms(order)}>
+              <MessageCircle className="w-4 h-4 ml-1" />
+              שלח SMS
+            </Button>
+
+            {order.customer_phone && (
+              <Button variant="outline" className="rounded-xl border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors" asChild>
+                <a href={`tel:${order.customer_phone}`}>
+                  <Phone className="w-4 h-4 ml-1" />
+                  התקשר
+                </a>
+              </Button>
+            )}
+
+            {order.customer_phone && (
+              <Button variant="outline" className="rounded-xl text-emerald-700 border-gray-200 bg-white hover:bg-emerald-50 hover:border-emerald-200 transition-colors" asChild>
+                <a href={`https://wa.me/972${order.customer_phone.replace(/^0/, '')}`} target="_blank" rel="noopener noreferrer">
+                  💬 וואטסאפ
+                </a>
+              </Button>
+            )}
+
+            {/* Shipping buttons */}
+            {shipmentBlockReason ? (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 flex items-center gap-2 text-red-800 text-sm font-medium">
+                <Truck className="w-4 h-4" />
+                {shipmentBlockReason}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  className={`rounded-xl bg-white transition-colors ${shippingType === 'cargo' ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50' : 'border-gray-200 text-gray-700 hover:bg-slate-50'}`}
+                  onClick={() => onCargoShipment ? onCargoShipment(order) : onShipment({ ...order, _shipCarrier: 'velo' })}
+                >
+                  <Truck className="w-4 h-4 ml-1" />
+                  🚚 קארגו
+                  {shippingType === 'cargo' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className={`rounded-xl bg-white transition-colors ${shippingType === 'ups' ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50' : 'border-gray-200 text-gray-700 hover:bg-slate-50'}`}
+                  onClick={() => onShipment({ ...order, _shipCarrier: 'ups' })}
+                >
+                  <Package className="w-4 h-4 ml-1" />
+                  📦 UPS
+                  {shippingType === 'ups' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className={`rounded-xl bg-white transition-colors ${shippingType === 'getpackage' ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50' : 'border-gray-200 text-gray-700 hover:bg-slate-50'}`}
+                  onClick={() => {
+                    if (onGetPackageShipment) onGetPackageShipment(order);
+                    window.dispatchEvent(new CustomEvent('openGetPackageQuoteForm'));
+                  }}
+                >
+                  <Truck className="w-4 h-4 ml-1" />
+                  ⚡ GetPackage
+                  {shippingType === 'getpackage' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
+                </Button>
+              </div>
+            )}
+
+            {((hasShipment && !shipmentBlockReason) || (onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id))) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="rounded-xl border-gray-200 bg-white text-gray-700 hover:bg-slate-50">
+                    <MoreHorizontal className="w-4 h-4 ml-1" />
+                    עוד פעולות
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  {hasShipment && !shipmentBlockReason && (
+                    <>
+                      <DropdownMenuItem onSelect={() => onCargoShipment ? onCargoShipment({ ...order, _cargoShipmentType: 'exchange' }) : undefined}>
+                        <Repeat className="w-4 h-4 ml-2" /> החלפה קארגו
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => onCargoShipment ? onCargoShipment({ ...order, _cargoShipmentType: 'return' }) : undefined}>
+                        <RotateCcw className="w-4 h-4 ml-2" /> החזרת קארגו
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => onShipment({ ...order, _shipCarrier: 'ups', _upsShipmentType: 'pickup_drop' })}>
+                        <Package className="w-4 h-4 ml-2" /> PICKUP DROP UPS
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id) && (
+                    <DropdownMenuItem onSelect={() => {
+                      const spOrder = {
+                        mirakl_order_id: order.mirakl_order_id || order.order_number,
+                        customer_first_name: order.customer_first_name || order.customer_name?.split(' ')[0] || '',
+                        customer_last_name: order.customer_last_name || order.customer_name?.split(' ').slice(1).join(' ') || '',
+                        customer_phone: order.customer_phone || '',
+                        order_lines_json: order.order_lines_json || JSON.stringify(order.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
+                        total_price: order.total || 0,
+                        linet_invoice_doc_id: order.linet_invoice_doc_id || '',
+                        linet_invoice_doc_number: order.linet_invoice_doc_number || '',
+                        linet_invoice_pdf_url: order.linet_invoice_pdf_url || '',
+                        linet_invoice_email_sent: order.linet_invoice_email_sent || false,
+                      };
+                      onCreateInvoice(spOrder);
+                    }}>
+                      <Receipt className="w-4 h-4 ml-2" />
+                      {order.linet_invoice_doc_id ? `חשבונית #${order.linet_invoice_doc_number || order.linet_invoice_doc_id}` : 'חשבונית לינט'}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </>
         )}
       </div>
+
+      {/* Followup Modal */}
+      {showFollowupModal && (
+        <OrderFollowupModal
+          order={order}
+          currentUser={currentUser}
+          onCreated={handleFollowupCreated}
+          onClose={() => setShowFollowupModal(false)}
+        />
+      )}
     </div>
   );
 }

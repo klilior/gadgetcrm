@@ -1,0 +1,74 @@
+{
+  "name": "OrderFollowup",
+  "type": "object",
+  "properties": {
+    "original_order_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d4\u05d6\u05de\u05e0\u05d4 \u05d4\u05de\u05e7\u05d5\u05e8\u05d9\u05ea",
+      "index": true
+    },
+    "original_order_source": {
+      "type": "string",
+      "enum": [
+        "woocommerce",
+        "mirakl",
+        "linet"
+      ],
+      "description": "\u05de\u05e7\u05d5\u05e8 \u05d4\u05d4\u05d6\u05de\u05e0\u05d4 \u05d4\u05de\u05e7\u05d5\u05e8\u05d9\u05ea"
+    },
+    "original_order_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d4\u05d4\u05d6\u05de\u05e0\u05d4 \u05d4\u05de\u05e7\u05d5\u05e8\u05d9\u05ea (\u05dc\u05ea\u05e6\u05d5\u05d2\u05d4)"
+    },
+    "followup_type": {
+      "type": "string",
+      "enum": [
+        "return",
+        "exchange",
+        "issue",
+        "other"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05d8\u05d9\u05e4\u05d5\u05dc: \u05d4\u05d7\u05d6\u05e8\u05d4 / \u05d4\u05d7\u05dc\u05e4\u05d4 / \u05ea\u05e7\u05dc\u05d4 / \u05d0\u05d7\u05e8"
+    },
+    "reason_note": {
+      "type": "string",
+      "description": "\u05d4\u05e2\u05e8\u05d4 \u05d7\u05d5\u05e4\u05e9\u05d9\u05ea \u05de\u05d4\u05e0\u05e6\u05d9\u05d2"
+    },
+    "created_by": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05de\u05e9\u05ea\u05de\u05e9 \u05e9\u05e4\u05ea\u05d7 \u05d0\u05ea \u05d4\u05d8\u05d9\u05e4\u05d5\u05dc"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "shipment_created",
+        "closed"
+      ],
+      "default": "open",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05d8\u05d9\u05e4\u05d5\u05dc",
+      "index": true
+    },
+    "new_shipment_created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05de\u05ea\u05d9 \u05e0\u05d5\u05e6\u05e8 \u05d4\u05de\u05e9\u05dc\u05d5\u05d7 \u05d4\u05d7\u05d3\u05e9 \u05d1\u05ea\u05d5\u05da \u05d4\u05d8\u05d9\u05e4\u05d5\u05dc"
+    },
+    "closed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05de\u05ea\u05d9 \u05e0\u05e1\u05d2\u05e8 \u05d4\u05d8\u05d9\u05e4\u05d5\u05dc"
+    },
+    "closed_by": {
+      "type": "string",
+      "description": "\u05de\u05d9 \u05e1\u05d2\u05e8 \u05d0\u05ea \u05d4\u05d8\u05d9\u05e4\u05d5\u05dc"
+    }
+  },
+  "required": [
+    "original_order_id",
+    "original_order_source",
+    "followup_type",
+    "reason_note",
+    "created_by"
+  ]
+}

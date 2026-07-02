@@ -724,6 +724,7 @@ export default function UnifiedOrders() {
                                 activeProviders={activeProviders}
                                 isManager={isManager}
                                 isShiftManager={isShiftManager}
+                                currentUser={currentUser}
                               />
                             </TableCell>
                           </TableRow>
