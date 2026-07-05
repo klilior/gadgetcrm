@@ -439,7 +439,7 @@ Deno.serve(async (req) => {
         add_context_from_internet: false,
         response_json_schema: EXTRACT_SCHEMA,
         file_urls: [fileUrlToUse],
-        model: 'claude_sonnet_4_6'
+        model: 'gpt_5_mini'
       });
     } catch (llmErr) {
       const errMsg = llmErr?.message || String(llmErr);
@@ -457,7 +457,7 @@ Deno.serve(async (req) => {
               add_context_from_internet: false,
               response_json_schema: EXTRACT_SCHEMA,
               file_urls: [correctedUrl],
-              model: 'claude_sonnet_4_6'
+              model: 'gpt_5_mini'
             });
             console.log('PDF extraction succeeded after re-upload');
           } catch (retryErr) {

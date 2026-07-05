@@ -136,39 +136,11 @@ Deno.serve(async (req) => {
       status: "חדש",
     });
 
-    // F. AI text generation for recommended_action
-    const aiPrompt = `You are writing a pricing recommendation in Hebrew for an Israeli electronics retailer.
-IMPORTANT: All numbers are already calculated. Do NOT change numbers. Do NOT perform calculations.
-
-Data:
-- מוצר: ${product.product_name}
-- מיקום נוכחי: ${my_pos} מתוך ${total_competitors || '?'}
-- יעד: ${desired_pos}
-- מחיר נוכחי באתר: ₪${my_price}
-- מחיר מומלץ: ₪${suggested}
-- רווח צפוי ליחידה: ₪${profit(suggested)}
-- מרווח רווח צפוי (%): ${Math.round(suggested_margin * 10) / 10}%
-- מחיר מינימלי מותר (עלות+רווח מינימלי): ₪${min_allowed_price}
-- סוג המלצה: ${recommendation_type}
-${above_price != null ? `- מתחרה מעל: ₪${above_price} (${position_above_me_store || '?'})` : ''}
-${below_price != null ? `- מתחרה מתחת: ₪${below_price} (${position_below_me_store || '?'})` : ''}
-
-Write 2-4 sentences in Hebrew:
-1) מה לעשות עכשיו (להוריד/להעלות/להישאר)
-2) למה זה נכון ביחס ליעד ולמתחרים
-3) אזהרה קצרה אם יש חריגה מרווח מינימלי
-Tone: ברור, ישיר, מקצועי. Output ONLY the Hebrew text, nothing else.`;
-
-    let aiText = '';
-    try {
-      aiText = await base44.asServiceRole.integrations.Core.InvokeLLM({ prompt: aiPrompt });
-    } catch (e) {
-      console.warn('AI text generation failed:', e.message);
-      aiText = recommendation_type;
-    }
+    // F. Deterministic recommendation text (no integration credits)
+    const aiText = `${recommendation_type}. מחיר נוכחי: ₪${my_price}, מחיר מומלץ: ₪${suggested}, יעד מיקום: ${desired_pos}, מיקום נוכחי: ${my_pos} מתוך ${total_competitors || '?'}. רווח צפוי: ₪${profit(suggested)} (${Math.round(suggested_margin * 10) / 10}%).`;
 
     await base44.asServiceRole.entities.PriceRecommendation.update(recommendation.id, {
-      recommended_action: typeof aiText === 'string' ? aiText : recommendation_type,
+      recommended_action: aiText,
     });
 
     // G. Create alert (at most one)
@@ -195,20 +167,8 @@ Tone: ברור, ישיר, מקצועי. Output ONLY the Hebrew text, nothing els
 
     let createdAlert = null;
     if (alertData) {
-      // AI alert message
-      let alertMsg = alertData.alert_type;
-      try {
-        const alertPrompt = `Write a 1-2 sentence Hebrew alert for an Israeli electronics retailer. Be factual and actionable.
-Alert type: ${alertData.alert_type}
-Product: ${product.product_name}
-Current position: ${my_pos}, Target: ${desired_pos}
-Current price: ₪${my_price}, Suggested: ₪${suggested}
-Output ONLY Hebrew text.`;
-        const aiAlertText = await base44.asServiceRole.integrations.Core.InvokeLLM({ prompt: alertPrompt });
-        if (typeof aiAlertText === 'string' && aiAlertText.length > 0) alertMsg = aiAlertText;
-      } catch (e) {
-        console.warn('AI alert text failed:', e.message);
-      }
+      // Deterministic alert message (no integration credits)
+      const alertMsg = `${alertData.alert_type} — ${product.product_name}. מיקום: ${my_pos} (יעד ${desired_pos}), מחיר נוכחי: ₪${my_price}, מומלץ: ₪${suggested}. מומלץ לבדוק ולעדכן מחיר בהתאם.`;
 
       createdAlert = await base44.asServiceRole.entities.PriceAlert.create({
         linked_product: product_id,
