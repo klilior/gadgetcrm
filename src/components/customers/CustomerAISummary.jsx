@@ -9,7 +9,15 @@ export default function CustomerAISummary({ customer, orders, repairs, tickets, 
     const [summary, setSummary] = useState(customer?.ai_summary || null);
     const [isGenerating, setIsGenerating] = useState(false);
 
-    const generateSummary = async () => {
+    const generateSummary = async (force = false) => {
+        // Avoid re-running the LLM if a recent summary (last 2 days) already exists
+        if (!force && customer?.ai_summary && customer?.ai_summary_date) {
+            const ageMs = Date.now() - new Date(customer.ai_summary_date).getTime();
+            if (ageMs < 2 * 24 * 60 * 60 * 1000) {
+                setSummary(customer.ai_summary);
+                return;
+            }
+        }
         setIsGenerating(true);
         try {
             const prompt = `אתה מנתח לקוחות מומחה של חנות טכנולוגיה (גאדג'ט טים). נתח את הלקוח הבא ותן סיכום קצר וממוקד:
@@ -64,7 +72,7 @@ ${devices?.slice(0, 5).map(d => `- ${d.manufacturer || ''} ${d.model}`).join('\n
                     <Button
                         size="sm"
                         variant="outline"
-                        onClick={generateSummary}
+                        onClick={() => generateSummary(!!summary)}
                         disabled={isGenerating}
                         className="gap-1 text-purple-700 border-purple-300 hover:bg-purple-100"
                     >
