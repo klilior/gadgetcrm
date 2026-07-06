@@ -42,47 +42,46 @@ Deno.serve(async (req) => {
       return Response.json({ serials: [], count: 0, error: credErr.message });
     }
 
-    const payload = {
-      ...creds,
-      limit: 500,
-      offset: 0,
-      query: JSON.stringify({ item_id: Number(linet_item_id) }),
-    };
-
+    // ⚠️ Linet מתעלם מ-query.item_id ומחזיר את כל המלאי, ולא בהכרח בדף הראשון.
+    // חובה לדפדף על כל המלאי ואז לסנן ידנית לפי item_id (פתרון ביניים עד לסנכרון לילי ל-DB מקומי).
+    const LIMIT = 500;
+    const MAX_PAGES = 30; // הגנה מלולאה אינסופית — עד 15,000 שורות
     let body_rows = [];
+    let pages_fetched = 0;
     try {
-      const res = await fetch("https://app.linet.org.il/api/newsearch/inventory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      for (let offset = 0; pages_fetched < MAX_PAGES; offset += LIMIT) {
+        const res = await fetch("https://app.linet.org.il/api/newsearch/inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...creds, limit: LIMIT, offset, query: JSON.stringify({ item_id: Number(linet_item_id) }) }),
+        });
 
-      if (!res.ok) {
-        return Response.json({ serials: [], count: 0, error: `Linet HTTP ${res.status}` });
+        if (!res.ok) {
+          return Response.json({ serials: [], count: 0, error: `Linet HTTP ${res.status}` });
+        }
+
+        const text = await res.text();
+        let parsed;
+        try { parsed = JSON.parse(text); } catch { return Response.json({ serials: [], count: 0, error: "Invalid JSON from Linet" }); }
+
+        const raw = parsed?.data?.body ?? parsed?.body ?? null;
+        pages_fetched++;
+
+        // Linet מחזיר string כשאין עוד תוצאות — עוצרים בבטחה
+        if (!Array.isArray(raw) || raw.length === 0) break;
+
+        body_rows = body_rows.concat(raw);
+
+        // הגענו לסוף המלאי
+        if (raw.length < LIMIT) break;
       }
-
-      const text = await res.text();
-      let parsed;
-      try { parsed = JSON.parse(text); } catch { return Response.json({ serials: [], count: 0, error: "Invalid JSON from Linet" }); }
-
-      // גישה ל-body — תומך בשתי מבנים אפשריים
-      const raw = parsed?.data?.body ?? parsed?.body ?? null;
-
-      if (!Array.isArray(raw)) {
-        // body הוא string או null — מחזיר ריק בלי לקרוס
-        return Response.json({ serials: [], count: 0, note: "body is not array", body_type: typeof raw });
-      }
-
-      body_rows = raw;
     } catch (fetchErr) {
       return Response.json({ serials: [], count: 0, error: fetchErr.message });
     }
 
-    // ⚠️ Linet מתעלם מ-query.item_id ומחזיר את כל המלאי (מאות שורות ממאות פריטים).
-    // חובה לסנן ידנית לפי item_id — אחרת מוצגים סריאלים של פריטים אחרים.
     const targetId = Number(linet_item_id);
     const matched = body_rows.filter((row) => Number(row.item_id) === targetId);
-    console.log(`[getAvailableSerials] item_id=${targetId}: Linet returned ${body_rows.length} rows, ${matched.length} matched after item_id filter`);
+    console.log(`[getAvailableSerials] item_id=${targetId}: fetched ${pages_fetched} pages, ${body_rows.length} total rows, ${matched.length} matched after item_id filter`);
 
     // מסנן רק שורות עם idcode לא-null
     const serials = matched
