@@ -30,8 +30,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { linet_item_id } = body;
 
-    if (!linet_item_id) {
-      return Response.json({ error: "linet_item_id נדרש" }, { status: 400 });
+    // הגנה קריטית: בלי linet_item_id אי אפשר לסנן — עדיף ריק על פני סריאלים שגויים
+    if (linet_item_id == null || linet_item_id === "" || Number.isNaN(Number(linet_item_id))) {
+      return Response.json({ serials: [], count: 0, warning: "חסר linet_item_id — לא ניתן לסנן סריאלים" });
     }
 
     let creds;
@@ -77,8 +78,14 @@ Deno.serve(async (req) => {
       return Response.json({ serials: [], count: 0, error: fetchErr.message });
     }
 
+    // ⚠️ Linet מתעלם מ-query.item_id ומחזיר את כל המלאי (מאות שורות ממאות פריטים).
+    // חובה לסנן ידנית לפי item_id — אחרת מוצגים סריאלים של פריטים אחרים.
+    const targetId = Number(linet_item_id);
+    const matched = body_rows.filter((row) => Number(row.item_id) === targetId);
+    console.log(`[getAvailableSerials] item_id=${targetId}: Linet returned ${body_rows.length} rows, ${matched.length} matched after item_id filter`);
+
     // מסנן רק שורות עם idcode לא-null
-    const serials = body_rows
+    const serials = matched
       .filter((row) => row.idcode != null && row.idcode !== "")
       .map((row) => ({
         serial: row.idcode,
