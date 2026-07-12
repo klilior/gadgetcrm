@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { X, Save, Loader2, AlertTriangle, History, Trash2, User, Printer, CheckCircle } from "lucide-react";
+import { X, Save, Loader2, AlertTriangle, History, Trash2, User, Printer } from "lucide-react";
 import { format } from 'date-fns';
 import { sendWhatsapp } from "@/functions/sendWhatsapp";
 import { sendTextMeSMS } from "@/functions/sendTextMeSMS";
@@ -38,10 +38,6 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
     const [showPrintReceipt, setShowPrintReceipt] = useState(false);
     const [showCustomerCard, setShowCustomerCard] = useState(false);
     const [showSmsModal, setShowSmsModal] = useState(false);
-    const [closeError, setCloseError] = useState('');
-    const [showBillingSuccess, setShowBillingSuccess] = useState(false);
-
-    const CLOSING_STATUSES = ['תיקון נסגר', 'מכשיר סיים תיקון וממתין לאיסוף'];
 
     const loadRelatedData = useCallback(async () => {
         if (!repair) return;
@@ -118,23 +114,13 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
 
     const handleStatusUpdate = async () => {
         if (!formData.status) return;
-
-        setCloseError('');
-
-        // חסימת סגירה ללא מחיר תיקון
-        const isClosing = CLOSING_STATUSES.includes(formData.status);
-        const finalPriceNum = parseFloat(formData.final_price);
-        if (isClosing && !(finalPriceNum > 0)) {
-            setCloseError('חובה להזין מחיר תיקון לפני סגירה');
-            return;
-        }
-
+        
         setIsUpdating(true);
         try {
             const updateData = {
                 status: formData.status,
-                part_cost: parseFloat(formData.part_cost) || 0,
-                final_price: isClosing ? finalPriceNum : (parseFloat(formData.final_price) || repair.final_price || 0)
+                part_cost: parseFloat(formData.part_cost) || repair.part_cost || 0,
+                final_price: parseFloat(formData.final_price) || repair.final_price || 0
             };
             
             if (formData.status === 'הוזמן חלק' && repair.status !== 'הוזמן חלק') {
@@ -212,11 +198,6 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
             onUpdate();
             setFormData({ ...formData, notes: '' });
             loadLogs();
-
-            // אישור ויזואלי שהתיקון עבר להתחשבנות
-            if (isClosing) {
-                setShowBillingSuccess(true);
-            }
         } catch (error) {
             console.error("Error updating repair:", error);
         } finally {
@@ -451,18 +432,6 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                                             rows={3}
                                         />
                                     </div>
-                                    {CLOSING_STATUSES.includes(formData.status) && !(parseFloat(formData.final_price) > 0) && (
-                                        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
-                                            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                                            <span>חובה להזין מחיר תיקון לפני סגירה</span>
-                                        </div>
-                                    )}
-                                    {closeError && (
-                                        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
-                                            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                                            <span>{closeError}</span>
-                                        </div>
-                                    )}
                                     <Button 
                                         onClick={handleStatusUpdate}
                                         disabled={isUpdating || !formData.status}
@@ -572,27 +541,6 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                     </div>
                 )}
             </div>
-
-            {showBillingSuccess && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70] p-4" dir="rtl">
-                    <div className="glass-card p-8 rounded-3xl max-w-sm w-full text-center bg-white/95">
-                        <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-                            <CheckCircle className="w-9 h-9 text-green-600" />
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-800 mb-2">התיקון עבר להתחשבנות</h3>
-                        <p className="text-gray-600 mb-6">
-                            תיקון #{repair.repair_id} נסגר עם מחיר {repair.final_price || formData.final_price} ₪ ונכלל בדוח ההתחשבנות.
-                        </p>
-                        <Button
-                            onClick={() => { setShowBillingSuccess(false); onClose(); }}
-                            className="w-full text-white"
-                            style={{ backgroundColor: '#7D0F82' }}
-                        >
-                            סגור
-                        </Button>
-                    </div>
-                </div>
-            )}
 
             {showPrintLabel && (
                 <RepairLabel

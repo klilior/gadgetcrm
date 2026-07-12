@@ -307,12 +307,6 @@ export default function RepairDashboard() {
     // Handle inline status change (with SMS notification)
     const handleStatusChange = async (repair, newStatus) => {
         try {
-            // סגירת תיקון חייבת לעבור דרך ה-modal עם מחיר תיקון
-            if (newStatus === 'תיקון נסגר') {
-                alert('לסגירת תיקון יש לפתוח את התיקון ולהזין מחיר תיקון.');
-                setSelectedRepair(repair);
-                return;
-            }
             const updateData = { status: newStatus };
             if (newStatus === 'הוזמן חלק' && repair.status !== 'הוזמן חלק') {
                 updateData.part_ordered_date = new Date().toISOString();
@@ -716,6 +710,7 @@ export default function RepairDashboard() {
                                                             <SelectItem value="At_Importer">אצל היבואן</SelectItem>
                                                             
                                                             <SelectItem value="לא ניתן לתיקון">לא ניתן לתיקון</SelectItem>
+                                                            <SelectItem value="תיקון נסגר">תיקון נסגר</SelectItem>
                                                         </SelectContent>
                                                     </Select>
                                                 </TableCell>
