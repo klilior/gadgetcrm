@@ -14,6 +14,7 @@ import { useUser } from '../components/UserAuth';
 import AddLabCreditModal from '../components/repairs/AddLabCreditModal';
 import AddLabPaymentModal from '../components/repairs/AddLabPaymentModal';
 import RepairDetailsModal from '../components/repairs/RepairDetailsModal';
+import RepairCalcChain from '../components/vendor-report/RepairCalcChain';
 
 export default function VendorReport() {
   const { currentUser } = useUser();
@@ -343,6 +344,7 @@ export default function VendorReport() {
                                 <TableHead className="text-right">רווח גולמי</TableHead>
                                 <TableHead className="text-right font-bold text-orange-700">תשלום למעבדה</TableHead>
                                 <TableHead className="text-right font-bold text-green-700">רווח נקי</TableHead>
+                                <TableHead>סטטוס</TableHead>
                                 {canEditAll && <TableHead>פעולות</TableHead>}
                                 </TableRow>
                                 </TableHeader>
@@ -354,8 +356,10 @@ export default function VendorReport() {
                                 const gross = fp - pc;
                                 const lab = (gross / 2) + pc;
                                 const net = fp - lab;
+                                const hasValues = (repair.final_price || 0) > 0 || (repair.part_cost || 0) > 0;
                                 return (
-                                <TableRow key={repair.id} className="cursor-pointer hover:bg-purple-50/50" onClick={() => setSelectedRepair(repair)}>
+                                <React.Fragment key={repair.id}>
+                                <TableRow className="cursor-pointer hover:bg-purple-50/50 border-b-0" onClick={() => setSelectedRepair(repair)}>
                                 <TableCell className="font-mono text-xs text-purple-700 underline">{repair.repair_id}</TableCell>
                                 <TableCell>{clientsMap[repair.client_id]?.full_name || "—"}</TableCell>
                                 <TableCell>{techniciansMap[repair.technician_id]?.employee_name || "—"}</TableCell>
@@ -372,6 +376,13 @@ export default function VendorReport() {
                                 <TableCell className="text-right">₪{gross.toLocaleString()}</TableCell>
                                 <TableCell className="text-right font-bold text-orange-600">₪{lab.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</TableCell>
                                 <TableCell className="text-right font-bold text-green-600">₪{net.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</TableCell>
+                                <TableCell>
+                                  {hasValues ? (
+                                    <Badge className="bg-green-100 text-green-700 border-green-200 text-[11px] whitespace-nowrap">נספר בהתחשבנות</Badge>
+                                  ) : (
+                                    <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[11px] whitespace-nowrap">פתוח — הטכנאי לא הזין עלות חלק</Badge>
+                                  )}
+                                </TableCell>
                                 {canEditAll && (
                                   <TableCell onClick={e => e.stopPropagation()}>
                                     {isEditing ? (
@@ -385,6 +396,14 @@ export default function VendorReport() {
                                   </TableCell>
                                 )}
                                 </TableRow>
+                                {hasValues && (
+                                  <TableRow className="hover:bg-transparent">
+                                    <TableCell colSpan={canEditAll ? 9 : 8} className="pt-0 pb-3">
+                                      <RepairCalcChain fp={fp} pc={pc} gross={gross} lab={lab} net={net} />
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                                </React.Fragment>
                                 );
                               })}
                             </TableBody>
