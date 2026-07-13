@@ -313,15 +313,7 @@ export default function VendorReport() {
                           <span className="text-orange-600">חוב תיקונים: ₪{stats.totalLabPayment.toLocaleString()}</span>
                           {stats.totalCredits > 0 && <span className="text-red-600">זיכויים: -₪{stats.totalCredits.toLocaleString()}</span>}
                           {stats.totalPaid > 0 && <span className="text-green-600">שולם: -₪{stats.totalPaid.toLocaleString()}</span>}
-                          {stats.netOwed >= 0 ? (
-                            <span className="text-red-600 font-bold">
-                              אתה חייב למעבדה: ₪{stats.netOwed.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                            </span>
-                          ) : (
-                            <span className="text-green-600 font-bold">
-                              המעבדה חייבת לך: ₪{Math.abs(stats.netOwed).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                            </span>
-                          )}
+                          <span className="text-purple-700 font-bold">יתרה: ₪{stats.netOwed.toLocaleString()}</span>
                         </div>
                       </div>
                     </AccordionTrigger>
