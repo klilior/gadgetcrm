@@ -11,46 +11,33 @@ import ProductSearchSelect from '@/components/vendor-report/ProductSearchSelect'
 export default function AddLabCreditModal({ isOpen, onClose, onSaved, currentUser }) {
   const [form, setForm] = useState({
     taken_by: '',
-    product_description: '',
     amount: '',
     notes: ''
   });
-  // Optional catalog reference — only set when the user picks a catalog result.
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const resetForm = () => {
-    setForm({ taken_by: '', product_description: '', amount: '', notes: '' });
+    setForm({ taken_by: '', amount: '', notes: '' });
     setSelectedProduct(null);
   };
 
-  // Free-text typing: keep the name, drop any catalog reference.
-  const handleTextChange = (name) => {
-    setSelectedProduct(null);
-    setForm(f => ({ ...f, product_description: name }));
-  };
-
-  // Catalog pick: fill name + auto-fill price (still editable) and keep the reference.
   const handleSelectProduct = (product) => {
     const price = parseFloat(product.price || product.regular_price || 0) || 0;
     setSelectedProduct(product);
-    setForm(f => ({
-      ...f,
-      product_description: product.name,
-      amount: price ? String(price) : f.amount
-    }));
+    setForm(f => ({ ...f, amount: price ? String(price) : f.amount }));
   };
 
-  const canSave = form.taken_by && form.product_description && form.amount;
+  const canSave = form.taken_by && selectedProduct && form.amount;
 
   const handleSave = async () => {
     if (!canSave) return;
     setSaving(true);
     await base44.entities.LabCredit.create({
       taken_by: form.taken_by,
-      product_description: form.product_description,
-      product_sku: selectedProduct?.sku || '',
-      product_woo_id: selectedProduct?.woo_product_id || null,
+      product_description: selectedProduct.name,
+      product_sku: selectedProduct.sku || '',
+      product_woo_id: selectedProduct.woo_product_id || null,
       amount: parseFloat(form.amount),
       taken_date: new Date().toISOString(),
       recorded_by: currentUser?.employee_name || 'לא ידוע',
@@ -81,13 +68,12 @@ export default function AddLabCreditModal({ isOpen, onClose, onSaved, currentUse
             />
           </div>
           <div>
-            <Label>מוצר שנלקח *</Label>
+            <Label>מוצר שנלקח * (בחירה מהקטלוג בלבד)</Label>
             <ProductSearchSelect
-              value={form.product_description}
-              onTextChange={handleTextChange}
+              selected={selectedProduct}
               onSelect={handleSelectProduct}
+              onClear={() => setSelectedProduct(null)}
             />
-            <p className="text-xs text-gray-400 mt-1">בחר מהקטלוג (ימלא מחיר אוטומטית) או הקלד שם חופשי</p>
           </div>
           <div>
             <Label>שווי בש״ח *</Label>
@@ -95,9 +81,11 @@ export default function AddLabCreditModal({ isOpen, onClose, onSaved, currentUse
               type="number"
               placeholder="0"
               value={form.amount}
+              readOnly
+              className="bg-gray-50"
               onChange={e => setForm({ ...form, amount: e.target.value })}
             />
-            <p className="text-xs text-gray-400 mt-1">ניתן לערוך ידנית למחיר הנכון</p>
+            <p className="text-xs text-gray-400 mt-1">מתמלא אוטומטית ממחיר המוצר בקטלוג</p>
           </div>
           <div>
             <Label>הערות</Label>
