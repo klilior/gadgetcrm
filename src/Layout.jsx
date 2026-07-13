@@ -184,6 +184,7 @@ function AppContent({ children, currentPageName }) {
     { title: "תיקונים", url: createPageUrl("RepairDashboard"), icon: Wrench },
     { title: "הזמנות מרוכזות", url: "/UnifiedOrders", icon: Package },
     ...(isManager ? [{ title: "דוח התחשבנות מעבדה", url: createPageUrl("VendorReport"), icon: FileText }] : []),
+    ...(isManager ? [{ title: "השלמת תיקונים ריקים", url: createPageUrl("BackfillEmptyRepairs"), icon: Wrench }] : []),
     { title: "קווים לטיפול", url: createPageUrl("LinesToWorkOn"), icon: Phone },
     { title: "ביצועי נציגים", url: createPageUrl("AgentPerformanceDashboard"), icon: Trophy },
     { title: "יומן שיחות", url: createPageUrl("CallLog"), icon: Phone },

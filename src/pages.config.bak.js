@@ -81,7 +81,6 @@ const TodaysCalls = lazy(() => import('./pages/TodaysCalls'));
 const WhatsAppDebug = lazy(() => import('./pages/WhatsAppDebug'));
 const SupplierProducts = lazy(() => import('./pages/SupplierProducts'));
 const TechnicianReport = lazy(() => import('./pages/TechnicianReport'));
-const BackfillEmptyRepairs = lazy(() => import('./pages/BackfillEmptyRepairs'));
 const ShipmentLabelPreview = lazy(() => import('./pages/ShipmentLabelPreview'));
 const GetPackageSettings = lazy(() => import('./pages/GetPackageSettings'));
 
@@ -93,7 +92,6 @@ export const PAGES = {
     "AttendanceManagerReport": AttendanceManagerReport,
     "AttendanceReport": AttendanceReport,
     "AttendanceSettings": AttendanceSettings,
-    "BackfillEmptyRepairs": BackfillEmptyRepairs,
     "BuildSchedule": BuildSchedule,
     "CallLog": CallLog,
     "CarrierManagement": CarrierManagement,
