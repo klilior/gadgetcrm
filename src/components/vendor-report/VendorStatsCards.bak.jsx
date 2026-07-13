@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { HandCoins, TrendingUp, Wrench, PackageMinus, Banknote, Calendar, ChevronLeft, ChevronRight, ArrowRightLeft } from 'lucide-react';
+import { HandCoins, TrendingUp, Wrench, PackageMinus, Banknote, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -15,49 +15,6 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, highlight }) => (
     {subtitle && <p className="text-[11px] text-gray-400 mt-0.5">{subtitle}</p>}
   </div>
 );
-
-const fmt = (n) => `₪${(n || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}`;
-
-// Sign-aware balance card: explicit label + line-by-line breakdown (no merged string).
-// netOwed > 0  → you owe the lab (red);  netOwed < 0 → lab owes you (green).
-const BalanceCard = ({ totalLabDebt, totalCredits, totalPaid, netOwed }) => {
-  const youOwe = netOwed >= 0;
-  const amount = Math.abs(netOwed);
-  return (
-    <div className={`bg-white/80 backdrop-blur-sm border-2 shadow-sm p-4 sm:p-5 rounded-2xl ${youOwe ? 'border-red-300 ring-2 ring-red-100' : 'border-green-300 ring-2 ring-green-100'}`}>
-      <div className="flex justify-between items-start">
-        <div>
-          <h3 className="text-xs sm:text-sm font-medium text-gray-500">מצב ההתחשבנות מול המעבדה</h3>
-          <p className={`text-lg sm:text-xl font-bold mt-1 ${youOwe ? 'text-red-600' : 'text-green-600'}`}>
-            {youOwe ? 'אתה חייב למעבדה' : 'המעבדה חייבת לך'}: {fmt(amount)}
-          </p>
-        </div>
-        <ArrowRightLeft className={`w-6 h-6 ${youOwe ? 'text-red-500' : 'text-green-500'}`} />
-      </div>
-
-      <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5 text-sm">
-        <div className="flex justify-between">
-          <span className="text-gray-600">חוב תיקונים (מגיע למעבדה)</span>
-          <span className="font-semibold text-orange-600">{fmt(totalLabDebt)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600">זיכויים (מוצרים שנלקחו — מגיע לך)</span>
-          <span className="font-semibold text-red-600">−{fmt(totalCredits)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600">סה״כ ששולם למעבדה</span>
-          <span className="font-semibold text-green-600">−{fmt(totalPaid)}</span>
-        </div>
-        <div className="flex justify-between pt-1.5 border-t border-gray-100">
-          <span className="font-bold text-gray-800">= יתרה</span>
-          <span className={`font-bold ${youOwe ? 'text-red-600' : 'text-green-600'}`}>
-            {youOwe ? '' : '−'}{fmt(amount)}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export default function VendorStatsCards({ repairs, labCredits, labPayments }) {
   // Current month as YYYY-MM
@@ -120,14 +77,21 @@ export default function VendorStatsCards({ repairs, labCredits, labPayments }) {
     <div className="space-y-4">
       {/* Row 1: All-time debt summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="col-span-2">
-          <BalanceCard
-            totalLabDebt={allTimeDebt.totalLabDebt}
-            totalCredits={allTimeDebt.totalCredits}
-            totalPaid={allTimeDebt.totalPaid}
-            netOwed={allTimeDebt.netOwed}
-          />
-        </div>
+        <StatCard
+          title="יתרת חוב למעבדה"
+          value={`₪${allTimeDebt.netOwed.toLocaleString(undefined, { maximumFractionDigits: 1 })}`}
+          icon={HandCoins}
+          color="text-purple-600"
+          subtitle={`חוב ₪${allTimeDebt.totalLabDebt.toLocaleString(undefined, { maximumFractionDigits: 1 })} − זיכויים ₪${allTimeDebt.totalCredits.toLocaleString()} − שולם ₪${allTimeDebt.totalPaid.toLocaleString()}`}
+          highlight
+        />
+        <StatCard
+          title="חוב תיקונים (כל הזמנים)"
+          value={`₪${allTimeDebt.totalLabDebt.toLocaleString(undefined, { maximumFractionDigits: 1 })}`}
+          icon={HandCoins}
+          color="text-orange-500"
+          subtitle={`${repairs.length} תיקונים`}
+        />
         <StatCard
           title="זיכויים (מוצרים)"
           value={`-₪${allTimeDebt.totalCredits.toLocaleString()}`}
