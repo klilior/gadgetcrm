@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { base44 } from '@/api/base44Client';
 import { Loader2, PackageMinus } from 'lucide-react';
+import ProductSearchSelect from '@/components/vendor-report/ProductSearchSelect';
 
 export default function AddLabCreditModal({ isOpen, onClose, onSaved, currentUser }) {
   const [form, setForm] = useState({
@@ -53,10 +54,14 @@ export default function AddLabCreditModal({ isOpen, onClose, onSaved, currentUse
           </div>
           <div>
             <Label>מוצר שנלקח *</Label>
-            <Input
-              placeholder="לדוגמא: iPhone 14 Pro Max"
+            <ProductSearchSelect
               value={form.product_description}
-              onChange={e => setForm({ ...form, product_description: e.target.value })}
+              onTextChange={val => setForm(f => ({ ...f, product_description: val }))}
+              onSelect={({ name, price }) => setForm(f => ({
+                ...f,
+                product_description: name,
+                amount: price ? String(price) : f.amount
+              }))}
             />
           </div>
           <div>
