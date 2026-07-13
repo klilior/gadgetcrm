@@ -9,12 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Wrench, Package, AlertTriangle, Clock, Search, Filter, Plus,
-  CheckCircle, XCircle, Settings as SettingsIcon, Truck, X, Trash2, Loader2
+  CheckCircle, XCircle, Settings as SettingsIcon, Truck, X, Trash2, Loader2, PackageMinus
 } from "lucide-react";
 import { format, isAfter, differenceInDays } from "date-fns";
 import { Repair as RepairEntity } from "@/entities/all";
 import RepairDetailsModal from "../components/repairs/RepairDetailsModal";
 import NewRepairModal from "../components/repairs/NewRepairModal";
+import AddLabCreditModal from "../components/repairs/AddLabCreditModal";
 import { useUser } from "../components/UserAuth";
 import { sendTextMeSMS } from "@/functions/sendTextMeSMS";
 import { customersService } from "../components/utils/customersService";
@@ -48,6 +49,7 @@ export default function RepairDashboard() {
     const [quickFilter, setQuickFilter] = useState(null);
     const [selectedRepair, setSelectedRepair] = useState(null);
     const [showNewRepairModal, setShowNewRepairModal] = useState(false);
+    const [showLabCreditModal, setShowLabCreditModal] = useState(false);
 
     // New states for bulk delete
     const [selectedRepairs, setSelectedRepairs] = useState([]);
@@ -56,6 +58,8 @@ export default function RepairDashboard() {
 
     const isManager = currentUser?.role === "מנהל";
     const isTechnicianRole = currentUser?.role === "טכנאי";
+    const appRole = currentUser?.app_role || currentUser?.data?.app_role || currentUser?.role;
+    const canRecordLabCredit = isManager || appRole === "מנהל משמרת";
 
     const getSlaStatus = (repair) => {
         if (!repair.sla_due) return { isBreached: false, daysRemaining: null };
@@ -494,6 +498,15 @@ export default function RepairDashboard() {
                             מחק {selectedRepairs.length} נבחרים
                         </Button>
                     )}
+                    {canRecordLabCredit && (
+                        <Button
+                            onClick={() => setShowLabCreditModal(true)}
+                            className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg shadow-lg"
+                        >
+                            <PackageMinus className="w-4 h-4 ml-2" />
+                            רישום מוצר שנלקח
+                        </Button>
+                    )}
                     <Button onClick={() => setShowNewRepairModal(true)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow-lg">
                         <Plus className="w-4 h-4 ml-2" />
                         תיקון חדש
@@ -857,6 +870,15 @@ export default function RepairDashboard() {
                         console.log("🔵 Repair updated, reloading data...");
                         loadData();
                     }}
+                />
+            )}
+
+            {canRecordLabCredit && (
+                <AddLabCreditModal
+                    isOpen={showLabCreditModal}
+                    onClose={() => setShowLabCreditModal(false)}
+                    onSaved={() => {}}
+                    currentUser={currentUser}
                 />
             )}
 

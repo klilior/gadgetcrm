@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { base44 } from '@/api/base44Client';
+import { notifyLabProductTaken } from '@/functions/notifyLabProductTaken';
 import { Loader2, PackageMinus } from 'lucide-react';
 import ProductSearchSelect from '@/components/vendor-report/ProductSearchSelect';
 
@@ -46,7 +47,7 @@ export default function AddLabCreditModal({ isOpen, onClose, onSaved, currentUse
   const handleSave = async () => {
     if (!canSave) return;
     setSaving(true);
-    await base44.entities.LabCredit.create({
+    const created = await base44.entities.LabCredit.create({
       taken_by: form.taken_by,
       product_description: form.product_description,
       product_sku: selectedProduct?.sku || '',
@@ -56,6 +57,19 @@ export default function AddLabCreditModal({ isOpen, onClose, onSaved, currentUse
       recorded_by: currentUser?.employee_name || 'לא ידוע',
       notes: form.notes || ''
     });
+
+    // Send control SMS to the lab owner (Hello-Hello). Don't block save on failure.
+    try {
+      await notifyLabProductTaken({
+        credit_id: created?.id,
+        product_name: form.product_description,
+        amount: parseFloat(form.amount),
+        taken_by: form.taken_by,
+      });
+    } catch (err) {
+      console.error('Lab-owner SMS failed:', err?.message);
+    }
+
     setSaving(false);
     resetForm();
     onSaved?.();
