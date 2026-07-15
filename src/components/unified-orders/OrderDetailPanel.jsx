@@ -9,7 +9,7 @@ import GetPackageOrderCard from "../getpackage/GetPackageOrderCard";
 import TrackingSection from "./TrackingSection";
 import { format, differenceInHours } from "date-fns";
 import SourceBadge from "./SourceBadge";
-import { getStatusLabel, getStatusOptions, getStatusColor, getShipmentBlockReason } from "./OrderStatusConfig";
+import { getStatusLabel, getStatusOptions, getStatusColor, getShipmentBlockReason, isOpenStatus } from "./OrderStatusConfig";
 import { detectShippingType, getShippingTypeBadge } from "./ShippingTypeHelper";
 import { getBlockingItems, getNextActionLabel, getPrimaryActionLabel, getSourceLabel } from "./orderUiHelpers";
 import ProductMetaBadges from "./ProductMetaBadges";
@@ -111,7 +111,12 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const isLocked = Boolean(order.order_locked || order.shipment_created_at);
 
   // ═══ Picking gate — applies to WooCommerce orders during initial (unlocked) treatment ═══
-  const pickingApplies = order.source === 'woocommerce' && !isLocked;
+  // Only when the order is actually ready for treatment: open status + not blocked (cancelled/refunded/on-hold/pending)
+  const pickingApplies =
+    order.source === 'woocommerce' &&
+    !isLocked &&
+    isOpenStatus(order.source, order.status) &&
+    !isBlockedForShipping;
   const [pickingStatus, setPickingStatus] = React.useState('not_started');
   const pickingComplete = !pickingApplies || pickingStatus === 'completed';
   const [showFollowupModal, setShowFollowupModal] = React.useState(false);
