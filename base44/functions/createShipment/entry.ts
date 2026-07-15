@@ -76,6 +76,21 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'חסרים שדות חובה' }, { status: 400 });
   }
 
+  // ── Picking gate: block outbound WooCommerce shipments before picking is complete ──
+  // Only for the initial treatment (not followups, not pickup_drop returns).
+  const safeGateOrderId = order_id && String(order_id) !== 'undefined' && String(order_id) !== 'null' ? String(order_id) : null;
+  if (safeGateOrderId && !followup_id && shipment_type !== 'pickup_drop') {
+    try {
+      const gate = await base44.asServiceRole.functions.invoke('checkPickingGate', { order_id: safeGateOrderId });
+      const gateData = gate?.data ?? gate;
+      if (gateData?.blocked) {
+        return Response.json({ success: false, error: gateData.message_he || 'לא ניתן ליצור משלוח לפני השלמת ליקוט.' }, { status: 409 });
+      }
+    } catch (ge) {
+      console.log(`⚠️ Picking gate check failed (allowing): ${ge.message}`);
+    }
+  }
+
   const pickupWarnings = [];
   if (shipment_type === 'pickup_point') {
     const orderCity = normalizeCityName(consignee_city);

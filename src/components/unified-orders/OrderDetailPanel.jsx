@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Receipt, Store, RotateCcw, Repeat, MoreHorizontal, Lock } from "lucide-react";
+import { MessageCircle, Phone, Truck, CheckCircle, Copy, MapPin, StickyNote, Package, Clock, Receipt, Store, RotateCcw, Repeat, MoreHorizontal, Lock, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import GetPackageOrderCard from "../getpackage/GetPackageOrderCard";
 import TrackingSection from "./TrackingSection";
@@ -13,6 +13,7 @@ import { getStatusLabel, getStatusOptions, getStatusColor, getShipmentBlockReaso
 import { detectShippingType, getShippingTypeBadge } from "./ShippingTypeHelper";
 import { getBlockingItems, getNextActionLabel, getPrimaryActionLabel, getSourceLabel } from "./orderUiHelpers";
 import ProductMetaBadges from "./ProductMetaBadges";
+import PickingList from "./PickingList";
 import OrderTreatmentTimeline from "./OrderTreatmentTimeline";
 import SerialHandlingZone from "../serials/SerialHandlingZone";
 import OrderFollowupModal from "./OrderFollowupModal";
@@ -108,6 +109,11 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
 
   // ═══ Order lock + Followup state ═══
   const isLocked = Boolean(order.order_locked || order.shipment_created_at);
+
+  // ═══ Picking gate — applies to WooCommerce orders during initial (unlocked) treatment ═══
+  const pickingApplies = order.source === 'woocommerce' && !isLocked;
+  const [pickingStatus, setPickingStatus] = React.useState('not_started');
+  const pickingComplete = !pickingApplies || pickingStatus === 'completed';
   const [showFollowupModal, setShowFollowupModal] = React.useState(false);
   const [activeFollowup, setActiveFollowup] = React.useState(null);
   const [followupLoaded, setFollowupLoaded] = React.useState(false);
@@ -229,36 +235,40 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           )}
         </div>
 
-        {/* Products */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2">
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1">
-            <Package className="w-3 h-3" /> מוצרים ({order.products?.length || 0})
-          </h4>
-          <div className="space-y-1 max-h-48 overflow-y-auto">
-            {(order.products || []).map((p, i) => (
-              <div key={i} className="text-sm">
-                <div className="flex justify-between items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <span className="text-gray-800 break-words">{p.name}</span>
-                    {p.sku && <div className="text-[11px] text-gray-400 font-mono">SKU: {p.sku}</div>}
+        {/* Products / Picking */}
+        {pickingApplies ? (
+          <PickingList order={order} currentUser={currentUser} onStatusChange={setPickingStatus} />
+        ) : (
+          <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2">
+            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1">
+              <Package className="w-3 h-3" /> מוצרים ({order.products?.length || 0})
+            </h4>
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {(order.products || []).map((p, i) => (
+                <div key={i} className="text-sm">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-gray-800 break-words">{p.name}</span>
+                      {p.sku && <div className="text-[11px] text-gray-400 font-mono">SKU: {p.sku}</div>}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 mr-2">
+                      <span className="text-gray-500">×{p.quantity}</span>
+                      {p.total > 0 && <span className="font-mono text-gray-700">₪{p.total.toLocaleString()}</span>}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 mr-2">
-                    <span className="text-gray-500">×{p.quantity}</span>
-                    {p.total > 0 && <span className="font-mono text-gray-700">₪{p.total.toLocaleString()}</span>}
-                  </div>
+                  <ProductMetaBadges metaData={p.meta_data} />
                 </div>
-                <ProductMetaBadges metaData={p.meta_data} />
-              </div>
-            ))}
-            {(!order.products || order.products.length === 0) && (
-              <p className="text-gray-400 text-sm">אין פריטים</p>
-            )}
+              ))}
+              {(!order.products || order.products.length === 0) && (
+                <p className="text-gray-400 text-sm">אין פריטים</p>
+              )}
+            </div>
+            <div className="border-t pt-2 flex justify-between items-center">
+              <span className="text-sm text-gray-500">סה״כ</span>
+              <span className="font-bold text-lg text-gray-900">₪{(order.total || 0).toLocaleString()}</span>
+            </div>
           </div>
-          <div className="border-t pt-2 flex justify-between items-center">
-            <span className="text-sm text-gray-500">סה״כ</span>
-            <span className="font-bold text-lg text-gray-900">₪{(order.total || 0).toLocaleString()}</span>
-          </div>
-        </div>
+        )}
 
         {/* Status + Shipping */}
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2">
@@ -420,6 +430,14 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
               </Button>
             )}
           </>
+        ) : !pickingComplete ? (
+          <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-3 text-amber-900">
+            <ClipboardList className="w-5 h-5 flex-shrink-0 text-amber-600" />
+            <div>
+              <p className="font-bold text-sm">יש להשלים את הליקוט לפני המשך הטיפול</p>
+              <p className="text-xs text-amber-700">סמן את כל הפריטים ברשימת הליקוט כדי לפתוח יצירת משלוח, הדפסת מדבקה ושליחת SMS.</p>
+            </div>
+          </div>
         ) : (
           <>
             <Button

@@ -1,0 +1,79 @@
+{
+  "name": "PickingState",
+  "type": "object",
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05d4\u05d6\u05de\u05e0\u05d4 \u05d4\u05e4\u05e0\u05d9\u05de\u05d9 (raw_id \u05e9\u05dc Order)",
+      "index": true
+    },
+    "order_source": {
+      "type": "string",
+      "enum": [
+        "woocommerce",
+        "mirakl",
+        "linet",
+        "manual"
+      ],
+      "description": "\u05de\u05e7\u05d5\u05e8 \u05d4\u05d4\u05d6\u05de\u05e0\u05d4"
+    },
+    "picking_item_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d9\u05e6\u05d9\u05d1 \u05dc\u05e4\u05e8\u05d9\u05d8 \u05d4\u05dc\u05d9\u05e7\u05d5\u05d8 (\u05e0\u05d2\u05d6\u05e8 \u05de\u05d4\u05d4\u05d6\u05de\u05e0\u05d4 + \u05de\u05d5\u05e6\u05e8)",
+      "index": true
+    },
+    "title": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05e4\u05e8\u05d9\u05d8 \u05dc\u05dc\u05d9\u05e7\u05d5\u05d8"
+    },
+    "sku": {
+      "type": "string",
+      "description": "\u05de\u05e7\u05f4\u05d8 \u05d0\u05dd \u05e7\u05d9\u05d9\u05dd"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "\u05db\u05de\u05d5\u05ea \u05e4\u05d9\u05d6\u05d9\u05ea \u05dc\u05d0\u05d9\u05e1\u05d5\u05e3"
+    },
+    "item_type": {
+      "type": "string",
+      "enum": [
+        "main_product",
+        "epo_addon",
+        "manual"
+      ],
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05e4\u05e8\u05d9\u05d8"
+    },
+    "parent_product_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05de\u05d5\u05e6\u05e8 \u05d4\u05d0\u05d1 (\u05dc\u05ea\u05d5\u05e1\u05e4\u05d5\u05ea EPO)"
+    },
+    "raw_meta_json": {
+      "type": "string",
+      "description": "meta \u05d2\u05d5\u05dc\u05de\u05d9 \u05de\u05d0\u05d7\u05d5\u05e8\u05d9 \u05d4\u05e7\u05dc\u05e2\u05d9\u05dd \u05dc\u05e6\u05d5\u05e8\u05db\u05d9 \u05ea\u05de\u05d9\u05db\u05d4"
+    },
+    "picked": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05d4\u05d0\u05dd \u05e1\u05d5\u05de\u05df \u05db\u05e0\u05d0\u05e1\u05e3"
+    },
+    "picked_by_user_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05d4\u05de\u05e9\u05ea\u05de\u05e9 \u05e9\u05e1\u05d9\u05de\u05df"
+    },
+    "picked_by_name": {
+      "type": "string",
+      "description": "\u05e9\u05dd \u05d4\u05de\u05e9\u05ea\u05de\u05e9 \u05e9\u05e1\u05d9\u05de\u05df"
+    },
+    "picked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05de\u05ea\u05d9 \u05e1\u05d5\u05de\u05df"
+    }
+  },
+  "required": [
+    "order_id",
+    "picking_item_id",
+    "title",
+    "quantity"
+  ]
+}
