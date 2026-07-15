@@ -110,10 +110,10 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   // ═══ Order lock + Followup state ═══
   const isLocked = Boolean(order.order_locked || order.shipment_created_at);
 
-  // ═══ Picking gate — applies to WooCommerce orders during initial (unlocked) treatment ═══
+  // ═══ Picking gate — applies to WooCommerce + Super-Pharm (Mirakl) orders during initial (unlocked) treatment ═══
   // Only when the order is actually ready for treatment: open status + not blocked (cancelled/refunded/on-hold/pending)
   const pickingApplies =
-    order.source === 'woocommerce' &&
+    (order.source === 'woocommerce' || order.source === 'mirakl') &&
     !isLocked &&
     isOpenStatus(order.source, order.status) &&
     !isBlockedForShipping;
