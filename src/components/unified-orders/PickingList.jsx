@@ -158,6 +158,18 @@ export default function PickingList({ order, currentUser, onStatusChange }) {
                     <div className={`text-sm font-medium break-words ${item.picked ? "text-emerald-900 line-through/50" : "text-gray-900"}`}>
                       {item.title}
                     </div>
+                    {item.attributes?.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        {item.attributes.map((attr, i) => (
+                          <span
+                            key={i}
+                            className="inline-flex items-center gap-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-md px-2 py-0.5 text-xs font-semibold"
+                          >
+                            {attr.label}: <span className="font-bold">{attr.value}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex flex-wrap items-center gap-2 mt-1">
                       {highlight ? (
                         <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 border border-orange-200 rounded-md px-2 py-0.5 text-xs font-bold">

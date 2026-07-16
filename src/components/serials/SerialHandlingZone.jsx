@@ -31,6 +31,9 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
   const [markingProductIdx, setMarkingProductIdx] = useState(null);
   const [markingBusy, setMarkingBusy] = useState(false);
 
+  // תצוגה מצומצמת — נפתח בלחיצה
+  const [expanded, setExpanded] = useState(false);
+
   // עבור SP: orderId = mirakl_order_id (029958952-A) — זה מה שנשמר ב-OrderSerialLine.order_id
   // עבור Woo: orderId = raw_id (entity id בלי prefix woo_)
   const orderId = order.source === 'mirakl'
@@ -208,30 +211,35 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
   const alreadyInvoiced = serialLinesRequired.some(l => l.serial_status === "invoiced" || l.linet_invoice_id);
 
   return (
-    <div dir="rtl" className="rounded-2xl border-2 border-amber-200 bg-amber-50/60 p-4 space-y-4">
-      {/* כותרת */}
-      <div className="flex items-center justify-between gap-2">
+    <div dir="rtl" className="rounded-2xl border-2 border-amber-200 bg-amber-50/60 p-3 space-y-4">
+      {/* כותרת — לחיצה פותחת/מכווצת */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 text-right"
+      >
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center flex-shrink-0">
+          <div className="w-7 h-7 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center flex-shrink-0">
             <ScanLine className="w-4 h-4 text-amber-700" />
           </div>
-          <div>
-            <div className="font-bold text-amber-900 text-sm">טיפול בפריט סריאלי</div>
-            <div className="text-xs text-amber-700">
-              {alreadyInvoiced ? "הושלם — חשבונית הופקה" : allReady ? "מוכן להנפקה" : "נדרשת פעולה"}
-            </div>
-          </div>
+          <div className="font-bold text-amber-900 text-sm">טיפול בפריט סריאלי</div>
         </div>
-        {allReady && !alreadyInvoiced && (
-          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs">מוכן ✓</Badge>
-        )}
-        {!allReady && !alreadyInvoiced && (
-          <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-xs">דורש פעולה</Badge>
-        )}
-        {alreadyInvoiced && (
-          <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">הושלם ✓</Badge>
-        )}
-      </div>
+        <div className="flex items-center gap-2">
+          {allReady && !alreadyInvoiced && (
+            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs">מוכן ✓</Badge>
+          )}
+          {!allReady && !alreadyInvoiced && (
+            <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-xs">דורש פעולה</Badge>
+          )}
+          {alreadyInvoiced && (
+            <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">הושלם ✓</Badge>
+          )}
+          {expanded ? <ChevronUp className="w-4 h-4 text-amber-700" /> : <ChevronDown className="w-4 h-4 text-amber-700" />}
+        </div>
+      </button>
+
+      {expanded && (
+      <div className="space-y-4">
 
       {/* שורות סריאליות */}
       {serialLinesRequired.length > 0 && (
@@ -403,6 +411,8 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
             })}
           </div>
         </div>
+      )}
+      </div>
       )}
     </div>
   );

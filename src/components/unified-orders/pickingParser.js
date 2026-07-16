@@ -62,6 +62,16 @@ function isNonPhysical(label, value) {
   return NON_PHYSICAL_KEYWORDS.some((kw) => hay.includes(kw.toLowerCase()));
 }
 
+// Attribute keywords — customer choices that aren't a separate pickable item, but the
+// picker MUST see them (e.g. a chosen color). Shown as tags on the parent product line.
+const ATTRIBUTE_KEYWORDS = ["צבע", "color", "חריטה", "הקדשה", "engraving", "מידה", "size", "דגם"];
+
+function isAttributeChoice(label, value) {
+  if (isNegativeChoice(value)) return false; // "ללא" — nothing chosen
+  const hay = `${label || ""} ${value || ""}`.toLowerCase();
+  return ATTRIBUTE_KEYWORDS.some((kw) => hay.includes(kw.toLowerCase()));
+}
+
 // Physical accessory hints — used to give a nicer clean title when possible
 function looksPhysical(label, value) {
   const hay = `${label || ""} ${value || ""}`.toLowerCase();
@@ -99,8 +109,8 @@ function rawItemsFromOrder(order) {
     const title = clean(p.name) || "מוצר";
     const sku = p.sku ? String(p.sku) : null;
 
-    // Main product
-    items.push({
+    // Main product — attributes (like chosen color) collected below and attached here
+    const mainItem = {
       type: "main_product",
       title,
       sku,
@@ -109,7 +119,9 @@ function rawItemsFromOrder(order) {
       parent_product_name: null,
       source_label: null,
       raw_meta_json: p.meta_data || null,
-    });
+      attributes: [],
+    };
+    items.push(mainItem);
 
     // EPO add-ons from meta_data
     const metas = parseMeta(p.meta_data);
@@ -117,6 +129,13 @@ function rawItemsFromOrder(order) {
       const label = clean(m.display_key || m.key);
       const value = clean(m.display_value || m.value);
       if (!value && !label) return;
+
+      // Customer-chosen attribute (e.g. color) — not a pickable item, but show it on the product
+      if (isAttributeChoice(m.display_key || m.key, m.display_value || m.value)) {
+        mainItem.attributes.push({ label: label || "בחירה", value: value || label });
+        return;
+      }
+
       if (isNonPhysical(m.display_key || m.key, m.display_value || m.value)) return;
 
       // Choose the cleanest physical name available
@@ -175,6 +194,7 @@ export function buildPickingItemsFromOrder(order) {
     source_line_item_id: it.source_line_item_id,
     parent_product_name: it.parent_product_name,
     source_label: it.source_label,
+    attributes: it.attributes || [],
     raw_meta_json: it.raw_meta_json,
     picked: false,
     picked_by_user_id: null,
