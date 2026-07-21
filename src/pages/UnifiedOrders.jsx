@@ -19,6 +19,7 @@ import PendingProductsSummary from "../components/unified-orders/PendingProducts
 import SendSmsOrderModal from "../components/unified-orders/SendSmsOrderModal";
 import { isClosedStatus, getShipmentBlockReason, LINET_ORDER_SKUS } from "../components/unified-orders/OrderStatusConfig";
 import { checkShipmentGate } from "@/functions/checkShipmentGate";
+import { issueInvoiceWithSerials } from "@/functions/issueInvoiceWithSerials";
 import { isBlockedOrder, isReadyForAction, isVisuallyClosed } from "../components/unified-orders/orderUiHelpers";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import SPShipDialog from "../components/superpharm/SPShipDialog";
@@ -537,12 +538,35 @@ export default function UnifiedOrders() {
     try {
       const res = await checkShipmentGate({ order_id: rawId });
       const data = res?.data ?? res;
-      if (data?.blocked) {
-        const msg = (data.messages_he || []).join("\n") || "יש להשלים טיפול במספר סידורי לפני יצירת משלוח.";
-        alert(msg);
-        return true; // חסום
+      if (!data?.blocked) return false; // לא חסום
+
+      const reasons = data.reasons || [];
+      // Woo: הסריאל נבחר אך טרם הופקה חשבונית — מציעים להנפיק עכשיו ולהמשיך למשלוח
+      if (order.source === 'woocommerce' && reasons.includes('no_invoice_yet') && !reasons.includes('missing_serial')) {
+        const ok = window.confirm(
+          "המספר הסידורי נבחר, אך טרם הופקה חשבונית מס-קבלה.\n\n" +
+          "להנפיק את החשבונית עכשיו ולהמשיך ליצירת המשלוח?\n" +
+          "⚠️ מפיק מסמך מס — לא ניתן לבטל אוטומטית."
+        );
+        if (!ok) return true; // המשתמש ביטל — לא ממשיכים
+        try {
+          const issueRes = await issueInvoiceWithSerials({ order_id: rawId, apply: true });
+          const issueData = issueRes?.data ?? issueRes;
+          if (issueData?.issued || issueData?.already_invoiced) {
+            window.dispatchEvent(new CustomEvent('serial-lines-updated', { detail: { orderId: rawId } }));
+            return false; // חשבונית הופקה — ממשיכים למשלוח
+          }
+          alert("הנפקת החשבונית נכשלה:\n" + ((issueData?.messages_he || []).join("\n") || issueData?.error || "שגיאה לא ידועה"));
+          return true;
+        } catch (e) {
+          alert("הנפקת החשבונית נכשלה: " + e.message);
+          return true;
+        }
       }
-      return false; // לא חסום
+
+      const msg = (data.messages_he || []).join("\n") || "יש להשלים טיפול במספר סידורי לפני יצירת משלוח.";
+      alert(msg);
+      return true; // חסום
     } catch (_) {
       return false; // שגיאת רשת — לא חוסמים
     }

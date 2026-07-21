@@ -348,6 +348,33 @@ Deno.serve(async (req) => {
         console.error('[SP Invoice] Failed to save invoice to order entity:', saveErr.message);
         // Don't fail the whole request - invoice was created successfully
       }
+
+      // Mark serial lines as invoiced (closes the serial flow for this order)
+      try {
+        const [oslLines, oisLines] = await Promise.all([
+          base44.asServiceRole.entities.OrderSerialLine.filter({ order_id: mirakl_order_id }).catch(() => []),
+          base44.asServiceRole.entities.OrderItemSerial.filter({ order_id: mirakl_order_id }).catch(() => []),
+        ]);
+        const nowIso = new Date().toISOString();
+        for (const l of oslLines) {
+          if (!l.requires_serial || l.serial_status === 'invoiced') continue;
+          await base44.asServiceRole.entities.OrderSerialLine.update(l.id, {
+            serial_status: 'invoiced',
+          }).catch(() => {});
+        }
+        for (const l of oisLines) {
+          if (!l.requires_serial || l.serial_status === 'invoiced') continue;
+          await base44.asServiceRole.entities.OrderItemSerial.update(l.id, {
+            serial_status: 'invoiced',
+            linet_invoice_id: String(docId),
+            linet_document_number: String(docNumber || ''),
+            invoiced_at: nowIso,
+          }).catch(() => {});
+        }
+        console.log('[SP Invoice] Serial lines marked as invoiced');
+      } catch (serialSaveErr) {
+        console.warn('[SP Invoice] Failed marking serial lines invoiced (non-critical):', serialSaveErr.message);
+      }
     }
 
     const msg = 'חשבונית מס-קבלה ' + (docNumber || docId) + ' נוצרה בהצלחה' + (emailSent ? ' ונשלחה במייל' : '');
