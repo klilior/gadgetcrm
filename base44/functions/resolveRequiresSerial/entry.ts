@@ -26,6 +26,20 @@ function isSuspectedSerial(productName) {
   return SUSPECTED_SERIAL_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
+// בוחר את המיפוי הטוב ביותר מבין כפילויות LinetProductMap לאותו sku.
+// עדיפות: 1) manual_override  2) יש linet_item_id + requires_serial  3) יש linet_item_id  4) העדכני ביותר
+function pickBestMap(maps) {
+  if (!Array.isArray(maps) || maps.length === 0) return null;
+  const byDate = (a, b) => new Date(b.updated_date || b.updated_at || 0) - new Date(a.updated_date || a.updated_at || 0);
+  const manual = maps.filter((m) => m.manual_override === true).sort(byDate);
+  if (manual.length > 0) return manual[0];
+  const withItemAndSerial = maps.filter((m) => m.linet_item_id != null && m.requires_serial === true).sort(byDate);
+  if (withItemAndSerial.length > 0) return withItemAndSerial[0];
+  const withItem = maps.filter((m) => m.linet_item_id != null).sort(byDate);
+  if (withItem.length > 0) return withItem[0];
+  return [...maps].sort(byDate)[0];
+}
+
 async function getLinetCreds(base44) {
   let login_id = Deno.env.get("LINET_LOGIN_ID");
   let login_hash = Deno.env.get("LINET_LOGIN_HASH");
@@ -76,11 +90,12 @@ async function resolveForItem({ base44, order_id, order_item_id, source, source_
   // ── 1. manual_override ──────────────────────────────────────────────
   if (source_sku) {
     const maps = await base44.asServiceRole.entities.LinetProductMap.filter({ sku: source_sku }).catch(() => []);
-    const existing = maps[0];
+    // בחירת המיפוי הטוב ביותר מבין כפילויות: קודם manual_override, אחר כך כזה עם linet_item_id+requires_serial, אחר כך העדכני ביותר
+    const existing = pickBestMap(maps);
     if (existing?.manual_override === true) {
       requires_serial = existing.requires_serial;
       serial_source = "manual_override";
-      mapped_linet_item_id = existing.linet_item_id ?? null;
+      mapped_linet_item_id = existing.linet_item_id != null ? Number(existing.linet_item_id) : null;
       mapped_linet_sku = existing.linet_sku ?? null;
       mapped_linet_item_name = existing.linet_item_name ?? null;
       log.decision = requires_serial ? "requires_serial=true" : "requires_serial=false";
@@ -108,7 +123,7 @@ async function resolveForItem({ base44, order_id, order_item_id, source, source_
 
         // שמור/עדכן LinetProductMap אם לא dry_run
         if (!dry_run) {
-          const existing = (await base44.asServiceRole.entities.LinetProductMap.filter({ sku: source_sku }).catch(() => []))[0];
+          const existing = pickBestMap(await base44.asServiceRole.entities.LinetProductMap.filter({ sku: source_sku }).catch(() => []));
           const mapData = {
             sku: source_sku,
             linet_item_id: mapped_linet_item_id,

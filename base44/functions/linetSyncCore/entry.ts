@@ -534,8 +534,14 @@ export async function executeLinetSync(base44, body = {}) {
               else {
                 category_name = await fetchProductCategory(credentials, sku, categoryTranslationMap);
                 productCache[sku] = category_name;
+                // upsert — לא ליצור כפילות. אם כבר קיים מיפוי ל-sku, רק לעדכן קטגוריה.
                 try {
-                  await base44.asServiceRole.entities.LinetProductMap.create({ sku, linet_category_name: category_name, last_checked: new Date().toISOString() });
+                  const existingMaps = await base44.asServiceRole.entities.LinetProductMap.filter({ sku }, null, 1);
+                  if (existingMaps.length > 0) {
+                    await base44.asServiceRole.entities.LinetProductMap.update(existingMaps[0].id, { linet_category_name: category_name, last_checked: new Date().toISOString() });
+                  } else {
+                    await base44.asServiceRole.entities.LinetProductMap.create({ sku, linet_category_name: category_name, last_checked: new Date().toISOString() });
+                  }
                 } catch (_dup) {}
               }
             }
