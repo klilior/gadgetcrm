@@ -1,0 +1,30 @@
+{
+  "name": "ClientErrorLog",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "number",
+      "description": "HTTP status code of the failed request"
+    },
+    "method": {
+      "type": "string",
+      "description": "HTTP method"
+    },
+    "url": {
+      "type": "string",
+      "description": "Request URL that failed"
+    },
+    "page": {
+      "type": "string",
+      "description": "App page path where it happened"
+    },
+    "happened_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the failure occurred"
+    }
+  },
+  "required": [
+    "url"
+  ]
+}

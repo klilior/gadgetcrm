@@ -10,6 +10,24 @@ import '@/index.css'
 // before any library handles it. This finally tells us WHICH request is 404ing,
 // even when the reported AxiosError has no config/URL attached.
 window.__last404s = window.__last404s || [];
+const __logged404Urls = new Set();
+const __persist404 = (entry) => {
+  // Persist to DB (deduped per session, capped) so the failing URL can be inspected
+  // later even when the error report itself carries no URL. Never persist the log
+  // write itself, and never let logging throw.
+  if (__logged404Urls.has(entry.url) || __logged404Urls.size >= 10) return;
+  if (entry.url.includes('ClientErrorLog')) return;
+  __logged404Urls.add(entry.url);
+  import('@/api/base44Client').then(({ base44 }) =>
+    base44.entities.ClientErrorLog.create({
+      status: 404,
+      method: entry.method,
+      url: entry.url,
+      page: window.location.pathname,
+      happened_at: entry.at,
+    })
+  ).catch(() => {});
+};
 const __origXhrOpen = XMLHttpRequest.prototype.open;
 XMLHttpRequest.prototype.open = function (method, url, ...rest) {
   this.addEventListener('loadend', () => {
@@ -18,6 +36,7 @@ XMLHttpRequest.prototype.open = function (method, url, ...rest) {
       window.__last404s.push(entry);
       if (window.__last404s.length > 20) window.__last404s.shift();
       console.warn(`[404 network tap] ${entry.method} ${entry.url}`);
+      __persist404(entry);
     }
   });
   return __origXhrOpen.call(this, method, url, ...rest);
