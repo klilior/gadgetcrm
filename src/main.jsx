@@ -14,8 +14,11 @@ window.addEventListener('unhandledrejection', (event) => {
   // fatal to this app. Log it (with the URL when available) for reference, then
   // prevent the opaque error overlay from interrupting the user.
   if (status === 404) {
-    console.error(
-      `[unhandled request error] 404 ` +
+    // Non-fatal: a background read hit a record that isn't there. Use console.warn
+    // (not console.error) so it doesn't get surfaced as a reported app error, and
+    // swallow the rejection so no overlay interrupts the user.
+    console.warn(
+      `[background 404 — handled] ` +
       `${(cfg?.method || 'get').toUpperCase()} ${cfg?.baseURL || ''}${cfg?.url || '(url unavailable)'}`,
       err?.response?.data || err?.message
     );
