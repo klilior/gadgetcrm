@@ -479,15 +479,9 @@ export default function UnifiedOrders() {
             });
           }
         };
-        if (order.raw_id) {
-          try {
-            await base44.entities.LinetOrderStatus.update(order.raw_id, { status: newStatus });
-          } catch (_) {
-            await upsertByDocNumber();
-          }
-        } else {
-          await upsertByDocNumber();
-        }
+        // Always resolve by doc_number first to avoid firing a 404 on a stale raw_id
+        // (a stale record id gets logged as an AxiosError 404 before the catch runs).
+        await upsertByDocNumber();
         setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
       }
     } catch (err) {
