@@ -7,6 +7,7 @@ import LinkLinetItem from "./LinkLinetItem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, ScanLine, CheckCircle2, AlertCircle, Receipt, ChevronDown, ChevronUp, Tag } from "lucide-react";
+import { markProductAsSerial } from "./markAsSerial";
 
 /**
  * SerialHandlingZone — מוצג בתוך OrderDetailPanel
@@ -16,7 +17,7 @@ import { Loader2, ScanLine, CheckCircle2, AlertCircle, Receipt, ChevronDown, Che
  *   order: unified order object
  *   onInvoiceIssued: callback אחרי הנפקה מוצלחת
  */
-export default function SerialHandlingZone({ order, onInvoiceIssued }) {
+export default function SerialHandlingZone({ order, onInvoiceIssued, linesHandledInPicking = false }) {
   const [gateResult, setGateResult] = useState(null); // { blocked, reasons, messages_he }
   const [serialLines, setSerialLines] = useState(null); // null=טעינה, []=ריק
   const [loading, setLoading] = useState(true);
@@ -76,6 +77,13 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // רענון כשהליקוט המאוחד מעדכן סריאליים (אירוע מ-PickingList)
+  useEffect(() => {
+    const handler = (e) => { if (e?.detail?.orderId === orderId) load(); };
+    window.addEventListener("serial-lines-updated", handler);
+    return () => window.removeEventListener("serial-lines-updated", handler);
+  }, [orderId, load]);
+
   const refresh = () => load();
 
   // עדכון שורה לאחר SerialPicker/LinkLinetItem
@@ -93,56 +101,10 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
     setMarkingProductIdx(product.sku || product.product_id);
     setMarkingBusy(true);
     try {
-      const sku = product.sku || String(product.product_id || "");
-      if (!sku) throw new Error("אין מק\"ט לסימון");
-
-      // עדכן/צור LinetProductMap
-      const isSuperPharm = order.source === "mirakl" || order.source === "superpharm";
-      const spSku = isSuperPharm ? sku : null; // S###### format
-
-      // לסופר-פארם: חפש לפי superpharm_sku; לשאר: לפי sku
-      // חיפוש לפי superpharm_sku (SP) או sku (Woo) — עקבי עם linkOrderLineToLinetItem
-      const maps = isSuperPharm
-        ? await base44.entities.LinetProductMap.filter({ superpharm_sku: sku }).catch(() => [])
-        : await base44.entities.LinetProductMap.filter({ sku }).catch(() => []);
-
-      const mapData = {
-        requires_serial: true,
-        linet_stock_type: 2,
-        manual_override: true,
-        serial_source: isSuperPharm ? "manual_sp" : "manual_serial",
-        updated_at: new Date().toISOString(),
-        ...(spSku ? { superpharm_sku: spSku } : {}),
-      };
-
-      if (maps.length > 0) {
-        await base44.entities.LinetProductMap.update(maps[0].id, mapData);
-      } else {
-        await base44.entities.LinetProductMap.create({
-          sku: isSuperPharm ? `sp_${sku}` : sku, // sp_S###### — עקבי עם linkOrderLineToLinetItem
-          ...mapData,
-          linet_item_name: product.name || "",
-        });
-      }
-
-      // צור/עדכן שורת OrderSerialLine להזמנה הזו
-      const itemId = `${orderId}_${sku}`;
-      const existing = (serialLines || []).find(l => l.source_sku === sku || l.order_item_id === itemId);
-      if (!existing) {
-        const newLine = await base44.entities.OrderSerialLine.create({
-          order_id: orderId,
-          order_item_id: itemId,
-          source: order.source === "mirakl" ? "superpharm" : "woo",
-          source_sku: sku,
-          source_product_name: product.name || "",
-          requires_serial: true,
-          serials_required_count: product.quantity || 1,
-          serial_status: "required_missing",
-          assigned_serials: [],
-        });
+      const newLine = await markProductAsSerial({ order, orderId, product, existingLines: serialLines || [] });
+      if (newLine && !(serialLines || []).some(l => l.id === newLine.id)) {
         setSerialLines(prev => [...(prev || []), newLine]);
       }
-
       await refresh();
     } catch (e) {
       alert("שגיאה בסימון: " + e.message);
@@ -200,6 +162,9 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
 
   if (!hasSerialLines && nonSerialProducts.length === 0) return null;
 
+  // כשהליקוט המאוחד מטפל בסריאליים — הזון משמש רק להנפקת חשבונית (אתר בלבד)
+  if (linesHandledInPicking && !(order.source === "woocommerce" && hasSerialLines)) return null;
+
   const gateBlocked = gateResult?.blocked ?? true;
   const gateMessages = gateResult?.messages_he || [];
   const serialLinesRequired = (serialLines || []).filter(l => l.requires_serial);
@@ -241,8 +206,8 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
       {expanded && (
       <div className="space-y-4">
 
-      {/* שורות סריאליות */}
-      {serialLinesRequired.length > 0 && (
+      {/* שורות סריאליות — מוצג רק כשהליקוט המאוחד לא מטפל בהן */}
+      {!linesHandledInPicking && serialLinesRequired.length > 0 && (
         <div className="space-y-3">
           {serialLinesRequired.map(line => {
             const isInvoiced = line.serial_status === "invoiced" || line.linet_invoice_id;
@@ -385,8 +350,8 @@ export default function SerialHandlingZone({ order, onInvoiceIssued }) {
         </div>
       )}
 
-      {/* סימון ידני — מוצרים לא-סריאליים */}
-      {nonSerialProducts.length > 0 && !alreadyInvoiced && (
+      {/* סימון ידני — מוצרים לא-סריאליים (בליקוט המאוחד זה נעשה ברשימת הליקוט) */}
+      {!linesHandledInPicking && nonSerialProducts.length > 0 && !alreadyInvoiced && (
         <div className="border-t border-amber-200 pt-3">
           <div className="text-xs text-gray-500 mb-2">מוצרים שלא זוהו כסריאליים — סמן אם נדרש מ"ס:</div>
           <div className="space-y-1.5">

@@ -342,6 +342,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         <SerialHandlingZone
           order={order}
           onInvoiceIssued={() => {}}
+          linesHandledInPicking={pickingApplies}
         />
       )}
 
