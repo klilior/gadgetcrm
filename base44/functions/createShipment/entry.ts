@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const PLUGINS_BASE = 'https://plugins.ship.co.il';
-const MAX_PICKUP_DISTANCE_KM = 2;
+const MAX_PICKUP_DISTANCE_KM = 2; // serial+picking gates enforced server-side
 
 function normalizeCityName(value) {
   return String(value || '')
@@ -88,6 +88,25 @@ Deno.serve(async (req) => {
       }
     } catch (ge) {
       console.log(`⚠️ Picking gate check failed (allowing): ${ge.message}`);
+    }
+
+    // ── Serial gate: block shipment if a serial-required item is not yet verified/invoiced ──
+    try {
+      const sGate = await base44.asServiceRole.functions.invoke('checkShipmentGate', { order_id: safeGateOrderId });
+      const sData = sGate?.data ?? sGate;
+      if (sData?.blocked) {
+        const sMsg = (sData.messages_he && sData.messages_he.join(' ')) || sData.message_he || 'לא ניתן ליצור משלוח — יש להשלים טיפול בסריאל (אימות והפקת חשבונית).';
+        await base44.asServiceRole.entities.SerialAuditLog.create({
+          order_id: safeGateOrderId,
+          action: 'shipment_blocked',
+          new_value: sMsg,
+          result: 'blocked',
+          error_message: sMsg,
+        }).catch(() => {});
+        return Response.json({ success: false, error: sMsg }, { status: 409 });
+      }
+    } catch (se) {
+      console.log(`⚠️ Serial gate check failed (allowing): ${se.message}`);
     }
   }
 
