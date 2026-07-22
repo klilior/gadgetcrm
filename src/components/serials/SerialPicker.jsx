@@ -50,7 +50,7 @@ export default function SerialPicker({ line, onUpdated }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await getAvailableSerials({ linet_item_id: line.mapped_linet_item_id });
+      const res = await getAvailableSerials({ linet_item_id: line.mapped_linet_item_id, exclude_line_id: line.id });
       const data = res?.data ?? res;
       if (data?.error) {
         setError(data.error);
@@ -116,7 +116,7 @@ export default function SerialPicker({ line, onUpdated }) {
     setVerifying(true);
     setVerifyResult(null);
     try {
-      const res = await verifySerial({ linet_item_id: line.mapped_linet_item_id, serial: trimmed });
+      const res = await verifySerial({ linet_item_id: line.mapped_linet_item_id, serial: trimmed, exclude_line_id: line.id });
       const data = res?.data ?? res;
 
       if (data?.valid) {
@@ -130,6 +130,8 @@ export default function SerialPicker({ line, onUpdated }) {
         let msg = "שגיאה באימות. נסה שוב.";
         if (data?.reason === "belongs_to_other_item") {
           msg = `הסריאלי שייך לפריט אחר${data.found_item_name ? `: ${data.found_item_name}` : ""}. לא נוסף.`;
+        } else if (data?.reason === "assigned_to_other_order") {
+          msg = `הסריאלי כבר משויך להזמנה אחרת${data.conflicting_order_id ? ` (${data.conflicting_order_id})` : ""}. בחר סריאלי אחר.`;
         } else if (data?.reason === "not_found_in_stock") {
           msg = "הסריאלי לא נמצא במלאי Linet. בדוק את המספר או את קליטת המלאי.";
         } else if (data?.reason === "linet_error") {

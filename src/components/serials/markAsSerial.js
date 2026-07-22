@@ -53,3 +53,50 @@ export async function markProductAsSerial({ order, orderId, product, existingLin
     assigned_serials: [],
   });
 }
+
+/**
+ * Auto-create OrderSerialLine records for products the system already knows are
+ * serial-required (taught previously via LinetProductMap) but have no line on
+ * this order yet. Includes the Linet mapping so the serial picker opens directly.
+ * Returns the newly created lines.
+ */
+export async function ensureSerialLinesFromCatalog({ order, orderId, items, existingLines = [] }) {
+  const isSuperPharm = order?.source === "mirakl" || order?.source === "superpharm";
+  const created = [];
+
+  for (const item of items || []) {
+    const sku = item.sku ? String(item.sku) : "";
+    if (!sku) continue;
+    if (existingLines.some((l) => String(l.source_sku || "") === sku)) continue;
+    if (created.some((l) => String(l.source_sku || "") === sku)) continue;
+
+    const maps = isSuperPharm
+      ? await base44.entities.LinetProductMap.filter({ superpharm_sku: sku }).catch(() => [])
+      : await base44.entities.LinetProductMap.filter({ sku }).catch(() => []);
+    const map = maps.find((m) => m.requires_serial === true);
+    if (!map) continue;
+
+    // Guard against a race: another panel may have created the line meanwhile
+    const itemId = `${orderId}_${sku}`;
+    const dup = await base44.entities.OrderSerialLine.filter({ order_item_id: itemId }).catch(() => []);
+    if (dup.length > 0) { created.push(dup[0]); continue; }
+
+    const line = await base44.entities.OrderSerialLine.create({
+      order_id: orderId,
+      order_item_id: itemId,
+      source: isSuperPharm ? "superpharm" : "woo",
+      source_sku: sku,
+      source_product_name: item.title || item.name || "",
+      mapped_linet_item_id: map.linet_item_id != null ? Number(map.linet_item_id) : null,
+      mapped_linet_sku: map.sku && !String(map.sku).startsWith("sp_") ? map.sku : null,
+      mapped_linet_item_name: map.linet_item_name || null,
+      requires_serial: true,
+      serials_required_count: Number(item.quantity) || 1,
+      serial_status: "required_missing",
+      assigned_serials: [],
+    });
+    created.push(line);
+  }
+
+  return created;
+}

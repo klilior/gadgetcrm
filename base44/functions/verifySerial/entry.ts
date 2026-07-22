@@ -43,6 +43,28 @@ Deno.serve(async (req) => {
     const correctItemRow = activeRows.find((r) => Number(r.linet_item_id) === targetItemId);
 
     if (correctItemRow) {
+      // בדיקה שהסריאלי לא משויך כבר להזמנה פתוחה אחרת
+      const { exclude_line_id } = body;
+      try {
+        const activeStatuses = ["selected", "verified", "invoiced"];
+        const [osl, ois] = await Promise.all([
+          base44.asServiceRole.entities.OrderSerialLine.filter({ serial_status: { $in: activeStatuses } }).catch(() => []),
+          base44.asServiceRole.entities.OrderItemSerial.filter({ serial_status: { $in: activeStatuses } }).catch(() => []),
+        ]);
+        const conflict = [...osl, ...ois].find((l) =>
+          l.id !== exclude_line_id && (l.assigned_serials || []).map(String).includes(serialNorm)
+        );
+        if (conflict) {
+          return Response.json({
+            valid: false,
+            reason: "assigned_to_other_order",
+            conflicting_order_id: conflict.order_id || null,
+          });
+        }
+      } catch (_) {
+        // non-blocking — item validity already confirmed
+      }
+
       return Response.json({
         valid: true,
         reason: "found_in_stock",

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, AlertTriangle, ListChecks, Loader2, ScanLine, Tag } from "lucide-react";
 import { buildPickingItemsFromOrder, totalPickingUnits, computePickingStatus } from "./pickingParser";
 import PickingSerialInline from "./PickingSerialInline";
-import { markProductAsSerial } from "@/components/serials/markAsSerial";
+import { markProductAsSerial, ensureSerialLinesFromCatalog } from "@/components/serials/markAsSerial";
 
 /**
  * PickingList — unified picking + serial flow for an order.
@@ -67,7 +67,10 @@ export default function PickingList({ order, currentUser, onStatusChange }) {
     return () => { cancelled = true; };
   }, [orderId]);
 
-  // Load serial lines for this order (both entities, same as SerialHandlingZone)
+  // Load serial lines for this order (both entities, same as SerialHandlingZone).
+  // Then auto-create lines for products already taught as serial-required
+  // (LinetProductMap) that have no line on this order yet.
+  const ensureAttempted = useRef(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -76,7 +79,28 @@ export default function PickingList({ order, currentUser, onStatusChange }) {
           base44.entities.OrderSerialLine.filter({ order_id: serialOrderId }).catch(() => []),
           base44.entities.OrderItemSerial.filter({ order_id: serialOrderId }).catch(() => []),
         ]);
-        if (!cancelled) setSerialLines([...osl, ...ois]);
+        if (cancelled) return;
+        let all = [...osl, ...ois];
+
+        if (ensureAttempted.current !== serialOrderId && !order?.order_locked) {
+          ensureAttempted.current = serialOrderId;
+          try {
+            const createdLines = await ensureSerialLinesFromCatalog({
+              order,
+              orderId: serialOrderId,
+              items: parsedItems.filter((it) => it.type === "main_product" && it.sku),
+              existingLines: all,
+            });
+            if (createdLines.length > 0) {
+              all = [...all, ...createdLines];
+              window.dispatchEvent(new CustomEvent("serial-lines-updated", { detail: { orderId: serialOrderId } }));
+            }
+          } catch (_) {
+            // non-blocking — user can still teach manually
+          }
+        }
+
+        if (!cancelled) setSerialLines(all);
       } catch (_) {
         // ignore
       } finally {
@@ -84,7 +108,7 @@ export default function PickingList({ order, currentUser, onStatusChange }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [serialOrderId]);
+  }, [serialOrderId, order, parsedItems]);
 
   const serialLineForItem = useCallback((item) => {
     if (!item?.sku) return null;
