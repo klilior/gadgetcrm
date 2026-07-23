@@ -101,7 +101,8 @@ export default function InvoicesToReview() {
         quantity: item.quantity ?? 1,
         unit_price_before_vat: item.unit_price_before_vat ?? '',
         line_total_before_vat: item.line_total_before_vat ?? '',
-        line_total_with_vat: item.line_total_with_vat ?? ''
+        line_total_with_vat: item.line_total_with_vat ?? '',
+        line_category: item.line_category || null
       }))
     });
     setIntakeFile(null);
@@ -168,6 +169,19 @@ export default function InvoicesToReview() {
     await learnSupplierPattern('vat_id', vatId || currentSupplier.vat_id);
   };
 
+  const selectedManualCategory = () => {
+    if (selected?.is_goods_invoice || selected?.expense_category === 'goods') return 'goods';
+    if (selected?.is_recurring_expense || ['communication', 'payment_fee', 'rent', 'software', 'service'].includes(selected?.expense_category)) return 'fixed';
+    return null;
+  };
+
+  const withManualOverrideNote = (notes) => {
+    const category = selectedManualCategory();
+    const cleanNotes = String(notes || '').replace(/\n?\[manual_classification_override\][^\n]*/g, '').trim();
+    if (!category) return cleanNotes;
+    return `${cleanNotes}\n[manual_classification_override] סווג ידנית כ${category === 'goods' ? 'סחורה' : 'הוצאה קבועה'}`.trim();
+  };
+
   const cleanLineItems = () => (selected?._lineItems || []).map((item, idx) => ({
     line_number: Number(item.line_number || idx + 1),
     sku: String(item.sku || '').trim(),
@@ -175,7 +189,8 @@ export default function InvoicesToReview() {
     quantity: Number(item.quantity || 0),
     unit_price_before_vat: item.unit_price_before_vat === '' ? null : Number(item.unit_price_before_vat),
     line_total_before_vat: item.line_total_before_vat === '' ? null : Number(item.line_total_before_vat),
-    line_total_with_vat: item.line_total_with_vat === '' ? null : Number(item.line_total_with_vat)
+    line_total_with_vat: item.line_total_with_vat === '' ? null : Number(item.line_total_with_vat),
+    line_category: selectedManualCategory() || item.line_category || null
   })).filter(item => item.sku || item.product_name);
 
   const saveLineItemEdits = async () => {
@@ -195,7 +210,10 @@ export default function InvoicesToReview() {
         unit_price_before_vat: item.unit_price_before_vat,
         line_total_before_vat: item.line_total_before_vat,
         line_total_with_vat: item.line_total_with_vat,
-        supplier_id: selected.supplier
+        supplier_id: selected.supplier,
+        line_category: item.line_category || undefined,
+        classification_source: selectedManualCategory() ? 'manual' : 'keywords',
+        classification_reason: selectedManualCategory() ? 'סיווג ידני מפורש בחשבונית' : 'נשמר מעריכת שורה ידנית'
       });
     }
     return JSON.stringify(extraction);
@@ -220,12 +238,12 @@ export default function InvoicesToReview() {
         is_goods_invoice: !!selected.is_goods_invoice,
         is_recurring_expense: !!selected.is_recurring_expense,
         classification_status: 'manually_corrected',
+        invoice_classification: selectedManualCategory() || selected.invoice_classification || undefined,
+        classification_reason: selectedManualCategory() ? 'סיווג ידני מפורש בחשבונית' : selected.classification_reason || undefined,
       };
       await saveSupplierEdits();
       updatePayload.ai_debug_last_extraction_json = await saveLineItemEdits();
-      if (selected.is_goods_invoice) {
-        updatePayload.notes = `${selected.notes || ''}\n[manual_classification_override] סווג ידנית כסחורה`.trim();
-      }
+      updatePayload.notes = withManualOverrideNote(selected.notes);
       await base44.entities.Invoices.update(selected.id, updatePayload);
       
       // Learn from corrections: save supplier name pattern and original extracted name
@@ -296,12 +314,12 @@ export default function InvoicesToReview() {
         is_goods_invoice: !!selected.is_goods_invoice,
         is_recurring_expense: !!selected.is_recurring_expense,
         classification_status: 'manually_corrected',
+        invoice_classification: selectedManualCategory() || selected.invoice_classification || undefined,
+        classification_reason: selectedManualCategory() ? 'סיווג ידני מפורש בחשבונית' : selected.classification_reason || undefined,
       };
       await saveSupplierEdits();
       updatePayload.ai_debug_last_extraction_json = await saveLineItemEdits();
-      if (selected.is_goods_invoice) {
-        updatePayload.notes = `${selected.notes || ''}\n[manual_classification_override] סווג ידנית כסחורה`.trim();
-      }
+      updatePayload.notes = withManualOverrideNote(selected.notes);
       await base44.entities.Invoices.update(selected.id, updatePayload);
 
       const result = await updateInvoiceStatus({ 

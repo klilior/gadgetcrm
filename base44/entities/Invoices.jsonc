@@ -4,7 +4,12 @@
   "properties": {
     "supplier": {
       "type": "string",
-      "description": "\u05e1\u05e4\u05e7",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e1\u05e4\u05e7",
+      "index": true
+    },
+    "detected_supplier_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05e1\u05e4\u05e7 \u05e9\u05d6\u05d5\u05d4\u05d4 \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05ea",
       "index": true
     },
     "doc_type": {
@@ -83,6 +88,39 @@
     "notes": {
       "type": "string",
       "description": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    },
+    "expense_category": {
+      "type": "string",
+      "description": "\u05e7\u05d8\u05d2\u05d5\u05e8\u05d9\u05d9\u05ea \u05d4\u05d5\u05e6\u05d0\u05d4 \u05d9\u05d3\u05e0\u05d9\u05ea/\u05de\u05e4\u05d5\u05e8\u05d8\u05ea"
+    },
+    "is_goods_invoice": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05e1\u05d9\u05de\u05d5\u05df \u05d9\u05d3\u05e0\u05d9 \u05db\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05e1\u05d7\u05d5\u05e8\u05d4"
+    },
+    "is_recurring_expense": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05e1\u05d9\u05de\u05d5\u05df \u05d9\u05d3\u05e0\u05d9 \u05db\u05d4\u05d5\u05e6\u05d0\u05d4 \u05e7\u05d1\u05d5\u05e2\u05d4"
+    },
+    "invoice_classification": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "goods",
+        "mixed"
+      ],
+      "description": "\u05e1\u05d9\u05db\u05d5\u05dd \u05e1\u05d9\u05d5\u05d5\u05d2 \u05e9\u05d5\u05e8\u05d5\u05ea \u05d4\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea",
+      "index": true
+    },
+    "classification_status": {
+      "type": "string",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05e1\u05d9\u05d5\u05d5\u05d2: auto_classified / needs_review / manually_corrected",
+      "index": true
+    },
+    "classification_reason": {
+      "type": "string",
+      "description": "\u05d4\u05e1\u05d1\u05e8 \u05dc\u05e1\u05d9\u05db\u05d5\u05dd \u05d4\u05e1\u05d9\u05d5\u05d5\u05d2"
     },
     "ai_debug_last_extraction_json": {
       "type": "string",

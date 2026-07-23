@@ -3,6 +3,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
+    const payload = await req.json().catch(() => ({}));
+    const dryRun = payload.dry_run === true;
 
     // Check previous month
     const now = new Date();
@@ -36,21 +38,23 @@ Deno.serve(async (req) => {
       if (existing && (existing.status === "התקבל" || existing.status === "אושר ידנית")) continue;
 
       const expected = s.expected_invoices_per_month || 1;
-      const names = [s.name, ...(s.aliases || "").split(",").map(a => a.trim())].filter(Boolean);
+      const names = [s.name, ...(s.aliases || "").split(/[,|]/).map(a => a.trim())].filter(Boolean);
 
-      // Find ALL matching invoices
-      const matched = relevant.filter(inv =>
-        names.some(n => (inv.supplier || "").includes(n) || n.includes(inv.supplier || ""))
-      );
+      // A fixed or mixed invoice satisfies a recurring expectation. A known goods-only invoice does not.
+      const matched = relevant.filter(inv => {
+        const supplierMatches = inv.supplier === s.id || names.some(n => (inv.supplier || "").includes(n) || n.includes(inv.supplier || ""));
+        const hasRecurringContent = !inv.invoice_classification || inv.invoice_classification === 'fixed' || inv.invoice_classification === 'mixed';
+        return supplierMatches && hasRecurringContent;
+      });
       const receivedCount = matched.length;
       const status = receivedCount >= expected ? "התקבל" : receivedCount > 0 ? "חלקי" : "חסר";
       const matchedJson = JSON.stringify(matched.map(inv => ({ id: inv.id, doc_number: inv.doc_number || "", supplier: inv.supplier || "" })));
 
-      if (existing) {
+      if (!dryRun && existing) {
         await base44.asServiceRole.entities.RecurringExpenseCheck.update(existing.id, {
           received_count: receivedCount, status, matched_invoices_json: matchedJson, expected_count: expected,
         });
-      } else {
+      } else if (!dryRun) {
         await base44.asServiceRole.entities.RecurringExpenseCheck.create({
           supplier_id: s.id, supplier_name: s.name, recurring_type: s.recurring_type || "",
           month: checkMonth, expected_count: expected, received_count: receivedCount,
@@ -63,8 +67,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Send SMS if missing
-    if (missing.length > 0) {
+    // Send alerts only during a real scheduled run.
+    if (missing.length > 0 && !dryRun) {
       const users = await base44.asServiceRole.entities.User.filter({}, null, 100);
       const liorUser = users.find(u => u.full_name?.includes("ליאור") && (u.role === "admin" || u.role === "מנהל"));
       const employees = await base44.asServiceRole.entities.Employee.filter({}, null, 100);
@@ -96,7 +100,7 @@ Deno.serve(async (req) => {
     }
 
     return Response.json({
-      month: checkMonth, total_recurring: allSuppliers.length,
+      month: checkMonth, dry_run: dryRun, total_recurring: allSuppliers.length,
       missing_count: missing.length, missing_suppliers: missing,
       message: missing.length === 0 ? "כל החשבוניות התקבלו ✅" : `${missing.length} הוצאות חסרות/חלקיות`,
     });

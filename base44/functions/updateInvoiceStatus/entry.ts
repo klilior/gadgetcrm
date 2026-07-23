@@ -54,6 +54,22 @@ Deno.serve(async (req) => {
         reviewed_at: now,
       });
       
+      // Persist an explicit manual classification as the learned supplier default.
+      const hasManualOverride = String(invoice.notes || '').includes('[manual_classification_override]') || invoice.classification_status === 'manually_corrected';
+      if (invoice.supplier && hasManualOverride) {
+        const category = invoice.is_goods_invoice === true || invoice.expense_category === 'goods'
+          ? 'goods'
+          : invoice.is_recurring_expense === true || ['communication', 'payment_fee', 'rent', 'software', 'service'].includes(invoice.expense_category)
+            ? 'fixed'
+            : null;
+        if (category) {
+          await base44.asServiceRole.entities.Suppliers.update(invoice.supplier, {
+            learned_classification: category,
+            classification_learned_from_invoice: invoice.id
+          });
+        }
+      }
+
       // Learn supplier patterns for future identification
       if (invoice.supplier && invoice.ai_debug_last_extraction_json) {
         try {

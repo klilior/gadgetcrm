@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { classifyInvoiceLines } from '../../shared/invoiceClassification.ts';
 
 const EXTRACT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -822,7 +823,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Step 5: Update invoice (mapping + safe auto-approval)
+    // Step 5: Classify every extracted line, then summarize the invoice.
+    const lineItems = extraction.line_items || [];
+    let matchedSupplier = allSuppliers.find((supplier) => supplier.id === supplierId) || null;
+    if (!matchedSupplier && supplierId) {
+      const supplierRows = await base44.asServiceRole.entities.Suppliers.filter({ id: supplierId }, undefined, 1);
+      matchedSupplier = supplierRows?.[0] || null;
+    }
+    const classificationResult = classifyInvoiceLines({ invoice, supplier: matchedSupplier, lineItems });
+    const classifiedByLineNumber = new Map(classificationResult.lines.map((line, index) => [Number(line.line_number || index + 1), line]));
+
     const baseNotes = `${extraction.display_summary_he || ''}\n${validation.display_validation_he || ''}`.trim();
 
     // Determine final status and notes
@@ -850,30 +860,39 @@ Deno.serve(async (req) => {
       total_with_vat: extraction.total_with_vat ?? undefined,
       confidence_score: extraction.overall_confidence ?? undefined,
       extraction_status: finalStatus,
-      notes: finalNotes
+      notes: finalNotes,
+      invoice_classification: classificationResult.invoice_classification || undefined,
+      classification_status: classificationResult.classification_status,
+      classification_reason: classificationResult.classification_reason
     };
 
     await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
 
     // Step 6: Create InvoiceLine records and update SupplierProductPrice + PriceAlert
-    const lineItems = extraction.line_items || [];
     const priceAlerts = [];
     
     for (const item of lineItems) {
-      if (!item.sku || !item.product_name) continue;
+      if (!item.sku && !item.product_name) continue;
+      const classifiedLine = classifiedByLineNumber.get(Number(item.line_number || 1));
       
-      // Create InvoiceLine
+      // Create InvoiceLine, including service/subscription lines that have no SKU.
       await base44.asServiceRole.entities.InvoiceLine.create({
         invoice_id: invoice.id,
         line_number: item.line_number || 1,
-        sku: item.sku,
-        product_name: item.product_name,
-        quantity: item.quantity || 1,
+        sku: item.sku || '',
+        product_name: item.product_name || item.sku,
+        quantity: item.quantity ?? 1,
         unit_price_before_vat: roundMoney(item.unit_price_before_vat) || null,
         line_total_before_vat: roundMoney(item.line_total_before_vat) || null,
         line_total_with_vat: roundMoney(item.line_total_with_vat) || null,
-        supplier_id: supplierId
+        supplier_id: supplierId,
+        line_category: classifiedLine?.line_category || undefined,
+        classification_source: classifiedLine?.classification_source || 'keywords',
+        classification_reason: classifiedLine?.classification_reason || ''
       });
+
+      // Service/subscription lines without SKU are classified and saved, but do not belong in product price tracking.
+      if (!item.sku) continue;
       
       // Check/update SupplierProductPrice
       const existingPrice = await base44.asServiceRole.entities.SupplierProductPrice.filter({

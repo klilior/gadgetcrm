@@ -27,64 +27,62 @@ export function getInvoiceText(invoice) {
   return parts.filter(Boolean).join(' ').toLowerCase();
 }
 
+const GOODS_KEYWORDS = [
+  'טלפון', 'סלולרי', 'מכשיר', 'סמארטפון', 'iphone', 'galaxy', 'samsung', 'apple',
+  'xiaomi', 'אביזר', 'מטען', 'כבל', 'מגן', 'כיסוי', 'אוזניות', 'מסך', 'טאבלט',
+  'מחשב', 'שעון', 'מק״ט', 'מקט', 'sku', 'gb', 'handset', 'device'
+];
+
+const FIXED_KEYWORDS = [
+  'תקשורת', 'חיוב חודשי', 'דמי מנוי', 'מנוי', 'subscription', 'monthly', 'חבילה',
+  'קו ', 'קווים', 'שיחות', 'גלישה', 'סים', 'sim', 'תוכנית', 'רישיון', 'license',
+  'שירות', 'עמלת סליקה', 'פרסום', 'ads module', 'bi module'
+];
+
+function normalized(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function storedCategory(value) {
+  const category = normalized(value);
+  if (category === 'goods' || category.includes('סחורה')) return 'goods';
+  if (category === 'fixed' || category === 'recurring' || category === 'communication' || category === 'payment_processing' ||
+      category.includes('קבוע') || category.includes('תקשורת') || category.includes('סליקה') || category.includes('מנוי') || category.includes('שירות')) return 'fixed';
+  return null;
+}
+
+export function getLineClassification(line, supplier = {}, invoice = {}) {
+  const manual = String(invoice?.notes || '').includes('[manual_classification_override]') || invoice?.classification_status === 'manually_corrected';
+  const manualCategory = manual && (invoice?.is_goods_invoice ? 'goods' : invoice?.is_recurring_expense ? 'fixed' : storedCategory(invoice?.expense_category));
+  const learned = storedCategory(supplier?.learned_classification) || storedCategory(supplier?.supplier_type) || storedCategory(supplier?.default_expense_category);
+  if (line?.line_category) return line.line_category;
+  if (manualCategory) return manualCategory;
+  if (learned) return learned;
+
+  const text = normalized(`${line?.product_name || ''} ${line?.description || ''} ${line?.sku || ''}`);
+  const goods = GOODS_KEYWORDS.some((word) => text.includes(word));
+  const fixed = FIXED_KEYWORDS.some((word) => text.includes(word));
+  if (supplier?.id && (supplier?.is_recurring || supplier?.is_recurring_expense)) return goods ? 'goods' : 'fixed';
+  if (supplier?.id) return fixed && !goods ? 'fixed' : 'goods';
+  if (goods || fixed) return goods ? 'goods' : 'fixed';
+  return null;
+}
+
 export function getInvoiceClassification(invoice, suppliersMap = {}) {
   const supplier = suppliersMap[invoice?.supplier] || suppliersMap[invoice?.detected_supplier_id] || {};
-  const text = getInvoiceText(invoice);
+  let summary = invoice?.invoice_classification || null;
 
-  const communicationKeywords = [
-    'שירותי תקשורת', 'תקשורת', 'חיוב חודשי', 'דמי מנוי', 'מנוי', 'חבילה', 'חבילת',
-    'קו ', 'קווים', 'שיחות', 'גלישה', 'סים', 'sim', 'תוכנית', 'חשבונית תקופתית', 'שירות'
-  ];
-
-  const goodsKeywords = [
-    'טלפון', 'טלפונים', 'סלולרי', 'סלולריים', 'מכשיר', 'מכשירים', 'סמארטפון',
-    'iphone', 'galaxy', 'samsung', 'apple', 'xiaomi', 'אביזר', 'אביזרים', 'מטען',
-    'כבל', 'מגן', 'כיסוי', 'אוזניות', 'מסך', 'מק״ט', 'מקט', 'sku'
-  ];
-
-  const hasCommunicationText = communicationKeywords.some((word) => text.includes(word));
-  const hasGoodsText = goodsKeywords.some((word) => text.includes(word));
-  const manualCategory = String(invoice?.expense_category || '').toLowerCase();
-
-  const explicitManualOverride = String(invoice?.notes || '').includes('[manual_classification_override]');
-
-  if (explicitManualOverride) {
-    if (invoice?.is_goods_invoice === true || manualCategory.includes('סחורה')) {
-      return { type: 'goods', label: 'סחורה', category: invoice?.expense_category || 'סחורה' };
-    }
-    if (invoice?.is_recurring_expense === true || manualCategory.includes('תקשורת') || manualCategory.includes('סליקה') || manualCategory.includes('קבוע')) {
-      return { type: 'recurring', label: 'הוצאה קבועה', category: invoice?.expense_category || 'הוצאה קבועה' };
-    }
-    return { type: 'other', label: 'הוצאה אחרת', category: invoice?.expense_category || 'אחר' };
+  if (!summary) {
+    let extraction = {};
+    try { extraction = invoice?.ai_debug_last_extraction_json ? JSON.parse(invoice.ai_debug_last_extraction_json) : {}; } catch (_) {}
+    const categories = new Set((extraction?.line_items || []).map((line) => getLineClassification(line, supplier, invoice)).filter(Boolean));
+    if (categories.size > 1) summary = 'mixed';
+    else if (categories.size === 1) summary = Array.from(categories)[0];
+    else summary = getLineClassification({}, supplier, invoice);
   }
 
-  if (hasCommunicationText && !hasGoodsText) {
-    return {
-      type: 'recurring',
-      label: 'הוצאה קבועה',
-      category: invoice?.expense_category || supplier.default_expense_category || 'שירותי תקשורת',
-    };
-  }
-
-  if (invoice?.is_goods_invoice === true || supplier.supplier_type === 'goods' || supplier.include_in_goods_ratio === true || hasGoodsText) {
-    return {
-      type: 'goods',
-      label: 'סחורה',
-      category: invoice?.expense_category || supplier.default_expense_category || 'סחורה',
-    };
-  }
-
-  if (invoice?.is_recurring_expense === true || supplier.is_recurring_expense === true || supplier.is_recurring === true || hasCommunicationText) {
-    return {
-      type: 'recurring',
-      label: 'הוצאה קבועה',
-      category: invoice?.expense_category || supplier.default_expense_category || 'הוצאה קבועה',
-    };
-  }
-
-  return {
-    type: 'other',
-    label: 'הוצאה אחרת',
-    category: invoice?.expense_category || supplier.default_expense_category || 'אחר',
-  };
+  if (summary === 'goods') return { type: 'goods', summaryType: 'goods', label: 'סחורה', category: invoice?.expense_category || 'סחורה' };
+  if (summary === 'fixed') return { type: 'recurring', summaryType: 'fixed', label: 'הוצאה קבועה', category: invoice?.expense_category || supplier.default_expense_category || 'הוצאה קבועה' };
+  if (summary === 'mixed') return { type: 'mixed', summaryType: 'mixed', label: 'מעורבת', category: 'סחורה והוצאה קבועה' };
+  return { type: 'other', summaryType: null, label: 'דורש סיווג', category: invoice?.expense_category || 'אחר' };
 }

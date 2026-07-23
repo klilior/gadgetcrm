@@ -40,11 +40,33 @@
       "type": "string",
       "description": "\u05e1\u05e4\u05e7",
       "index": true
+    },
+    "line_category": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "goods"
+      ],
+      "description": "\u05e1\u05d9\u05d5\u05d5\u05d2 \u05d4\u05e9\u05d5\u05e8\u05d4: \u05d4\u05d5\u05e6\u05d0\u05d4 \u05e7\u05d1\u05d5\u05e2\u05d4 \u05d0\u05d5 \u05e1\u05d7\u05d5\u05e8\u05d4",
+      "index": true
+    },
+    "classification_source": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "learned",
+        "supplier_default",
+        "keywords"
+      ],
+      "description": "\u05de\u05e7\u05d5\u05e8 \u05d4\u05d7\u05dc\u05d8\u05ea \u05d4\u05e1\u05d9\u05d5\u05d5\u05d2"
+    },
+    "classification_reason": {
+      "type": "string",
+      "description": "\u05d4\u05e1\u05d1\u05e8 \u05dc\u05d4\u05d7\u05dc\u05d8\u05ea \u05d4\u05e1\u05d9\u05d5\u05d5\u05d2"
     }
   },
   "required": [
     "invoice_id",
-    "sku",
     "product_name",
     "quantity"
   ]
