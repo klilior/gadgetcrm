@@ -304,6 +304,11 @@ export default function PickingList({ order, currentUser, onStatusChange }) {
                           <span className="text-xs text-gray-500">כמות: {item.quantity}</span>
                         )}
                         {item.sku && <span className="text-[11px] text-gray-400 font-mono">SKU: {item.sku}</span>}
+                        {item.addon_price != null && (
+                          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                            תוספת: ₪{item.addon_price.toLocaleString("he-IL")}
+                          </span>
+                        )}
                         {item.source_label && (
                           <span className="text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.5">
                             {item.source_label}

@@ -49,11 +49,20 @@ const NON_PHYSICAL_KEYWORDS = [
 
 // Values that mean "customer chose NOT to add this" → not a physical item
 const NEGATIVE_VALUES = ["ללא", "לא", "אין", "no", "none", "0"];
+const PLACEHOLDER_VALUES = ["בחר ראש טעינה", "בחר מטען", "בחר אפשרות", "יש לבחור"];
 
 function isNegativeChoice(value) {
-  const v = String(value || "").trim().toLowerCase();
+  const v = clean(value).trim().toLowerCase();
   if (!v) return true;
-  return NEGATIVE_VALUES.includes(v);
+  return NEGATIVE_VALUES.includes(v) || PLACEHOLDER_VALUES.some((text) => v.startsWith(text));
+}
+
+function extractPrice(value) {
+  const decoded = decodeHtmlEntities(value).replace(/<[^>]*>/g, " ");
+  const match = decoded.match(/(?:₪\s*([\d,.]+)|([\d,.]+)\s*₪)/);
+  if (!match) return null;
+  const price = Number(String(match[1] || match[2]).replace(/,/g, ""));
+  return Number.isFinite(price) ? price : null;
 }
 
 function isNonPhysical(label, value) {
@@ -138,20 +147,21 @@ function rawItemsFromOrder(order) {
 
       if (isNonPhysical(m.display_key || m.key, m.display_value || m.value)) return;
 
-      // Choose the cleanest physical name available
-      let addonTitle = value || label;
-      if (looksPhysical(label, "")) addonTitle = label;
+      // Prefer the specific selected product (e.g. "כיסוי ארנק") over a generic field label.
+      let addonTitle = looksPhysical("", value) ? value : (looksPhysical(label, "") ? label : (value || label));
       addonTitle = clean(addonTitle);
       if (!addonTitle) return;
 
       // Quantity: from the raw value text (e.g. "הוסף 2 מגני מסך"), multiplied by product qty
       const addonQty = extractQtyFromText(m.display_value || m.value) * qty;
+      const addonPrice = extractPrice(m.display_value || m.value);
 
       items.push({
         type: "epo_addon",
         title: addonTitle,
         sku: null,
         quantity: addonQty,
+        addon_price: addonPrice,
         source_line_item_id: `${orderId}_line_${pIdx}`,
         parent_product_name: title,
         source_label: "תוספת מוצר",
@@ -191,6 +201,7 @@ export function buildPickingItemsFromOrder(order) {
     title: it.title,
     sku: it.sku,
     quantity: it.quantity,
+    addon_price: it.addon_price ?? null,
     source_line_item_id: it.source_line_item_id,
     parent_product_name: it.parent_product_name,
     source_label: it.source_label,
