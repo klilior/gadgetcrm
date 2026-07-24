@@ -1,23 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-
-function isLikelyInlineOrPreviewImage(intake) {
-  const name = (intake?.file_name || '').trim().toLowerCase();
-  const mime = (intake?.file_mime || '').trim().toLowerCase();
-  const isImage = mime.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(name);
-  if (!isImage) return false;
-  return name.startsWith('~') || name.includes('logo') || name.includes('signature') || name.includes('image00') || name.includes('cid:');
-}
-
-function isValidFile(intake) {
-  if (isLikelyInlineOrPreviewImage(intake)) return false;
-  const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'application/octet-stream'];
-  if (!intake?.file) return false;
-  if (intake?.file_mime && allowed.includes(intake.file_mime.toLowerCase())) return true;
-  try {
-    const name = (intake?.file_name || '').toLowerCase();
-    return ['.pdf', '.jpg', '.jpeg', '.png'].some((ext) => name.endsWith(ext));
-  } catch (_) { return false; }
-}
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { calculateFileHash, findReusableDuplicate, getEarlyNonInvoiceReason, isValidInvoiceFile } from '../../shared/invoiceIntakeGuards.ts';
 
 Deno.serve(async (req) => {
   try {
@@ -68,13 +50,24 @@ Deno.serve(async (req) => {
     const list = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ id: intakeId });
     const intake = list?.[0];
     if (!intake) return Response.json({ error: 'Intake not found' }, { status: 404 });
+    if (!intake.file_hash && intake.file) {
+      const hash = await calculateFileHash(intake.file).catch(() => null);
+      if (hash) {
+        intake.file_hash = hash;
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { file_hash: hash });
+      }
+    }
 
     const updates = {};
 
     // C1: initialize status
-    if (!isValidFile(intake)) {
+    const earlySkipReason = getEarlyNonInvoiceReason(intake);
+    if (!isValidInvoiceFile(intake)) {
       updates.status = 'דולג';
       updates.status_reason = 'אין קובץ תקין לעיבוד.';
+    } else if (earlySkipReason) {
+      updates.status = 'דולג';
+      updates.status_reason = earlySkipReason;
     } else if (intake.status === 'חדש' || !intake.status) {
       updates.status = 'מוכן לניתוח';
     }
@@ -85,19 +78,18 @@ Deno.serve(async (req) => {
       Object.assign(intake, updates);
     }
 
-    // C2: duplicate by file_hash (60 days)
+    // C2: permanent cache by exact file hash.
     if (intake.file_hash && intake.status !== 'דולג') {
-      const others = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ file_hash: intake.file_hash }, '-received_at', 1000);
-      const now = new Date();
-      const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
-      const dup = (others || []).find((r) => r.id !== intake.id && r.received_at && new Date(r.received_at) >= sixtyDaysAgo);
-      if (dup && intake.status !== 'כפילות') {
+      const matches = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ file_hash: intake.file_hash }, 'id', 1000);
+      const dup = findReusableDuplicate(matches, intake.id);
+      if (dup?.linked_invoice) {
         await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
           status: 'כפילות',
-          status_reason: 'זוהתה כפילות לפי חתימת קובץ.'
+          status_reason: 'זוהתה כפילות לפי חתימת קובץ; נעשה שימוש בתוצאת החילוץ הקיימת.',
+          linked_invoice: dup.linked_invoice || undefined,
+          ai_debug_last_extraction_json: dup.ai_debug_last_extraction_json || undefined
         });
-        intake.status = 'כפילות';
-        intake.status_reason = 'זוהתה כפילות לפי חתימת קובץ.';
+        return Response.json({ success: true, status: 'duplicate_cached', original_id: dup.id, invoice_id: dup.linked_invoice || null, needs_extraction: false });
       }
     }
 
@@ -119,7 +111,7 @@ Deno.serve(async (req) => {
       const existing = await base44.asServiceRole.entities.Invoices.filter({ source_intake: intake.id }, undefined, 1);
       let invoiceId = existing?.[0]?.id || null;
 
-      const validForCreation = isValidFile(intake) && intake.status !== 'דולג' && intake.status !== 'כפילות';
+      const validForCreation = isValidInvoiceFile(intake) && intake.status !== 'דולג' && intake.status !== 'כפילות';
 
       if (!invoiceId && validForCreation) {
         const created = await base44.asServiceRole.entities.Invoices.create({

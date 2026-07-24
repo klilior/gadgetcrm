@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 
 Deno.serve(async (req) => {
   try {
@@ -67,6 +67,25 @@ Deno.serve(async (req) => {
             learned_classification: category,
             classification_learned_from_invoice: invoice.id
           });
+        }
+      }
+
+      // Learn exact SKU/product-line classifications. These override keyword rules on future invoices.
+      if (invoice.supplier && hasManualOverride) {
+        const correctedLines = await base44.asServiceRole.entities.InvoiceLine.filter({ invoice_id: invoice.id }, 'line_number', 500);
+        for (const line of correctedLines) {
+          const category = line.line_category;
+          if (category !== 'goods' && category !== 'fixed') continue;
+          const candidates = [
+            line.sku ? { pattern_type: 'line_sku_classification', pattern_value: String(line.sku).trim().toLowerCase() } : null,
+            line.product_name ? { pattern_type: 'line_name_classification', pattern_value: String(line.product_name).trim().toLowerCase() } : null
+          ].filter((item) => item?.pattern_value);
+          for (const candidate of candidates) {
+            const found = await base44.asServiceRole.entities.SupplierPattern.filter({ supplier_id: invoice.supplier, pattern_type: candidate.pattern_type, pattern_value: candidate.pattern_value }, undefined, 1);
+            const data = { ...candidate, supplier_id: invoice.supplier, classification: category, confidence: 100, learned_from_invoice: invoice.id, is_active: true };
+            if (found?.[0]) await base44.asServiceRole.entities.SupplierPattern.update(found[0].id, data);
+            else await base44.asServiceRole.entities.SupplierPattern.create(data);
+          }
         }
       }
 

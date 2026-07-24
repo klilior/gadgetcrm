@@ -42,7 +42,7 @@ export function getLearnedSupplierCategory(supplier) {
     categoryFromValue(supplier?.default_expense_category);
 }
 
-export function classifyInvoiceLines({ invoice = {}, supplier = null, lineItems = [] }) {
+export function classifyInvoiceLines({ invoice = {}, supplier = null, lineItems = [], learnedLinePatterns = [] }) {
   const manualCategory = getManualInvoiceCategory(invoice);
   const learnedCategory = getLearnedSupplierCategory(supplier);
   const supplierKnown = !!supplier?.id;
@@ -53,6 +53,13 @@ export function classifyInvoiceLines({ invoice = {}, supplier = null, lineItems 
     const text = normalize(`${line?.product_name || ''} ${line?.description || ''} ${line?.sku || ''}`);
     const goodsSignal = includesAny(text, GOODS_KEYWORDS);
     const fixedSignal = includesAny(text, FIXED_KEYWORDS);
+    const sku = normalize(line?.sku);
+    const name = normalize(line?.product_name || line?.description);
+    const learnedLine = learnedLinePatterns.find((pattern) =>
+      (pattern.pattern_type === 'line_sku_classification' && sku && normalize(pattern.pattern_value) === sku) ||
+      (pattern.pattern_type === 'line_name_classification' && name && normalize(pattern.pattern_value) === name)
+    );
+    const learnedLineCategory = categoryFromValue(learnedLine?.classification);
     let category = null;
     let source = defaultSource;
     let reason = '';
@@ -60,6 +67,10 @@ export function classifyInvoiceLines({ invoice = {}, supplier = null, lineItems 
     if (manualCategory) {
       category = manualCategory;
       reason = 'סיווג ידני מפורש בחשבונית';
+    } else if (learnedLineCategory) {
+      category = learnedLineCategory;
+      source = 'learned';
+      reason = 'סיווג שנלמד ידנית עבור מק״ט או שורת מוצר זו אצל הספק';
     } else if (learnedCategory) {
       category = learnedCategory;
       reason = 'סיווג ידני שנלמד עבור הספק';

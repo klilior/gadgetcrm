@@ -1,5 +1,6 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { classifyInvoiceLines } from '../../shared/invoiceClassification.ts';
+import { calculateFileHash, findReusableDuplicate, getEarlyNonInvoiceReason } from '../../shared/invoiceIntakeGuards.ts';
 
 const EXTRACT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -351,6 +352,28 @@ Deno.serve(async (req) => {
         ai_debug_last_error_he: errMsg
       });
       return Response.json({ success: false, skipped: true, reason: 'No file on intake', ai_debug_last_error_he: errMsg });
+    }
+
+    const earlySkipReason = getEarlyNonInvoiceReason(intake);
+    if (earlySkipReason && !body.force) {
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'דולג', status_reason: earlySkipReason });
+      await base44.asServiceRole.entities.Invoices.update(invoice.id, { extraction_status: 'נדחה', notes: earlySkipReason });
+      return Response.json({ success: true, skipped: true, reason: 'Early non-invoice filter' });
+    }
+
+    let fileHash = intake.file_hash;
+    if (!fileHash) {
+      fileHash = await calculateFileHash(intake.file).catch(() => null);
+      if (fileHash) await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { file_hash: fileHash });
+    }
+    if (fileHash && !body.force) {
+      const sameFiles = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ file_hash: fileHash }, 'id', 1000);
+      const cached = findReusableDuplicate(sameFiles, intake.id);
+      if (cached?.linked_invoice && cached.linked_invoice !== invoice.id) {
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'כפילות', status_reason: 'נעשה שימוש בתוצאת חילוץ קיימת לפי חתימת קובץ.', linked_invoice: cached.linked_invoice, ai_debug_last_extraction_json: cached.ai_debug_last_extraction_json || undefined });
+        await base44.asServiceRole.entities.Invoices.update(invoice.id, { extraction_status: 'נדחה', notes: `כפילות קובץ; התוצאה הקיימת נמצאת בחשבונית ${cached.linked_invoice}.` });
+        return Response.json({ success: true, skipped: true, reason: 'Cached file hash', cached_invoice_id: cached.linked_invoice });
+      }
     }
 
     // Idempotency: run only if doc_number OR total_with_vat missing (unless force re-run)
@@ -830,7 +853,8 @@ Deno.serve(async (req) => {
       const supplierRows = await base44.asServiceRole.entities.Suppliers.filter({ id: supplierId }, undefined, 1);
       matchedSupplier = supplierRows?.[0] || null;
     }
-    const classificationResult = classifyInvoiceLines({ invoice, supplier: matchedSupplier, lineItems });
+    const learnedLinePatterns = learnedPatterns.filter((pattern) => pattern.supplier_id === supplierId && pattern.classification);
+    const classificationResult = classifyInvoiceLines({ invoice, supplier: matchedSupplier, lineItems, learnedLinePatterns });
     const classifiedByLineNumber = new Map(classificationResult.lines.map((line, index) => [Number(line.line_number || index + 1), line]));
 
     const baseNotes = `${extraction.display_summary_he || ''}\n${validation.display_validation_he || ''}`.trim();
