@@ -868,6 +868,17 @@ Deno.serve(async (req) => {
 
     await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
 
+    // Linet is the source of truth: stop financial ingestion when an exact type-13 duplicate exists.
+    try {
+      const reconciliation = await base44.asServiceRole.functions.invoke('reconcileLinetInvoices', { invoice_ids: [invoice.id] });
+      const result = reconciliation?.data || reconciliation;
+      if (result?.stats?.matched_duplicates === 1) {
+        return Response.json({ success: true, skipped: true, reason: 'duplicate_in_linet', invoice_id: invoice.id, reconciliation: result.stats });
+      }
+    } catch (reconciliationError) {
+      console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
+    }
+
     // Step 6: Create InvoiceLine records and update SupplierProductPrice + PriceAlert
     const priceAlerts = [];
     

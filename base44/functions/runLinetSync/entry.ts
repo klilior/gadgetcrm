@@ -533,7 +533,15 @@ async function executeLinetSync(base44, body = {}) {
       }
     } catch (deviceErr) { console.log('⚠️ Device sync skipped:', deviceErr.message); }
 
-    return { success: true, stats, customer_sync: customerSyncStats, device_sync: deviceSyncStats, message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים, ${stats.clients_created} לקוחות, ${stats.undelivered_tasks_created} משימות הזמנות` };
+    let purchaseSyncStats = null;
+    try {
+      const purchaseSync = await base44.asServiceRole.functions.invoke('syncLinetPurchases', { from_datetime: fromDatetime, to_datetime: toDatetime });
+      purchaseSyncStats = purchaseSync?.data || purchaseSync;
+    } catch (purchaseError) {
+      console.log('⚠️ Purchase document sync skipped:', purchaseError.message);
+    }
+
+    return { success: true, stats, customer_sync: customerSyncStats, device_sync: deviceSyncStats, purchase_sync: purchaseSyncStats, message: `סנכרון הושלם: ${stats.created} נוצרו, ${stats.updated} עודכנו, ${stats.line_contracts_created} חוזי קווים, ${stats.clients_created} לקוחות, ${stats.undelivered_tasks_created} משימות הזמנות` };
   } catch (error) {
     const errorMessage = error?.message || error?.toString() || String(error);
     try {

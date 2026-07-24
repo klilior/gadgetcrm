@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Calendar, Filter, Search, X, ZoomIn, ZoomOut, FileText } from "lucide-react";
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, subWeeks, subMonths, subYears, startOfDay, endOfDay, startOfYear, endOfYear, isBefore, isAfter } from "date-fns";
 import useSuppliers from "../components/hooks/useSuppliers";
+import LinetReconciliationSummary from "@/components/invoices/LinetReconciliationSummary";
 
 export default function InvoicesOverview() {
   const [rows, setRows] = useState([]);
@@ -134,6 +135,8 @@ export default function InvoicesOverview() {
         <h1 className="text-2xl font-bold flex items-center gap-2"><Filter className="w-6 h-6"/> ריכוז חשבוניות</h1>
         <Button variant="outline" onClick={load} className="gap-2">רענן</Button>
       </div>
+
+      <LinetReconciliationSummary />
 
       {/* Filters bar */}
       <Card className="glass-card border-0">

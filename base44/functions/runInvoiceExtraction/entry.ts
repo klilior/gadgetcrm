@@ -389,6 +389,16 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
 
   await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
 
+  try {
+    const reconciliation = await base44.asServiceRole.functions.invoke('reconcileLinetInvoices', { invoice_ids: [invoice.id] });
+    const result = reconciliation?.data || reconciliation;
+    if (result?.stats?.matched_duplicates === 1) {
+      return { success: true, skipped: true, reason: 'duplicate_in_linet', invoice_id: invoice.id, reconciliation: result.stats };
+    }
+  } catch (reconciliationError) {
+    console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
+  }
+
   return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction, validation };
 }
 

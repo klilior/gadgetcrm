@@ -24,6 +24,11 @@
       "type": "string",
       "description": "\u05de\u05e1\u05e4\u05e8 \u05de\u05e1\u05de\u05da"
     },
+    "normalized_doc_number": {
+      "type": "string",
+      "description": "\u05d4\u05dc\u05d9\u05d1\u05d4 \u05d4\u05de\u05e1\u05e4\u05e8\u05d9\u05ea \u05d4\u05de\u05e0\u05d5\u05e8\u05de\u05dc\u05ea",
+      "index": true
+    },
     "doc_date": {
       "type": "string",
       "format": "date",
@@ -84,6 +89,44 @@
       "type": "string",
       "description": "\u05de\u05e4\u05ea\u05d7 \u05db\u05e4\u05d9\u05dc\u05d5\u05ea",
       "index": true
+    },
+    "linet_match_status": {
+      "type": "string",
+      "enum": [
+        "unchecked",
+        "matched_duplicate",
+        "possible_match",
+        "missing_in_linet"
+      ],
+      "default": "unchecked",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05e6\u05dc\u05d1\u05d4 \u05de\u05d5\u05dc \u05dc\u05d9\u05e0\u05d8",
+      "index": true
+    },
+    "linet_purchase_document_id": {
+      "type": "string",
+      "description": "\u05e8\u05e9\u05d5\u05de\u05ea \u05de\u05e1\u05de\u05da \u05e8\u05db\u05e9 13 \u05ea\u05d5\u05d0\u05de\u05ea",
+      "index": true
+    },
+    "linet_doc_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e1\u05de\u05da \u05d1\u05dc\u05d9\u05e0\u05d8"
+    },
+    "linet_doc_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05de\u05e1\u05de\u05da \u05e8\u05db\u05e9 \u05e4\u05e0\u05d9\u05de\u05d9 \u05d1\u05dc\u05d9\u05e0\u05d8"
+    },
+    "linet_supplier_invoice_number": {
+      "type": "string",
+      "description": "\u05de\u05e1\u05e4\u05e8 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05e1\u05e4\u05e7 \u05d1\u05dc\u05d9\u05e0\u05d8"
+    },
+    "linet_match_reason": {
+      "type": "string",
+      "description": "\u05d4\u05e1\u05d1\u05e8 \u05d4\u05e6\u05dc\u05d1\u05d4"
+    },
+    "linet_matched_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05de\u05d5\u05e2\u05d3 \u05d4\u05e6\u05dc\u05d1\u05d4"
     },
     "notes": {
       "type": "string",

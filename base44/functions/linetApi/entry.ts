@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
 
                 const query = {
                     issue_date: `${date_from} to ${date_to}`,
-                    doctype: doctypes || ["3", "4", "9"], // Default to Tax Invoice (3), Credit Invoice (4), and Receipt-Invoice (9)
+                    doctype: doctypes || ["3", "4", "9"], // Callers may explicitly request purchase documents with doctypes: ["13"]
                     refstatus: refstatus !== undefined ? refstatus : null
                 };
 
