@@ -20,6 +20,9 @@ import { createPageUrl } from "@/utils";
 import useSuppliers from "../components/hooks/useSuppliers";
 import UndeliveredOrdersWidget from "../components/dashboard/UndeliveredOrdersWidget";
 import RepSalesDrilldown from "../components/dashboard/RepSalesDrilldown";
+import ManagerInvoiceAlerts from "../components/dashboard/ManagerInvoiceAlerts";
+import CogsTrendCard from "../components/dashboard/CogsTrendCard";
+import FixedExpenseTrendCard from "../components/dashboard/FixedExpenseTrendCard";
 import { getInvoiceClassification } from "../components/utils/invoiceClassification";
 import { linetHourlySync } from "@/functions/linetHourlySync";
 
@@ -31,6 +34,8 @@ export default function ManagerControlCenter() {
 
   const [sales, setSales] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [trendSales, setTrendSales] = useState([]);
+  const [trendInvoices, setTrendInvoices] = useState([]);
   const [mappings, setMappings] = useState([]);
   const [pendingInvoicesCount, setPendingInvoicesCount] = useState(0);
   const { suppliersMap, suppliersList } = useSuppliers();
@@ -67,8 +72,9 @@ export default function ManagerControlCenter() {
     setIsLoading(true);
     const salesQuery = { issue_date: { $gte: dateFrom, $lte: dateTo } };
     const invoiceQuery = { doc_date: { $gte: dateFrom, $lte: dateTo }, extraction_status: 'אושר' };
+    const trendFrom = format(startOfMonth(subMonths(new Date(), 11)), 'yyyy-MM-dd');
 
-    const [salesData, mappingsData, invoicesData, pendingInvoices, syncLogs, activities] = await Promise.all([
+    const [salesData, mappingsData, invoicesData, pendingInvoices, syncLogs, activities, trendSalesData, trendInvoicesData] = await Promise.all([
       base44.entities.SalesTransaction.filter(salesQuery, '-issue_date', 2000).catch(() => []),
       mappings.length > 0 ? Promise.resolve(mappings) : base44.entities.CommissionGroupMapping.filter({ is_active: true }).catch(() => []),
       base44.entities.Invoices.filter(invoiceQuery, '-doc_date', 2000).catch(() => []),
@@ -76,12 +82,16 @@ export default function ManagerControlCenter() {
       base44.entities.SyncLog.filter({ sync_key: 'linet_main_sync' }, '-run_started_at', 1).catch(() => []),
       base44.entities.Activity.filter({
         activity_type: { $in: ['שיחה נכנסת', 'שיחה יוצאת'] }
-      }, '-created_date', 2000).catch(() => [])
+      }, '-created_date', 2000).catch(() => []),
+      base44.entities.SalesTransaction.filter({ issue_date: { $gte: trendFrom } }, '-issue_date', 5000).catch(() => []),
+      base44.entities.Invoices.filter({ doc_date: { $gte: trendFrom }, extraction_status: 'אושר' }, '-doc_date', 5000).catch(() => [])
     ]);
 
     if (mappings.length === 0 && mappingsData.length > 0) setMappings(mappingsData);
     setSales(salesData);
     setInvoices(invoicesData);
+    setTrendSales(trendSalesData);
+    setTrendInvoices(trendInvoicesData);
 
     // Last sync
     if (syncLogs.length > 0) setLastSync(syncLogs[0]);
@@ -260,6 +270,34 @@ export default function ManagerControlCenter() {
     return Object.values(map).map(s => ({ ...s, percent: total > 0 ? ((s.total / total) * 100).toFixed(1) : 0 })).sort((a, b) => b.total - a.total).slice(0, 10);
   }, [invoices, suppliersMap]);
 
+  const monthlyInsights = useMemo(() => {
+    const months = Array.from({ length: 12 }, (_, index) => format(startOfMonth(subMonths(new Date(), 11 - index)), 'yyyy-MM'));
+    const monthMap = Object.fromEntries(months.map(month => [month, { month: month.slice(5) + '/' + month.slice(2, 4), sales: 0, goods: 0, fixed: 0 }]));
+    const seen = new Set();
+    trendSales.forEach(sale => {
+      const key = `${sale.linet_doc_id || sale.id}_${sale.sku || ''}_${sale.product_name || ''}`;
+      if (seen.has(key)) return; seen.add(key);
+      const month = sale.issue_date?.slice(0, 7); if (monthMap[month]) monthMap[month].sales += Number(sale.total_row_amount) || 0;
+    });
+    trendInvoices.filter(inv => inv.doc_type === 'חשבונית מס').forEach(inv => {
+      const month = inv.doc_date?.slice(0, 7); if (!monthMap[month]) return;
+      const type = getInvoiceClassification(inv, suppliersMap).type;
+      if (type === 'goods') monthMap[month].goods += Number(inv.total_with_vat) || 0;
+      if (type === 'recurring') monthMap[month].fixed += Number(inv.total_with_vat) || 0;
+    });
+    return months.map(month => ({ ...monthMap[month], cogs: monthMap[month].sales > 0 ? Number((monthMap[month].goods / monthMap[month].sales * 100).toFixed(1)) : 0 }));
+  }, [trendSales, trendInvoices, suppliersMap]);
+
+  const fixedBreakdown = useMemo(() => {
+    const map = {};
+    trendInvoices.filter(inv => inv.doc_type === 'חשבונית מס' && getInvoiceClassification(inv, suppliersMap).type === 'recurring').forEach(inv => {
+      const name = suppliersMap[inv.supplier]?.name || inv.supplier || 'לא משויך';
+      if (!map[name]) map[name] = { name, type: inv.expense_category || suppliersMap[inv.supplier]?.recurring_type || 'קבועה', total: 0 };
+      map[name].total += Number(inv.total_with_vat) || 0;
+    });
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [trendInvoices, suppliersMap]);
+
   const getRatioColor = (ratio) => {
     const val = parseFloat(ratio);
     if (val < RATIO_THRESHOLDS.good) return 'text-green-600 bg-green-100';
@@ -302,10 +340,13 @@ export default function ManagerControlCenter() {
             )}
           </div>
         </div>
-        <Button onClick={handleManualLinetSync} disabled={isLoading || isSyncingLinet} variant="outline" size="sm">
-          <RefreshCw className={`w-4 h-4 ml-2 ${isLoading || isSyncingLinet ? 'animate-spin' : ''}`} />
-          {isSyncingLinet ? 'מסנכרן...' : 'רענן'}
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild size="sm"><Link to="/ExpensesInvoicesHub">הוצאות וחשבוניות</Link></Button>
+          <Button onClick={handleManualLinetSync} disabled={isLoading || isSyncingLinet} variant="outline" size="sm">
+            <RefreshCw className={`w-4 h-4 ml-2 ${isLoading || isSyncingLinet ? 'animate-spin' : ''}`} />
+            {isSyncingLinet ? 'מסנכרן...' : 'רענן'}
+          </Button>
+        </div>
       </div>
 
       {/* Date Filters */}
@@ -347,23 +388,8 @@ export default function ManagerControlCenter() {
         </CardContent>
       </Card>
 
-      {/* Pending invoices alert */}
-      {pendingInvoicesCount > 0 && (
-        <Link to={createPageUrl("InvoicesToReview")}>
-          <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 transition-all cursor-pointer">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-white/20 rounded-full p-2"><AlertCircle className="w-6 h-6" /></div>
-                <div>
-                  <p className="font-bold text-lg">{pendingInvoicesCount} חשבוניות ממתינות לאימות</p>
-                  <p className="text-white/80 text-sm">לחץ לעבור לאימות</p>
-                </div>
-              </div>
-              <Button variant="secondary" size="sm" className="bg-white text-orange-600 hover:bg-white/90">עבור לאימות →</Button>
-            </CardContent>
-          </Card>
-        </Link>
-      )}
+      {/* Manager-only focused invoice alerts */}
+      <ManagerInvoiceAlerts pendingCount={pendingInvoicesCount} />
 
       {/* Top KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
@@ -385,38 +411,14 @@ export default function ManagerControlCenter() {
             <p className="text-xl font-bold">₪{kpiData.grossSales.toLocaleString()}</p>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-orange-600 to-orange-500 text-white">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Package className="w-4 h-4 text-orange-200" />
-              <span className="text-xs text-orange-100">סה״כ הוצאות</span>
-            </div>
-            <p className="text-xl font-bold">₪{kpiData.purchasesTotal.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-        <Link to={`${createPageUrl("PurchasesDashboard")}?classification=goods`} className="block">
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-600 to-blue-500 text-white hover:scale-[1.02] transition-transform cursor-pointer">
-            <CardContent className="p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <ShoppingBag className="w-4 h-4 text-blue-200" />
-                <span className="text-xs text-blue-100">קניית סחורה</span>
-              </div>
-              <p className="text-xl font-bold">₪{kpiData.goodsPurchases.toLocaleString()}</p>
-              <p className="text-xs text-blue-100 mt-0.5">{kpiData.goodsRatio}% מהמחזור · לחץ לפירוט</p>
-            </CardContent>
-          </Card>
+        <Link to="/ExpensesInvoicesHub?tab=business" className="block">
+          <Card className="border shadow-sm bg-card hover:border-primary/40 transition-colors"><CardContent className="p-3"><div className="flex items-center gap-2 mb-1"><Package className="w-4 h-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">סה״כ רכישות</span></div><p className="text-xl font-bold">₪{kpiData.purchasesTotal.toLocaleString()}</p></CardContent></Card>
         </Link>
-        <Link to={`${createPageUrl("PurchasesDashboard")}?classification=recurring`} className="block">
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-600 to-amber-500 text-white hover:scale-[1.02] transition-transform cursor-pointer">
-            <CardContent className="p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Clock className="w-4 h-4 text-amber-200" />
-                <span className="text-xs text-amber-100">הוצאות קבועות</span>
-              </div>
-              <p className="text-xl font-bold">₪{kpiData.recurringExpenses.toLocaleString()}</p>
-              <p className="text-xs text-amber-100 mt-0.5">לחץ לפירוט חשבוניות</p>
-            </CardContent>
-          </Card>
+        <Link to="/ExpensesInvoicesHub?tab=business" className="block">
+          <Card className="border shadow-sm bg-card hover:border-primary/40 transition-colors"><CardContent className="p-3"><div className="flex items-center gap-2 mb-1"><ShoppingBag className="w-4 h-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">סחורה</span></div><p className="text-xl font-bold">₪{kpiData.goodsPurchases.toLocaleString()}</p><p className="text-xs text-muted-foreground mt-0.5">{kpiData.goodsRatio}% מהמחזור</p></CardContent></Card>
+        </Link>
+        <Link to="/ExpensesInvoicesHub?tab=recurring" className="block">
+          <Card className="border shadow-sm bg-card hover:border-primary/40 transition-colors"><CardContent className="p-3"><div className="flex items-center gap-2 mb-1"><Clock className="w-4 h-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">הוצאות קבועות</span></div><p className="text-xl font-bold">₪{kpiData.recurringExpenses.toLocaleString()}</p><p className="text-xs text-muted-foreground mt-0.5">פירוט לפי ספק וסוג</p></CardContent></Card>
         </Link>
         <Card className="border-0 shadow-lg bg-white">
           <CardContent className="p-3">
@@ -442,6 +444,11 @@ export default function ManagerControlCenter() {
             )}
           </CardContent>
         </Card>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <CogsTrendCard data={monthlyInsights} />
+        <FixedExpenseTrendCard data={monthlyInsights} breakdown={fixedBreakdown} />
       </div>
 
       {/* Sales by type */}
@@ -545,8 +552,8 @@ export default function ManagerControlCenter() {
               <FileText className="w-5 h-5 text-orange-600" />
               בקרת רכישות
             </CardTitle>
-            <Link to={createPageUrl("PurchasesDashboard")}>
-              <Button variant="outline" size="sm" className="h-7 text-xs">דשבורד רכישות מלא</Button>
+            <Link to="/ExpensesInvoicesHub?tab=business">
+              <Button variant="outline" size="sm" className="h-7 text-xs">למרכז הוצאות וחשבוניות</Button>
             </Link>
           </div>
         </CardHeader>

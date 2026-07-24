@@ -11,7 +11,6 @@ import { Calendar, Filter, Search, X, ZoomIn, ZoomOut, FileText } from "lucide-r
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, subWeeks, subMonths, subYears, startOfDay, endOfDay, startOfYear, endOfYear, isBefore, isAfter } from "date-fns";
 import useSuppliers from "../components/hooks/useSuppliers";
 import LinetReconciliationSummary from "@/components/invoices/LinetReconciliationSummary";
-import RecurringInvoiceAlerts from "@/components/invoices/RecurringInvoiceAlerts";
 
 export default function InvoicesOverview() {
   const [rows, setRows] = useState([]);
@@ -138,7 +137,6 @@ export default function InvoicesOverview() {
       </div>
 
       <LinetReconciliationSummary />
-      <RecurringInvoiceAlerts />
 
       {/* Filters bar */}
       <Card className="glass-card border-0">

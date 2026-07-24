@@ -106,7 +106,7 @@ function AppContent({ children, currentPageName }) {
 
   // Force cache-bust on new app version (fixes live showing old bundle)
   useEffect(() => {
-    const VERSION = '2026-06-26-recover-2';
+    const VERSION = '2026-07-24-expenses-hub-1';
     try {
       const stored = localStorage.getItem('app_version');
       if (stored !== VERSION) {
@@ -181,6 +181,7 @@ function AppContent({ children, currentPageName }) {
     { title: "דוח התחשבנות", url: createPageUrl("VendorReport"), icon: BarChart3 }
   ] : [
     { title: "דשבורד", url: dashboardUrl, icon: Home },
+    ...(isManager ? [{ title: "הוצאות וחשבוניות", url: "/ExpensesInvoicesHub", icon: Receipt }] : []),
     { title: "תיקונים", url: createPageUrl("RepairDashboard"), icon: Wrench },
     { title: "הזמנות מרוכזות", url: "/UnifiedOrders", icon: Package },
     ...(isManager ? [{ title: "דוח התחשבנות מעבדה", url: createPageUrl("VendorReport"), icon: FileText }] : []),
@@ -213,17 +214,7 @@ function AppContent({ children, currentPageName }) {
 
   const purchasesItems = [];
   if (currentUser && !isTechnicianRole) {
-    if (isManager || currentUser?.role === 'admin') {
-      purchasesItems.push(
-        { title: "תיבת קליטה", url: createPageUrl("IntakeInbox") },
-        { title: "העלאה מנייד", url: createPageUrl("MobileInvoiceUpload") },
-        { title: "חשבוניות לאימות", url: createPageUrl("InvoicesToReview") },
-        { title: "ריכוז חשבוניות", url: createPageUrl("InvoicesOverview") },
-        { title: "התראות מחיר", url: createPageUrl("PriceAlerts") },
-        { title: "ספקים", url: createPageUrl("SuppliersManagement") },
-        { title: "דשבורד רכישות", url: createPageUrl("PurchasesDashboard") },
-      );
-    } else if (isShiftManager) {
+    if (!isManager && isShiftManager) {
       purchasesItems.push(
         { title: "תיבת קליטה", url: createPageUrl("IntakeInbox") },
         { title: "העלאה מנייד", url: createPageUrl("MobileInvoiceUpload") },

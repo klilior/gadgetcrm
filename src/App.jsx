@@ -9,6 +9,7 @@ import MiraklInvoiceBatch from './pages/MiraklInvoiceBatch';
 import QuickInvoiceUpload from './pages/QuickInvoiceUpload';
 import LinetDebug from './pages/LinetDebug';
 import SerialLiveTest from './pages/SerialLiveTest';
+import ExpensesInvoicesHub from './pages/ExpensesInvoicesHub';
 import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
@@ -108,6 +109,11 @@ const AuthenticatedApp = () => {
       <Route path="/MiraklInvoiceBatch" element={
         <LayoutWrapper currentPageName="MiraklInvoiceBatch">
           <Suspense fallback={<LazyFallback />}><MiraklInvoiceBatch /></Suspense>
+        </LayoutWrapper>
+      } />
+      <Route path="/ExpensesInvoicesHub" element={
+        <LayoutWrapper currentPageName="ExpensesInvoicesHub">
+          <Suspense fallback={<LazyFallback />}><ExpensesInvoicesHub /></Suspense>
         </LayoutWrapper>
       } />
       <Route path="/QuickInvoiceUpload" element={<QuickInvoiceUpload />} />
