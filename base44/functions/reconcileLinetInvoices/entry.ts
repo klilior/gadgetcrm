@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     const [allInvoices, purchases, allLines, suppliers, allGaps] = await Promise.all([
       listAll(base44.asServiceRole.entities.Invoices, '-doc_date'), listAll(base44.asServiceRole.entities.LinetPurchaseDocument, '-doc_date'),
       listAll(base44.asServiceRole.entities.InvoiceLine, 'invoice_id'), listAll(base44.asServiceRole.entities.Suppliers, 'name'),
-      listAll(base44.asServiceRole.entities.InvoiceReconciliationGap, '-detected_at')
+      listAll(base44.asServiceRole.entities.InvoiceReconciliationGap, 'id')
     ]);
     const requestedIds = new Set(body.invoice_ids || []);
     const invoices = allInvoices.filter((invoice) => {
