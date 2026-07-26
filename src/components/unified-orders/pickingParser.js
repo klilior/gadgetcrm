@@ -173,11 +173,20 @@ function rawItemsFromOrder(order) {
   return { orderId, items };
 }
 
-// Merge identical items (same type + title + sku), summing quantities
+// Signature of the customer-chosen attributes (e.g. color) — lines with different
+// choices must stay separate even when they share the same product/SKU.
+function attributesKey(it) {
+  return (it.attributes || [])
+    .map((a) => `${(a.label || "").toLowerCase()}=${(a.value || "").toLowerCase()}`)
+    .sort()
+    .join(";");
+}
+
+// Merge identical items (same type + title + sku + chosen attributes), summing quantities
 function mergeItems(items) {
   const map = new Map();
   for (const it of items) {
-    const key = `${it.type}|${(it.title || "").toLowerCase()}|${it.sku || ""}`;
+    const key = `${it.type}|${(it.title || "").toLowerCase()}|${it.sku || ""}|${attributesKey(it)}`;
     if (map.has(key)) {
       const prev = map.get(key);
       prev.quantity += it.quantity;
