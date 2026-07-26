@@ -347,7 +347,13 @@ Deno.serve(async (req) => {
             }
         }
 
-        console.log(`🔍 ${statusOnlyUpdates.length} status updates, ${fullProcessing.length} new orders (${wooOrders.length - statusOnlyUpdates.length - fullProcessing.length} unchanged)`);
+        // Cap work per run so a backlog can never push the run past the platform timeout.
+        const MAX_NEW_PER_RUN = 25;
+        const MAX_STALE_PER_RUN = 15;
+        const newOrdersQueued = fullProcessing.length;
+        const newOrdersThisRun = fullProcessing.slice(0, MAX_NEW_PER_RUN);
+
+        console.log(`🔍 ${statusOnlyUpdates.length} status updates, ${newOrdersThisRun.length}/${newOrdersQueued} new orders this run (${wooOrders.length - statusOnlyUpdates.length - newOrdersQueued} unchanged)`);
 
         let created = 0, updated = 0, failed = 0;
 
@@ -416,15 +422,14 @@ Deno.serve(async (req) => {
                 failed++;
                 console.error(`❌ Status update #${wo.id}: ${err.message}`);
             }
-            // Light delay — just 500ms since these are single updates
-            if (i > 0 && i % 3 === 0) await delay(1500);
+            if (i > 0 && i % 5 === 0) await delay(300);
         }
 
         console.log(`✅ Phase 1 done: ${updated} status updates`);
 
         // Phase 2: Full processing for new orders
-        for (let i = 0; i < fullProcessing.length; i++) {
-            const wo = fullProcessing[i];
+        for (let i = 0; i < newOrdersThisRun.length; i++) {
+            const wo = newOrdersThisRun[i];
             try {
                 const isPaidOrPending = ['processing', 'completed', 'on-hold', 'pending', 'ordered', 'wc-awaiting-serial'].includes(wo.status);
                 let clientId = null;
@@ -508,8 +513,7 @@ Deno.serve(async (req) => {
                 failed++;
                 console.error(`❌ New order #${wo.id}: ${err.message}`);
             }
-            // Heavier delay for full processing (lots of DB operations)
-            await delay(2000);
+            await delay(400);
         }
 
         // Phase 3: Check stale open orders not covered by the date range
@@ -517,7 +521,7 @@ Deno.serve(async (req) => {
         const recentWooIds = new Set(wooOrders.map(wo => wo.id.toString()));
         const staleOpenOrders = existingOrders.filter(o => 
             openStatuses.includes(o.status) && !recentWooIds.has(o.external_order_number)
-        );
+        ).slice(0, MAX_STALE_PER_RUN);
         
         let staleUpdated = 0;
         if (staleOpenOrders.length > 0) {
@@ -556,7 +560,7 @@ Deno.serve(async (req) => {
                         staleUpdated++;
                         console.log(`✅ Stale #${staleOrder.external_order_number}: ${staleOrder.status} → ${updateData.status || staleOrder.status}`);
                     }
-                    await delay(500);
+                    await delay(200);
                 } catch (err) {
                     console.error(`❌ Stale check #${staleOrder.external_order_number}: ${err.message}`);
                 }
@@ -565,9 +569,10 @@ Deno.serve(async (req) => {
         }
 
         updated += staleUpdated;
-        const msg = `סנכרון WooCommerce הושלם: ${created} נוצרו, ${updated} עודכנו, ${failed} נכשלו (מתוך ${wooOrders.length}, +${staleOpenOrders.length} ישנות).`;
+        const remainingNew = Math.max(0, newOrdersQueued - newOrdersThisRun.length);
+        const msg = `סנכרון WooCommerce הושלם: ${created} נוצרו, ${updated} עודכנו, ${failed} נכשלו (מתוך ${wooOrders.length}, +${staleOpenOrders.length} ישנות)${remainingNew ? `, ${remainingNew} הזמנות חדשות ימשיכו בריצה הבאה` : ''}.`;
         console.log(`✅ ${msg}`);
-        return Response.json({ success: true, message: msg, created, updated, failed, total: wooOrders.length, staleChecked: staleOpenOrders.length, staleUpdated });
+        return Response.json({ success: true, message: msg, created, updated, failed, total: wooOrders.length, staleChecked: staleOpenOrders.length, staleUpdated, remainingNew });
 
     } catch (error) {
         console.error("❌ WooSync Error:", error);
