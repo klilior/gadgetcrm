@@ -468,6 +468,16 @@ Deno.serve(async (req) => {
                     console.log(`📦 Tracking for new #${wo.id}: ${trackingInfo.tracking_number}`);
                 }
 
+                // Race guard: another writer (webhook / parallel run) may have created this
+                // order after we pre-fetched the existing map. Re-check right before creating.
+                const justCreated = await withRetry(() => sr.Order.filter({ external_order_number: wo.id.toString() }, null, 1));
+                if (justCreated.length > 0) {
+                    await withRetry(() => sr.Order.update(justCreated[0].id, orderData));
+                    console.log(`♻️ Order #${wo.id} already existed (race) — updated instead of creating`);
+                    updated++;
+                    continue;
+                }
+
                 const createdOrder = await withRetry(() => sr.Order.create(orderData));
 
                 const lineItems = Array.isArray(wo.line_items) ? wo.line_items : [];
