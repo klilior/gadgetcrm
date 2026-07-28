@@ -36,6 +36,25 @@ async function linetPost(endpoint, payload) {
   return data;
 }
 
+// Search Linet for an existing document by external reference (idempotency guard)
+async function findExistingLinetDoc(creds, refnumExt) {
+  for (const doctype of ['9', '3']) {
+    try {
+      const result = await linetPost('newsearch/docs', {
+        ...creds,
+        query: { refnum_ext: refnumExt, doctype: [doctype] },
+        limit: 5,
+        offset: 0,
+      });
+      const docs = result?.body || (Array.isArray(result) ? result : []);
+      if (Array.isArray(docs) && docs.length > 0) return docs[0];
+    } catch (e) {
+      console.warn('[Linet] Doc search failed for ' + refnumExt + ': ' + e.message);
+    }
+  }
+  return null;
+}
+
 async function findOrCreateClient(creds, { name, phone, email, city, address }) {
   let accountId = null;
 
@@ -107,8 +126,16 @@ async function findOrCreateClient(creds, { name, phone, email, city, address }) 
 }
 
 Deno.serve(async (req) => {
+  const base44 = createClientFromRequest(req);
+  let lockedOrderIdOuter = null;
+  const releaseLock = async () => {
+    if (!lockedOrderIdOuter) return;
+    await base44.asServiceRole.entities.SuperPharmOrder.update(lockedOrderIdOuter, {
+      linet_invoice_doc_id: '',
+    }).catch(() => {});
+    console.log('[SP Invoice] Lock released for order ' + lockedOrderIdOuter);
+  };
   try {
-    const base44 = createClientFromRequest(req);
 
     let user = null;
     try { user = await base44.auth.me(); } catch (_) {}
@@ -129,6 +156,9 @@ Deno.serve(async (req) => {
     // === Optional: look up serial lines for this Mirakl order (non-blocking) ===
     // Collect ALL assigned_serials from ALL serial lines into one flat array.
     // If not found / error → continue exactly as before (allSerials stays empty).
+    // Lock bookkeeping — released if the flow fails before an invoice is created
+    let lockedOrderId = null;
+
     let allSerials = [];
     if (mirakl_order_id) {
       try {
@@ -170,6 +200,13 @@ Deno.serve(async (req) => {
         // Duplicate check
         if (existingOrder.linet_invoice_doc_id) {
           console.log('[SP Invoice] DUPLICATE BLOCKED - Invoice already exists: doc_id=' + existingOrder.linet_invoice_doc_id);
+          if (existingOrder.linet_invoice_doc_id === 'pending') {
+            return Response.json({
+              success: false,
+              error: 'חשבונית להזמנה זו נמצאת כרגע בהפקה — נסה שוב בעוד רגע',
+              duplicate: true,
+            });
+          }
           return Response.json({
             success: false,
             error: `חשבונית כבר הונפקה להזמנה זו (חשבונית מס׳ ${existingOrder.linet_invoice_doc_number || existingOrder.linet_invoice_doc_id})`,
@@ -179,6 +216,14 @@ Deno.serve(async (req) => {
             duplicate: true,
           });
         }
+
+        // Claim the lock BEFORE any Linet call, so a second parallel run is blocked
+        await base44.asServiceRole.entities.SuperPharmOrder.update(existingOrder.id, {
+          linet_invoice_doc_id: 'pending',
+        });
+        lockedOrderId = existingOrder.id;
+        lockedOrderIdOuter = existingOrder.id;
+        console.log('[SP Invoice] Lock claimed for order ' + existingOrder.id);
 
         // Always take customer name from the entity (synced from Mirakl)
         resolvedCustomerName = `${existingOrder.customer_first_name || ''} ${existingOrder.customer_last_name || ''}`.trim();
@@ -230,6 +275,7 @@ Deno.serve(async (req) => {
     }
 
     if (!resolvedCustomerName || !resolvedProductDescription || !resolvedUnitPrice) {
+      await releaseLock();
       return Response.json({ error: 'חסרים שדות חובה: שם לקוח, תיאור מוצר, מחיר' }, { status: 400 });
     }
 
@@ -237,7 +283,39 @@ Deno.serve(async (req) => {
 
     const creds = getLinetCreds();
     if (!creds.login_id || !creds.login_hash || !creds.login_company) {
+      await releaseLock();
       return Response.json({ error: 'הגדרות לינט חסרות' }, { status: 500 });
+    }
+
+    // 0. Idempotency against Linet itself — never create a second doc for the same order
+    if (mirakl_order_id) {
+      const existingDoc = await findExistingLinetDoc(creds, mirakl_order_id);
+      if (existingDoc) {
+        const foundId = String(existingDoc.id);
+        const foundNumber = String(existingDoc.docnum || existingDoc.doc_number || '');
+        const foundPdf = BASE_URL + '/doc/pdf?' + new URLSearchParams({
+          login_id: creds.login_id,
+          login_hash: creds.login_hash,
+          login_company: String(creds.login_company),
+          id: foundId,
+        }).toString();
+        if (lockedOrderId) {
+          await base44.asServiceRole.entities.SuperPharmOrder.update(lockedOrderId, {
+            linet_invoice_doc_id: foundId,
+            linet_invoice_doc_number: foundNumber,
+            linet_invoice_pdf_url: foundPdf,
+          });
+        }
+        console.log('[SP Invoice] DUPLICATE BLOCKED - doc already exists in Linet: ' + foundNumber);
+        return Response.json({
+          success: false,
+          error: `חשבונית כבר קיימת בלינט להזמנה זו (מס׳ ${foundNumber || foundId})`,
+          existing_doc_id: foundId,
+          existing_doc_number: foundNumber,
+          existing_pdf_url: foundPdf,
+          duplicate: true,
+        });
+      }
     }
 
     // 1. Find or create client
@@ -391,6 +469,7 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('[SP Linet Invoice] Error:', error.message);
+    await releaseLock();
     return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 });
