@@ -49,8 +49,12 @@ export default function UnifiedOrders() {
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [showClosed, setShowClosed] = useState(false);
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const p = new URLSearchParams(window.location.search).get('filter');
+    return p === 'pending' ? 'pending' : 'all';
+  });
+  // תצוגה מאוחדת: "כל ההזמנות" כוללת גם הזמנות שטופלו; רק מסנן "ממתינות לטיפול" מסתיר אותן
+  const showClosed = statusFilter !== 'pending';
   const [showBlocked, setShowBlocked] = useState(false);
   const [readyOnly, setReadyOnly] = useState(false);
 
@@ -521,7 +525,6 @@ export default function UnifiedOrders() {
     setSearchTerm("");
     setSourceFilter("all");
     setStatusFilter("all");
-    setShowClosed(false);
     setShowBlocked(false);
     setReadyOnly(false);
     setPage(1);
@@ -644,7 +647,6 @@ export default function UnifiedOrders() {
             searchTerm={searchTerm} setSearchTerm={setSearchTerm}
             sourceFilter={sourceFilter} setSourceFilter={setSourceFilter}
             statusFilter={statusFilter} setStatusFilter={setStatusFilter}
-            showClosed={showClosed} setShowClosed={setShowClosed}
             showBlocked={showBlocked} setShowBlocked={setShowBlocked}
             readyOnly={readyOnly} setReadyOnly={setReadyOnly}
             onReset={resetFilters}

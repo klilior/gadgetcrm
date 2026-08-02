@@ -27,6 +27,7 @@ import TeamPerformanceTable from '../components/dashboard/TeamPerformanceTable';
 import QuickLeadsToComplete from '../components/dashboard/QuickLeadsToComplete';
 import EditLeadModal from '../components/leads/EditLeadModal';
 import UndeliveredOrdersWidget from '../components/dashboard/UndeliveredOrdersWidget';
+import PendingOrdersWidget from '../components/dashboard/PendingOrdersWidget';
 import { 
   buildEmployeeMap, 
   groupSalesByEmployee,
@@ -623,6 +624,9 @@ export default function AgentDashboard() {
 
       {/* Personal Sales Pulse */}
       <PersonalSalesPulse data={personalSalesPulse} />
+
+      {/* Pending Orders Widget */}
+      <PendingOrdersWidget />
 
 
       {/* Quick Leads to Complete */}

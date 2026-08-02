@@ -8,7 +8,6 @@ export default function OrderFilters({
   searchTerm, setSearchTerm,
   sourceFilter, setSourceFilter,
   statusFilter, setStatusFilter,
-  showClosed, setShowClosed,
   showBlocked, setShowBlocked,
   readyOnly, setReadyOnly,
   onReset,
@@ -45,7 +44,7 @@ export default function OrderFilters({
             <SelectValue placeholder="סטטוס" />
           </SelectTrigger>
           <SelectContent className="rounded-xl">
-            <SelectItem value="all">כל הסטטוסים</SelectItem>
+            <SelectItem value="all">כל ההזמנות (כולל שטופלו)</SelectItem>
             <SelectItem value="pending">ממתינות לטיפול</SelectItem>
             <SelectItem value="serial">חסר סריאלי</SelectItem>
             <SelectItem value="ready">מוכנות למשלוח</SelectItem>
@@ -67,9 +66,9 @@ export default function OrderFilters({
           <CheckCircle2 className="w-3.5 h-3.5 ml-1" />
           מוכן לפעולה
         </Button>
-        <Button variant={showClosed ? "default" : "outline"} size="sm" className={`h-9 rounded-xl px-3 text-xs ${showClosed ? 'bg-[#7D0F82] hover:bg-[#6a0c6f] text-white' : 'border-gray-200 bg-white text-gray-600'}`} onClick={() => setShowClosed(!showClosed)}>
-          {showClosed ? <Eye className="w-3.5 h-3.5 ml-1" /> : <EyeOff className="w-3.5 h-3.5 ml-1" />}
-          {showClosed ? "כולל סגורות" : "ללא סגורות"}
+        <Button variant={statusFilter === 'pending' ? "default" : "outline"} size="sm" className={`h-9 rounded-xl px-3 text-xs ${statusFilter === 'pending' ? 'bg-[#7D0F82] hover:bg-[#6a0c6f] text-white' : 'border-gray-200 bg-white text-gray-600'}`} onClick={() => setStatusFilter?.(statusFilter === 'pending' ? 'all' : 'pending')}>
+          {statusFilter === 'pending' ? <EyeOff className="w-3.5 h-3.5 ml-1" /> : <Eye className="w-3.5 h-3.5 ml-1" />}
+          {statusFilter === 'pending' ? "ממתינות לטיפול בלבד" : "הצג ממתינות לטיפול"}
         </Button>
         <Button variant="ghost" size="sm" className="h-9 rounded-xl px-3 text-xs text-gray-500 hover:text-[#7D0F82] hover:bg-purple-50" onClick={onReset}>
           <RotateCcw className="w-3.5 h-3.5 ml-1" />
