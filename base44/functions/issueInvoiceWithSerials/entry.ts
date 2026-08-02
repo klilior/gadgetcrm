@@ -31,6 +31,43 @@ async function linetPost(endpoint, body) {
   return { http_status: res.status, data };
 }
 
+/** מחפש פריט ב-Linet לפי מק"ט — משמש כשאין מיפוי שמור */
+async function linetFindItemBySku(creds, sku) {
+  const res = await linetPost("newsearch/item", { ...creds, limit: 5, offset: 0, query: { sku: String(sku) } });
+  const rows = Array.isArray(res.data?.body) ? res.data.body : (Array.isArray(res.data) ? res.data : []);
+  const exact = rows.find((r) => String(r.sku) === String(sku));
+  return exact ?? null;
+}
+
+/** מחזיר { linet_item_id, linet_item_name } עבור מק"ט — משתמש במיפוי שמור, אחרת מחפש ב-Linet ושומר */
+async function resolveLinetItem(base44, creds, sku, existingMap, log) {
+  if (existingMap?.linet_item_id) {
+    return { linet_item_id: existingMap.linet_item_id, linet_item_name: existingMap.linet_item_name };
+  }
+  const found = await linetFindItemBySku(creds, sku).catch(() => null);
+  if (!found?.id) {
+    log.push({ step: "linet_item_not_found", sku });
+    return null;
+  }
+  log.push({ step: "linet_item_auto_mapped", sku, linet_item_id: found.id });
+  const patch = {
+    linet_item_id: Number(found.id),
+    linet_item_name: found.name ?? "",
+    linet_stock_type: found.stockType,
+    requires_serial: found.stockType === 2,
+    serial_source: "linet",
+    last_checked: new Date().toISOString(),
+  };
+  try {
+    if (existingMap?.id) {
+      await base44.asServiceRole.entities.LinetProductMap.update(existingMap.id, patch);
+    } else {
+      await base44.asServiceRole.entities.LinetProductMap.create({ sku: String(sku), ...patch });
+    }
+  } catch (_) {}
+  return { linet_item_id: Number(found.id), linet_item_name: found.name ?? "" };
+}
+
 function normalizePhoneLocal(raw) {
   if (!raw) return null;
   let digits = String(raw).replace(/\D/g, "");
@@ -281,23 +318,23 @@ Deno.serve(async (req) => {
     // 5ב. פריטים רגילים (לא סריאליים)
     for (const prod of orderProducts) {
       if (!prod.sku || serialSkus.has(prod.sku)) continue; // כבר מטופל כסריאלי
-      const map = mapBySku[prod.sku];
-      if (!map?.linet_item_id) {
-        // פריט לא ממופה — חסום
+      const resolved = await resolveLinetItem(base44, creds, prod.sku, mapBySku[prod.sku], log);
+      if (!resolved) {
+        // פריט לא קיים ב-Linet כלל — חסום
         return Response.json({
           issued: false,
           blocked: true,
           reason: "unmapped_regular_item",
-          messages_he: [`הפריט "${prod.name}" (מק"ט ${prod.sku}) אינו ממופה ל-Linet. יש למפות אותו לפני הנפקת חשבונית.`],
+          messages_he: [`הפריט "${prod.name}" (מק"ט ${prod.sku}) לא נמצא ב-Linet. יש למפות אותו לפני הנפקת חשבונית.`],
           log,
         });
       }
       const totalInc = prod.total ? parseFloat(prod.total) : 0;
       const qty = prod.quantity ?? 1;
       docDetailes.push(buildLine({
-        item_id: map.linet_item_id,
+        item_id: resolved.linet_item_id,
         sku: prod.sku,
-        name: map.linet_item_name ?? prod.name ?? "",
+        name: resolved.linet_item_name || prod.name || "",
         qty,
         totalInc,
         serials: [],
@@ -307,8 +344,8 @@ Deno.serve(async (req) => {
     // 5ג. שורת משלוח
     const shippingTotal = order?.shipping_total ? parseFloat(order.shipping_total) : 0;
     if (shippingTotal > 0) {
-      const shippingMap = mapBySku["19034"];
-      if (!shippingMap?.linet_item_id) {
+      const shippingResolved = await resolveLinetItem(base44, creds, "19034", mapBySku["19034"], log);
+      if (!shippingResolved) {
         return Response.json({
           issued: false,
           blocked: true,
@@ -318,7 +355,7 @@ Deno.serve(async (req) => {
         });
       }
       docDetailes.push(buildLine({
-        item_id: shippingMap.linet_item_id,
+        item_id: shippingResolved.linet_item_id,
         sku: "19034",
         name: order.shipping_method ?? "משלוח",
         qty: 1,
@@ -332,8 +369,9 @@ Deno.serve(async (req) => {
     // ─── שלב 6: סיכומים כספיים ──────────────────────────────────────────────
     let subTotal = 0, totalInc = 0;
     for (const line of docDetailes) {
-      subTotal  += parseFloat(line.iTotal);
-      totalInc  += parseFloat(line.iTotalVat);
+      const lineInc = Number(line.iItem) * Number(line.qty || 1);
+      totalInc += lineInc;
+      subTotal += lineInc / (1 + VAT_RATE);
     }
     const vatAmount   = totalInc - subTotal;
     const subTotalStr = fmt2(subTotal);
