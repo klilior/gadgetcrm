@@ -91,6 +91,11 @@ export default function SmsTemplatesManager() {
           <p className="text-sm text-gray-500 mt-1">
             תבניות מוכנות לשליחת SMS מהירה. השתמש ב-{"{שם_משתנה}"} להחלפה דינמית.
           </p>
+          <div className="mt-2 p-3 bg-blue-50 rounded-lg text-xs text-blue-700">
+            <p className="font-semibold mb-1">📦 תבניות הודעות מעקב משלוח:</p>
+            <p>המערכת מחפשת תבנית לפי חברת המשלוח ואז נופלת לברירת מחדל:</p>
+            <p className="mt-1 font-mono">tracking_sms_cargo · tracking_sms_ups · tracking_sms_getpackage · tracking_sms_velo · tracking_sms_default</p>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Add/Edit Form */}
@@ -139,7 +144,7 @@ export default function SmsTemplatesManager() {
               <div className="bg-white rounded-lg p-3 text-xs text-gray-500">
                 <p className="font-semibold mb-1">משתנים נפוצים:</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {["{customer_name}", "{phone}", "{repair_id}", "{status}", "{device}", "{final_price}", "{order_number}"].map(v => (
+                  {["{customer_name}", "{phone}", "{repair_id}", "{status}", "{device}", "{final_price}", "{order_number}", "{first_name}", "{tracking_number}", "{carrier_name}", "{tracking_url}", "{tracking_url_block}", "{order_number_text}", "{delivery_note}"].map(v => (
                     <code key={v} className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded cursor-pointer hover:bg-purple-200"
                       onClick={() => setForm({ ...form, hebrew_template: form.hebrew_template + " " + v })}>
                       {v}
