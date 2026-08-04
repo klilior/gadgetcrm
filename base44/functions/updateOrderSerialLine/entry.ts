@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
+import { resolveItemFromSerials, learnLineMapping } from '../../shared/serialItemLearning.ts';
 
 /**
  * updateOrderSerialLine
@@ -43,6 +44,22 @@ Deno.serve(async (req) => {
       }
     } catch (invErr) {
       console.warn("[updateOrderSerialLine] inventory active-flag update failed (non-critical):", invErr.message);
+    }
+
+    // למידה: הסריאלי הפיזי מזהה את הפריט ב-Linet — עדכן את מיפוי השורה ו-LinetProductMap
+    // כך שבפעם הבאה המערכת תזהה את המק"ט אוטומטית, וגם תתקן מיפוי שגוי קיים.
+    if (added.length > 0) {
+      try {
+        const resolved = await resolveItemFromSerials(base44, nextSerials);
+        if (resolved) {
+          const learn = await learnLineMapping(base44, { entityName: "OrderSerialLine", line: { ...prevLine, id: line_id }, resolved });
+          if (learn.updated_line || learn.updated_map) {
+            console.log("[updateOrderSerialLine] learned mapping: item", resolved.linet_item_id, "sku", resolved.linet_sku, learn);
+          }
+        }
+      } catch (learnErr) {
+        console.warn("[updateOrderSerialLine] mapping learn failed (non-critical):", learnErr.message);
+      }
     }
 
     return Response.json({ ok: true });

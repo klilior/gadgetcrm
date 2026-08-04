@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { resolveItemFromSerials, learnLineMapping } from '../../shared/serialItemLearning.ts';
 
 const BASE_URL = "https://app.linet.org.il/api";
 
@@ -160,14 +161,22 @@ Deno.serve(async (req) => {
     let lockedOrderId = null;
 
     let allSerials = [];
+    const serialLineRecords = []; // [{ entityName, line, resolvedItem }]
     if (mirakl_order_id) {
       try {
         const [osl, ois] = await Promise.all([
           base44.asServiceRole.entities.OrderSerialLine.filter({ order_id: mirakl_order_id }).catch(() => []),
           base44.asServiceRole.entities.OrderItemSerial.filter({ order_id: mirakl_order_id }).catch(() => []),
         ]);
-        for (const l of [...osl, ...ois]) {
+        for (const l of osl) {
           if (l.requires_serial && Array.isArray(l.assigned_serials) && l.assigned_serials.length > 0) {
+            serialLineRecords.push({ entityName: 'OrderSerialLine', line: l, resolvedItem: null });
+            allSerials = allSerials.concat(l.assigned_serials);
+          }
+        }
+        for (const l of ois) {
+          if (l.requires_serial && Array.isArray(l.assigned_serials) && l.assigned_serials.length > 0) {
+            serialLineRecords.push({ entityName: 'OrderItemSerial', line: l, resolvedItem: null });
             allSerials = allSerials.concat(l.assigned_serials);
           }
         }
@@ -187,6 +196,7 @@ Deno.serve(async (req) => {
     let resolvedQuantity = quantity || 1;
     let resolvedUnitPrice = Number(unit_price) || 0;
     let resolvedShippingAmount = Number(shipping_amount) || 0;
+    let parsedOrderLines = [];
 
     if (mirakl_order_id) {
       console.log('[SP Invoice] Loading order from DB for mirakl_order_id:', mirakl_order_id);
@@ -243,6 +253,7 @@ Deno.serve(async (req) => {
         if (existingOrder.order_lines_json) {
           try {
             const lines = JSON.parse(existingOrder.order_lines_json || '[]');
+            if (Array.isArray(lines)) parsedOrderLines = lines;
             if (Array.isArray(lines) && lines.length > 0) {
               resolvedProductDescription = lines.map(function(line) {
                 return line.product_title || line.offer_sku || 'פריט סופר-פארם';
@@ -327,20 +338,89 @@ Deno.serve(async (req) => {
       address: resolvedAddress,
     });
 
-    // 2. Build invoice lines (docDet)
-    const docDet = [];
+    // 1.5. Resolve the correct Linet item for each serial line:
+    // the physical serial identifies the item (via SerialInventory) — this is the source of truth.
+    // Learn/re-learn the mapping so future SP orders auto-identify the SKU.
+    for (const rec of serialLineRecords) {
+      const l = rec.line;
+      let resolved = null;
+      try { resolved = await resolveItemFromSerials(base44, l.assigned_serials); } catch (_) {}
+      if (resolved) {
+        rec.resolvedItem = resolved;
+        try {
+          const learn = await learnLineMapping(base44, { entityName: rec.entityName, line: l, resolved });
+          if (learn.updated_line || learn.updated_map) {
+            console.log('[SP Invoice] Learned mapping for sku ' + l.source_sku + ' → Linet item ' + resolved.linet_item_id);
+          }
+        } catch (learnErr) {
+          console.warn('[SP Invoice] Mapping learn failed (non-critical): ' + learnErr.message);
+        }
+      } else if (l.mapped_linet_item_id) {
+        // fallback to the stored mapping when the serial isn't in the local inventory
+        rec.resolvedItem = {
+          linet_item_id: Number(l.mapped_linet_item_id),
+          linet_sku: l.mapped_linet_sku || null,
+          linet_item_name: l.mapped_linet_item_name || null,
+        };
+      } else {
+        console.warn('[SP Invoice] Could not resolve Linet item for serials ' + JSON.stringify(l.assigned_serials) + ' (sku ' + l.source_sku + ') — will use generic line');
+      }
+    }
 
-    docDet.push({
-      item_id: 1,
-      name: resolvedProductDescription,
-      description: 'הזמנת סופר-פארם ' + (mirakl_order_id || ''),
-      qty: resolvedQuantity || 1,
-      iItem: Number(resolvedUnitPrice),
-      iItemWithVat: 1,
-      currency_id: "ILS",
-      vat_cat_id: 1,
-      ...(allSerials.length > 0 ? { serial: allSerials } : {}),
-    });
+    // 2. Build invoice lines (docDet) — one line per order line, with the correct
+    // Linet item_id for serial lines so Linet deducts the serial from the right item's stock.
+    const docDet = [];
+    const usedSerialRecIds = new Set();
+
+    if (Array.isArray(parsedOrderLines) && parsedOrderLines.length > 0) {
+      for (const ol of parsedOrderLines) {
+        const rec = serialLineRecords.find(r => !usedSerialRecIds.has(r.line.id) && String(r.line.source_sku || '') === String(ol.offer_sku || ''))
+          || ((parsedOrderLines.length === 1 && serialLineRecords.length === 1 && !usedSerialRecIds.has(serialLineRecords[0].line.id)) ? serialLineRecords[0] : null);
+        if (rec) usedSerialRecIds.add(rec.line.id);
+
+        const lineTotal = Number(ol.price) || Number(ol.total_price) || 0;
+        const qty = Number(ol.quantity) || 1;
+        const serials = rec ? (rec.line.assigned_serials || []) : [];
+        const item = rec?.resolvedItem;
+
+        docDet.push({
+          item_id: item ? Number(item.linet_item_id) : 1,
+          ...(item?.linet_sku ? { sku: item.linet_sku } : {}),
+          name: item?.linet_item_name || ol.product_title || ol.offer_sku || 'פריט סופר-פארם',
+          description: 'הזמנת סופר-פארם ' + (mirakl_order_id || ''),
+          qty: qty,
+          iItem: Number((lineTotal / qty).toFixed(2)),
+          iItemWithVat: 1,
+          currency_id: "ILS",
+          vat_cat_id: 1,
+          ...(item ? { warehouse_id: 115 } : {}),
+          ...(serials.length > 0 ? { serial: serials } : {}),
+        });
+        if (item && serials.length > 0) {
+          console.log('[SP Invoice] Serial docDet line: item_id=' + item.linet_item_id + ' sku=' + (item.linet_sku || '') + ' serials=' + serials.join(','));
+        }
+      }
+
+      // Safety: serial lines that matched no order line — attach their serials to the first line (old behavior)
+      const leftover = serialLineRecords.filter(r => !usedSerialRecIds.has(r.line.id)).flatMap(r => r.line.assigned_serials || []);
+      if (leftover.length > 0 && docDet.length > 0) {
+        console.warn('[SP Invoice] Leftover serials with no matching order line, attaching to first line: ' + leftover.join(','));
+        docDet[0].serial = [...(docDet[0].serial || []), ...leftover];
+      }
+    } else {
+      // Fallback (no order lines on the entity): single generic line — exactly as before
+      docDet.push({
+        item_id: 1,
+        name: resolvedProductDescription,
+        description: 'הזמנת סופר-פארם ' + (mirakl_order_id || ''),
+        qty: resolvedQuantity || 1,
+        iItem: Number(resolvedUnitPrice),
+        iItemWithVat: 1,
+        currency_id: "ILS",
+        vat_cat_id: 1,
+        ...(allSerials.length > 0 ? { serial: allSerials } : {}),
+      });
+    }
 
     if (resolvedShippingAmount && Number(resolvedShippingAmount) > 0) {
       docDet.push({
@@ -452,6 +532,19 @@ Deno.serve(async (req) => {
         console.log('[SP Invoice] Serial lines marked as invoiced');
       } catch (serialSaveErr) {
         console.warn('[SP Invoice] Failed marking serial lines invoiced (non-critical):', serialSaveErr.message);
+      }
+
+      // Deduct the invoiced serials from the local serial inventory (mirrors the Linet deduction)
+      try {
+        if (allSerials.length > 0) {
+          await base44.asServiceRole.entities.SerialInventory.updateMany(
+            { serial: { $in: allSerials.map(String) }, active: true },
+            { $set: { active: false, last_synced: new Date().toISOString() } }
+          );
+          console.log('[SP Invoice] Local serial inventory deactivated for: ' + allSerials.join(','));
+        }
+      } catch (invErr) {
+        console.warn('[SP Invoice] Failed deactivating local serial inventory (non-critical):', invErr.message);
       }
     }
 
