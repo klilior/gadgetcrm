@@ -112,8 +112,10 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
 
   // ═══ Picking gate — applies to WooCommerce + Super-Pharm (Mirakl) orders during initial (unlocked) treatment ═══
   // Only when the order is actually ready for treatment: open status + not blocked (cancelled/refunded/on-hold/pending)
+  // הזמנת סופר-פארם שממתינה לאישור: קודם מאשרים מול Mirakl, רק אחר כך ליקוט/סריאלי
   const pickingApplies =
     (order.source === 'woocommerce' || order.source === 'mirakl') &&
+    !isMiraklNew &&
     !isLocked &&
     isOpenStatus(order.source, order.status) &&
     !isBlockedForShipping;
