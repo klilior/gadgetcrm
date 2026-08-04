@@ -42,6 +42,8 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
     const [showBillingSuccess, setShowBillingSuccess] = useState(false);
 
     const CLOSING_STATUSES = ['תיקון נסגר', 'מכשיר סיים תיקון וממתין לאיסוף'];
+    // התחשבנות מול המעבדה (וחובת הזנת מחירים בסגירה) חלה רק על תיקוני מעבדת Gadget-Team
+    const isLabRepair = repair?.repair_type === 'מעבדת Gadget-Team';
 
     const loadRelatedData = useCallback(async () => {
         if (!repair) return;
@@ -124,7 +126,7 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
         // חסימת סגירה ללא מחיר תיקון
         const isClosing = CLOSING_STATUSES.includes(formData.status);
         const finalPriceNum = parseFloat(formData.final_price);
-        if (isClosing && !(finalPriceNum > 0)) {
+        if (isLabRepair && isClosing && !(finalPriceNum > 0)) {
             setCloseError('חובה להזין מחיר תיקון לפני סגירה');
             return;
         }
@@ -134,7 +136,7 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
             const updateData = {
                 status: formData.status,
                 part_cost: parseFloat(formData.part_cost) || 0,
-                final_price: isClosing ? finalPriceNum : (parseFloat(formData.final_price) || repair.final_price || 0)
+                final_price: (isLabRepair && isClosing) ? finalPriceNum : (parseFloat(formData.final_price) || repair.final_price || 0)
             };
             
             if (formData.status === 'הוזמן חלק' && repair.status !== 'הוזמן חלק') {
@@ -214,7 +216,7 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
             loadLogs();
 
             // אישור ויזואלי שהתיקון עבר להתחשבנות
-            if (isClosing) {
+            if (isLabRepair && isClosing) {
                 setShowBillingSuccess(true);
             }
         } catch (error) {
@@ -451,7 +453,7 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                                             rows={3}
                                         />
                                     </div>
-                                    {CLOSING_STATUSES.includes(formData.status) && !(parseFloat(formData.final_price) > 0) && (
+                                    {isLabRepair && CLOSING_STATUSES.includes(formData.status) && !(parseFloat(formData.final_price) > 0) && (
                                         <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
                                             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                                             <span>חובה להזין מחיר תיקון לפני סגירה</span>
