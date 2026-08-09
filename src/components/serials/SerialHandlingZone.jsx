@@ -77,6 +77,13 @@ export default function SerialHandlingZone({ order, onInvoiceIssued, linesHandle
 
   useEffect(() => { load(); }, [load]);
 
+  // פתיחה אוטומטית כשיש פריט סריאלי שממתין לטיפול/הנפקת חשבונית
+  useEffect(() => {
+    if (!serialLines) return;
+    const pending = serialLines.some(l => l.requires_serial && l.serial_status !== "invoiced" && !l.linet_invoice_id);
+    if (pending) setExpanded(true);
+  }, [serialLines]);
+
   // רענון כשהליקוט המאוחד מעדכן סריאליים (אירוע מ-PickingList)
   useEffect(() => {
     const handler = (e) => { if (e?.detail?.orderId === orderId) load(); };
@@ -256,7 +263,7 @@ export default function SerialHandlingZone({ order, onInvoiceIssued, linesHandle
           {issueResult?.success && (
             <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 text-green-800 text-sm">
               <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-              חשבונית {issueResult.doc_number || issueResult.doc_id} הופקה בהצלחה ✓
+              חשבונית {issueResult.doc_number || issueResult.doc_id} הופקה בהצלחה ✓ וההזמנה סומנה כהושלמה בווקומרס
             </div>
           )}
           {issueResult?.success === false && (
@@ -325,6 +332,7 @@ export default function SerialHandlingZone({ order, onInvoiceIssued, linesHandle
 
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
                 ⚠️ מפיק מסמך מס — לא ניתן לבטל אוטומטית לאחר ההנפקה.
+                <div className="mt-1">בסיום ההנפקה ההזמנה תסומן אוטומטית כ"הושלמה" בווקומרס.</div>
               </div>
 
               <div className="flex gap-2">

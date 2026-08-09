@@ -533,12 +533,30 @@ Deno.serve(async (req) => {
 
     log.push({ step: "entities_updated", lines_updated: serialLines.length });
 
+    // ─── השלמת ההזמנה: סימון הנפקה + עדכון סטטוס בווקומרס ─────────────────
+    let orderCompleted = false;
+    if (order?.id) {
+      await base44.asServiceRole.entities.Order.update(order.id, { invoice_issued_at: invoicedAt }).catch(() => {});
+      try {
+        const wooRes = await base44.asServiceRole.functions.invoke("updateWooOrderStatus", {
+          order_id: order.id,
+          external_order_number: order.external_order_number,
+          new_status: "completed",
+        });
+        orderCompleted = true;
+        log.push({ step: "woo_order_completed", result: wooRes?.data ?? wooRes });
+      } catch (e) {
+        log.push({ step: "woo_order_complete_failed", error: e.message });
+      }
+    }
+
     return Response.json({
       issued: true,
       linet_invoice_id: String(createdDocId),
       linet_document_number: String(createdDocNumber),
       invoiced_at: invoicedAt,
       lines_updated: serialLines.length,
+      order_completed: orderCompleted,
       log,
     });
 
