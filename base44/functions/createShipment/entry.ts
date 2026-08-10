@@ -70,6 +70,7 @@ Deno.serve(async (req) => {
     notes,
     followup_id,  // optional: if set, update OrderFollowup instead of locking Order
     linet_order_status_id,  // optional: if set, lock LinetOrderStatus record directly
+    dry_run,  // optional: run all gates + auth, stop before creating a real waybill
   } = await req.json();
 
   if (!shipment_type || !consignee_name || !consignee_phone || !consignee_city) {
@@ -130,6 +131,16 @@ Deno.serve(async (req) => {
   console.log(`📦 Creating ${shipment_type} shipment for ${consignee_name}`);
 
   const token = await getToken();
+
+  if (dry_run) {
+    return Response.json({
+      success: true,
+      dry_run: true,
+      gates_passed: true,
+      token_ok: !!token,
+      pickup_warnings: pickupWarnings,
+    });
+  }
 
   // Build the waybill payload
   const data = {
