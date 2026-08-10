@@ -343,7 +343,34 @@ Deno.serve(async (req) => {
 
     // 5ג. שורת משלוח
     const shippingTotal = order?.shipping_total ? parseFloat(order.shipping_total) : 0;
-    if (shippingTotal > 0) {
+
+    // בדיקת כפל חיוב משלוח: אם קיימת ללקוח הזמנה נפרדת (שדרוג משלוח) על סכום המשלוח
+    // שכבר הופקה לה חשבונית בלינט — אין לחייב שוב את רכיב המשלוח כאן.
+    let shippingAlreadyInvoiced = false;
+    let shippingSkipInfo = null;
+    if (shippingTotal > 0 && order?.client_id) {
+      const clientOrders = await base44.asServiceRole.entities.Order.filter({ client_id: order.client_id }).catch(() => []);
+      const candidates = clientOrders.filter((o) =>
+        o.id !== order.id &&
+        o.total && Math.abs(parseFloat(o.total) - shippingTotal) <= 0.01 &&
+        (!o.order_date || !order.order_date || o.order_date >= order.order_date)
+      );
+      for (const cand of candidates) {
+        if (!cand.external_order_number) continue;
+        const check = await linetPost("newsearch/docs", { ...creds, limit: 3, offset: 0, query: { refnum: String(cand.external_order_number) } });
+        const docs = Array.isArray(check.data?.body) ? check.data.body : (Array.isArray(check.data) ? check.data : []);
+        if (docs.length > 0) {
+          shippingAlreadyInvoiced = true;
+          shippingSkipInfo = { upgrade_order: cand.external_order_number, linet_docs: docs.map((d) => d.docnum), amount: shippingTotal };
+          break;
+        }
+      }
+    }
+    if (shippingAlreadyInvoiced) {
+      log.push({ step: "shipping_skipped_already_invoiced", ...shippingSkipInfo });
+    }
+
+    if (shippingTotal > 0 && !shippingAlreadyInvoiced) {
       const shippingResolved = await resolveLinetItem(base44, creds, "19034", mapBySku["19034"], log);
       if (!shippingResolved) {
         return Response.json({
@@ -364,7 +391,7 @@ Deno.serve(async (req) => {
       }));
     }
 
-    log.push({ step: "docDetailes_built", count: docDetailes.length, breakdown: { serial: serialLines.length, regular: orderProducts.filter((p) => p.sku && !serialSkus.has(p.sku)).length, shipping: shippingTotal > 0 ? 1 : 0 } });
+    log.push({ step: "docDetailes_built", count: docDetailes.length, breakdown: { serial: serialLines.length, regular: orderProducts.filter((p) => p.sku && !serialSkus.has(p.sku)).length, shipping: shippingTotal > 0 && !shippingAlreadyInvoiced ? 1 : 0 } });
 
     // ─── שלב 6: סיכומים כספיים ──────────────────────────────────────────────
     let subTotal = 0, totalInc = 0;
@@ -379,7 +406,11 @@ Deno.serve(async (req) => {
     const totalStr    = fmt2(totalInc);
 
     // ─── שלב 7: בדיקת איזון ─────────────────────────────────────────────────
-    const orderTotalNum = order?.total ? parseFloat(order.total) : null;
+    // אם רכיב המשלוח דולג (חויב בנפרד) — הסכום הצפוי הוא סך ההזמנה פחות המשלוח
+    const rawOrderTotal = order?.total ? parseFloat(order.total) : null;
+    const orderTotalNum = rawOrderTotal !== null
+      ? rawOrderTotal - (shippingAlreadyInvoiced ? shippingTotal : 0)
+      : null;
     if (orderTotalNum !== null) {
       const diff = Math.abs(totalInc - orderTotalNum);
       if (diff > 0.05) {
@@ -402,7 +433,7 @@ Deno.serve(async (req) => {
     // ─── שלב 8: סוג תשלום ───────────────────────────────────────────────────
     const isSuperPharm = allSerialLines.some((l) => l.source === "superpharm");
     const chequeType   = isSuperPharm ? 50 : 30;
-    const orderTotalStr = order?.total ? fmt2(parseFloat(order.total)) : totalStr;
+    const orderTotalStr = orderTotalNum !== null ? fmt2(orderTotalNum) : totalStr;
 
     // ─── שלב 9: payload ──────────────────────────────────────────────────────
     const dateStr = nowStr();
@@ -458,6 +489,7 @@ Deno.serve(async (req) => {
         account_resolved: { id: accountId, found_existing: accountFound },
         account_to_create: accountToCreate ?? null,
         financials: { sub_total: subTotalStr, vat: vatStr, total: totalStr, order_total: orderTotalStr },
+        shipping_skipped_already_invoiced: shippingAlreadyInvoiced ? shippingSkipInfo : null,
         payload_preview: payload,
         serial_lines_included: serialLines.map((l) => ({
           item_name: l.source_product_name,
