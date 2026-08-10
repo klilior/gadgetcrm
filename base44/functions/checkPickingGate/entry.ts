@@ -125,8 +125,19 @@ Deno.serve(async (req) => {
     try { picks = await base44.asServiceRole.entities.PickingState.filter({ order_id: String(order_id) }); } catch (_) {}
     const pickedSet = new Set(picks.filter((p) => p.picked).map((p) => p.picking_item_id));
 
-    const pickedItems = items.filter((it) => pickedSet.has(it.picking_item_id)).length;
-    const allPicked = pickedItems === items.length;
+    let pickedItems = items.filter((it) => pickedSet.has(it.picking_item_id)).length;
+    let allPicked = pickedItems === items.length;
+
+    // Fallback: picking_item_id הוא מזהה מיקומי — סטייה קלה בין הפרסר בקליינט לפרסר כאן
+    // (למשל פריט שסונן רק בצד אחד) גורמת לאי-התאמה במזהים למרות שהליקוט הושלם בפועל.
+    // אם כל הרשומות השמורות מסומנות כנאספו ומספרן >= מספר הפריטים הנדרשים — הליקוט הושלם.
+    if (!allPicked && picks.length > 0) {
+      const allSavedPicked = picks.every((p) => p.picked);
+      if (allSavedPicked && pickedSet.size >= items.length) {
+        pickedItems = items.length;
+        allPicked = true;
+      }
+    }
 
     if (!allPicked) {
       return Response.json({

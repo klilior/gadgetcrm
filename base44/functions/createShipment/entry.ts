@@ -347,7 +347,7 @@ Deno.serve(async (req) => {
             const authString = btoa(`${consumerKey}:${consumerSecret}`);
             const noteText = `שטר מטען UPS נוצר.\nמספר מעקב: ${tracking_number}\nמעקב: https://www.ups.co.il/tracking?trackingNumbers=${tracking_number}`;
             
-            const noteRes = await fetch(`${wooUrl}/wp-json/wc/v3/orders/${order.external_order_number}/notes`, {
+            const noteRes = await fetch(`${wooUrl}/wp-json/wc/v3/orders/${wooOrder.external_order_number}/notes`, {
               method: 'POST',
               headers: {
                 'Authorization': `Basic ${authString}`,

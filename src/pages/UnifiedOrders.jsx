@@ -162,7 +162,9 @@ export default function UnifiedOrders() {
         if (!showClosed && closedWoo.has(o.status)) continue;
         if (o.order_date && new Date(o.order_date) < THIRTY_DAYS_AGO) continue;
         const c = cM[o.client_id];
-        const pr = pM[o.id] || [];
+        // SKU 180948 = "תוספת דמי משלוח" (שדרוג משלוח) — לא מוצר פיזי, מסונן מרשימת המוצרים/ליקוט (כמו בשרת)
+        const SHIPPING_UPSELL_SKU = '180948';
+        const pr = (pM[o.id] || []).filter(x => String(x.sku || '') !== SHIPPING_UPSELL_SKU && String(x.product_id ?? '') !== SHIPPING_UPSELL_SKU);
         let billing = {};
         try { billing = JSON.parse(o.raw_data_billing || '{}'); } catch(_){}
         // Resolve tracking: Order entity > Shipment entity > GetPackage
