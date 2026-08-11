@@ -47,6 +47,14 @@ export function detectShippingType(order) {
 }
 
 /**
+ * איסוף עצמי — הלקוח מגיע לחנות. אין שלב משלוח:
+ * ההזמנה נסגרת בשלב הנפקת החשבונית.
+ */
+export function isSelfPickup(order) {
+  return detectShippingType(order) === 'self_pickup';
+}
+
+/**
  * Returns the styling config for a shipping type badge
  */
 export function getShippingTypeBadge(type) {

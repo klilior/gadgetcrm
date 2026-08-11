@@ -1,4 +1,5 @@
 import { getShipmentBlockReason, isClosedStatus } from "./OrderStatusConfig";
+import { isSelfPickup } from "./ShippingTypeHelper";
 
 export function isVisuallyClosed(order) {
   if (!order) return false;
@@ -30,6 +31,8 @@ export function getNextActionLabel(order) {
   if (isVisuallyClosed(order)) return order.status === "cancelled" || order.status === "CANCELED" ? "לביטול" : "הושלם";
   if (["on-hold", "pending", "WAITING_DEBIT", "WAITING_DEBIT_PAYMENT"].includes(order.status)) return "ממתין לתשלום";
   if (["cancelled", "failed", "CANCELED", "REFUSED"].includes(order.status)) return "לביטול";
+  // איסוף עצמי — אין משלוח: הפעולה האחרונה היא הנפקת חשבונית
+  if (isSelfPickup(order)) return order.invoice_issued_at ? "הושלם" : "להנפיק חשבונית";
   if (order.tracking_number || order.status === "נוצר משלוח" || order.status === "SHIPPED") return "הושלם";
   if (isReadyForAction(order)) return "להוציא משלוח";
   return "לטיפול ידני";
@@ -60,6 +63,7 @@ export function getPrimaryActionLabel(order) {
   if (!order) return "המשך טיפול";
   if (isVisuallyClosed(order)) return "השלם הזמנה";
   if (isBlockedOrder(order) || order.source === "mirakl" && order.status === "WAITING_ACCEPTANCE") return "המשך טיפול";
+  if (isSelfPickup(order)) return "הנפק חשבונית";
   if (order.tracking_number || order.status === "נוצר משלוח" || order.status === "SHIPPED") return "השלם הזמנה";
   return "צור משלוח";
 }

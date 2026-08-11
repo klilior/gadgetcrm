@@ -214,6 +214,7 @@ export default function UnifiedOrders() {
           tracking_url: trackUrl,
           shipment_created_at: shipment?.created_date || '',
           tracking_created_at: shipment?.created_date || '',
+          invoice_issued_at: o.invoice_issued_at || '',
           sms_sent_at: smsLog?.sent_at || smsLog?.created_date || '',
           sms_status: smsLog?.status || '',
           sms_event_type: smsLog?.event_type || '',

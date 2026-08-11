@@ -107,8 +107,12 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
   const hoursSince = order.order_date ? differenceInHours(new Date(), new Date(order.order_date)) : 0;
   const isBlockedForShipping = Boolean(shipmentBlockReason);
 
+  // ═══ איסוף עצמי — אין שלב משלוח. ההזמנה נסגרת בהנפקת החשבונית ═══
+  const isSelfPickupOrder = shippingType === 'self_pickup';
+  const selfPickupInvoiced = isSelfPickupOrder && Boolean(order.invoice_issued_at);
+
   // ═══ Order lock + Followup state ═══
-  const isLocked = Boolean(order.order_locked || order.shipment_created_at);
+  const isLocked = Boolean(order.order_locked || order.shipment_created_at || selfPickupInvoiced);
 
   // ═══ Picking gate — applies to WooCommerce + Super-Pharm (Mirakl) orders during initial (unlocked) treatment ═══
   // Only when the order is actually ready for treatment: open status + not blocked (cancelled/refunded/on-hold/pending)
@@ -365,9 +369,11 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
       {isLocked && (
         <div className="flex items-center gap-2 bg-gray-100 border border-gray-300 rounded-xl px-4 py-2 text-sm text-gray-700 font-medium">
           <Lock className="w-4 h-4 text-gray-500 flex-shrink-0" />
-          {order.shipment_created_at === 'historical'
-            ? '🔒 הזמנה היסטורית (טופלה לפני הפעלת הנעילה)'
-            : `🔒 משלוח בוצע ב-${formatDate(order.shipment_created_at)}`}
+          {selfPickupInvoiced && !order.shipment_created_at
+            ? `🏪 איסוף עצמי — חשבונית הופקה ב-${formatDate(order.invoice_issued_at)}, ההזמנה הושלמה`
+            : order.shipment_created_at === 'historical'
+              ? '🔒 הזמנה היסטורית (טופלה לפני הפעלת הנעילה)'
+              : `🔒 משלוח בוצע ב-${formatDate(order.shipment_created_at)}`}
         </div>
       )}
 
@@ -448,14 +454,24 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
           </div>
         ) : (
           <>
-            <Button
-              className="bg-[#7D0F82] hover:bg-[#6a0c6f] text-white rounded-xl px-5 shadow-sm"
-              disabled={isBlockedForShipping || (hasShipment && primaryActionLabel === 'השלם הזמנה')}
-              onClick={runPrimaryAction}
-            >
-              <CheckCircle className="w-4 h-4 ml-1" />
-              {isMiraklNew ? 'אשר הזמנה' : primaryActionLabel}
-            </Button>
+            {isSelfPickupOrder && !isMiraklNew ? (
+              <div className="w-full bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 flex items-center gap-3 text-emerald-900">
+                <Store className="w-5 h-5 flex-shrink-0 text-emerald-600" />
+                <div>
+                  <p className="font-bold text-sm">איסוף עצמי — אין צורך במשלוח</p>
+                  <p className="text-xs text-emerald-700">הנפק חשבונית מס-קבלה בכרטיס הטיפול למעלה; עם ההנפקה ההזמנה תסומן אוטומטית כ"הושלמה".</p>
+                </div>
+              </div>
+            ) : (
+              <Button
+                className="bg-[#7D0F82] hover:bg-[#6a0c6f] text-white rounded-xl px-5 shadow-sm"
+                disabled={isBlockedForShipping || (hasShipment && primaryActionLabel === 'השלם הזמנה')}
+                onClick={runPrimaryAction}
+              >
+                <CheckCircle className="w-4 h-4 ml-1" />
+                {isMiraklNew ? 'אשר הזמנה' : primaryActionLabel}
+              </Button>
+            )}
 
             {!isMiraklNew && (
               <Select value={order.status} onValueChange={(val) => onStatusChange(order, val)}>
@@ -492,8 +508,8 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
               </Button>
             )}
 
-            {/* Shipping buttons */}
-            {shipmentBlockReason ? (
+            {/* Shipping buttons — לא מוצגים באיסוף עצמי */}
+            {isSelfPickupOrder ? null : shipmentBlockReason ? (
               <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 flex items-center gap-2 text-red-800 text-sm font-medium">
                 <Truck className="w-4 h-4" />
                 {shipmentBlockReason}

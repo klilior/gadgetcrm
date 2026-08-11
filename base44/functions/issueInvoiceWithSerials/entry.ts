@@ -568,7 +568,14 @@ Deno.serve(async (req) => {
     // ─── השלמת ההזמנה: סימון הנפקה + עדכון סטטוס בווקומרס ─────────────────
     let orderCompleted = false;
     if (order?.id) {
-      await base44.asServiceRole.entities.Order.update(order.id, { invoice_issued_at: invoicedAt }).catch(() => {});
+      // איסוף עצמי — אין שלב משלוח. עם הנפקת החשבונית ההזמנה מסתיימת ונעילה.
+      const method = String(order.shipping_method ?? "").toLowerCase();
+      const isSelfPickup = method.includes("איסוף מ") || method.includes("איסוף עצמי") || method.includes("self pickup");
+      await base44.asServiceRole.entities.Order.update(order.id, {
+        invoice_issued_at: invoicedAt,
+        ...(isSelfPickup ? { order_locked: true } : {}),
+      }).catch(() => {});
+      if (isSelfPickup) log.push({ step: "self_pickup_order_closed", order_id: order.id });
       try {
         const wooRes = await base44.asServiceRole.functions.invoke("updateWooOrderStatus", {
           order_id: order.id,
