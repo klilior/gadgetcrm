@@ -1,6 +1,7 @@
 import './App.css'
 import React, { Suspense } from 'react'
 import { Toaster } from "@/components/ui/toaster"
+import { Toaster as SonnerToaster } from "sonner"
 import { QueryClientProvider } from '@tanstack/react-query'
 import SuperPharmOrdersPage from './pages/SuperPharmOrdersPage';
 import UnifiedOrders from './pages/UnifiedOrders';
@@ -138,6 +139,7 @@ function App() {
           <AuthenticatedApp />
         </Router>
         <Toaster />
+        <SonnerToaster position="top-center" richColors dir="rtl" />
         <VisualEditAgent />
       </QueryClientProvider>
     </AuthProvider>
