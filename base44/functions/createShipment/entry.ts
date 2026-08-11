@@ -296,6 +296,9 @@ Deno.serve(async (req) => {
             status: 'completed',
             shipment_created_at: new Date().toISOString(),
             order_locked: true,
+            tracking_number,
+            tracking_carrier: 'ups',
+            tracking_url: `https://www.ups.co.il/tracking?trackingNumbers=${tracking_number}`,
           });
         } else {
           // Try SuperPharmOrder (Mirakl)
@@ -345,6 +348,22 @@ Deno.serve(async (req) => {
 
           if (wooUrl && consumerKey && consumerSecret) {
             const authString = btoa(`${consumerKey}:${consumerSecret}`);
+
+            // עדכון סטטוס ההזמנה ב-WooCommerce ל-completed — אחרת הסנכרון מחזיר אותה ל"בטיפול"
+            try {
+              const statusRes = await fetch(`${wooUrl}/wp-json/wc/v3/orders/${wooOrder.external_order_number}`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Basic ${authString}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'completed' }),
+                signal: AbortSignal.timeout(15000)
+              });
+              console.log(statusRes.ok
+                ? `✅ WooCommerce order #${wooOrder.external_order_number} set to completed`
+                : `⚠️ Could not set WooCommerce status: ${statusRes.status}`);
+            } catch (se) {
+              console.log(`⚠️ Could not set WooCommerce status: ${se.message}`);
+            }
+
             const noteText = `שטר מטען UPS נוצר.\nמספר מעקב: ${tracking_number}\nמעקב: https://www.ups.co.il/tracking?trackingNumbers=${tracking_number}`;
             
             const noteRes = await fetch(`${wooUrl}/wp-json/wc/v3/orders/${wooOrder.external_order_number}/notes`, {
