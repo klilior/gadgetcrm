@@ -3,6 +3,8 @@ import { classifyInvoiceLines } from '../../shared/invoiceClassification.ts';
 import { calculateFileHash, getEarlyNonInvoiceReason } from '../../shared/invoiceIntakeGuards.ts';
 import { needsFileHashRecompute, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
 import { planExtractionRoutePreflight } from '../../shared/invoiceExtractionRoutePreflight.ts';
+import { BUSINESS_DUPLICATE_CODE, findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
+import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDATION_VERSION, ARITHMETIC_TOLERANCE } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
@@ -130,9 +132,12 @@ Deno.serve(async (req) => {
         supplier_name_normalized: parsedExtraction?.supplier_name_normalized
       }, { suppliers: existingSuppliers, patterns: existingPatterns });
       const existingSupplier = existingResolution.supplier;
-      const existingDuplicates = existingResolution.supplier_id
-        ? await base44.asServiceRole.entities.Invoices.filter({ supplier: existingResolution.supplier_id }, undefined, 200)
-        : [];
+      // D2a: same canonical-family candidate semantics as the full extraction path.
+      const existingFamily = existingResolution.supplier_id
+        ? await loadFamilyDuplicateCandidates(base44, existingResolution.supplier_id, existingSuppliers)
+        : { family: null, candidates: [] };
+      const existingDuplicates = existingFamily.candidates;
+      const existingBusinessDuplicate = findBusinessDuplicate({ docNumber: invoice.doc_number, invoiceId: invoice.id, candidates: existingDuplicates });
       const existingGate = validateInvoiceForAutoApproval({
         supplier_name: parsedExtraction?.supplier_name,
         supplier_vat_id: parsedExtraction?.supplier_vat_id,
@@ -151,7 +156,11 @@ Deno.serve(async (req) => {
         invoice_id: invoice.id,
         line_check: lineCheck
       });
-      const canAutoApproveExisting = validationOk && existingGate.passed && !lineCheck.hasAnyFailure;
+      if (existingBusinessDuplicate && !existingGate.failures.some((failure) => failure.includes(BUSINESS_DUPLICATE_CODE))) {
+        existingGate.failures.push(existingBusinessDuplicate.failure_he);
+        existingGate.passed = false;
+      }
+      const canAutoApproveExisting = validationOk && existingGate.passed && !existingBusinessDuplicate && !lineCheck.hasAnyFailure;
       const normalizedStatus = canAutoApproveExisting ? 'אושר' : 'ממתין לאימות';
 
       if (invoice.extraction_status !== normalizedStatus) {
@@ -178,7 +187,7 @@ Deno.serve(async (req) => {
           status_reason: 'החשבונית כבר נותחה; הסטטוס סונכרן לפי תוצאות הניתוח.'
         });
       }
-      return Response.json({ success: true, skipped: true, reason: 'Already populated', normalized_status: normalizedStatus });
+      return Response.json({ success: true, skipped: true, reason: 'Already populated', normalized_status: normalizedStatus, business_duplicate: existingBusinessDuplicate || null, canonical_supplier_family: existingFamily.family || null });
     }
 
     // Step 1: Extraction - with automatic PDF to image conversion fallback
@@ -488,9 +497,12 @@ Deno.serve(async (req) => {
     // P0.1 + P0.2: auto approval is decided ONLY by the deterministic validation gate.
     // extraction.overall_confidence is stored for telemetry and is NOT part of this decision.
     const normalizedDocNumber = normalizeInvoiceNumber(extraction.doc_number);
-    const duplicateCandidates = extraction.doc_number && supplierId
-      ? await base44.asServiceRole.entities.Invoices.filter({ supplier: supplierId }, undefined, 200)
-      : [];
+    // D2a: business duplicates are judged by canonical supplier family, not by a single supplier row.
+    const family = extraction.doc_number && supplierId
+      ? await loadFamilyDuplicateCandidates(base44, supplierId, allSuppliers)
+      : { family: null, candidates: [] };
+    const duplicateCandidates = family.candidates;
+    const businessDuplicate = findBusinessDuplicate({ docNumber: extraction.doc_number, invoiceId: invoice.id, candidates: duplicateCandidates });
     const gate = validateInvoiceForAutoApproval({
       supplier_name: extraction.supplier_name,
       supplier_vat_id: extraction.supplier_vat_id,
@@ -511,7 +523,13 @@ Deno.serve(async (req) => {
     });
     console.log('Validation gate:', JSON.stringify(gate));
 
-    const canAutoApprove = gate.passed && validation.recommended_extraction_status_he === 'נקרא בהצלחה';
+    // Stable BUSINESS_DUPLICATE failure — distinct from FILE_DUPLICATE and from Linet conflicts,
+    // and it never writes linet_match_status/matched_duplicate.
+    if (businessDuplicate && !gate.failures.some((failure) => failure.includes(BUSINESS_DUPLICATE_CODE))) {
+      gate.failures.push(businessDuplicate.failure_he);
+      gate.passed = false;
+    }
+    const canAutoApprove = gate.passed && !businessDuplicate && validation.recommended_extraction_status_he === 'נקרא בהצלחה';
     const finalStatus = canAutoApprove ? 'אושר' : 'ממתין לאימות';
     const finalNotes = canAutoApprove
       ? `${baseNotes}\nאושר אוטומטית לאחר מעבר כל בדיקות התקינות (${gate.validation_version}).`
@@ -664,6 +682,8 @@ Deno.serve(async (req) => {
       invoice_id: invoice.id, 
       supplier_id: supplierId, 
       line_items_count: lineItems.length,
+      business_duplicate: businessDuplicate || null,
+      canonical_supplier_family: family.family || null,
       price_alerts: priceAlerts,
       lines_persisted: linePersistence,
       reconciliation: reconciliationResult,

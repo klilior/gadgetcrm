@@ -5,6 +5,8 @@ import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
 import { buildInvoiceLineRecords, persistInvoiceLines, applyLinetLinesToInvoice } from '../../shared/invoiceLinePersistence.ts';
 import { parseLinetLines, LINET_MATCH_RULE_VERSION } from '../../shared/linetInvoiceReconciliation.ts';
+import { BUSINESS_DUPLICATE_CODE, findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
+import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -153,9 +155,11 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
   // The deterministic gate is the ONLY thing that may approve an invoice here.
   // extraction.overall_confidence is telemetry and never part of this decision.
   const matchedSupplier = resolution.supplier;
-  const duplicateCandidates = supplierId
-    ? await base44.asServiceRole.entities.Invoices.filter({ supplier: supplierId }, undefined, 200)
-    : [];
+  // D2a: candidates come from the whole canonical supplier family (redirects included),
+  // so a legacy-linked historical invoice still blocks a canonical-linked new one.
+  const family = supplierId ? await loadFamilyDuplicateCandidates(base44, supplierId, suppliers) : { family: null, candidates: [] };
+  const duplicateCandidates = family.candidates;
+  const businessDuplicate = findBusinessDuplicate({ docNumber: extraction.doc_number, invoiceId: invoice.id, candidates: duplicateCandidates });
   const gate = validateInvoiceForAutoApproval({
     supplier_name: extraction.supplier_name,
     supplier_vat_id: extraction.supplier_vat_id,
@@ -175,8 +179,14 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     line_check: validation.line_check
   });
 
+  // Stable BUSINESS_DUPLICATE failure — distinct from FILE_DUPLICATE and from Linet conflicts.
+  if (businessDuplicate && !gate.failures.some((failure) => failure.includes(BUSINESS_DUPLICATE_CODE))) {
+    gate.failures.push(businessDuplicate.failure_he);
+    gate.passed = false;
+  }
+
   const amountsAmbiguous = extraction.amount_provenance?.ambiguous === true;
-  const canAutoApprove = gate.passed && !amountsAmbiguous && validation.missing_critical_fields.length === 0;
+  const canAutoApprove = gate.passed && !businessDuplicate && !amountsAmbiguous && validation.missing_critical_fields.length === 0;
   const finalStatus = canAutoApprove ? 'אושר' : 'ממתין לאימות';
 
   const indexNote = invoiceIndex !== null ? `[חשבונית ${invoiceIndex + 1} מתוך קובץ מרובה]\n` : '';
@@ -238,7 +248,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
   }
 
-  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
 }
 
 Deno.serve(async (req) => {
