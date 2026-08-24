@@ -62,9 +62,43 @@ export async function persistInvoiceLines(base44, invoiceId, records) {
 }
 
 /**
+ * Pure preflight (C2/D): a write is allowed ONLY for a complete deterministic one-to-one mapping —
+ * identical non-empty normalized key sets on both sides, equal counts, no duplicate keys.
+ * Any partial mapping, extra/missing key or duplicate returns ambiguous and blocks all writes.
+ */
+export function preflightLinetLineMapping(localLines, linetLines) {
+  const keyOf = (line) => normalizedText(line?.sku) || normalizedText(line?.product_name);
+  const local = localLines || [];
+  const linet = linetLines || [];
+  if (!local.length || !linet.length) return { ok: false, ambiguous: false, reason: 'no_lines_on_one_side', pairs: [] };
+  if (local.length !== linet.length) return { ok: false, ambiguous: true, reason: 'line_count_mismatch', pairs: [] };
+
+  const linetByKey = new Map();
+  for (const line of linet) {
+    const key = keyOf(line);
+    if (!key) return { ok: false, ambiguous: true, reason: 'empty_linet_key', pairs: [] };
+    if (linetByKey.has(key)) return { ok: false, ambiguous: true, reason: 'ambiguous_linet_keys', pairs: [] };
+    linetByKey.set(key, line);
+  }
+  const localByKey = new Map();
+  for (const line of local) {
+    const key = keyOf(line);
+    if (!key) return { ok: false, ambiguous: true, reason: 'empty_local_key', pairs: [] };
+    if (localByKey.has(key)) return { ok: false, ambiguous: true, reason: 'ambiguous_local_keys', pairs: [] };
+    localByKey.set(key, line);
+  }
+  const missing = [...localByKey.keys()].filter((key) => !linetByKey.has(key));
+  const extra = [...linetByKey.keys()].filter((key) => !localByKey.has(key));
+  if (missing.length || extra.length) {
+    return { ok: false, ambiguous: true, reason: 'incomplete_mapping', missing_keys: missing, extra_keys: extra, pairs: [] };
+  }
+  return { ok: true, ambiguous: false, reason: 'complete_one_to_one', pairs: [...localByKey.entries()].map(([key, localLine]) => ({ key, local: localLine, linet: linetByKey.get(key) })) };
+}
+
+/**
  * On a strong (confirmed) merchandise match, Linet structured lines become the final business
- * values where they map deterministically by SKU/name. The extracted candidate is preserved in
- * line_provenance_json. Ambiguous mapping is never applied silently — it is reported for review.
+ * values — but only when the mapping is a complete one-to-one match (see preflight above).
+ * The extracted candidate is preserved in line_provenance_json. Ambiguous mapping writes nothing.
  */
 export async function applyLinetLinesToInvoice(base44, invoiceId, linetLines, matchEvaluation) {
   if (matchEvaluation?.level !== 'confirmed' || !linetLines?.length) {
@@ -73,23 +107,10 @@ export async function applyLinetLinesToInvoice(base44, invoiceId, linetLines, ma
   const existing = await base44.asServiceRole.entities.InvoiceLine.filter({ invoice_id: invoiceId }, undefined, 500);
   if (!existing.length) return { applied: false, reason: 'no_stored_lines', ambiguous: false };
 
-  const keyOf = (line) => normalizedText(line.sku) || normalizedText(line.product_name);
-  const linetByKey = new Map();
-  for (const line of linetLines) {
-    const key = keyOf(line);
-    if (!key) continue;
-    if (linetByKey.has(key)) return { applied: false, reason: 'ambiguous_linet_keys', ambiguous: true };
-    linetByKey.set(key, line);
-  }
-  const localByKey = new Map();
-  for (const line of existing) {
-    const key = keyOf(line);
-    if (!key) continue;
-    if (localByKey.has(key)) return { applied: false, reason: 'ambiguous_local_keys', ambiguous: true };
-    localByKey.set(key, line);
-  }
-  const pairs = [...localByKey.entries()].filter(([key]) => linetByKey.has(key));
-  if (!pairs.length) return { applied: false, reason: 'no_deterministic_mapping', ambiguous: true };
+  const preflight = preflightLinetLineMapping(existing, linetLines);
+  if (!preflight.ok) return { applied: false, reason: preflight.reason, ambiguous: preflight.ambiguous, missing_keys: preflight.missing_keys, extra_keys: preflight.extra_keys };
+  const pairs = preflight.pairs.map((pair) => [pair.key, pair.local]);
+  const linetByKey = new Map(preflight.pairs.map((pair) => [pair.key, pair.linet]));
 
   let applied = 0;
   for (const [key, localLine] of pairs) {

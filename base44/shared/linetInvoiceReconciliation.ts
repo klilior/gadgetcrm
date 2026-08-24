@@ -14,7 +14,9 @@ export const LINET_REASON_CODES = {
   DATE: 'LINET_DATE_CONFLICT',
   SUPPLIER: 'LINET_SUPPLIER_CONFLICT',
   LINE: 'LINET_LINE_CONFLICT',
-  VERIFIED: 'LINET_VERIFIED'
+  VERIFIED: 'LINET_VERIFIED',
+  AMBIGUOUS_CANDIDATES: 'LINET_AMBIGUOUS_CANDIDATES',
+  PURCHASE_ALREADY_MATCHED: 'LINET_PURCHASE_ALREADY_MATCHED'
 };
 
 export function normalizeInvoiceNumber(value) {
@@ -115,6 +117,46 @@ export function compareLines(invoiceLines, linetLines) {
 }
 
 /**
+ * Pure candidate selection (C2/B + C2/C). NEVER picks the first of several confirmed candidates,
+ * and never claims a purchase document that already belongs to another invoice or was reserved by
+ * an earlier confirmed match in the same batch. Blocked decisions carry stable reason codes and
+ * preserve all candidate ids/values so the reviewer sees both sides; no header value is chosen.
+ *
+ * evaluations: [{ purchase, match }]
+ * returns { decision: 'confirmed'|'blocked'|'conflict'|'possible'|'none', selected, reason_code, candidates }
+ */
+export function selectLinetCandidate(evaluations, { invoiceId = null, reservedPurchaseIds = null } = {}) {
+  const reserved = reservedPurchaseIds instanceof Set ? reservedPurchaseIds : new Set(reservedPurchaseIds || []);
+  const list = Array.isArray(evaluations) ? evaluations : [];
+  const describe = (item) => ({
+    linet_purchase_document_id: item.purchase?.id ?? null,
+    linet_doc_id: item.purchase?.linet_doc_id ?? null,
+    linet_doc_number: item.purchase?.linet_doc_number ?? null,
+    matched_invoice_id: item.purchase?.matched_invoice_id ?? null,
+    values: item.match?.values ?? null
+  });
+
+  const confirmed = list.filter((item) => item.match?.level === 'confirmed');
+  if (confirmed.length > 1) {
+    return { decision: 'blocked', selected: null, reason_code: LINET_REASON_CODES.AMBIGUOUS_CANDIDATES, candidates: confirmed.map(describe) };
+  }
+  if (confirmed.length === 1) {
+    const item = confirmed[0];
+    const takenByOther = item.purchase?.matched_invoice_id && String(item.purchase.matched_invoice_id) !== String(invoiceId ?? '');
+    const reservedInBatch = item.purchase?.id && reserved.has(item.purchase.id);
+    if (takenByOther || reservedInBatch) {
+      return { decision: 'blocked', selected: null, reason_code: LINET_REASON_CODES.PURCHASE_ALREADY_MATCHED, candidates: [describe(item)] };
+    }
+    return { decision: 'confirmed', selected: item, reason_code: LINET_REASON_CODES.VERIFIED, candidates: [describe(item)] };
+  }
+  const conflicted = list.find((item) => item.match?.level === 'conflict');
+  if (conflicted) return { decision: 'conflict', selected: conflicted, reason_code: null, candidates: [describe(conflicted)] };
+  const possible = list.find((item) => item.match?.level === 'possible' || item.match?.level === 'number_only');
+  if (possible) return { decision: 'possible', selected: possible, reason_code: null, candidates: [describe(possible)] };
+  return { decision: 'none', selected: null, reason_code: null, candidates: [] };
+}
+
+/**
  * Evaluate one invoice against one Linet purchase document.
  * level: 'none' | 'number_only' | 'possible' | 'conflict' | 'confirmed'
  * A confirmed match requires ALL of: normalized number, positive supplier identity,
@@ -122,7 +164,9 @@ export function compareLines(invoiceLines, linetLines) {
  */
 export function evaluateLinetMatch(invoice, purchase, invoiceLines = [], supplier = null, tolerance = LINET_MATCH_TOLERANCE) {
   const localNumber = normalizeInvoiceNumber(invoice.doc_number);
-  const numberMatch = localNumber !== '' && localNumber === purchase.normalized_invoice_number;
+  // Defensive: the stored Linet key may be unnormalized (leading zeros, dashes, spaces).
+  const linetNumber = normalizeInvoiceNumber(purchase.normalized_invoice_number);
+  const numberMatch = localNumber !== '' && localNumber === linetNumber;
 
   const localVat = String(supplier?.vat_id || '').replace(/\D/g, '');
   const linetVat = String(purchase.supplier_vat_id || '').replace(/\D/g, '');
@@ -136,7 +180,7 @@ export function evaluateLinetMatch(invoice, purchase, invoiceLines = [], supplie
   const values = {
     local_doc_number: invoice.doc_number || null,
     local_normalized_number: localNumber || null,
-    linet_normalized_number: purchase.normalized_invoice_number || null,
+    linet_normalized_number: linetNumber || null,
     linet_supplier_invoice_number: purchase.supplier_invoice_number || null,
     local_vat_id: localVat || null,
     linet_vat_id: linetVat || null,

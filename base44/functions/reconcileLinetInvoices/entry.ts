@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
-import { normalizeInvoiceNumber, evaluateLinetMatch, LINET_MATCH_RULE_VERSION, LINET_REASON_CODES } from '../../shared/linetInvoiceReconciliation.ts';
+import { normalizeInvoiceNumber, evaluateLinetMatch, selectLinetCandidate, LINET_MATCH_RULE_VERSION, LINET_REASON_CODES } from '../../shared/linetInvoiceReconciliation.ts';
 
 /**
  * Invoice ↔ Linet purchase-document reconciliation.
@@ -78,9 +78,11 @@ Deno.serve(async (req) => {
     const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
     const purchasesByNumber = new Map();
     for (const purchase of purchases) {
-      if (!purchase.normalized_invoice_number) continue;
-      if (!purchasesByNumber.has(purchase.normalized_invoice_number)) purchasesByNumber.set(purchase.normalized_invoice_number, []);
-      purchasesByNumber.get(purchase.normalized_invoice_number).push(purchase);
+      // Defensive: stored keys may be unnormalized, so index by the normalized form.
+      const key = normalizeInvoiceNumber(purchase.normalized_invoice_number);
+      if (!key) continue;
+      if (!purchasesByNumber.has(key)) purchasesByNumber.set(key, []);
+      purchasesByNumber.get(key).push(purchase);
     }
     const gapByKey = new Map(allGaps.map((gap) => [gap.gap_key, gap]));
     const matchedPurchaseIds = new Set();
@@ -112,10 +114,43 @@ Deno.serve(async (req) => {
       if (!normalized) continue;
       const supplier = supplierById.get(invoice.supplier);
       const evaluations = (purchasesByNumber.get(normalized) || []).map((purchase) => ({ purchase, match: evaluateLinetMatch(invoice, purchase, linesByInvoice.get(invoice.id) || [], supplier) }));
-      const confirmed = evaluations.find((item) => item.match.level === 'confirmed');
-      const conflicted = evaluations.find((item) => item.match.level === 'conflict');
-      const possible = evaluations.find((item) => item.match.level === 'possible' || item.match.level === 'number_only');
+      // Never first-of-many, never a purchase document already owned by another invoice.
+      const selection = selectLinetCandidate(evaluations, { invoiceId: invoice.id, reservedPurchaseIds: matchedPurchaseIds });
+      const confirmed = selection.decision === 'confirmed' ? selection.selected : null;
+      const conflicted = selection.decision === 'conflict' ? selection.selected : null;
+      const possible = selection.decision === 'possible' ? selection.selected : null;
       const supplierName = supplier?.name || '';
+
+      if (selection.decision === 'blocked') {
+        stats.conflicts++;
+        const code = selection.reason_code;
+        const reason = code === LINET_REASON_CODES.AMBIGUOUS_CANDIDATES
+          ? `נמצאו ${selection.candidates.length} מסמכי רכש מאומתים לאותו מספר חשבונית — נדרשת הכרעה ידנית.`
+          : 'מסמך הרכש בלינט כבר שויך לחשבונית אחרת — נדרשת הכרעה ידנית.';
+        // No header value from any candidate is written, and no purchase link is claimed/overwritten.
+        invoiceUpdates.push({
+          id: invoice.id,
+          normalized_doc_number: normalized,
+          linet_match_status: 'conflict',
+          linet_conflict_reason_code: code,
+          linet_match_reason: reason,
+          linet_matched_at: now,
+          linet_provenance_json: JSON.stringify({
+            rule_version: LINET_MATCH_RULE_VERSION,
+            evaluated_at: now,
+            chosen_source: 'none',
+            reason: code,
+            candidates: selection.candidates
+          }),
+          auto_approved: false,
+          validation_passed: false,
+          extraction_status: invoice.extraction_status === 'אושר' || invoice.extraction_status === 'נדחה' ? 'ממתין לאימות' : invoice.extraction_status,
+          notes: String(invoice.notes || '').includes('[linet_conflict]') ? invoice.notes : `${invoice.notes || ''}\n[linet_conflict] ${reason}`.trim()
+        });
+        results.push({ invoice_id: invoice.id, status: 'conflict', reason_codes: [code], reason, candidates: selection.candidates });
+        queueGap({ gap_key: `ambiguous:${invoice.id}`, direction: 'ambiguous_match', invoice_id: invoice.id, doc_number: invoice.doc_number, supplier_name: supplierName, doc_date: invoice.doc_date, total_with_vat: invoice.total_with_vat, status: 'open', reason, detected_at: now });
+        continue;
+      }
 
       if (confirmed) {
         stats.matched++;
