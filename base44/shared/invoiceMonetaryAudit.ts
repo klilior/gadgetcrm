@@ -339,11 +339,44 @@ export function selectPayableAmounts(audit: any) {
 }
 
 /**
+ * Builds the audit prompt. With a target scope (plain text, or a structured
+ * { index, supplier_hint, doc_number_hint, page_hint }) the audit is restricted to that
+ * one invoice inside a multi-invoice file. No scope => the base prompt, unchanged.
+ */
+export function buildScopedAuditPrompt(targetScope?: any): string {
+  if (!targetScope) return MONETARY_AUDIT_PROMPT;
+
+  let scopeText = '';
+  if (typeof targetScope === 'string') {
+    scopeText = targetScope.trim();
+  } else if (typeof targetScope === 'object') {
+    const parts: string[] = [];
+    if (targetScope.index !== null && targetScope.index !== undefined) parts.push(`invoice #${targetScope.index}`);
+    if (targetScope.supplier_hint) parts.push(`supplier: ${targetScope.supplier_hint}`);
+    if (targetScope.doc_number_hint) parts.push(`document number: ${targetScope.doc_number_hint}`);
+    if (targetScope.page_hint) parts.push(`location: ${targetScope.page_hint}`);
+    if (targetScope.text) parts.push(String(targetScope.text));
+    scopeText = parts.join(' | ');
+  }
+  if (!scopeText) return MONETARY_AUDIT_PROMPT;
+
+  return `${MONETARY_AUDIT_PROMPT}
+
+TARGET SCOPE (MANDATORY)
+This file contains MORE THAN ONE invoice/document. Audit ONLY the following target:
+${scopeText}
+- Every candidate you report MUST come from that target invoice only.
+- Amounts printed on any OTHER invoice/page/document in this file MUST be ignored completely — do not report them as candidates, not even as context.
+- If you cannot confidently isolate the target invoice, report no payable candidate rather than mixing documents.
+- All other rules above (roles, verbatim printed labels, never-payable figures, ambiguity) still apply exactly as stated.`;
+}
+
+/**
  * Runs the audit against the ORIGINAL file. Never receives stored invoice values.
  */
-export async function runMonetaryAudit(base44: any, fileUrl: string, model = 'gpt_5_mini') {
+export async function runMonetaryAudit(base44: any, fileUrl: string, model = 'gpt_5_mini', targetScope?: any) {
   let audit = await base44.integrations.Core.InvokeLLM({
-    prompt: MONETARY_AUDIT_PROMPT,
+    prompt: buildScopedAuditPrompt(targetScope),
     add_context_from_internet: false,
     response_json_schema: MONETARY_AUDIT_SCHEMA,
     file_urls: [fileUrl],
@@ -370,9 +403,9 @@ export function applyMonetaryAudit(extraction: any, audit: any) {
 }
 
 /** Convenience wrapper: audit the file and apply it, degrading safely to "ambiguous". */
-export async function auditAndApplyAmounts(base44: any, extraction: any, fileUrl: string, model = 'gpt_5_mini') {
+export async function auditAndApplyAmounts(base44: any, extraction: any, fileUrl: string, model = 'gpt_5_mini', targetScope?: any) {
   try {
-    const audit = await runMonetaryAudit(base44, fileUrl, model);
+    const audit = await runMonetaryAudit(base44, fileUrl, model, targetScope);
     return applyMonetaryAudit(extraction, audit);
   } catch (err: any) {
     extraction.total_with_vat = null;

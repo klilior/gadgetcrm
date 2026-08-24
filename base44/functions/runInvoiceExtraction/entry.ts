@@ -309,9 +309,11 @@ Deno.serve(async (req) => {
     }
 
     // Prepares every extraction result identically: separate dates + evidence-based amounts.
-    const prepareExtraction = async (extraction) => {
+    // targetScope is passed ONLY for multi-invoice files, so the monetary audit reads
+    // amounts from the same invoice the extraction prompt was scoped to.
+    const prepareExtraction = async (extraction, targetScope = undefined) => {
       normalizeExtractionDates(extraction);
-      await auditAndApplyAmounts(base44, extraction, intake.file);
+      await auditAndApplyAmounts(base44, extraction, intake.file, 'gpt_5_mini', targetScope);
       return extraction;
     };
 
@@ -334,6 +336,14 @@ Deno.serve(async (req) => {
 
       for (let i = 0; i < invoiceCount; i++) {
         const hint = multiDetect.invoices_detected[i];
+        // Same identity/hints the extraction prompt below uses — reused for the monetary audit.
+        const targetScope = {
+          index: i + 1,
+          supplier_hint: hint?.supplier_hint || null,
+          doc_number_hint: hint?.doc_number_hint || null,
+          page_hint: hint?.page_hint || null,
+          text: `invoice #${i + 1} of ${invoiceCount} in this file`
+        };
         
         // Create extraction prompt with specific invoice hint
         const specificPrompt = `${EXTRACT_PROMPT}
@@ -351,7 +361,7 @@ Ignore all other invoices in the document.`;
 
         if (extraction?.response?.classification) extraction = extraction.response;
         if (!extraction || typeof extraction !== 'object') continue;
-        await prepareExtraction(extraction);
+        await prepareExtraction(extraction, targetScope);
 
         // For first invoice, use the existing linked invoice
         // For additional invoices, create new invoice records
