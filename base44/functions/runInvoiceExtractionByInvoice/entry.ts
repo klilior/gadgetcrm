@@ -3,6 +3,7 @@ import { classifyInvoiceLines } from '../../shared/invoiceClassification.ts';
 import { calculateFileHash, findReusableDuplicate, getEarlyNonInvoiceReason } from '../../shared/invoiceIntakeGuards.ts';
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDATION_VERSION, ARITHMETIC_TOLERANCE } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
+import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 
 Deno.serve(async (req) => {
     // Read body BEFORE creating base44 client (body can only be read once)
@@ -305,6 +306,12 @@ Deno.serve(async (req) => {
 
     // P0.3: invoice date and due date are separate. The due date must NEVER become the invoice date.
     normalizeExtractionDates(extraction);
+
+    // P0.4: evidence-based monetary audit (second pass on the original file).
+    // Turnover / balance / account-summary figures can never become the payable total;
+    // missing or conflicting label evidence nulls the amounts so the gate sends to review.
+    const amountSelection = await auditAndApplyAmounts(base44, extraction, fileUrlToUse);
+    console.log('Monetary audit:', JSON.stringify(amountSelection.provenance));
 
     // DEBUG: Save raw extraction JSON (after post-processing)
     const extractionJson = JSON.stringify(extraction);

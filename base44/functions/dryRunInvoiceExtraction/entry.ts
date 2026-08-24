@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { validateInvoiceForAutoApproval } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
+import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 
 /**
  * SAFE, STRICTLY READ-ONLY regression harness (admins only).
@@ -64,6 +65,10 @@ Deno.serve(async (req) => {
 
       normalizeExtractionDates(extraction);
 
+      // Second pass: evidence-based monetary audit against the ORIGINAL file.
+      // Stored invoice amounts are never fed into extraction or selection.
+      await auditAndApplyAmounts(base44, extraction, intake.file);
+
       // Read-only supplier resolution — never creates or updates a supplier.
       const vatDigits = extraction.supplier_vat_id ? String(extraction.supplier_vat_id).replace(/\D/g, '') : '';
       let supplier = vatDigits ? suppliers.find((s: any) => (s.vat_id || '').replace(/\D/g, '') === vatDigits) || null : null;
@@ -111,6 +116,20 @@ Deno.serve(async (req) => {
           total_with_vat: extraction.total_with_vat ?? null,
           currency: extraction.currency ?? null
         },
+        amount_provenance: extraction.amount_provenance ? {
+          audit_version: extraction.amount_provenance.audit_version,
+          document_kind: extraction.amount_provenance.document_kind,
+          ambiguous: extraction.amount_provenance.ambiguous,
+          total_evidence_label: extraction.amount_provenance.total_evidence_label,
+          total_evidence_role: extraction.amount_provenance.total_evidence_role,
+          subtotal_evidence_label: extraction.amount_provenance.subtotal_evidence_label,
+          vat_evidence_label: extraction.amount_provenance.vat_evidence_label,
+          reasons: extraction.amount_provenance.reasons,
+          candidates_count: (extraction.amount_provenance.candidates || []).length,
+          charge_candidates: (extraction.amount_provenance.candidates || [])
+            .filter((c: any) => ['document_payable', 'document_subtotal', 'document_vat', 'fee_or_commission'].includes(c.role))
+            .slice(0, 12)
+        } : null,
         line_check: lineCheck,
         gate: {
           passed: gate.passed,

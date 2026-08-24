@@ -1,4 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { validateInvoiceForAutoApproval, normalizeInvoiceNumber } from '../../shared/invoiceValidationGate.ts';
+import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
+import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -54,203 +57,30 @@ const MULTI_INVOICE_DETECT_SCHEMA = {
   required: ['invoice_count', 'is_single_invoice', 'detection_confidence']
 };
 
-const EXTRACT_PROMPT = `SYSTEM / INSTRUCTION
-
-You are an invoice header extraction engine.
-
-INPUT
-You will receive ONE document file (PDF/JPG/PNG) attached to this request.
-
-IMPORTANT UI LANGUAGE RULE
-All human-readable text intended to be displayed in the app UI must be in Hebrew (RTL).
-JSON keys MUST be English as defined below.
-
-GOAL
-Extract structured header data from a supplier document.
-Only two document types are relevant:
-- Tax Invoice (חשבונית מס)
-- Credit Note (חשבונית זיכוי)
-Anything else must be classified as OTHER and skipped.
-
-STRICT OUTPUT RULES
-1) Output ONLY a single valid JSON object. No markdown, no code fences, no commentary.
-2) Never guess. If not confidently found, use null.
-3) Dates must be ISO-8601: YYYY-MM-DD.
-4) Amounts must be numbers only (no currency symbols, no commas). Use '.' decimal separator.
-5) Currency must be a 3-letter ISO code (ILS, USD, EUR...). If not found, null.
-6) For multi-page docs: use totals for the entire document.
-
-CLASSIFICATION
-- TAX_INVOICE if explicit "חשבונית מס" / "Tax Invoice"
-- CREDIT_NOTE if explicit "חשבונית זיכוי" / "Credit Note"
-- OTHER otherwise (statement, report, proforma, order confirmation, etc.)
-
-CREDIT SIGN
-If CREDIT_NOTE:
-- If the displayed total is negative or has a minus sign => credit_sign = "NEGATIVE"
-- Otherwise => credit_sign = "POSITIVE"
-
-DATES — INVOICE DATE vs DUE DATE (CRITICAL)
-- doc_date = the date the document was ISSUED ("תאריך חשבונית", "תאריך המסמך", "Invoice Date").
-- due_date = the PAYMENT date only ("לתשלום עד", "מועד תשלום", "שוטף +", "Due Date").
-- NEVER use the due date as the invoice date. If no issue date is printed, doc_date = null.
-- If there is no payment date, due_date = null.
-
-TOTAL — AMOUNT DUE FOR THIS DOCUMENT (CRITICAL)
-- total_with_vat = the final amount due for THIS document ("סה״כ לתשלום", "לתשלום",
-  "סה״כ כולל מע״מ", "Total", "Amount Due", "Grand Total").
-- NEVER choose a number because it is the largest on the page.
-- It is NOT turnover/מחזור, accumulated or previous balance/יתרה, sum of transactions,
-  credit limit, or account total. Cross-check with subtotal + VAT.
-
-CONFIDENCE (TELEMETRY ONLY — NEVER AN APPROVAL SIGNAL)
-Provide overall_confidence (0..100) and per-field confidence (0..100) for debugging only.
-Approval is decided by a deterministic validation gate in the system.
-Do not inflate confidence if key fields are missing.
-
-CRITICAL FIELDS
-supplier_name, doc_number, doc_date, total_with_vat, doc_type_he
-
-OUTPUT SCHEMA (EXACT)
-{
-  "classification": "TAX_INVOICE" | "CREDIT_NOTE" | "OTHER",
-  "should_skip": boolean,
-  "skip_reason_he": string | null,
-
-  "supplier_name": string | null,
-  "supplier_name_normalized": string | null,
-  "supplier_vat_id": string | null,
-
-  "doc_type_he": "חשבונית מס" | "חשבונית זיכוי" | null,
-  "doc_number": string | null,
-  "doc_date": string | null,
-
-  "currency": string | null,
-  "subtotal_before_vat": number | null,
-  "vat_amount": number | null,
-  "total_with_vat": number | null,
-
-  "credit_sign": "NEGATIVE" | "POSITIVE" | null,
-
-  "overall_confidence": number,
-  "field_confidence": {
-    "supplier_name": number,
-    "supplier_vat_id": number,
-    "doc_number": number,
-    "doc_date": number,
-    "currency": number,
-    "subtotal_before_vat": number,
-    "vat_amount": number,
-    "total_with_vat": number,
-    "doc_type_he": number
-  },
-
-  "display_summary_he": string
+/**
+ * Deterministic validation summary (no LLM). Approval itself is decided by the
+ * shared validation gate — this only produces Hebrew review text and field checks.
+ */
+function buildDeterministicValidation(extraction) {
+  const missing = ['supplier_name', 'doc_type_he', 'doc_number', 'invoice_date', 'total_with_vat'].filter((field) => {
+    const value = extraction[field];
+    return value === null || value === undefined || value === '' || value === 'null';
+  });
+  const lineCheck = getLineItemsCheck(extraction);
+  const reviewReasons = [];
+  if (missing.length) reviewReasons.push(`שדות חסרים: ${missing.join(', ')}`);
+  if (lineCheck.hasMismatch) reviewReasons.push(`סכום שורות המוצרים אינו תואם לסכום החשבונית (הפרש ${lineCheck.delta} ש״ח).`);
+  if (lineCheck.hasBadQuantity) reviewReasons.push('קיימות שורות מוצר עם כמות חסרה או לא תקינה.');
+  const provenance = extraction.amount_provenance;
+  if (provenance?.ambiguous) reviewReasons.push(`הסכומים אינם חד-משמעיים: ${(provenance.reasons || []).join(' | ') || 'אין תיוג מודפס ישיר.'}`);
+  return {
+    missing_critical_fields: missing,
+    line_check: lineCheck,
+    amount_provenance: provenance || null,
+    review_reasons_he: reviewReasons,
+    display_validation_he: reviewReasons.length ? `נדרשת בדיקה: ${reviewReasons.join('; ')}` : 'כל שדות החובה נקראו.'
+  };
 }
-
-DISPLAY SUMMARY (HEBREW)
-- If invoice/credit note: short Hebrew summary including supplier, date, total, and confidence.
-- If OTHER: explain in Hebrew that the document is skipped.
-
-DECISION RULES
-- If classification == OTHER:
-  should_skip = true
-  doc_type_he = null
-  display_summary_he must explain skip in Hebrew.
-- Else:
-  should_skip = false
-  doc_type_he must match classification:
-    TAX_INVOICE => "חשבונית מס"
-    CREDIT_NOTE => "חשבונית זיכוי"`;
-
-const EXTRACT_SCHEMA = {
-  type: 'object',
-  properties: {
-    classification: { enum: ['TAX_INVOICE', 'CREDIT_NOTE', 'OTHER'] },
-    should_skip: { type: 'boolean' },
-    skip_reason_he: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    supplier_name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    supplier_name_normalized: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    supplier_vat_id: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    doc_type_he: { anyOf: [{ enum: ['חשבונית מס', 'חשבונית זיכוי'] }, { type: 'null' }] },
-    doc_number: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    doc_date: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    currency: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    subtotal_before_vat: { anyOf: [{ type: 'number' }, { type: 'null' }] },
-    vat_amount: { anyOf: [{ type: 'number' }, { type: 'null' }] },
-    total_with_vat: { anyOf: [{ type: 'number' }, { type: 'null' }] },
-    credit_sign: { anyOf: [{ enum: ['NEGATIVE', 'POSITIVE'] }, { type: 'null' }] },
-    overall_confidence: { type: 'number' },
-    field_confidence: {
-      type: 'object',
-      properties: {
-        supplier_name: { type: 'number' },
-        supplier_vat_id: { type: 'number' },
-        doc_number: { type: 'number' },
-        doc_date: { type: 'number' },
-        currency: { type: 'number' },
-        subtotal_before_vat: { type: 'number' },
-        vat_amount: { type: 'number' },
-        total_with_vat: { type: 'number' },
-        doc_type_he: { type: 'number' },
-      },
-      additionalProperties: true,
-    },
-    display_summary_he: { type: 'string' },
-  },
-  required: ['classification', 'should_skip', 'overall_confidence', 'field_confidence', 'display_summary_he'],
-  additionalProperties: true,
-};
-
-const VALIDATE_PROMPT = `SYSTEM / INSTRUCTION
-
-You are a validation and normalization engine for extracted invoice header data.
-
-INPUT
-You will receive a JSON object that matches the extraction schema from the previous step.
-
-IMPORTANT UI LANGUAGE RULE
-All UI text must be Hebrew (RTL).
-Output JSON keys must be English.
-
-TASKS
-1) Validate math consistency:
-   subtotal_before_vat + vat_amount ≈ total_with_vat
-   tolerance: 1.0
-2) Validate critical fields presence:
-   supplier_name, doc_type_he, doc_number, doc_date, total_with_vat
-3) Recommend invoice extraction status in Hebrew.
-
-STRICT OUTPUT RULES
-Output ONLY one valid JSON object.
-
-OUTPUT SCHEMA
-{
-  "is_math_consistent": boolean,
-  "math_delta": number | null,
-  "missing_critical_fields": string[],
-  "recommended_extraction_status_he": "נקרא בהצלחה" | "ממתין לאימות",
-  "review_reasons_he": string[],
-  "display_validation_he": string
-}
-
-LOGIC
-If any critical field missing OR is_math_consistent=false => "ממתין לאימות"
-Else => "נקרא בהצלחה"`;
-
-const VALIDATE_SCHEMA = {
-  type: 'object',
-  properties: {
-    is_math_consistent: { type: 'boolean' },
-    math_delta: { anyOf: [{ type: 'number' }, { type: 'null' }] },
-    missing_critical_fields: { type: 'array', items: { type: 'string' } },
-    recommended_extraction_status_he: { enum: ['נקרא בהצלחה', 'ממתין לאימות'] },
-    review_reasons_he: { type: 'array', items: { type: 'string' } },
-    display_validation_he: { type: 'string' },
-  },
-  required: ['is_math_consistent', 'missing_critical_fields', 'recommended_extraction_status_he', 'review_reasons_he', 'display_validation_he'],
-  additionalProperties: true,
-};
 
 // Helper function to process a single invoice extraction
 async function processSingleInvoice(base44, intake, invoice, extraction, invoiceIndex = null) {
@@ -269,30 +99,25 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     return { success: true, skipped: true, reason: 'OTHER', extraction };
   }
 
-  // Validation
-  const validationPrompt = `${VALIDATE_PROMPT}\n\nHere is the extracted JSON (use as input):\n\n${JSON.stringify(extraction)}`;
-  const validation = await base44.integrations.Core.InvokeLLM({
-    prompt: validationPrompt,
-    add_context_from_internet: false,
-    response_json_schema: VALIDATE_SCHEMA,
-  });
-
-  if (!validation || typeof validation !== 'object') throw new Error('Invalid validation response');
+  // Deterministic validation only — no LLM decides status here.
+  const validation = buildDeterministicValidation(extraction);
 
   // Supplier linking with pattern learning
   let supplierId = null;
+  let supplierMatchMethod = 'none';
   const vatId = extraction.supplier_vat_id && String(extraction.supplier_vat_id).trim();
   const supplierName = extraction.supplier_name?.trim();
   const normalizedName = extraction.supplier_name_normalized?.trim();
-  
+
   // First try to find by VAT ID (exact match)
   if (vatId) {
     const found = await base44.asServiceRole.entities.Suppliers.filter({ vat_id: vatId }, undefined, 1);
     if (found && found.length > 0) {
       supplierId = found[0].id;
+      supplierMatchMethod = 'vat_id';
     }
   }
-  
+
   // If not found by VAT, check if VAT ID appears in any supplier's aliases field
   if (!supplierId && vatId) {
     const allSuppliers = await base44.asServiceRole.entities.Suppliers.filter({}, undefined, 500);
@@ -302,10 +127,11 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     });
     if (aliasMatch) {
       supplierId = aliasMatch.id;
+      supplierMatchMethod = 'alias';
       console.log(`Matched supplier via alias: ${aliasMatch.name} (alias contains VAT ${vatId})`);
     }
   }
-  
+
   // If not found by VAT, try by learned pattern
   if (!supplierId && normalizedName) {
     const patterns = await base44.asServiceRole.entities.SupplierPattern.filter({ 
@@ -315,9 +141,10 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     }, undefined, 1);
     if (patterns && patterns.length > 0) {
       supplierId = patterns[0].supplier_id;
+      supplierMatchMethod = 'learned_pattern';
     }
   }
-  
+
   // Create new supplier if not found
   if (!supplierId) {
     const created = await base44.asServiceRole.entities.Suppliers.create({
@@ -327,7 +154,8 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
       is_active: true
     });
     supplierId = created.id;
-    
+    supplierMatchMethod = 'created';
+
     // Save patterns for future matching
     if (vatId) {
       try {
@@ -382,23 +210,60 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     }
   }
 
-  // Update invoice
+  // The deterministic gate is the ONLY thing that may approve an invoice here.
+  // extraction.overall_confidence is telemetry and never part of this decision.
+  const matchedSupplier = (await base44.asServiceRole.entities.Suppliers.filter({ id: supplierId }, undefined, 1))?.[0] || null;
+  const duplicateCandidates = await base44.asServiceRole.entities.Invoices.filter({ supplier: supplierId }, undefined, 200);
+  const gate = validateInvoiceForAutoApproval({
+    supplier_name: extraction.supplier_name,
+    supplier_vat_id: extraction.supplier_vat_id,
+    doc_number: extraction.doc_number,
+    invoice_date: extraction.invoice_date,
+    due_date: extraction.due_date,
+    subtotal_before_vat: extraction.subtotal_before_vat,
+    vat_amount: extraction.vat_amount,
+    total_with_vat: extraction.total_with_vat,
+    doc_type_he: extraction.doc_type_he
+  }, {
+    supplier: matchedSupplier,
+    supplier_match_method: supplierMatchMethod,
+    duplicates: duplicateCandidates,
+    invoice_id: invoice.id,
+    line_check: validation.line_check
+  });
+
+  const amountsAmbiguous = extraction.amount_provenance?.ambiguous === true;
+  const canAutoApprove = gate.passed && !amountsAmbiguous && validation.missing_critical_fields.length === 0;
+  const finalStatus = canAutoApprove ? 'אושר' : 'ממתין לאימות';
+
   const indexNote = invoiceIndex !== null ? `[חשבונית ${invoiceIndex + 1} מתוך קובץ מרובה]\n` : '';
-  const notes = `${indexNote}${extraction.display_summary_he || ''}\n${validation.display_validation_he || ''}`.trim();
+  const baseNotes = `${indexNote}${extraction.display_summary_he || ''}\n${validation.display_validation_he || ''}`.trim();
+  const notes = canAutoApprove
+    ? `${baseNotes}\nאושר אוטומטית לאחר מעבר כל בדיקות התקינות (${gate.validation_version}).`
+    : `${baseNotes}\nנדרש אימות ידני: ${(gate.failures.length ? gate.failures : validation.review_reasons_he).join(' | ') || 'נדרשת בדיקה ידנית.'}`;
+
   const updatePayload = {
     supplier: supplierId,
     doc_type: extraction.doc_type_he || undefined,
     doc_number: extraction.doc_number || undefined,
-    doc_date: extraction.doc_date || undefined,
+    normalized_doc_number: normalizeInvoiceNumber(extraction.doc_number) || undefined,
+    doc_date: extraction.invoice_date || undefined,
+    due_date: extraction.due_date || undefined,
     currency: extraction.currency || undefined,
-    subtotal_before_vat: extraction.subtotal_before_vat ?? undefined,
-    vat_amount: extraction.vat_amount ?? undefined,
-    total_with_vat: extraction.total_with_vat ?? undefined,
+    subtotal_before_vat: roundMoney(extraction.subtotal_before_vat) ?? undefined,
+    vat_amount: roundMoney(extraction.vat_amount) ?? undefined,
+    total_with_vat: roundMoney(extraction.total_with_vat) ?? undefined,
     confidence_score: extraction.overall_confidence ?? undefined,
-    extraction_status: validation.recommended_extraction_status_he,
+    validation_passed: gate.passed,
+    validation_failures: gate.failures.join(' | ') || undefined,
+    validation_warnings: gate.warnings.join(' | ') || undefined,
+    validated_fields: gate.validated_fields.join(',') || undefined,
+    validation_version: gate.validation_version,
+    auto_approved: canAutoApprove,
+    extraction_status: finalStatus,
     notes: notes,
     ai_debug_last_extraction_json: JSON.stringify(extraction),
-    ai_debug_last_validation_json: JSON.stringify(validation)
+    ai_debug_last_validation_json: JSON.stringify({ ...validation, gate })
   };
 
   await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
@@ -413,7 +278,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
   }
 
-  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction, validation };
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, extraction, validation, gate };
 }
 
 Deno.serve(async (req) => {
@@ -443,6 +308,13 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, skipped: true, reason: 'Invoice already finalized' });
     }
 
+    // Prepares every extraction result identically: separate dates + evidence-based amounts.
+    const prepareExtraction = async (extraction) => {
+      normalizeExtractionDates(extraction);
+      await auditAndApplyAmounts(base44, extraction, intake.file);
+      return extraction;
+    };
+
     // Step 0: Detect if multiple invoices in file
     const multiDetect = await base44.integrations.Core.InvokeLLM({
       prompt: MULTI_INVOICE_DETECT_PROMPT,
@@ -470,14 +342,16 @@ IMPORTANT: This document contains MULTIPLE invoices.
 Extract ONLY invoice #${i + 1} which is: ${hint?.supplier_hint || ''} ${hint?.doc_number_hint || ''} ${hint?.page_hint || ''}
 Ignore all other invoices in the document.`;
 
-        const extraction = await base44.integrations.Core.InvokeLLM({
+        let extraction = await base44.integrations.Core.InvokeLLM({
           prompt: specificPrompt,
           add_context_from_internet: false,
           response_json_schema: EXTRACT_SCHEMA,
           file_urls: [intake.file]
         });
 
+        if (extraction?.response?.classification) extraction = extraction.response;
         if (!extraction || typeof extraction !== 'object') continue;
+        await prepareExtraction(extraction);
 
         // For first invoice, use the existing linked invoice
         // For additional invoices, create new invoice records
@@ -511,14 +385,16 @@ Ignore all other invoices in the document.`;
     }
 
     // Single invoice - normal flow
-    const extraction = await base44.integrations.Core.InvokeLLM({
+    let extraction = await base44.integrations.Core.InvokeLLM({
       prompt: EXTRACT_PROMPT,
       add_context_from_internet: false,
       response_json_schema: EXTRACT_SCHEMA,
       file_urls: [intake.file]
     });
 
+    if (extraction?.response?.classification) extraction = extraction.response;
     if (!extraction || typeof extraction !== 'object') throw new Error('Invalid extraction response');
+    await prepareExtraction(extraction);
 
     const result = await processSingleInvoice(base44, intake, invoice, extraction);
     
@@ -527,13 +403,9 @@ Ignore all other invoices in the document.`;
     }
 
     // Update intake status_reason
-    let intakeReason = '';
-    if (result.validation?.recommended_extraction_status_he === 'נקרא בהצלחה') {
-      intakeReason = 'המסמך נותח ונקלט לחשבונית. ממתין לאישור סופי לפי הצורך.';
-    } else {
-      const topReason = (result.validation?.review_reasons_he && result.validation.review_reasons_he[0]) || 'נדרש אימות ידני.';
-      intakeReason = `המסמך נותח אך נדרש אימות ידני: ${topReason}`;
-    }
+    const intakeReason = result.extraction_status === 'אושר'
+      ? 'המסמך נותח ונקלט לחשבונית ואושר לפי בדיקות התקינות.'
+      : `המסמך נותח אך נדרש אימות ידני: ${(result.gate?.failures?.[0]) || (result.validation?.review_reasons_he?.[0]) || 'נדרשת בדיקה ידנית.'}`;
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status_reason: intakeReason });
 
     return Response.json(result);
