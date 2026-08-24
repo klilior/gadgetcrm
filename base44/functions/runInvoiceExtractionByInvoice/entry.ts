@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { classifyInvoiceLines } from '../../shared/invoiceClassification.ts';
-import { calculateFileHash, findReusableDuplicate, getEarlyNonInvoiceReason } from '../../shared/invoiceIntakeGuards.ts';
+import { calculateFileHash, getEarlyNonInvoiceReason } from '../../shared/invoiceIntakeGuards.ts';
+import { FILE_HASH_ALGORITHM, findFileHashDuplicate, needsFileHashRecompute, pickReusableOriginal, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDATION_VERSION, ARITHMETIC_TOLERANCE } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
@@ -67,18 +68,34 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, skipped: true, reason: 'Early non-invoice filter' });
     }
 
-    let fileHash = intake.file_hash;
-    if (!fileHash) {
-      fileHash = await calculateFileHash(intake.file).catch(() => null);
-      if (fileHash) await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { file_hash: fileHash });
+    // D1 technical-identity preflight. Legacy non-64-hex pseudo-hashes are untrusted, so the hash
+    // is recomputed from the ACTUAL file bytes before any comparison, and dedupe requires a trusted
+    // SHA-256 on BOTH sides. This is a technical duplicate only — never a Linet/matched_duplicate.
+    if (needsFileHashRecompute(intake)) {
+      const recomputed = await calculateFileHash(intake.file).catch(() => null);
+      if (recomputed) {
+        intake.file_hash = recomputed;
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { file_hash: recomputed, file_hash_algorithm: FILE_HASH_ALGORITHM });
+      }
     }
+    const fileHash = trustedFileHash(intake);
     if (fileHash && !body.force) {
       const sameFiles = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ file_hash: fileHash }, 'id', 1000);
-      const cached = findReusableDuplicate(sameFiles, intake.id);
-      if (cached?.linked_invoice && cached.linked_invoice !== invoice.id) {
-        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'כפילות', status_reason: 'נעשה שימוש בתוצאת חילוץ קיימת לפי חתימת קובץ.', linked_invoice: cached.linked_invoice, ai_debug_last_extraction_json: cached.ai_debug_last_extraction_json || undefined });
-        await base44.asServiceRole.entities.Invoices.update(invoice.id, { extraction_status: 'נדחה', notes: `כפילות קובץ; התוצאה הקיימת נמצאת בחשבונית ${cached.linked_invoice}.` });
-        return Response.json({ success: true, skipped: true, reason: 'Cached file hash', cached_invoice_id: cached.linked_invoice });
+      const duplicate = findFileHashDuplicate(sameFiles, intake, intake.id);
+      const original = duplicate ? (pickReusableOriginal(sameFiles, intake.id) || duplicate.intake) : null;
+      // Same-intake idempotency: an invoice already belonging to THIS intake is not a duplicate.
+      if (original?.linked_invoice && original.linked_invoice !== invoice.id) {
+        // Report only. processIntake is what prevents duplicate shells; here we must not create,
+        // delete, reject, re-link or overwrite anything — cleanup stays a manual decision.
+        return Response.json({
+          success: true,
+          skipped: true,
+          reason: 'Technical file duplicate',
+          reason_code: duplicate.reason_code,
+          original_intake_id: original.id,
+          original_invoice_id: original.linked_invoice,
+          records_unchanged: true
+        });
       }
     }
 

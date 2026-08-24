@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
-import { decideIntakeShellAction, findGmailDuplicate, gmailIdentity, isSha256Hex, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
+import { decideIntakeShellAction, findFileHashDuplicate, findGmailDuplicate, gmailIdentity, isSha256Hex, needsFileHashRecompute, pickReusableOriginal, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
 
 /**
  * ADMIN-ONLY, STRICTLY READ-ONLY regression harness for D1 intake identity/idempotency.
@@ -108,6 +108,26 @@ Deno.serve(async (req) => {
       name: 'trusted_sha256_duplicate_reuses_original_invoice',
       pass: fileDupDecision.action === 'reuse_duplicate' && fileDupDecision.invoice_id === 'inv1' && fileDupDecision.reason_code === 'FILE_DUPLICATE',
       detail: fileDupDecision
+    });
+
+    // runInvoiceExtractionByInvoice preflight: legacy 32-char input must force a byte recompute and
+    // must not dedupe; a trusted 64-hex pair selects the reusable original.
+    fixtures.push({
+      name: 'route_legacy_32char_hash_requires_recompute_and_no_dedupe',
+      pass: needsFileHashRecompute({ file: 'u2', file_hash: legacyHash }) === true &&
+        findFileHashDuplicate([{ id: 'i1', file_hash: legacyHash, linked_invoice: 'inv1' }], { id: 'i2', file_hash: legacyHash }, 'i2') === null,
+      detail: { legacyHash, recompute_required: true, duplicate: null }
+    });
+    fixtures.push({
+      name: 'route_trusted_64hex_selects_original_invoice',
+      pass: (() => {
+        const candidates = [{ id: 'i1', file_hash: hashA2, linked_invoice: 'inv1', ai_debug_last_extraction_json: '{"ok":1}' }];
+        const incoming = { id: 'i2', file: 'u2', file_hash: hashA1 };
+        const dup = findFileHashDuplicate(candidates, incoming, 'i2');
+        const original = pickReusableOriginal(candidates, 'i2');
+        return needsFileHashRecompute(incoming) === false && dup?.reason_code === 'FILE_DUPLICATE' && original?.linked_invoice === 'inv1';
+      })(),
+      detail: { recompute_required: false, reason_code: 'FILE_DUPLICATE', original_invoice_id: 'inv1' }
     });
 
     const linkedDecision = decideIntakeShellAction({
