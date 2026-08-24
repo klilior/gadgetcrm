@@ -1,7 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { classifyInvoiceLines } from '../../shared/invoiceClassification.ts';
 import { calculateFileHash, getEarlyNonInvoiceReason } from '../../shared/invoiceIntakeGuards.ts';
-import { FILE_HASH_ALGORITHM, findFileHashDuplicate, needsFileHashRecompute, pickReusableOriginal, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
+import { needsFileHashRecompute, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
+import { planExtractionRoutePreflight } from '../../shared/invoiceExtractionRoutePreflight.ts';
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDATION_VERSION, ARITHMETIC_TOLERANCE } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
@@ -31,14 +32,11 @@ Deno.serve(async (req) => {
     const invoice = invList?.[0];
     if (!invoice) return Response.json({ error: 'Invoice not found' }, { status: 404 });
 
-    // Allow re-run for any non-finalized status
-    if (invoice.extraction_status === 'אושר' || invoice.extraction_status === 'נדחה') {
-      // Check if force re-run was requested
-      if (!body.force) {
-        return Response.json({ success: true, skipped: true, reason: 'Finalized' });
-      }
-      // Reset status to allow re-extraction
-      await base44.asServiceRole.entities.Invoices.update(invoice.id, { extraction_status: 'ממתין לאימות' });
+    // Allow re-run for any non-finalized status. The reset write is DEFERRED until after the
+    // technical-identity preflight, so a cross-intake duplicate can never mutate a finalized invoice.
+    const isFinalized = invoice.extraction_status === 'אושר' || invoice.extraction_status === 'נדחה';
+    if (isFinalized && !body.force) {
+      return Response.json({ success: true, skipped: true, reason: 'Finalized' });
     }
     if (!invoice.source_intake) {
       return Response.json({ success: true, skipped: true, reason: 'No source intake' });
@@ -48,8 +46,44 @@ Deno.serve(async (req) => {
     const intake = intakeList?.[0];
     if (!intake) return Response.json({ success: false, error: 'Source intake not found' }, { status: 404 });
 
-    // DEBUG: Check file presence
+    // File presence is evaluated IN MEMORY; the debug write is deferred past the preflight.
     const filePresent = !!(intake.file && typeof intake.file === 'string' && intake.file.trim().length > 0);
+
+    // D1 technical-identity preflight — BEFORE any entity update. Legacy non-64-hex pseudo-hashes
+    // are untrusted, so the hash is recomputed from the ACTUAL file bytes in memory and dedupe
+    // requires a trusted SHA-256 on BOTH sides. Technical duplicate only — never a
+    // Linet/matched_duplicate. force NEVER bypasses this ruling.
+    let recomputedHash = null;
+    if (filePresent && needsFileHashRecompute(intake)) {
+      recomputedHash = await calculateFileHash(intake.file).catch(() => null);
+    }
+    const probeHash = trustedFileHash({ ...intake, file_hash: recomputedHash || intake.file_hash });
+    const candidates = probeHash
+      ? await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ file_hash: probeHash }, 'id', 1000)
+      : [];
+    const preflight = planExtractionRoutePreflight({ intake, invoiceId: invoice.id, candidates, recomputedHash, force: body.force === true });
+
+    if (preflight.is_duplicate) {
+      // Report only, zero writes: no shell creation, deletion, rejection, re-linking or overwrite.
+      return Response.json({
+        success: true,
+        skipped: true,
+        reason: 'Technical file duplicate',
+        reason_code: preflight.reason_code,
+        original_intake_id: preflight.original_intake_id,
+        original_invoice_id: preflight.original_invoice_id,
+        records_unchanged: true
+      });
+    }
+
+    // Not a duplicate → the deferred writes may now run, in the original order.
+    for (const write of preflight.planned_writes) {
+      intake.file_hash = write.data.file_hash;
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(write.id, write.data);
+    }
+    if (isFinalized) {
+      await base44.asServiceRole.entities.Invoices.update(invoice.id, { extraction_status: 'ממתין לאימות' });
+    }
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_input_file_present: filePresent });
 
     if (!filePresent) {
@@ -66,37 +100,6 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'דולג', status_reason: earlySkipReason });
       await base44.asServiceRole.entities.Invoices.update(invoice.id, { extraction_status: 'נדחה', notes: earlySkipReason });
       return Response.json({ success: true, skipped: true, reason: 'Early non-invoice filter' });
-    }
-
-    // D1 technical-identity preflight. Legacy non-64-hex pseudo-hashes are untrusted, so the hash
-    // is recomputed from the ACTUAL file bytes before any comparison, and dedupe requires a trusted
-    // SHA-256 on BOTH sides. This is a technical duplicate only — never a Linet/matched_duplicate.
-    if (needsFileHashRecompute(intake)) {
-      const recomputed = await calculateFileHash(intake.file).catch(() => null);
-      if (recomputed) {
-        intake.file_hash = recomputed;
-        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { file_hash: recomputed, file_hash_algorithm: FILE_HASH_ALGORITHM });
-      }
-    }
-    const fileHash = trustedFileHash(intake);
-    if (fileHash && !body.force) {
-      const sameFiles = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ file_hash: fileHash }, 'id', 1000);
-      const duplicate = findFileHashDuplicate(sameFiles, intake, intake.id);
-      const original = duplicate ? (pickReusableOriginal(sameFiles, intake.id) || duplicate.intake) : null;
-      // Same-intake idempotency: an invoice already belonging to THIS intake is not a duplicate.
-      if (original?.linked_invoice && original.linked_invoice !== invoice.id) {
-        // Report only. processIntake is what prevents duplicate shells; here we must not create,
-        // delete, reject, re-link or overwrite anything — cleanup stays a manual decision.
-        return Response.json({
-          success: true,
-          skipped: true,
-          reason: 'Technical file duplicate',
-          reason_code: duplicate.reason_code,
-          original_intake_id: original.id,
-          original_invoice_id: original.linked_invoice,
-          records_unchanged: true
-        });
-      }
     }
 
     // Idempotency: run only if doc_number OR total_with_vat missing (unless force re-run)

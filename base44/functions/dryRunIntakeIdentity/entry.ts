@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { planExtractionRoutePreflight } from '../../shared/invoiceExtractionRoutePreflight.ts';
 import { decideIntakeShellAction, findFileHashDuplicate, findGmailDuplicate, gmailIdentity, isSha256Hex, needsFileHashRecompute, pickReusableOriginal, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
 
 /**
@@ -117,6 +118,41 @@ Deno.serve(async (req) => {
       pass: needsFileHashRecompute({ file: 'u2', file_hash: legacyHash }) === true &&
         findFileHashDuplicate([{ id: 'i1', file_hash: legacyHash, linked_invoice: 'inv1' }], { id: 'i2', file_hash: legacyHash }, 'i2') === null,
       detail: { legacyHash, recompute_required: true, duplicate: null }
+    });
+    // Ordering proof: a cross-intake technical duplicate plans ZERO writes, force included.
+    for (const force of [false, true]) {
+      const plan = planExtractionRoutePreflight({
+        intake: { id: 'i2', file: 'u2', file_hash: legacyHash, status: 'חדש' },
+        invoiceId: 'inv2',
+        candidates: [{ id: 'i1', file_hash: hashA2, linked_invoice: 'inv1', ai_debug_last_extraction_json: '{"ok":1}' }],
+        recomputedHash: hashA1,
+        force
+      });
+      fixtures.push({
+        name: `route_cross_intake_duplicate_plans_zero_writes_force_${force}`,
+        pass: plan.is_duplicate === true && plan.planned_writes.length === 0 && plan.force_applied === false &&
+          plan.reason_code === 'FILE_DUPLICATE' && plan.original_invoice_id === 'inv1',
+        detail: plan
+      });
+    }
+    // No duplicate → the recomputed SHA-256 is the only planned write, persisted after the ruling.
+    fixtures.push({
+      name: 'route_no_duplicate_plans_only_hash_persistence',
+      pass: (() => {
+        const plan = planExtractionRoutePreflight({ intake: { id: 'i2', file: 'u2', file_hash: legacyHash }, invoiceId: 'inv2', candidates: [], recomputedHash: hashA1, force: true });
+        return plan.is_duplicate === false && plan.force_applied === true && plan.planned_writes.length === 1 &&
+          plan.planned_writes[0].data.file_hash === hashA1 && plan.planned_writes[0].data.file_hash_algorithm === 'SHA-256';
+      })(),
+      detail: 'hash + algorithm persisted once, only when no cross-intake duplicate exists'
+    });
+    // Same-intake idempotency: this intake\'s own invoice is not a technical duplicate.
+    fixtures.push({
+      name: 'route_same_intake_invoice_is_not_duplicate',
+      pass: (() => {
+        const plan = planExtractionRoutePreflight({ intake: { id: 'i2', file: 'u2', file_hash: hashA1 }, invoiceId: 'inv1', candidates: [{ id: 'i1', file_hash: hashA2, linked_invoice: 'inv1' }], recomputedHash: null, force: false });
+        return plan.is_duplicate === false && plan.planned_writes.length === 0;
+      })(),
+      detail: 'linked_invoice === current invoice → normal flow continues, no writes planned here'
     });
     fixtures.push({
       name: 'route_trusted_64hex_selects_original_invoice',
