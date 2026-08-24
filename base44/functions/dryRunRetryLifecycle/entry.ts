@@ -8,8 +8,11 @@ import {
   planAttemptFailure,
   planAttemptStart,
   planAttemptSuccess,
-  planNonAttempt
+  planNonAttempt,
+  planRouteFailureTarget,
+  RETRY_READY_STATUS
 } from '../../shared/invoiceRetryLifecycle.ts';
+import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
 import { SHELL_CALLERS, hasSingleAutomaticOwner, planShellOwnership } from '../../shared/invoiceShellOwnership.ts';
 import { planSupplierPricePurchase } from '../../shared/supplierPriceRetry.ts';
 
@@ -134,6 +137,84 @@ Deno.serve(async (req) => {
         technical.reason_code !== BUSINESS_DUPLICATE_CODE &&
         !allText.includes('matched_duplicate') && !allText.includes('linet') && !allText.includes('LINET'),
       detail: { technical_reason_code: technical.reason_code, business_code: BUSINESS_DUPLICATE_CODE }
+    });
+
+    // 10. Consumed-body-safe failure target keeps the ORIGINAL intake_id and stays retry-ready.
+    const transientTarget = planRouteFailureTarget({ intakeId: 'intake-7', error: new Error('502 upstream timeout') });
+    const terminalTarget = planRouteFailureTarget({ intakeId: 'intake-7', error: new Error('Invalid extraction response') });
+    const noIdTarget = planRouteFailureTarget({ intakeId: null, error: new Error('boom') });
+    fixtures.push({
+      name: 'route_failure_target_retains_original_intake_id',
+      pass: transientTarget.intake_id === 'intake-7' && transientTarget.can_persist === true &&
+        terminalTarget.intake_id === 'intake-7' && noIdTarget.can_persist === false && noIdTarget.intake_id === null,
+      detail: { transientTarget, noIdTarget }
+    });
+    fixtures.push({
+      name: 'transient_route_failure_stays_ready_and_retryable',
+      pass: transientTarget.writes.status === RETRY_READY_STATUS && RETRY_READY_STATUS === 'מוכן לניתוח' &&
+        transientTarget.writes.processing_status === PROCESSING_STATUS.RETRYABLE &&
+        transientTarget.writes.status !== 'דולג' && transientTarget.attempt_delta === 0 &&
+        terminalTarget.writes.status === RETRY_READY_STATUS && terminalTarget.writes.processing_status === PROCESSING_STATUS.FAILED,
+      detail: { transient: transientTarget.writes, terminal: terminalTarget.writes }
+    });
+
+    // 11. First run of a 3-document intake: root + two creates.
+    const root = { id: 'inv-root', source_intake: 'intake-8' };
+    const firstRun = planMultiDocumentTargets({ intakeId: 'intake-8', rootInvoice: root, invoiceCount: 3, existingInvoices: [root] });
+    fixtures.push({
+      name: 'first_run_three_documents_root_plus_two_creates',
+      pass: firstRun.creates === 2 && firstRun.reuses === 0 &&
+        firstRun.targets[0].action === 'root' && firstRun.targets[0].invoice_id === 'inv-root' &&
+        firstRun.targets[0].needs_index_write === true && firstRun.targets[0].index === ROOT_DOCUMENT_INDEX &&
+        firstRun.targets[1].action === 'create' && firstRun.targets[2].action === 'create',
+      detail: firstRun.targets
+    });
+
+    // 12. Retry of the same intake/count: three reuses of the same ids, zero creates.
+    const indexedRoot = { id: 'inv-root', source_intake: 'intake-8', source_document_index: 1 };
+    const retryRun = planMultiDocumentTargets({
+      intakeId: 'intake-8',
+      rootInvoice: indexedRoot,
+      invoiceCount: 3,
+      existingInvoices: [indexedRoot, { id: 'inv-c2', source_intake: 'intake-8', source_document_index: 2 }, { id: 'inv-c3', source_intake: 'intake-8', source_document_index: 3 }]
+    });
+    fixtures.push({
+      name: 'retry_three_documents_zero_creates_same_invoice_ids',
+      pass: retryRun.creates === 0 && retryRun.reuses === 2 &&
+        retryRun.targets[0].action === 'root' && retryRun.targets[0].needs_index_write === false &&
+        retryRun.targets[1].invoice_id === 'inv-c2' && retryRun.targets[2].invoice_id === 'inv-c3',
+      detail: retryRun.targets
+    });
+
+    // 13. Duplicate index rows and index-less rows can never be reused twice / at all.
+    const messy = planMultiDocumentTargets({
+      intakeId: 'intake-9',
+      rootInvoice: { id: 'inv-r9', source_intake: 'intake-9', source_document_index: 1 },
+      invoiceCount: 3,
+      existingInvoices: [
+        { id: 'inv-dup-a', source_intake: 'intake-9', source_document_index: 2 },
+        { id: 'inv-dup-b', source_intake: 'intake-9', source_document_index: 2 },
+        { id: 'inv-noidx', source_intake: 'intake-9' },
+        { id: 'inv-other', source_intake: 'intake-OTHER', source_document_index: 3 }
+      ]
+    });
+    fixtures.push({
+      name: 'duplicate_or_missing_index_candidates_never_reused_twice',
+      pass: messy.targets[1].action === 'reuse' && messy.targets[1].invoice_id === 'inv-dup-a' &&
+        messy.targets[2].action === 'create' &&
+        messy.reused_invoice_ids.length === new Set(messy.reused_invoice_ids).size &&
+        !messy.reused_invoice_ids.includes('inv-dup-b') && !messy.reused_invoice_ids.includes('inv-noidx') &&
+        !messy.reused_invoice_ids.includes('inv-other'),
+      detail: messy
+    });
+
+    // 14. Missing-file / not-ready / no-linked guards: attempt delta 0, no writes.
+    const guardPlans = [NON_ATTEMPT_REASONS.MISSING_FILE_SKIP, NON_ATTEMPT_REASONS.INTAKE_NOT_READY, NON_ATTEMPT_REASONS.NO_LINKED_INVOICE, NON_ATTEMPT_REASONS.INTAKE_NOT_FOUND].map((r) => planNonAttempt(r));
+    fixtures.push({
+      name: 'missing_file_not_ready_no_linked_attempt_delta_zero',
+      pass: guardPlans.every((plan) => plan.attempt_delta === 0 && plan.is_attempt === false && Object.keys(plan.writes).length === 0) &&
+        guardPlans.map((p) => p.reason).join(',') === 'MISSING_FILE_SKIP,INTAKE_NOT_READY,NO_LINKED_INVOICE,INTAKE_NOT_FOUND',
+      detail: guardPlans.map((p) => p.reason)
     });
 
     const passed = fixtures.filter((f) => f.pass).length;

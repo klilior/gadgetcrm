@@ -8,7 +8,8 @@ import { parseLinetLines, LINET_MATCH_RULE_VERSION } from '../../shared/linetInv
 import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
 import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
-import { NON_ATTEMPT_REASONS, planAttemptFailure, planAttemptStart, planAttemptSuccess, planNonAttempt } from '../../shared/invoiceRetryLifecycle.ts';
+import { NON_ATTEMPT_REASONS, planAttemptStart, planAttemptSuccess, planNonAttempt, planRouteFailureTarget } from '../../shared/invoiceRetryLifecycle.ts';
+import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -221,22 +222,26 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
 
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
+  // The body can be read ONCE — capture intake_id in outer scope so the catch below can always
+  // reach the original intake without re-reading the (already consumed) request.
+  let intakeId = null;
   try {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const text = await req.text();
     const body = text ? JSON.parse(text) : {};
-    const intakeId = body.intake_id;
+    intakeId = body.intake_id || null;
     if (!intakeId) return Response.json({ error: 'Missing intake_id' }, { status: 400 });
 
     const intakeList = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ id: intakeId });
     const intake = intakeList?.[0];
-    if (!intake) return Response.json({ error: 'Intake not found' }, { status: 404 });
+    if (!intake) return Response.json({ error: 'Intake not found', lifecycle: planNonAttempt(NON_ATTEMPT_REASONS.INTAKE_NOT_FOUND) }, { status: 404 });
 
-    if (!intake.file) return Response.json({ error: 'No file on intake' }, { status: 400 });
-    if (intake.status !== 'מוכן לניתוח') return Response.json({ error: 'Intake not ready' }, { status: 400 });
-    if (!intake.linked_invoice) return Response.json({ error: 'No linked invoice' }, { status: 400 });
+    // Guard paths below are NOT AI attempts: zero writes, zero attempt increment.
+    if (!intake.file) return Response.json({ error: 'No file on intake', lifecycle: planNonAttempt(NON_ATTEMPT_REASONS.MISSING_FILE_SKIP) }, { status: 400 });
+    if (intake.status !== 'מוכן לניתוח') return Response.json({ error: 'Intake not ready', lifecycle: planNonAttempt(NON_ATTEMPT_REASONS.INTAKE_NOT_READY) }, { status: 400 });
+    if (!intake.linked_invoice) return Response.json({ error: 'No linked invoice', lifecycle: planNonAttempt(NON_ATTEMPT_REASONS.NO_LINKED_INVOICE) }, { status: 400 });
 
     // Fetch linked invoice and guard approved/rejected
     const invList = await base44.asServiceRole.entities.Invoices.filter({ id: intake.linked_invoice });
@@ -283,6 +288,11 @@ Deno.serve(async (req) => {
         status_reason: `זוהו ${invoiceCount} חשבוניות בקובץ. מעבד...`
       });
 
+      // Deterministic per-intake document index: a retry of the same intake reuses the same
+      // indexed invoices instead of creating a second set of children.
+      const existingForIntake = await base44.asServiceRole.entities.Invoices.filter({ source_intake: intake.id }, undefined, 200);
+      const documentPlan = planMultiDocumentTargets({ intakeId: intake.id, rootInvoice: invoice, invoiceCount, existingInvoices: existingForIntake || [] });
+
       for (let i = 0; i < invoiceCount; i++) {
         const hint = multiDetect.invoices_detected[i];
         // Same identity/hints the extraction prompt below uses — reused for the monetary audit.
@@ -312,16 +322,24 @@ Ignore all other invoices in the document.`;
         if (!extraction || typeof extraction !== 'object') continue;
         await prepareExtraction(extraction, targetScope);
 
-        // For first invoice, use the existing linked invoice
-        // For additional invoices, create new invoice records
+        // Root = document index 1; every other index reuses its existing child, or is created once.
+        const target = documentPlan.targets[i];
         let targetInvoice = invoice;
-        if (i > 0) {
-          const newInvoice = await base44.asServiceRole.entities.Invoices.create({
+        if (target?.action === 'root') {
+          if (target.needs_index_write) {
+            await base44.asServiceRole.entities.Invoices.update(invoice.id, { source_document_index: ROOT_DOCUMENT_INDEX });
+          }
+        } else if (target?.action === 'reuse') {
+          const reused = (await base44.asServiceRole.entities.Invoices.filter({ id: target.invoice_id }, undefined, 1))?.[0];
+          if (!reused) continue;
+          targetInvoice = reused;
+        } else {
+          targetInvoice = await base44.asServiceRole.entities.Invoices.create({
             source_intake: intake.id,
+            source_document_index: target?.index ?? (i + 1),
             extraction_status: 'ממתין לאימות',
             notes: `נוצר אוטומטית - חשבונית ${i + 1} מתוך ${invoiceCount} בקובץ מרובה`
           });
-          targetInvoice = newInvoice;
         }
 
         const result = await processSingleInvoice(base44, intake, targetInvoice, extraction, i);
@@ -340,6 +358,7 @@ Ignore all other invoices in the document.`;
         success: true, 
         multiple_invoices: true, 
         invoice_count: invoiceCount,
+        document_plan: documentPlan,
         lifecycle: multiLifecycle,
         attempt_count: attemptPlan.writes.attempt_count,
         results 
@@ -375,19 +394,14 @@ Ignore all other invoices in the document.`;
 
     return Response.json({ ...result, lifecycle: successLifecycle, attempt_count: attemptPlan.writes.attempt_count });
   } catch (error) {
+    // Transient errors → RETRYABLE and the intake stays 'מוכן לניתוח' so a retry is possible;
+    // structurally invalid responses → FAILED (still ready for manual recovery).
+    const failureTarget = planRouteFailureTarget({ intakeId, error });
     try {
-      const text = await req.text().catch(() => null);
-      const body = text ? JSON.parse(text) : {};
-      const intakeId = body?.intake_id;
-      if (intakeId) {
-        // Transient extraction/PDF errors → RETRYABLE, structurally invalid response → FAILED.
-        await createClientFromRequest(req).asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, {
-          status: 'דולג',
-          status_reason: 'שגיאת ניתוח מסמך. נדרש טיפול ידני.',
-          ...planAttemptFailure(error).writes
-        });
+      if (failureTarget.can_persist) {
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(failureTarget.intake_id, failureTarget.writes);
       }
     } catch (_) {}
-    return Response.json({ success: false, error: error?.message || String(error) }, { status: 500 });
+    return Response.json({ success: false, error: error?.message || String(error), lifecycle: failureTarget }, { status: 500 });
   }
 });

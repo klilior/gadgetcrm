@@ -30,7 +30,10 @@ export const NON_ATTEMPT_REASONS = {
   EARLY_NON_INVOICE_SKIP: 'EARLY_NON_INVOICE_SKIP',
   ALREADY_POPULATED_GATE: 'ALREADY_POPULATED_GATE',
   REUSE_EXISTING_INVOICE: 'REUSE_EXISTING_INVOICE',
-  FINALIZED_INVOICE: 'FINALIZED_INVOICE'
+  FINALIZED_INVOICE: 'FINALIZED_INVOICE',
+  INTAKE_NOT_READY: 'INTAKE_NOT_READY',
+  NO_LINKED_INVOICE: 'NO_LINKED_INVOICE',
+  INTAKE_NOT_FOUND: 'INTAKE_NOT_FOUND'
 };
 
 const MAX_ERROR_LENGTH = 500;
@@ -96,6 +99,33 @@ export function planAttemptFailure(error) {
     writes: {
       processing_status: status,
       last_error: String(error?.message || error || 'שגיאה לא ידועה').slice(0, MAX_ERROR_LENGTH)
+    }
+  };
+}
+
+/** Legacy intake status a failed route leaves behind. */
+export const RETRY_READY_STATUS = 'מוכן לניתוח';
+
+/**
+ * Route-level failure target. The caller MUST have captured intake_id before the request body
+ * was consumed — this plan simply carries that exact id through, so the failure always lands on
+ * the original intake. A transient failure stays 'מוכן לניתוח' so a retry is actually possible;
+ * a terminal failure also stays ready for manual recovery but is marked FAILED.
+ */
+export function planRouteFailureTarget({ intakeId, error }) {
+  const failure = planAttemptFailure(error);
+  const retryable = failure.writes.processing_status === PROCESSING_STATUS.RETRYABLE;
+  return {
+    intake_id: intakeId || null,
+    can_persist: Boolean(intakeId),
+    retryable,
+    attempt_delta: 0,
+    writes: {
+      status: RETRY_READY_STATUS,
+      status_reason: retryable
+        ? 'שגיאת ניתוח זמנית. הקליטה נשארה מוכנה לניתוח לנסיון חוזר.'
+        : 'שגיאת ניתוח מסמך. נדרש טיפול ידני.',
+      ...failure.writes
     }
   };
 }
