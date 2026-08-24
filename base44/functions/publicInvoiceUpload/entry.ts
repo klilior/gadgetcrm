@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
+import { SHELL_CALLERS, planShellOwnership } from '../../shared/invoiceShellOwnership.ts';
 
 const MAX_FILE_SIZE = 12 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']);
@@ -54,16 +55,26 @@ Deno.serve(async (req) => {
       file_name: fileName,
       file_mime: fileMime,
       status: 'חדש',
-      status_reason: `הועלה מקישור מהיר (${uploadedBy})`
+      status_reason: `הועלה מקישור מהיר (${uploadedBy})`,
+      processing_status: 'IDLE',
+      attempt_count: 0
     });
 
-    let invoiceId = null;
-    try {
-      const processed = await base44.asServiceRole.functions.invoke('processIntake', { intake_id: intake.id });
-      invoiceId = processed?.data?.created_invoice_id || processed?.data?.invoice_id || null;
-    } catch (_) {}
+    // D2b1: this route accepts the file only. processIntakeAutomation is the single automatic
+    // shell creator, so no competing creator is invoked here — that removes the upload/automation
+    // race that could produce two shells for one intake.
+    const ownership = planShellOwnership(SHELL_CALLERS.PUBLIC_UPLOAD);
+    const current = (await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ id: intake.id }, undefined, 1))?.[0];
 
-    return Response.json({ success: true, intake_id: intake.id, invoice_id: invoiceId });
+    return Response.json({
+      success: true,
+      status: 'accepted',
+      processing_status: current?.processing_status || 'IDLE',
+      intake_id: intake.id,
+      invoice_id: current?.linked_invoice || null,
+      shell_owner: ownership,
+      pending: !current?.linked_invoice
+    });
   } catch (error) {
     return Response.json({ success: false, error: error?.message || String(error) }, { status: 500 });
   }

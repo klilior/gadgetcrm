@@ -3,6 +3,8 @@ import { classifyInvoiceLines } from '../../shared/invoiceClassification.ts';
 import { calculateFileHash, getEarlyNonInvoiceReason } from '../../shared/invoiceIntakeGuards.ts';
 import { needsFileHashRecompute, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
 import { planExtractionRoutePreflight } from '../../shared/invoiceExtractionRoutePreflight.ts';
+import { NON_ATTEMPT_REASONS, planAttemptFailure, planAttemptStart, planAttemptSuccess, planNonAttempt } from '../../shared/invoiceRetryLifecycle.ts';
+import { planSupplierPricePurchase } from '../../shared/supplierPriceRetry.ts';
 import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
 import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
@@ -34,6 +36,15 @@ Deno.serve(async (req) => {
     const invList = await base44.asServiceRole.entities.Invoices.filter({ id: invoiceId });
     const invoice = invList?.[0];
     if (!invoice) return Response.json({ error: 'Invoice not found' }, { status: 404 });
+
+    // D2b1: lifecycle writes are applied only where the shared plan says so. The same intake and
+    // the same invoice are preserved across retries; the original file is never overwritten.
+    const applyLifecycle = async (targetIntakeId, plan) => {
+      if (targetIntakeId && Object.keys(plan.writes).length) {
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(targetIntakeId, plan.writes);
+      }
+      return plan;
+    };
 
     // Allow re-run for any non-finalized status. The reset write is DEFERRED until after the
     // technical-identity preflight, so a cross-intake duplicate can never mutate a finalized invoice.
@@ -75,7 +86,9 @@ Deno.serve(async (req) => {
         reason_code: preflight.reason_code,
         original_intake_id: preflight.original_intake_id,
         original_invoice_id: preflight.original_invoice_id,
-        records_unchanged: true
+        records_unchanged: true,
+        // Preflight is not an AI attempt: zero writes, zero attempt increment.
+        lifecycle: planNonAttempt(NON_ATTEMPT_REASONS.TECHNICAL_DUPLICATE_PREFLIGHT)
       });
     }
 
@@ -95,14 +108,14 @@ Deno.serve(async (req) => {
         status: 'דולג',
         ai_debug_last_error_he: errMsg
       });
-      return Response.json({ success: false, skipped: true, reason: 'No file on intake', ai_debug_last_error_he: errMsg });
+      return Response.json({ success: false, skipped: true, reason: 'No file on intake', ai_debug_last_error_he: errMsg, lifecycle: planNonAttempt(NON_ATTEMPT_REASONS.MISSING_FILE_SKIP) });
     }
 
     const earlySkipReason = getEarlyNonInvoiceReason(intake);
     if (earlySkipReason && !body.force) {
       await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status: 'דולג', status_reason: earlySkipReason });
       await base44.asServiceRole.entities.Invoices.update(invoice.id, { extraction_status: 'נדחה', notes: earlySkipReason });
-      return Response.json({ success: true, skipped: true, reason: 'Early non-invoice filter' });
+      return Response.json({ success: true, skipped: true, reason: 'Early non-invoice filter', lifecycle: planNonAttempt(NON_ATTEMPT_REASONS.EARLY_NON_INVOICE_SKIP) });
     }
 
     // Idempotency: run only if doc_number OR total_with_vat missing (unless force re-run)
@@ -188,7 +201,7 @@ Deno.serve(async (req) => {
           status_reason: 'החשבונית כבר נותחה; הסטטוס סונכרן לפי תוצאות הניתוח.'
         });
       }
-      return Response.json({ success: true, skipped: true, reason: 'Already populated', normalized_status: normalizedStatus, business_duplicate: existingBusinessDuplicate || null, canonical_supplier_family: existingFamily.family || null });
+      return Response.json({ success: true, skipped: true, reason: 'Already populated', lifecycle: planNonAttempt(NON_ATTEMPT_REASONS.ALREADY_POPULATED_GATE), normalized_status: normalizedStatus, business_duplicate: existingBusinessDuplicate || null, canonical_supplier_family: existingFamily.family || null });
     }
 
     // Step 1: Extraction - with automatic PDF to image conversion fallback
@@ -230,6 +243,9 @@ Deno.serve(async (req) => {
       }
     };
     
+    // D2b1: an actual AI extraction attempt begins here — the ONLY attempt_count increment.
+    const attemptPlan = await applyLifecycle(intake.id, planAttemptStart(intake));
+
     try {
       extraction = await base44.integrations.Core.InvokeLLM({
         prompt: EXTRACT_PROMPT,
@@ -370,7 +386,9 @@ Deno.serve(async (req) => {
         extraction_status: 'נדחה',
         notes: (invoice.notes ? invoice.notes + '\n' : '') + newNotes 
       });
-      return Response.json({ success: true, skipped: true, reason: 'OTHER', extraction });
+      // Intentional non-invoice classification is a COMPLETED attempt → SUCCEEDED, error cleared.
+      const skipLifecycle = await applyLifecycle(intake.id, planAttemptSuccess());
+      return Response.json({ success: true, skipped: true, reason: 'OTHER', extraction, lifecycle: skipLifecycle, attempt_count: attemptPlan.writes.attempt_count });
     }
 
     // Step 3: Deterministic validation (no LLM - avoids math miscalculations)
@@ -538,6 +556,9 @@ Deno.serve(async (req) => {
       if (existingPrice && existingPrice.length > 0) {
         const oldPriceRecord = existingPrice[0];
         const oldPrice = oldPriceRecord.last_price_before_vat;
+        // D2b1: a retry of the SAME invoice is not a new purchase — price/min/max may refresh,
+        // but purchase_count stays put when the record already points at this invoice.
+        const purchasePlan = planSupplierPricePurchase({ oldRecord: oldPriceRecord, invoiceId: invoice.id });
 
         // Calculate min/max prices
         const currentMin = oldPriceRecord.min_price_before_vat || oldPrice || newPrice;
@@ -560,7 +581,7 @@ Deno.serve(async (req) => {
             price_change_direction: direction,
             last_invoice_id: invoice.id,
             last_invoice_date: extraction.doc_date || null,
-            purchase_count: (oldPriceRecord.purchase_count || 0) + 1
+            purchase_count: purchasePlan.purchase_count
           });
           
           // Log price change (PriceAlert entity is used for Zap monitoring, not invoices)
@@ -574,7 +595,7 @@ Deno.serve(async (req) => {
             last_invoice_date: extraction.doc_date || null,
             min_price_before_vat: newMin,
             max_price_before_vat: newMax,
-            purchase_count: (oldPriceRecord.purchase_count || 0) + 1,
+            purchase_count: purchasePlan.purchase_count,
             price_change_direction: 'ללא שינוי'
           });
         }
@@ -590,7 +611,7 @@ Deno.serve(async (req) => {
           last_invoice_id: invoice.id,
           last_invoice_date: extraction.doc_date || null,
           first_seen_date: extraction.doc_date || new Date().toISOString().split('T')[0],
-          purchase_count: 1,
+          purchase_count: planSupplierPricePurchase({ oldRecord: null, invoiceId: invoice.id }).purchase_count,
           price_change_direction: 'ללא שינוי'
         });
         }
@@ -628,9 +649,12 @@ Deno.serve(async (req) => {
       intakeReason = `המסמך נותח אך נדרש אימות ידני: ${topReason}`;
     }
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status_reason: intakeReason });
+    const successLifecycle = await applyLifecycle(intake.id, planAttemptSuccess());
 
     return Response.json({ 
       success: true, 
+      lifecycle: successLifecycle,
+      attempt_count: attemptPlan.writes.attempt_count,
       invoice_id: invoice.id, 
       supplier_id: supplierId, 
       line_items_count: lineItems.length,
@@ -649,9 +673,13 @@ Deno.serve(async (req) => {
         const invList = await base44.asServiceRole.entities.Invoices.filter({ id: invoiceId });
         const invoice = invList?.[0];
         if (invoice?.source_intake) {
+          // D2b1: transient extraction/PDF errors → RETRYABLE, structurally invalid response → FAILED.
+          // The intake/invoice pair and the original file are preserved for the next retry.
+          const failure = planAttemptFailure(error);
           await base44.asServiceRole.entities.InvoiceIntakeRaw.update(invoice.source_intake, {
             status: 'מוכן לניתוח',
-            status_reason: `שגיאת ניתוח אוטומטי: ${error?.message || String(error)}`
+            status_reason: `שגיאת ניתוח אוטומטי: ${error?.message || String(error)}`,
+            ...failure.writes
           });
         }
       }

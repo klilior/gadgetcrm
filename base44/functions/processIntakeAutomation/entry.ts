@@ -2,6 +2,10 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { calculateFileHash, getEarlyNonInvoiceReason, isValidInvoiceFile } from '../../shared/invoiceIntakeGuards.ts';
 import { FILE_HASH_ALGORITHM, decideIntakeShellAction, needsFileHashRecompute } from '../../shared/invoiceIntakeIdentity.ts';
 import { loadIntakeDuplicateCandidates } from '../../shared/invoiceIntakeCandidates.ts';
+import { SHELL_CALLERS, planShellOwnership } from '../../shared/invoiceShellOwnership.ts';
+
+// D2b1: this automation is the SINGLE automatic owner of invoice-shell creation.
+const OWNERSHIP = planShellOwnership(SHELL_CALLERS.AUTOMATION);
 
 /**
  * Automation handler for InvoiceIntakeRaw entity creation
@@ -168,6 +172,7 @@ Deno.serve(async (req) => {
       success: true, 
       intake_id: intakeId,
       invoice_id: invoiceId,
+      shell_owner: OWNERSHIP,
       extraction_triggered: true,
       extraction_success: extractionResult?.data?.success || false,
       extraction_error: extractionError

@@ -2,6 +2,12 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { calculateFileHash, getEarlyNonInvoiceReason, isValidInvoiceFile } from '../../shared/invoiceIntakeGuards.ts';
 import { FILE_HASH_ALGORITHM, decideIntakeShellAction, needsFileHashRecompute } from '../../shared/invoiceIntakeIdentity.ts';
 import { loadIntakeDuplicateCandidates } from '../../shared/invoiceIntakeCandidates.ts';
+import { SHELL_CALLERS, planShellOwnership } from '../../shared/invoiceShellOwnership.ts';
+
+// D2b1: MANUAL, idempotent recovery path only. It is never wired to an automation and is never
+// invoked by publicInvoiceUpload, so it cannot race processIntakeAutomation — the single
+// automatic shell creator. It reuses the same decideIntakeShellAction rules.
+const OWNERSHIP = planShellOwnership(SHELL_CALLERS.MANUAL_RECOVERY);
 
 Deno.serve(async (req) => {
   try {
@@ -116,7 +122,7 @@ Deno.serve(async (req) => {
         notes: 'נוצר אוטומטית ממסמך שנקלט. ממתין לניתוח/הזנה.'
       });
       await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { linked_invoice: created.id, status: 'מוכן לניתוח' });
-      return Response.json({ success: true, updates_applied: updates, created_invoice_id: created.id, intake_id: intake.id });
+      return Response.json({ success: true, updates_applied: updates, created_invoice_id: created.id, intake_id: intake.id, shell_owner: OWNERSHIP });
     }
 
     return Response.json({ success: true, updates_applied: updates, status: 'skipped', reason: decision.reason, created_invoice_id: null, intake_id: intake.id });

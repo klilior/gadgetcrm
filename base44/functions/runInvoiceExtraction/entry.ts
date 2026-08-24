@@ -8,6 +8,7 @@ import { parseLinetLines, LINET_MATCH_RULE_VERSION } from '../../shared/linetInv
 import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
 import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
+import { NON_ATTEMPT_REASONS, planAttemptFailure, planAttemptStart, planAttemptSuccess, planNonAttempt } from '../../shared/invoiceRetryLifecycle.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -242,8 +243,16 @@ Deno.serve(async (req) => {
     const invoice = invList?.[0];
     if (!invoice) return Response.json({ error: 'Linked invoice not found' }, { status: 404 });
     if (invoice.extraction_status === 'אושר' || invoice.extraction_status === 'נדחה') {
-      return Response.json({ success: true, skipped: true, reason: 'Invoice already finalized' });
+      // Not an AI attempt: no lifecycle writes, no attempt increment.
+      return Response.json({ success: true, skipped: true, reason: 'Invoice already finalized', lifecycle: planNonAttempt(NON_ATTEMPT_REASONS.FINALIZED_INVOICE) });
     }
+
+    // D2b1: lifecycle writes come only from the shared plans; the same intake/invoice pair and
+    // the original file survive every retry.
+    const applyLifecycle = async (plan) => {
+      if (Object.keys(plan.writes).length) await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, plan.writes);
+      return plan;
+    };
 
     // Prepares every extraction result identically: separate dates + evidence-based amounts.
     // targetScope is passed ONLY for multi-invoice files, so the monetary audit reads
@@ -253,6 +262,9 @@ Deno.serve(async (req) => {
       await auditAndApplyAmounts(base44, extraction, intake.file, 'gpt_5_mini', targetScope);
       return extraction;
     };
+
+    // D2b1: an actual AI extraction attempt begins here — the ONLY attempt_count increment.
+    const attemptPlan = await applyLifecycle(planAttemptStart(intake));
 
     // Step 0: Detect if multiple invoices in file
     const multiDetect = await base44.integrations.Core.InvokeLLM({
@@ -323,10 +335,13 @@ Ignore all other invoices in the document.`;
         status_reason: `עובדו ${successCount} חשבוניות מתוך ${invoiceCount} שזוהו בקובץ`
       });
 
+      const multiLifecycle = await applyLifecycle(planAttemptSuccess());
       return Response.json({ 
         success: true, 
         multiple_invoices: true, 
         invoice_count: invoiceCount,
+        lifecycle: multiLifecycle,
+        attempt_count: attemptPlan.writes.attempt_count,
         results 
       });
     }
@@ -346,7 +361,9 @@ Ignore all other invoices in the document.`;
     const result = await processSingleInvoice(base44, intake, invoice, extraction);
     
     if (result.skipped) {
-      return Response.json(result);
+      // Intentional non-invoice classification is a COMPLETED attempt → SUCCEEDED.
+      const skipLifecycle = await applyLifecycle(planAttemptSuccess());
+      return Response.json({ ...result, lifecycle: skipLifecycle, attempt_count: attemptPlan.writes.attempt_count });
     }
 
     // Update intake status_reason
@@ -354,17 +371,20 @@ Ignore all other invoices in the document.`;
       ? 'המסמך נותח ונקלט לחשבונית ואושר לפי בדיקות התקינות.'
       : `המסמך נותח אך נדרש אימות ידני: ${(result.gate?.failures?.[0]) || (result.validation?.review_reasons_he?.[0]) || 'נדרשת בדיקה ידנית.'}`;
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { status_reason: intakeReason });
+    const successLifecycle = await applyLifecycle(planAttemptSuccess());
 
-    return Response.json(result);
+    return Response.json({ ...result, lifecycle: successLifecycle, attempt_count: attemptPlan.writes.attempt_count });
   } catch (error) {
     try {
       const text = await req.text().catch(() => null);
       const body = text ? JSON.parse(text) : {};
       const intakeId = body?.intake_id;
       if (intakeId) {
+        // Transient extraction/PDF errors → RETRYABLE, structurally invalid response → FAILED.
         await createClientFromRequest(req).asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, {
           status: 'דולג',
-          status_reason: 'שגיאת ניתוח מסמך. נדרש טיפול ידני.'
+          status_reason: 'שגיאת ניתוח מסמך. נדרש טיפול ידני.',
+          ...planAttemptFailure(error).writes
         });
       }
     } catch (_) {}
