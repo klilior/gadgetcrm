@@ -2,6 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
+import { applyDocumentClassificationGuard } from '../../shared/invoiceDocumentClassification.ts';
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
 import { buildInvoiceLineRecords, persistInvoiceLines, applyLinetLinesToInvoice } from '../../shared/invoiceLinePersistence.ts';
 import { parseLinetLines, LINET_MATCH_RULE_VERSION } from '../../shared/linetInvoiceReconciliation.ts';
@@ -295,6 +296,8 @@ Deno.serve(async (req) => {
     // targetScope is passed ONLY for multi-invoice files, so the monetary audit reads
     // amounts from the same invoice the extraction prompt was scoped to.
     const prepareExtraction = async (extraction, targetScope = undefined) => {
+      // D3a: deterministic classification guard — receipts and generic "Invoice" titles stay OTHER.
+      applyDocumentClassificationGuard(extraction);
       normalizeExtractionDates(extraction);
       await auditAndApplyAmounts(base44, extraction, intake.file, 'gpt_5_mini', targetScope);
       return extraction;

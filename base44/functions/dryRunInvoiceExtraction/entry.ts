@@ -2,6 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { validateInvoiceForAutoApproval } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
+import { applyDocumentClassificationGuard } from '../../shared/invoiceDocumentClassification.ts';
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
 
 /**
@@ -65,6 +66,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      applyDocumentClassificationGuard(extraction);
       normalizeExtractionDates(extraction);
 
       // Second pass: evidence-based monetary audit against the ORIGINAL file.

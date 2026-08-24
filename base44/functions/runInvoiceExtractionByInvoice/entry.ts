@@ -12,6 +12,7 @@ import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDupli
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDATION_VERSION, ARITHMETIC_TOLERANCE } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
+import { applyDocumentClassificationGuard } from '../../shared/invoiceDocumentClassification.ts';
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
 import { buildInvoiceLineRecords, persistInvoiceLines, applyLinetLinesToInvoice } from '../../shared/invoiceLinePersistence.ts';
 import { parseLinetLines, LINET_MATCH_RULE_VERSION } from '../../shared/linetInvoiceReconciliation.ts';
@@ -362,6 +363,9 @@ Deno.serve(async (req) => {
       }
       console.log('Post-processing complete.');
     }
+
+    // D3a: deterministic classification guard — receipts and generic "Invoice" titles stay OTHER.
+    applyDocumentClassificationGuard(extraction);
 
     // P0.3: invoice date and due date are separate. The due date must NEVER become the invoice date.
     normalizeExtractionDates(extraction);

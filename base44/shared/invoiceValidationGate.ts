@@ -7,6 +7,8 @@
  *        auto-approved. Every pipeline must call validateInvoiceForAutoApproval().
  */
 
+import { CLASSIFICATION_REASON_CODES, isSupportedDocType } from './invoiceDocumentClassification.ts';
+
 export const INVOICE_VALIDATION_VERSION = 'gate-1.0.0';
 
 // Rounding-only tolerance for subtotal + VAT ≈ total (single agora of rounding).
@@ -116,6 +118,15 @@ export function validateInvoiceForAutoApproval(candidate: any, context: any = {}
     } else {
       validated_fields.push('invoice_date');
     }
+  }
+
+  // ── Document type (D3a) ──────────────────────────────────────────────
+  // Only חשבונית מס / חשבונית זיכוי may be approved. An unsupported or missing type is a
+  // CRITICAL failure — a readable amount, date and number can never compensate for it.
+  if (!isSupportedDocType(candidate?.doc_type_he)) {
+    failures.push(`${CLASSIFICATION_REASON_CODES.UNSUPPORTED_DOC_TYPE}: סוג המסמך אינו חשבונית מס או חשבונית זיכוי.`);
+  } else {
+    validated_fields.push('doc_type');
   }
 
   // ── Total ────────────────────────────────────────────────────────────

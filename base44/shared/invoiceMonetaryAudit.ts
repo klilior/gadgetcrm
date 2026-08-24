@@ -152,8 +152,15 @@ const NEVER_PAYABLE_LABEL = /(מחזור|סכום\s*עסקאות|סה[”"״']?�
 
 const VAT_ONLY_LABEL = /^(\s*)(מע[”"״']?מ|vat)(\s|:|\d|%|$)/i;
 
-/** Labels that state, in print, that the amount must be paid. */
-const EXPLICIT_PAYABLE_LABEL = /(לתשלום|כולל\s*מע[”"״']?מ|סה[”"״']?כ\s*חשבונית|amount\s*due|total\s*due|grand\s*total|net\s*payable)/i;
+/**
+ * Labels that state, in print, that this amount is the document's final payable figure.
+ * "סה״כ" / "סכום כולל" / "Total" belong here: a foot-of-transactions-table "סה״כ" never reaches
+ * this test, because NEVER_PAYABLE_LABEL and the turnover roles are evaluated first.
+ */
+const EXPLICIT_PAYABLE_LABEL = /(לתשלום|כולל\s*מע[”"״']?מ|סה[”"״']?כ\s*חשבונית|סה[”"״']?כ|סכום\s*כולל|סך\s*הכל|amount\s*due|total\s*due|balance\s*due|grand\s*total|net\s*payable|total)/i;
+
+/** Document kinds where an explicitly labelled payable total is the document's own demand. */
+const STANDARD_KINDS = new Set(['standard_invoice', 'credit_note']);
 
 const PAYABLE_ROLES_PRIMARY = ['document_payable'];
 const PAYABLE_ROLES_FALLBACK = ['fee_or_commission'];
@@ -246,10 +253,23 @@ export function selectPayableAmounts(audit: any) {
     return { total: null, subtotal: null, vat: null, provenance };
   }
 
+  const documentKind = cleanLabel(audit?.document_kind).toLowerCase();
+  const isStandardKind = STANDARD_KINDS.has(documentKind);
+  // A single, explicitly payable-labelled candidate is direct printed evidence. It rescues an
+  // ordinary document that the model merely FELT unsure about — turnover/balance/summary
+  // candidates can never enter this pool, so the Phoenix exclusions still hold.
+  const explicitPool = pickPool(candidates, PAYABLE_ROLES_PRIMARY, false)
+    .filter((c) => EXPLICIT_PAYABLE_LABEL.test(cleanLabel(c.printed_label)));
+  const explicitDistinct = distinctAmounts(explicitPool);
+
   if (audit?.ambiguous === true) {
-    provenance.ambiguous = true;
-    provenance.reasons.push(`המסמך סומן כלא חד-משמעי: ${cleanLabel(audit?.ambiguity_reason) || 'ללא הסבר'}.`);
-    return { total: null, subtotal: null, vat: null, provenance };
+    if (explicitDistinct.size === 1) {
+      provenance.reasons.push(`המסמך סומן כלא חד-משמעי (${cleanLabel(audit?.ambiguity_reason) || 'ללא הסבר'}), אך קיים תיוג מודפס יחיד לסכום לתשלום ולכן הוא נבחר.`);
+    } else {
+      provenance.ambiguous = true;
+      provenance.reasons.push(`המסמך סומן כלא חד-משמעי: ${cleanLabel(audit?.ambiguity_reason) || 'ללא הסבר'}.`);
+      return { total: null, subtotal: null, vat: null, provenance };
+    }
   }
 
   // Primary: an amount this document explicitly demands. Fallback: the fee/commission charged
@@ -260,8 +280,13 @@ export function selectPayableAmounts(audit: any) {
     pool = pickPool(candidates, PAYABLE_ROLES_PRIMARY, false);
   }
   // Drop aggregates of the listed transactions — those are turnover, whatever they are labelled.
+  // On an ordinary invoice/credit note an explicitly payable-labelled amount is NOT disqualified
+  // just because the same numeric value is also printed elsewhere (balance/summary echo).
   const beforeAggregateFilter = pool.length;
-  pool = pool.filter((c) => !isTurnoverAggregate(roundMoney(c.amount) as number, candidates));
+  pool = pool.filter((c) => {
+    if (isStandardKind && EXPLICIT_PAYABLE_LABEL.test(cleanLabel(c.printed_label))) return true;
+    return !isTurnoverAggregate(roundMoney(c.amount) as number, candidates);
+  });
   if (beforeAggregateFilter && !pool.length) {
     provenance.reasons.push('המועמד לסכום לתשלום זהה לסיכום העסקאות/היתרה ולכן נדחה כמחזור.');
   }
@@ -288,7 +313,9 @@ export function selectPayableAmounts(audit: any) {
     let narrowed: any[] = [];
     if (subRole && vatRole) {
       const chargeTotal = roundMoney(subRole.amount + vatRole.amount) as number;
-      narrowed = pool.filter((c) => Math.abs((roundMoney(c.amount) as number) - chargeTotal) <= 0.02);
+      // Supporting evidence only: the candidate that the printed "before VAT + VAT" pair closes,
+      // by magnitude so a credit note's sign convention cannot break it.
+      narrowed = pool.filter((c) => Math.abs(Math.abs(roundMoney(c.amount) as number) - Math.abs(chargeTotal)) <= 0.02);
       if (narrowed.length) provenance.reasons.push(`הובחר סכום סגירת גוש החיוב במסמך (${chargeTotal}) מבין ${distinct.size} מועמדים מתויגים.`);
     }
     if (!narrowed.length) {
@@ -322,7 +349,11 @@ export function selectPayableAmounts(audit: any) {
   let subtotal: number | null = null;
   let vatAmount: number | null = null;
   if (sub && vat) {
-    const delta = Math.round(Math.abs(sub.amount + vat.amount - totalAmount) * 100) / 100;
+    // Credit notes may be printed as positive presentation values or as signed values; the sign
+    // convention must not break the coherence check, so magnitudes are compared.
+    const signed = Math.round(Math.abs(sub.amount + vat.amount - totalAmount) * 100) / 100;
+    const magnitude = Math.round(Math.abs(Math.abs(sub.amount) + Math.abs(vat.amount) - Math.abs(totalAmount)) * 100) / 100;
+    const delta = Math.min(signed, magnitude);
     if (delta <= 0.02) {
       subtotal = sub.amount;
       vatAmount = vat.amount;

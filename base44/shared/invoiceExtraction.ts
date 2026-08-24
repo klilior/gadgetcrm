@@ -112,9 +112,15 @@ STRICT OUTPUT RULES
 6) For multi-page docs: use totals for the entire document.
 
 CLASSIFICATION
-- TAX_INVOICE if explicit "חשבונית מס" / "Tax Invoice"
-- CREDIT_NOTE if explicit "חשבונית זיכוי" / "Credit Note"
-- OTHER otherwise (statement, report, proforma, order confirmation, etc.)
+- document_title: copy the document's printed title/heading VERBATIM (e.g. "חשבונית מס", "קבלה",
+  "Invoice", "Tax Invoice"). If no title is printed, null. Never invent or "upgrade" a title.
+- TAX_INVOICE only if the document explicitly qualifies itself as a TAX invoice:
+  "חשבונית מס" / "מס/קבלה" / "Tax Invoice" / "VAT Invoice".
+- CREDIT_NOTE only if explicit "חשבונית זיכוי" / "תעודת זיכוי" / "Credit Note".
+- OTHER otherwise. In particular:
+  * a receipt / קבלה / payment confirmation / delivery note / תעודת משלוח / statement / report /
+    proforma / quote / order confirmation is ALWAYS OTHER, even when it shows amounts and VAT;
+  * a generic "Invoice" / "חשבונית" heading with NO tax-invoice qualification is OTHER.
 
 CREDIT SIGN
 If CREDIT_NOTE:
@@ -140,6 +146,7 @@ OUTPUT SCHEMA (EXACT)
   "supplier_vat_id": string | null,
 
   "doc_type_he": "חשבונית מס" | "חשבונית זיכוי" | null,
+  "document_title": string | null,
   "doc_number": string | null,
   "invoice_date": string | null,
   "due_date": string | null,
@@ -206,6 +213,7 @@ export const EXTRACT_SCHEMA = {
     supplier_name_normalized: { type: 'string' },
     supplier_vat_id: { type: 'string' },
     doc_type_he: { type: 'string' },
+    document_title: { type: 'string' },
     doc_number: { type: 'string' },
     invoice_date: { type: 'string' },
     due_date: { type: 'string' },
