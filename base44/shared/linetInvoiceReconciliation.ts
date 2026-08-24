@@ -136,23 +136,35 @@ export function selectLinetCandidate(evaluations, { invoiceId = null, reservedPu
     values: item.match?.values ?? null
   });
 
+  // A purchase owned by a DIFFERENT invoice may never be selected on any path — otherwise a later
+  // conflicting invoice would overwrite its reconciliation_status/match_reason.
+  const ownedByOther = (item) => {
+    const owner = item.purchase?.matched_invoice_id;
+    return !!owner && String(owner) !== String(invoiceId ?? '');
+  };
+  const blockedAlreadyMatched = (item) => ({ decision: 'blocked', selected: null, reason_code: LINET_REASON_CODES.PURCHASE_ALREADY_MATCHED, candidates: [describe(item)] });
+
   const confirmed = list.filter((item) => item.match?.level === 'confirmed');
   if (confirmed.length > 1) {
     return { decision: 'blocked', selected: null, reason_code: LINET_REASON_CODES.AMBIGUOUS_CANDIDATES, candidates: confirmed.map(describe) };
   }
   if (confirmed.length === 1) {
     const item = confirmed[0];
-    const takenByOther = item.purchase?.matched_invoice_id && String(item.purchase.matched_invoice_id) !== String(invoiceId ?? '');
+    // reserved holds ONLY purchases confirmed earlier in this batch.
     const reservedInBatch = item.purchase?.id && reserved.has(item.purchase.id);
-    if (takenByOther || reservedInBatch) {
-      return { decision: 'blocked', selected: null, reason_code: LINET_REASON_CODES.PURCHASE_ALREADY_MATCHED, candidates: [describe(item)] };
-    }
+    if (ownedByOther(item) || reservedInBatch) return blockedAlreadyMatched(item);
     return { decision: 'confirmed', selected: item, reason_code: LINET_REASON_CODES.VERIFIED, candidates: [describe(item)] };
   }
   const conflicted = list.find((item) => item.match?.level === 'conflict');
-  if (conflicted) return { decision: 'conflict', selected: conflicted, reason_code: null, candidates: [describe(conflicted)] };
+  if (conflicted) {
+    if (ownedByOther(conflicted)) return blockedAlreadyMatched(conflicted);
+    return { decision: 'conflict', selected: conflicted, reason_code: null, candidates: [describe(conflicted)] };
+  }
   const possible = list.find((item) => item.match?.level === 'possible' || item.match?.level === 'number_only');
-  if (possible) return { decision: 'possible', selected: possible, reason_code: null, candidates: [describe(possible)] };
+  if (possible) {
+    if (ownedByOther(possible)) return blockedAlreadyMatched(possible);
+    return { decision: 'possible', selected: possible, reason_code: null, candidates: [describe(possible)] };
+  }
   return { decision: 'none', selected: null, reason_code: null, candidates: [] };
 }
 

@@ -85,7 +85,11 @@ Deno.serve(async (req) => {
       purchasesByNumber.get(key).push(purchase);
     }
     const gapByKey = new Map(allGaps.map((gap) => [gap.gap_key, gap]));
-    const matchedPurchaseIds = new Set();
+    // Reservation is confirmed-only: a purchase merely observed as conflict/possible/blocked stays
+    // available for a later invoice that genuinely confirms against it.
+    const confirmedReservedPurchaseIds = new Set();
+    // Observed set is used ONLY to suppress false missing_in_system gaps.
+    const observedPurchaseIds = new Set();
     const now = new Date().toISOString();
     const stats = { checked: invoices.length, matched: 0, conflicts: 0, possible_matches: 0, missing_in_linet: 0, missing_in_system: 0, legacy_recovered: 0 };
     const results = [];
@@ -115,7 +119,10 @@ Deno.serve(async (req) => {
       const supplier = supplierById.get(invoice.supplier);
       const evaluations = (purchasesByNumber.get(normalized) || []).map((purchase) => ({ purchase, match: evaluateLinetMatch(invoice, purchase, linesByInvoice.get(invoice.id) || [], supplier) }));
       // Never first-of-many, never a purchase document already owned by another invoice.
-      const selection = selectLinetCandidate(evaluations, { invoiceId: invoice.id, reservedPurchaseIds: matchedPurchaseIds });
+      const selection = selectLinetCandidate(evaluations, { invoiceId: invoice.id, reservedPurchaseIds: confirmedReservedPurchaseIds });
+      for (const candidate of selection.candidates || []) {
+        if (candidate.linet_purchase_document_id) observedPurchaseIds.add(candidate.linet_purchase_document_id);
+      }
       const confirmed = selection.decision === 'confirmed' ? selection.selected : null;
       const conflicted = selection.decision === 'conflict' ? selection.selected : null;
       const possible = selection.decision === 'possible' ? selection.selected : null;
@@ -154,7 +161,8 @@ Deno.serve(async (req) => {
 
       if (confirmed) {
         stats.matched++;
-        matchedPurchaseIds.add(confirmed.purchase.id);
+        confirmedReservedPurchaseIds.add(confirmed.purchase.id);
+        observedPurchaseIds.add(confirmed.purchase.id);
         const reason = `אותה עסקה אומתה מול מסמך רכש בלינט: ${confirmed.match.reason}`;
         const update = {
           id: invoice.id,
@@ -204,7 +212,7 @@ Deno.serve(async (req) => {
         queueGap({ gap_key: `ambiguous:${invoice.id}`, direction: 'ambiguous_match', invoice_id: invoice.id, linet_purchase_document_id: confirmed.purchase.id, doc_number: invoice.doc_number, supplier_name: supplierName, doc_date: invoice.doc_date, total_with_vat: invoice.total_with_vat, status: 'resolved', reason, detected_at: now, resolved_at: now });
       } else if (conflicted) {
         stats.conflicts++;
-        matchedPurchaseIds.add(conflicted.purchase.id);
+        observedPurchaseIds.add(conflicted.purchase.id);
         const codes = conflicted.match.conflict_codes.join(',');
         const reason = `סתירה מול לינט (${codes}): ${conflicted.match.reason}`;
         // Neither side is overwritten; both values live in provenance and the record goes to review.
@@ -232,7 +240,7 @@ Deno.serve(async (req) => {
         queueGap({ gap_key: `ambiguous:${invoice.id}`, direction: 'ambiguous_match', invoice_id: invoice.id, linet_purchase_document_id: conflicted.purchase.id, doc_number: invoice.doc_number, supplier_name: supplierName || conflicted.purchase.supplier_name, doc_date: invoice.doc_date, total_with_vat: invoice.total_with_vat, status: 'open', reason, detected_at: now });
       } else if (possible) {
         stats.possible_matches++;
-        matchedPurchaseIds.add(possible.purchase.id);
+        observedPurchaseIds.add(possible.purchase.id);
         const reason = `התאמה אפשרית הדורשת בדיקה: ${possible.match.reason}`;
         invoiceUpdates.push({ id: invoice.id, normalized_doc_number: normalized, linet_match_status: 'possible_match', linet_purchase_document_id: possible.purchase.id, linet_total_with_vat: possible.match.values?.linet_total_with_vat ?? undefined, linet_doc_date: possible.match.values?.linet_doc_date ?? undefined, linet_match_reason: reason, linet_matched_at: now, linet_provenance_json: buildProvenance(possible.match, 'extracted', 'LINET_POSSIBLE_MATCH', now) });
         if (!purchaseUpdates.has(possible.purchase.id)) purchaseUpdates.set(possible.purchase.id, { id: possible.purchase.id, reconciliation_status: 'ambiguous', match_reason: reason });
@@ -254,7 +262,7 @@ Deno.serve(async (req) => {
     if (!requestedIds.size) {
       const eligiblePurchases = purchases.filter((purchase) => (!body.from_date || purchase.doc_date >= body.from_date) && (!body.to_date || purchase.doc_date <= body.to_date));
       for (const purchase of eligiblePurchases) {
-        if (purchase.matched_invoice_id || matchedPurchaseIds.has(purchase.id)) continue;
+        if (purchase.matched_invoice_id || observedPurchaseIds.has(purchase.id)) continue;
         stats.missing_in_system++;
         queueGap({ gap_key: `linet:${purchase.id}`, direction: 'missing_in_system', linet_purchase_document_id: purchase.id, doc_number: purchase.supplier_invoice_number, supplier_name: purchase.supplier_name, doc_date: purchase.doc_date, total_with_vat: purchase.total_with_vat, status: 'open', reason: 'מסמך רכש 13 קיים ב-Linet אך לא נמצאה חשבונית תואמת במערכת.', detected_at: now });
       }
