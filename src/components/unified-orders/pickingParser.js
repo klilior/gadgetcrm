@@ -29,13 +29,22 @@ function clean(str) {
   return stripPrice(decodeHtmlEntities(str)).trim();
 }
 
-// Detect a leading quantity in EPO free text e.g. "הוסף 2 מגני מסך" → 2
+// Detect an EXPLICIT quantity in EPO free text e.g. "הוסף 2 מגני מסך", "כמות: 3", "x2".
+// Any other number in the text (price, "9 שכבות", model numbers) is NOT a quantity → 1.
 function extractQtyFromText(text) {
   if (!text) return 1;
-  const m = String(text).match(/(\d+)/);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    if (Number.isFinite(n) && n > 0 && n <= 999) return n;
+  const t = stripPrice(decodeHtmlEntities(String(text)).replace(/<[^>]*>/g, " "));
+  const patterns = [
+    /(?:הוסף|הוספת|כמות|יחידות|qty|quantity)\s*:?\s*(\d{1,2})(?!\d)/i,
+    /(?:^|\s)[xX×]\s*(\d{1,2})(?!\d)/,
+    /(\d{1,2})\s*[xX×](?:\s|$)/,
+  ];
+  for (const re of patterns) {
+    const m = t.match(re);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > 0 && n <= 20) return n;
+    }
   }
   return 1;
 }
