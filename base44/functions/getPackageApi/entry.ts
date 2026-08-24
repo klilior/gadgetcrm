@@ -475,6 +475,35 @@ Deno.serve(async (req) => {
         }
 
         console.log(`[GetPackage] Delivery created: id=${deliveryId}, tracking=${trackingUrl}`);
+
+        // Sync order: mark as completed + save tracking + lock (same as UPS/Cargo flows)
+        try {
+          let order = null;
+          if (shipment.order_id) {
+            order = await sr.entities.Order.get(shipment.order_id).catch(() => null);
+          }
+          if (!order && shipment.woo_order_id) {
+            const found = await sr.entities.Order.filter({ external_order_number: String(shipment.woo_order_id) });
+            order = found[0] || null;
+          }
+          if (order) {
+            await sr.entities.Order.update(order.id, {
+              status: 'completed',
+              tracking_number: String(deliveryId),
+              tracking_carrier: 'getpackage',
+              tracking_url: trackingUrl,
+              shipment_created_at: order.shipment_created_at || new Date().toISOString(),
+              order_locked: true,
+            });
+            await sr.functions.invoke('updateWooOrderStatus', {
+              external_order_number: order.external_order_number,
+              status: 'completed',
+            });
+          }
+        } catch (e) {
+          console.error('[GetPackage] Order sync failed:', e.message);
+        }
+
         return Response.json({
           success: true,
           delivery_id: deliveryId,
