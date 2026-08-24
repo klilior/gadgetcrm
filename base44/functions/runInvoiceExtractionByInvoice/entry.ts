@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { classifyInvoiceLines } from '../../shared/invoiceClassification.ts';
 import { calculateFileHash, findReusableDuplicate, getEarlyNonInvoiceReason } from '../../shared/invoiceIntakeGuards.ts';
+import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDATION_VERSION } from '../../shared/invoiceValidationGate.ts';
 
 const EXTRACT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -37,16 +38,20 @@ ABSOLUTE PRECISION RULES — READ CAREFULLY
 5. supplier_name_normalized: remove punctuation and legal suffixes (בע"מ, ltd, etc.) but keep the EXACT spelling.
 6. Common Israeli supplier examples: "אולפון", "ניופאן", "פלאפון", "סלקום" — do NOT confuse similar names.
 
-*** DATE EXTRACTION — CRITICAL ***
-1. The document date (doc_date) MUST be read EXACTLY as printed on the invoice.
-2. Look for labels like "תאריך חשבונית:", "תאריך:", "Date:" — read the date next to them.
-3. Israeli date formats: DD/MM/YY or DD/MM/YYYY. Convert to ISO: YYYY-MM-DD.
+*** DATE EXTRACTION — CRITICAL (INVOICE DATE vs DUE DATE) ***
+1. invoice_date = the date the DOCUMENT WAS ISSUED. Read it EXACTLY as printed.
+   Labels: "תאריך חשבונית", "תאריך המסמך", "תאריך הפקה", "תאריך", "Invoice Date", "Document Date", "Date".
+2. due_date = the PAYMENT date only. Labels: "לתשלום עד", "תאריך לתשלום", "מועד תשלום",
+   "תנאי תשלום ... עד", "שוטף + ...", "Due Date", "Payment Due", "Payment Date".
+3. NEVER use due_date as invoice_date, and never use invoice_date as due_date.
+   If a payment date exists but no issue date is printed → invoice_date = null (do NOT fall back to the due date).
+   If no payment date exists → due_date = null.
+4. Israeli date formats: DD/MM/YY or DD/MM/YYYY. Convert to ISO: YYYY-MM-DD.
    - "28/04/26" means 2026-04-28
    - "28/04/2026" means 2026-04-28
-   - "15/01/25" means 2025-01-15
    - Two-digit years: 20-29 = 2020-2029, 30-99 = 2030-2099
-4. NEVER fabricate a date. If you cannot read it clearly, set to null.
-5. Cross-check: if the document has multiple date fields (תאריך חשבונית, תאריך הדפסה), use "תאריך חשבונית" as the primary date.
+5. NEVER fabricate a date. If you cannot read it clearly, set to null.
+6. Ignore "תאריך הדפסה" / print date — it is not the invoice date.
 
 *** AMOUNT EXTRACTION — CRITICAL ***
 1. Read ALL amounts EXACTLY as printed. Do NOT calculate or estimate.
@@ -54,8 +59,20 @@ ABSOLUTE PRECISION RULES — READ CAREFULLY
    - "מחיר כולל" or "סה"כ לפני מע"מ" = subtotal_before_vat
    - "מע"מ" or "מע״מ (18%)" = vat_amount
    - "סה"כ כולל מע"מ" or "סה״כ מחיר" or "סה״כ לתשלום" = total_with_vat
-3. The total_with_vat is the FINAL number the customer pays (the largest amount).
-4. Verify: subtotal + VAT should approximately equal total. If not, re-read the numbers.
+3. total_with_vat = the FINAL AMOUNT DUE FOR THIS SPECIFIC DOCUMENT.
+   NEVER pick a number just because it is the largest on the page.
+   total_with_vat is NOT: turnover / מחזור, accumulated balance / יתרה, previous balance / יתרה קודמת,
+   sum of transactions / סכום עסקאות, credit limit / מסגרת אשראי, account total / סה״כ חשבון,
+   monthly summary of activity, or any reference figure about the account rather than this document.
+   Use the label next to the amount, in the document's own totals block:
+   "סה״כ לתשלום", "לתשלום", "סה״כ כולל מע״מ", "סה״כ חשבונית", "Total", "Amount Due", "Grand Total".
+   Do not rely on a single keyword: cross-check with the arithmetic
+   (subtotal_before_vat + vat_amount must equal total_with_vat) and with the invoice's own line items.
+   If several candidate "totals" exist, choose the one that is consistent with this document's
+   VAT breakdown and its line items — not the biggest figure.
+   If the document is a commission/collection/settlement statement, the amount due is usually
+   the small net amount charged, while large figures are turnover — never take the turnover.
+4. Verify: subtotal + VAT should equal total. If not, re-read the numbers before answering.
 5. Israeli number format: commas for thousands (17,987.34), period for decimals.
 
 *** LINE ITEMS — CRITICAL (VAT AWARENESS) ***
@@ -104,10 +121,10 @@ If CREDIT_NOTE:
 - If the displayed total is negative or has a minus sign => credit_sign = "NEGATIVE"
 - Otherwise => credit_sign = "POSITIVE"
 
-CONFIDENCE
-Provide overall_confidence (0..100) and per-field confidence (0..100).
+CONFIDENCE (TELEMETRY ONLY — NEVER AN APPROVAL SIGNAL)
+Provide overall_confidence (0..100) and per-field confidence (0..100) for debugging purposes only.
+Approval is decided by a deterministic validation gate in the system, not by your confidence.
 Do not inflate confidence — if ANY field was hard to read or ambiguous, lower its confidence.
-If you had to guess or approximate ANY value, set overall_confidence below 80.
 
 CRITICAL FIELDS
 supplier_name, doc_number, doc_date, total_with_vat, doc_type_he
@@ -124,7 +141,8 @@ OUTPUT SCHEMA (EXACT)
 
   "doc_type_he": "חשבונית מס" | "חשבונית זיכוי" | null,
   "doc_number": string | null,
-  "doc_date": string | null,
+  "invoice_date": string | null,
+  "due_date": string | null,
 
   "currency": string | null,
   "subtotal_before_vat": number | null,
@@ -190,6 +208,8 @@ const EXTRACT_SCHEMA = {
     supplier_vat_id: { type: 'string' },
     doc_type_he: { type: 'string' },
     doc_number: { type: 'string' },
+    invoice_date: { type: 'string' },
+    due_date: { type: 'string' },
     doc_date: { type: 'string' },
     currency: { type: 'string' },
     subtotal_before_vat: { type: 'number' },
@@ -394,9 +414,33 @@ Deno.serve(async (req) => {
         !lineCheck.hasMismatch &&
         !lineCheck.hasBadQuantity
       );
-      const confidence = Number(invoice.confidence_score || 0);
-      const canAutoApproveExisting = validationOk && confidence >= 90 && !!invoice.supplier;
-      const normalizedStatus = canAutoApproveExisting ? 'אושר' : (validationOk ? 'נקרא בהצלחה' : 'ממתין לאימות');
+      // P0.1: never approve an existing record based on AI self-confidence.
+      // Re-running the deterministic gate on the stored values is the only approval path.
+      const existingSupplier = invoice.supplier
+        ? (await base44.asServiceRole.entities.Suppliers.filter({ id: invoice.supplier }, undefined, 1))?.[0] || null
+        : null;
+      const existingDuplicates = invoice.supplier
+        ? await base44.asServiceRole.entities.Invoices.filter({ supplier: invoice.supplier }, undefined, 200)
+        : [];
+      const existingGate = validateInvoiceForAutoApproval({
+        supplier_name: existingSupplier?.name || parsedExtraction?.supplier_name,
+        supplier_vat_id: existingSupplier?.vat_id,
+        doc_number: invoice.doc_number,
+        invoice_date: invoice.doc_date,
+        due_date: invoice.due_date,
+        subtotal_before_vat: invoice.subtotal_before_vat,
+        vat_amount: invoice.vat_amount,
+        total_with_vat: invoice.total_with_vat,
+        doc_type_he: invoice.doc_type
+      }, {
+        supplier: existingSupplier,
+        supplier_match_method: existingSupplier?.vat_id ? 'vat_id' : 'name',
+        duplicates: existingDuplicates,
+        invoice_id: invoice.id,
+        line_check: lineCheck
+      });
+      const canAutoApproveExisting = validationOk && existingGate.passed;
+      const normalizedStatus = canAutoApproveExisting ? 'אושר' : 'ממתין לאימות';
 
       if (invoice.extraction_status !== normalizedStatus) {
         const lineNote = lineCheck.hasMismatch
@@ -404,9 +448,16 @@ Deno.serve(async (req) => {
           : '';
         await base44.asServiceRole.entities.Invoices.update(invoice.id, {
           extraction_status: normalizedStatus,
-          notes: lineNote || (canAutoApproveExisting && !(invoice.notes || '').includes('אושר אוטומטית')
-            ? `${invoice.notes || ''}\nאושר אוטומטית (ודאות גבוהה).`.trim()
-            : invoice.notes)
+          validation_passed: existingGate.passed,
+          validation_failures: existingGate.failures.join(' | ') || undefined,
+          validation_warnings: existingGate.warnings.join(' | ') || undefined,
+          validated_fields: existingGate.validated_fields.join(',') || undefined,
+          validation_version: existingGate.validation_version,
+          auto_approved: canAutoApproveExisting,
+          normalized_doc_number: normalizeInvoiceNumber(invoice.doc_number) || undefined,
+          notes: canAutoApproveExisting
+            ? ((invoice.notes || '').includes('אושר אוטומטית') ? invoice.notes : `${invoice.notes || ''}\nאושר אוטומטית לאחר מעבר כל בדיקות התקינות (${INVOICE_VALIDATION_VERSION}).`.trim())
+            : `${lineNote || invoice.notes || ''}\nנדרש אימות ידני: ${existingGate.failures.join(' | ') || 'תוצאות ניתוח לא תקינות.'}`.trim()
         });
       }
       if (invoice.source_intake) {
@@ -570,6 +621,16 @@ Deno.serve(async (req) => {
       console.log('Post-processing complete.');
     }
 
+    // P0.3: invoice date and due date are separate. The due date must NEVER become the invoice date.
+    const isIsoDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
+    extraction.due_date = isIsoDate(extraction.due_date) ? extraction.due_date.trim() : null;
+    let invoiceDate = isIsoDate(extraction.invoice_date) ? extraction.invoice_date.trim() : null;
+    if (!invoiceDate && isIsoDate(extraction.doc_date) && extraction.doc_date.trim() !== extraction.due_date) {
+      invoiceDate = extraction.doc_date.trim(); // legacy field, only when it is not the due date
+    }
+    extraction.invoice_date = invoiceDate;
+    extraction.doc_date = invoiceDate; // keep legacy consumers working, never filled from due_date
+
     // DEBUG: Save raw extraction JSON (after post-processing)
     const extractionJson = JSON.stringify(extraction);
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_extraction_json: extractionJson });
@@ -648,6 +709,7 @@ Deno.serve(async (req) => {
 
     // Step 4: Supplier linking - improved with learned patterns, normalized VAT ID matching and aliases
     let supplierId = null;
+    let supplierMatchMethod = 'none';
     const rawVatId = extraction.supplier_vat_id && String(extraction.supplier_vat_id).trim();
     
     // Extract only digits for VAT ID (Israeli VAT IDs are 9 digits)
@@ -674,6 +736,7 @@ Deno.serve(async (req) => {
       );
       if (vatPattern) {
         supplierId = vatPattern.supplier_id;
+        supplierMatchMethod = 'vat_id';
         console.log(`Supplier matched by learned VAT pattern: ${supplierId}`);
       }
     }
@@ -694,6 +757,7 @@ Deno.serve(async (req) => {
       });
       if (namePattern) {
         supplierId = namePattern.supplier_id;
+        supplierMatchMethod = 'learned_pattern';
         console.log(`Supplier matched by learned name pattern: ${supplierId}`);
       }
     }
@@ -727,6 +791,7 @@ Deno.serve(async (req) => {
       const foundSupplier = allSuppliers.find(s => s.id === supplierId);
       if (!foundSupplier) {
         supplierId = null; // Pattern points to deleted supplier, continue with normal search
+        supplierMatchMethod = 'none';
       }
     }
     
@@ -741,6 +806,7 @@ Deno.serve(async (req) => {
         return sVatDigits === normalizedVatId || s.vat_id === rawVatId;
       });
       
+      let matchedByVat = found.length > 0;
       // If not found, check aliases
       if (found.length === 0) {
         found = allSuppliers.filter(s => matchesSupplier(s, normalizedVatId, extraction.supplier_name));
@@ -748,6 +814,7 @@ Deno.serve(async (req) => {
       
       if (found.length > 0) {
         supplierId = found[0].id;
+        supplierMatchMethod = matchedByVat ? 'vat_id' : 'alias';
         // Update supplier name if current is generic and we have a better one
         const currentName = found[0].name || '';
         const newName = extraction.supplier_name || '';
@@ -766,6 +833,7 @@ Deno.serve(async (req) => {
           is_active: true
         });
         supplierId = created.id;
+        supplierMatchMethod = 'created';
       }
     } else if (!supplierId) {
       // No VAT ID and no pattern match - try to match by normalized name or aliases
@@ -775,6 +843,7 @@ Deno.serve(async (req) => {
       if (normalizedName) {
         // Check aliases first
         let found = allSuppliers.find(s => matchesSupplier(s, null, supplierName));
+        const foundByAlias = !!found;
         
         // Then check by name
         if (!found) {
@@ -786,6 +855,7 @@ Deno.serve(async (req) => {
         
         if (found) {
           supplierId = found.id;
+          supplierMatchMethod = foundByAlias ? 'alias' : 'name';
         } else {
           const created = await base44.asServiceRole.entities.Suppliers.create({
             name: extraction.supplier_name || 'לא ידוע',
@@ -793,6 +863,7 @@ Deno.serve(async (req) => {
             is_active: true
           });
           supplierId = created.id;
+          supplierMatchMethod = 'created';
         }
       } else {
         const created = await base44.asServiceRole.entities.Suppliers.create({
@@ -801,6 +872,7 @@ Deno.serve(async (req) => {
           is_active: true
         });
         supplierId = created.id;
+        supplierMatchMethod = 'created';
       }
     }
 
@@ -859,30 +931,55 @@ Deno.serve(async (req) => {
 
     const baseNotes = `${extraction.display_summary_he || ''}\n${validation.display_validation_he || ''}`.trim();
 
-    // Determine final status and notes
-    const fieldsComplete = !!(extraction.doc_type_he && extraction.doc_number && extraction.doc_date && (typeof extraction.total_with_vat === 'number'));
-    // Auto-approve if: deterministic validation passed (math OK + all fields present) AND
-    // AI confidence >= 90 because supplier expenses require strict numerical accuracy.
-    const canAutoApprove = (
-      validation.recommended_extraction_status_he === 'נקרא בהצלחה' &&
-      (typeof extraction.overall_confidence === 'number' ? extraction.overall_confidence >= 90 : false) &&
-      validation.is_math_consistent === true &&
-      fieldsComplete
-    );
+    // P0.1 + P0.2: auto approval is decided ONLY by the deterministic validation gate.
+    // extraction.overall_confidence is stored for telemetry and is NOT part of this decision.
+    const normalizedDocNumber = normalizeInvoiceNumber(extraction.doc_number);
+    const duplicateCandidates = extraction.doc_number
+      ? await base44.asServiceRole.entities.Invoices.filter({ supplier: supplierId }, undefined, 200)
+      : [];
+    const gate = validateInvoiceForAutoApproval({
+      supplier_name: extraction.supplier_name,
+      supplier_vat_id: extraction.supplier_vat_id,
+      doc_number: extraction.doc_number,
+      invoice_date: extraction.invoice_date,
+      due_date: extraction.due_date,
+      subtotal_before_vat: extraction.subtotal_before_vat,
+      vat_amount: extraction.vat_amount,
+      total_with_vat: extraction.total_with_vat,
+      doc_type_he: extraction.doc_type_he
+    }, {
+      supplier: matchedSupplier,
+      supplier_match_method: supplierMatchMethod,
+      duplicates: duplicateCandidates,
+      invoice_id: invoice.id,
+      line_check: getLineItemsCheck(extraction)
+    });
+    console.log('Validation gate:', JSON.stringify(gate));
 
-    const finalStatus = canAutoApprove ? 'אושר' : validation.recommended_extraction_status_he;
-    const finalNotes = canAutoApprove ? `${baseNotes}\nאושר אוטומטית (ודאות גבוהה).` : baseNotes;
+    const canAutoApprove = gate.passed && validation.recommended_extraction_status_he === 'נקרא בהצלחה';
+    const finalStatus = canAutoApprove ? 'אושר' : 'ממתין לאימות';
+    const finalNotes = canAutoApprove
+      ? `${baseNotes}\nאושר אוטומטית לאחר מעבר כל בדיקות התקינות (${gate.validation_version}).`
+      : `${baseNotes}\nנדרש אימות ידני: ${(gate.failures.length ? gate.failures : validation.review_reasons_he).join(' | ')}`;
 
     const updatePayload = {
       supplier: supplierId,
       doc_type: extraction.doc_type_he || undefined,
       doc_number: extraction.doc_number || undefined,
       doc_date: extraction.doc_date || undefined,
+      due_date: extraction.due_date || undefined,
+      normalized_doc_number: normalizedDocNumber || undefined,
       currency: extraction.currency || undefined,
       subtotal_before_vat: extraction.subtotal_before_vat ?? undefined,
       vat_amount: extraction.vat_amount ?? undefined,
       total_with_vat: extraction.total_with_vat ?? undefined,
       confidence_score: extraction.overall_confidence ?? undefined,
+      validation_passed: gate.passed,
+      validation_failures: gate.failures.join(' | ') || undefined,
+      validation_warnings: gate.warnings.join(' | ') || undefined,
+      validated_fields: gate.validated_fields.join(',') || undefined,
+      validation_version: gate.validation_version,
+      auto_approved: canAutoApprove,
       extraction_status: finalStatus,
       notes: finalNotes,
       invoice_classification: classificationResult.invoice_classification || undefined,
