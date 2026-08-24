@@ -2,6 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { validateInvoiceForAutoApproval } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
+import { resolveSupplier } from '../../shared/supplierResolver.ts';
 
 /**
  * SAFE, STRICTLY READ-ONLY regression harness (admins only).
@@ -33,6 +34,7 @@ Deno.serve(async (req) => {
     if (ids.length > MAX_IDS) return Response.json({ error: `Too many invoice_ids (max ${MAX_IDS}).` }, { status: 400 });
 
     const suppliers = await base44.asServiceRole.entities.Suppliers.list('-created_date', 1000);
+    const patterns = await base44.asServiceRole.entities.SupplierPattern.filter({ is_active: true }, undefined, 1000);
     const results: any[] = [];
 
     for (const id of ids) {
@@ -69,14 +71,14 @@ Deno.serve(async (req) => {
       // Stored invoice amounts are never fed into extraction or selection.
       await auditAndApplyAmounts(base44, extraction, intake.file);
 
-      // Read-only supplier resolution — never creates or updates a supplier.
-      const vatDigits = extraction.supplier_vat_id ? String(extraction.supplier_vat_id).replace(/\D/g, '') : '';
-      let supplier = vatDigits ? suppliers.find((s: any) => (s.vat_id || '').replace(/\D/g, '') === vatDigits) || null : null;
-      let matchMethod = supplier ? 'vat_id' : 'none';
-      if (!supplier && invoice.supplier) {
-        supplier = suppliers.find((s: any) => s.id === invoice.supplier) || null;
-        if (supplier) matchMethod = supplier.vat_id ? 'vat_id' : 'name';
-      }
+      // Read-only supplier resolution via the shared deterministic resolver.
+      const resolution = resolveSupplier({
+        vat_id: extraction.supplier_vat_id,
+        supplier_name: extraction.supplier_name,
+        supplier_name_normalized: extraction.supplier_name_normalized
+      }, { suppliers, patterns });
+      const supplier = resolution.supplier;
+      const matchMethod = resolution.method;
       const duplicates = supplier
         ? await base44.asServiceRole.entities.Invoices.filter({ supplier: supplier.id }, undefined, 300)
         : [];
@@ -95,6 +97,7 @@ Deno.serve(async (req) => {
       }, {
         supplier,
         supplier_match_method: matchMethod,
+        supplier_resolution: resolution,
         duplicates,
         invoice_id: invoice.id,
         line_check: lineCheck
@@ -131,6 +134,17 @@ Deno.serve(async (req) => {
             .slice(0, 12)
         } : null,
         line_check: lineCheck,
+        supplier_resolution: {
+          supplier_id: resolution.supplier_id,
+          supplier_name: resolution.supplier?.name ?? null,
+          method: resolution.method,
+          evidence_strength: resolution.evidence_strength,
+          reliable_for_auto_approval: resolution.reliable_for_auto_approval,
+          reason_code: resolution.reason_code,
+          reason: resolution.reason,
+          candidate_ids: resolution.candidate_ids,
+          redirected_from: resolution.redirected_from
+        },
         gate: {
           passed: gate.passed,
           failures: gate.failures,

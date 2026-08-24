@@ -2,6 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
+import { resolveSupplier } from '../../shared/supplierResolver.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -102,83 +103,20 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
   // Deterministic validation only — no LLM decides status here.
   const validation = buildDeterministicValidation(extraction);
 
-  // Supplier linking with pattern learning
-  let supplierId = null;
-  let supplierMatchMethod = 'none';
+  // Supplier resolution ONLY — this route may never create, rename or update a supplier.
+  const suppliers = await base44.asServiceRole.entities.Suppliers.list('-created_date', 1000);
+  const supplierPatterns = await base44.asServiceRole.entities.SupplierPattern.filter({ is_active: true }, undefined, 1000);
+  const resolution = resolveSupplier({
+    vat_id: extraction.supplier_vat_id,
+    supplier_name: extraction.supplier_name,
+    supplier_name_normalized: extraction.supplier_name_normalized
+  }, { suppliers, patterns: supplierPatterns });
+
+  const supplierId = resolution.supplier_id;
+  const supplierMatchMethod = resolution.method;
   const vatId = extraction.supplier_vat_id && String(extraction.supplier_vat_id).trim();
-  const supplierName = extraction.supplier_name?.trim();
-  const normalizedName = extraction.supplier_name_normalized?.trim();
-
-  // First try to find by VAT ID (exact match)
-  if (vatId) {
-    const found = await base44.asServiceRole.entities.Suppliers.filter({ vat_id: vatId }, undefined, 1);
-    if (found && found.length > 0) {
-      supplierId = found[0].id;
-      supplierMatchMethod = 'vat_id';
-    }
-  }
-
-  // If not found by VAT, check if VAT ID appears in any supplier's aliases field
-  if (!supplierId && vatId) {
-    const allSuppliers = await base44.asServiceRole.entities.Suppliers.filter({}, undefined, 500);
-    const aliasMatch = allSuppliers.find(s => {
-      if (!s.aliases) return false;
-      return s.aliases.split(',').map(a => a.trim()).includes(vatId);
-    });
-    if (aliasMatch) {
-      supplierId = aliasMatch.id;
-      supplierMatchMethod = 'alias';
-      console.log(`Matched supplier via alias: ${aliasMatch.name} (alias contains VAT ${vatId})`);
-    }
-  }
-
-  // If not found by VAT, try by learned pattern
-  if (!supplierId && normalizedName) {
-    const patterns = await base44.asServiceRole.entities.SupplierPattern.filter({ 
-      pattern_type: 'name_pattern', 
-      pattern_value: normalizedName,
-      is_active: true 
-    }, undefined, 1);
-    if (patterns && patterns.length > 0) {
-      supplierId = patterns[0].supplier_id;
-      supplierMatchMethod = 'learned_pattern';
-    }
-  }
-
-  // Create new supplier if not found
   if (!supplierId) {
-    const created = await base44.asServiceRole.entities.Suppliers.create({
-      name: supplierName || 'לא ידוע',
-      vat_id: vatId || undefined,
-      created_from_invoice: true,
-      is_active: true
-    });
-    supplierId = created.id;
-    supplierMatchMethod = 'created';
-
-    // Save patterns for future matching
-    if (vatId) {
-      try {
-        await base44.asServiceRole.entities.SupplierPattern.create({
-          supplier_id: supplierId,
-          pattern_type: 'vat_id',
-          pattern_value: vatId,
-          confidence: 100,
-          learned_from_invoice: invoice.id
-        });
-      } catch (_) {}
-    }
-    if (normalizedName) {
-      try {
-        await base44.asServiceRole.entities.SupplierPattern.create({
-          supplier_id: supplierId,
-          pattern_type: 'name_pattern',
-          pattern_value: normalizedName,
-          confidence: 80,
-          learned_from_invoice: invoice.id
-        });
-      } catch (_) {}
-    }
+    validation.review_reasons_he.unshift(`${resolution.reason_code}: ${resolution.reason}`);
   }
 
   // Duplicate check - same doc_number + same supplier
@@ -212,8 +150,10 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
 
   // The deterministic gate is the ONLY thing that may approve an invoice here.
   // extraction.overall_confidence is telemetry and never part of this decision.
-  const matchedSupplier = (await base44.asServiceRole.entities.Suppliers.filter({ id: supplierId }, undefined, 1))?.[0] || null;
-  const duplicateCandidates = await base44.asServiceRole.entities.Invoices.filter({ supplier: supplierId }, undefined, 200);
+  const matchedSupplier = resolution.supplier;
+  const duplicateCandidates = supplierId
+    ? await base44.asServiceRole.entities.Invoices.filter({ supplier: supplierId }, undefined, 200)
+    : [];
   const gate = validateInvoiceForAutoApproval({
     supplier_name: extraction.supplier_name,
     supplier_vat_id: extraction.supplier_vat_id,
@@ -227,6 +167,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
   }, {
     supplier: matchedSupplier,
     supplier_match_method: supplierMatchMethod,
+    supplier_resolution: resolution,
     duplicates: duplicateCandidates,
     invoice_id: invoice.id,
     line_check: validation.line_check
@@ -243,7 +184,8 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     : `${baseNotes}\nנדרש אימות ידני: ${(gate.failures.length ? gate.failures : validation.review_reasons_he).join(' | ') || 'נדרשת בדיקה ידנית.'}`;
 
   const updatePayload = {
-    supplier: supplierId,
+    // Unresolved identity persists NO supplier id — the invoice goes to review instead.
+    supplier: supplierId || undefined,
     doc_type: extraction.doc_type_he || undefined,
     doc_number: extraction.doc_number || undefined,
     normalized_doc_number: normalizeInvoiceNumber(extraction.doc_number) || undefined,
@@ -263,7 +205,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     extraction_status: finalStatus,
     notes: notes,
     ai_debug_last_extraction_json: JSON.stringify(extraction),
-    ai_debug_last_validation_json: JSON.stringify({ ...validation, gate })
+    ai_debug_last_validation_json: JSON.stringify({ ...validation, gate, supplier_resolution: resolution })
   };
 
   await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);

@@ -4,6 +4,7 @@ import { calculateFileHash, findReusableDuplicate, getEarlyNonInvoiceReason } fr
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDATION_VERSION, ARITHMETIC_TOLERANCE } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
+import { resolveSupplier, normalizeVatId, isOurBuyerVatId } from '../../shared/supplierResolver.ts';
 
 Deno.serve(async (req) => {
     // Read body BEFORE creating base44 client (body can only be read once)
@@ -389,174 +390,21 @@ Deno.serve(async (req) => {
     const validationJson = JSON.stringify(validation);
     await base44.asServiceRole.entities.Invoices.update(invoice.id, { ai_debug_last_validation_json: validationJson });
 
-    // Step 4: Supplier linking - improved with learned patterns, normalized VAT ID matching and aliases
-    let supplierId = null;
-    let supplierMatchMethod = 'none';
+    // Step 4: Supplier resolution ONLY — deterministic, shared, and never creates/renames a supplier.
+    const allSuppliers = await base44.asServiceRole.entities.Suppliers.list('-created_date', 1000);
+    const learnedPatterns = await base44.asServiceRole.entities.SupplierPattern.filter({ is_active: true }, undefined, 1000);
+    const supplierResolution = resolveSupplier({
+      vat_id: extraction.supplier_vat_id,
+      supplier_name: extraction.supplier_name,
+      supplier_name_normalized: extraction.supplier_name_normalized
+    }, { suppliers: allSuppliers, patterns: learnedPatterns });
+
+    const supplierId = supplierResolution.supplier_id;
+    const supplierMatchMethod = supplierResolution.method;
     const rawVatId = extraction.supplier_vat_id && String(extraction.supplier_vat_id).trim();
-    
-    // Extract only digits for VAT ID (Israeli VAT IDs are 9 digits)
-    const digitsOnly = rawVatId ? rawVatId.replace(/\D/g, '') : '';
-    // Normalize: if we have 9 digits, use them; otherwise keep the raw value for matching
-    const normalizedVatId = digitsOnly.length === 9 ? digitsOnly : (rawVatId ? rawVatId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : null);
-    
-    // CRITICAL: Check if extracted VAT ID is actually OUR company's VAT ID (buyer, not supplier)
-    const OUR_VAT_ID = '040638660';
-    if (normalizedVatId === OUR_VAT_ID || rawVatId === OUR_VAT_ID) {
-      console.log(`WARNING: Extracted VAT ID ${rawVatId} is OUR company's VAT ID, not supplier's. Ignoring.`);
-      // Don't use this VAT ID for supplier matching - it's ours!
-      // Fall through to name-based matching instead
-    }
-    
-    // First, try to find supplier by learned patterns (highest priority)
-    const learnedPatterns = await base44.asServiceRole.entities.SupplierPattern.filter({ is_active: true }, undefined, 500);
-    
-    // Check VAT ID patterns first
-    if (normalizedVatId) {
-      const vatPattern = learnedPatterns.find(p => 
-        p.pattern_type === 'vat_id' && 
-        (p.pattern_value === normalizedVatId || p.pattern_value === rawVatId)
-      );
-      if (vatPattern) {
-        supplierId = vatPattern.supplier_id;
-        supplierMatchMethod = 'vat_id';
-        console.log(`Supplier matched by learned VAT pattern: ${supplierId}`);
-      }
-    }
-    
-    // Check name patterns if no VAT match
-    if (!supplierId && extraction.supplier_name) {
-      const supplierName = extraction.supplier_name.trim();
-      const normalizedName = extraction.supplier_name_normalized?.trim();
-      
-      const namePattern = learnedPatterns.find(p => {
-        if (p.pattern_type !== 'name_pattern') return false;
-        const patternLower = p.pattern_value.toLowerCase();
-        const nameLower = supplierName.toLowerCase();
-        const normLower = normalizedName?.toLowerCase() || '';
-        return patternLower === nameLower || patternLower === normLower ||
-               patternLower.includes(nameLower) || nameLower.includes(patternLower) ||
-               (normLower && (patternLower.includes(normLower) || normLower.includes(patternLower)));
-      });
-      if (namePattern) {
-        supplierId = namePattern.supplier_id;
-        supplierMatchMethod = 'learned_pattern';
-        console.log(`Supplier matched by learned name pattern: ${supplierId}`);
-      }
-    }
-    
-    // Helper: check if a supplier matches by VAT ID or aliases
-    const matchesSupplier = (supplier, vatId, supplierName) => {
-      // Match by VAT ID
-      if (vatId && supplier.vat_id) {
-        const supplierVatDigits = supplier.vat_id.replace(/\D/g, '');
-        if (supplierVatDigits === vatId || supplier.vat_id === vatId) return true;
-      }
-      // Match by aliases (pipe-separated)
-      if (supplier.aliases && vatId) {
-        const aliasesList = supplier.aliases.split('|').map(a => a.trim().toUpperCase());
-        if (aliasesList.includes(vatId) || aliasesList.includes(rawVatId?.toUpperCase())) return true;
-      }
-      // Match by name in aliases
-      if (supplier.aliases && supplierName) {
-        const normalizedSearchName = supplierName.replace(/['"״׳\-\.]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
-        const aliasesList = supplier.aliases.split('|').map(a => a.trim().toLowerCase());
-        if (aliasesList.some(alias => alias.includes(normalizedSearchName) || normalizedSearchName.includes(alias))) return true;
-      }
-      return false;
-    };
-    
-    const allSuppliers = await base44.asServiceRole.entities.Suppliers.filter({ is_active: true }, undefined, 500);
-    
-    // If already found by patterns, skip to supplier update
-    if (supplierId) {
-      // Verify supplier still exists
-      const foundSupplier = allSuppliers.find(s => s.id === supplierId);
-      if (!foundSupplier) {
-        supplierId = null; // Pattern points to deleted supplier, continue with normal search
-        supplierMatchMethod = 'none';
-      }
-    }
-    
-    // Only use VAT ID for matching if it's NOT our company's VAT ID
-    const isOurVatId = normalizedVatId === OUR_VAT_ID || rawVatId === OUR_VAT_ID;
-    
-    if (!supplierId && normalizedVatId && !isOurVatId) {
-      // Try to find by exact vat_id first
-      let found = allSuppliers.filter(s => {
-        if (!s.vat_id) return false;
-        const sVatDigits = s.vat_id.replace(/\D/g, '');
-        return sVatDigits === normalizedVatId || s.vat_id === rawVatId;
-      });
-      
-      let matchedByVat = found.length > 0;
-      // If not found, check aliases
-      if (found.length === 0) {
-        found = allSuppliers.filter(s => matchesSupplier(s, normalizedVatId, extraction.supplier_name));
-      }
-      
-      if (found.length > 0) {
-        supplierId = found[0].id;
-        supplierMatchMethod = matchedByVat ? 'vat_id' : 'alias';
-        // Update supplier name if current is generic and we have a better one
-        const currentName = found[0].name || '';
-        const newName = extraction.supplier_name || '';
-        const hasHebrew = /[\u0590-\u05FF]/.test(newName);
-        const currentHasHebrew = /[\u0590-\u05FF]/.test(currentName);
-        if (hasHebrew && !currentHasHebrew && newName.length > currentName.length) {
-          await base44.asServiceRole.entities.Suppliers.update(supplierId, { name: newName });
-        }
-      } else {
-        // Use the 9-digit VAT ID if available
-        const vatIdToSave = digitsOnly.length === 9 ? digitsOnly : rawVatId;
-        const created = await base44.asServiceRole.entities.Suppliers.create({
-          name: extraction.supplier_name || 'לא ידוע',
-          vat_id: vatIdToSave,
-          created_from_invoice: true,
-          is_active: true
-        });
-        supplierId = created.id;
-        supplierMatchMethod = 'created';
-      }
-    } else if (!supplierId) {
-      // No VAT ID and no pattern match - try to match by normalized name or aliases
-      const supplierName = extraction.supplier_name || '';
-      const normalizedName = supplierName.replace(/['"״׳\-\.]/g, '').replace(/בע"?מ|בעמ|ltd|llc|inc/gi, '').replace(/\s+/g, ' ').trim().toLowerCase();
-      
-      if (normalizedName) {
-        // Check aliases first
-        let found = allSuppliers.find(s => matchesSupplier(s, null, supplierName));
-        const foundByAlias = !!found;
-        
-        // Then check by name
-        if (!found) {
-          found = allSuppliers.find(s => {
-            const sName = (s.name || '').replace(/['"״׳\-\.]/g, '').replace(/בע"?מ|בעמ|ltd|llc|inc/gi, '').replace(/\s+/g, ' ').trim().toLowerCase();
-            return sName === normalizedName || sName.includes(normalizedName) || normalizedName.includes(sName);
-          });
-        }
-        
-        if (found) {
-          supplierId = found.id;
-          supplierMatchMethod = foundByAlias ? 'alias' : 'name';
-        } else {
-          const created = await base44.asServiceRole.entities.Suppliers.create({
-            name: extraction.supplier_name || 'לא ידוע',
-            created_from_invoice: true,
-            is_active: true
-          });
-          supplierId = created.id;
-          supplierMatchMethod = 'created';
-        }
-      } else {
-        const created = await base44.asServiceRole.entities.Suppliers.create({
-          name: extraction.supplier_name || 'לא ידוע',
-          created_from_invoice: true,
-          is_active: true
-        });
-        supplierId = created.id;
-        supplierMatchMethod = 'created';
-      }
-    }
+    const isOurVatId = isOurBuyerVatId(rawVatId);
+    const normalizedVatId = isOurVatId ? null : (normalizeVatId(rawVatId) || null);
+    console.log(`Supplier resolution: ${supplierMatchMethod} / ${supplierResolution.evidence_strength} → ${supplierId || 'UNRESOLVED'} (${supplierResolution.reason_code || 'ok'})`);
 
     // Step 4b: Duplicate check - same doc_number + same supplier (by vat_id)
     const extractedDocNumber = extraction.doc_number?.trim();
@@ -602,11 +450,7 @@ Deno.serve(async (req) => {
 
     // Step 5: Classify every extracted line, then summarize the invoice.
     const lineItems = extraction.line_items || [];
-    let matchedSupplier = allSuppliers.find((supplier) => supplier.id === supplierId) || null;
-    if (!matchedSupplier && supplierId) {
-      const supplierRows = await base44.asServiceRole.entities.Suppliers.filter({ id: supplierId }, undefined, 1);
-      matchedSupplier = supplierRows?.[0] || null;
-    }
+    const matchedSupplier = supplierResolution.supplier;
     const learnedLinePatterns = learnedPatterns.filter((pattern) => pattern.supplier_id === supplierId && pattern.classification);
     const classificationResult = classifyInvoiceLines({ invoice, supplier: matchedSupplier, lineItems, learnedLinePatterns });
     const classifiedByLineNumber = new Map(classificationResult.lines.map((line, index) => [Number(line.line_number || index + 1), line]));
@@ -616,7 +460,7 @@ Deno.serve(async (req) => {
     // P0.1 + P0.2: auto approval is decided ONLY by the deterministic validation gate.
     // extraction.overall_confidence is stored for telemetry and is NOT part of this decision.
     const normalizedDocNumber = normalizeInvoiceNumber(extraction.doc_number);
-    const duplicateCandidates = extraction.doc_number
+    const duplicateCandidates = extraction.doc_number && supplierId
       ? await base44.asServiceRole.entities.Invoices.filter({ supplier: supplierId }, undefined, 200)
       : [];
     const gate = validateInvoiceForAutoApproval({
@@ -632,6 +476,7 @@ Deno.serve(async (req) => {
     }, {
       supplier: matchedSupplier,
       supplier_match_method: supplierMatchMethod,
+      supplier_resolution: supplierResolution,
       duplicates: duplicateCandidates,
       invoice_id: invoice.id,
       line_check: getLineItemsCheck(extraction)
@@ -642,10 +487,11 @@ Deno.serve(async (req) => {
     const finalStatus = canAutoApprove ? 'אושר' : 'ממתין לאימות';
     const finalNotes = canAutoApprove
       ? `${baseNotes}\nאושר אוטומטית לאחר מעבר כל בדיקות התקינות (${gate.validation_version}).`
-      : `${baseNotes}\nנדרש אימות ידני: ${(gate.failures.length ? gate.failures : validation.review_reasons_he).join(' | ')}`;
+      : `${baseNotes}\nנדרש אימות ידני: ${(gate.failures.length ? gate.failures : validation.review_reasons_he).join(' | ')}${supplierId ? '' : `\n${supplierResolution.reason_code}: ${supplierResolution.reason}`}`;
 
     const updatePayload = {
-      supplier: supplierId,
+      // Unresolved identity persists NO supplier id — the invoice goes to review instead.
+      supplier: supplierId || undefined,
       doc_type: extraction.doc_type_he || undefined,
       doc_number: extraction.doc_number || undefined,
       doc_date: extraction.doc_date || undefined,
@@ -699,14 +545,15 @@ Deno.serve(async (req) => {
         unit_price_before_vat: roundMoney(item.unit_price_before_vat) || null,
         line_total_before_vat: roundMoney(item.line_total_before_vat) || null,
         line_total_with_vat: roundMoney(item.line_total_with_vat) || null,
-        supplier_id: supplierId,
+        supplier_id: supplierId || undefined,
         line_category: classifiedLine?.line_category || undefined,
         classification_source: classifiedLine?.classification_source || 'keywords',
         classification_reason: classifiedLine?.classification_reason || ''
       });
 
       // Service/subscription lines without SKU are classified and saved, but do not belong in product price tracking.
-      if (!item.sku) continue;
+      // Without a resolved supplier there is no identity to track a price against.
+      if (!item.sku || !supplierId) continue;
       
       // Check/update SupplierProductPrice
       const existingPrice = await base44.asServiceRole.entities.SupplierProductPrice.filter({

@@ -61,16 +61,27 @@ export function validateInvoiceForAutoApproval(candidate: any, context: any = {}
   const supplier = context.supplier || null;
   const matchMethod = context.supplier_match_method || 'none';
   const RELIABLE_MATCHES = ['vat_id', 'alias', 'learned_pattern'];
+  // Supplier reliability comes from the deterministic resolver when the route supplies it.
+  // A Supplier record merely EXISTING is never enough. Older callers that pass no
+  // resolution keep the previous match-method behaviour.
+  const resolution = context.supplier_resolution || null;
+  const reliableIdentity = resolution
+    ? resolution.reliable_for_auto_approval === true
+    : RELIABLE_MATCHES.includes(matchMethod);
 
   // ── Supplier identity ────────────────────────────────────────────────
   const supplierName = cleanStr(candidate?.supplier_name);
   const GENERIC_NAMES = ['לא ידוע', 'לא ניתן לקרוא', 'unknown', 'n/a'];
   if (!supplier?.id) {
-    failures.push('לא זוהה ספק במערכת.');
+    failures.push(resolution?.reason
+      ? `לא זוהה ספק במערכת (${resolution.reason_code || 'SUPPLIER_UNRESOLVED'}): ${resolution.reason}`
+      : 'לא זוהה ספק במערכת.');
   } else if (!supplierName || GENERIC_NAMES.includes(supplierName.toLowerCase())) {
     failures.push('שם הספק אינו קריא או כללי מדי.');
-  } else if (!RELIABLE_MATCHES.includes(matchMethod)) {
-    failures.push(`זיהוי הספק אינו אמין דיו (זוהה לפי ${matchMethod === 'created' ? 'יצירת ספק חדש' : 'התאמת שם'}).`);
+  } else if (!reliableIdentity) {
+    failures.push(resolution
+      ? `זיהוי הספק אינו אמין דיו (${resolution.reason_code || 'SUPPLIER_WEAK_EVIDENCE'}): ${resolution.reason}`
+      : `זיהוי הספק אינו אמין דיו (זוהה לפי ${matchMethod === 'created' ? 'יצירת ספק חדש' : 'התאמת שם'}).`);
   } else {
     validated_fields.push('supplier');
   }
