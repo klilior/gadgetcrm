@@ -5,6 +5,7 @@ import { needsFileHashRecompute, trustedFileHash } from '../../shared/invoiceInt
 import { planExtractionRoutePreflight } from '../../shared/invoiceExtractionRoutePreflight.ts';
 import { NON_ATTEMPT_REASONS, planAttemptFailure, planAttemptStart, planAttemptSuccess, planNonAttempt } from '../../shared/invoiceRetryLifecycle.ts';
 import { planSupplierPricePurchase } from '../../shared/supplierPriceRetry.ts';
+import { EVENT_TYPES, appendProcessingEvent, appendProcessingEvents, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
 import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
 import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
@@ -505,6 +506,31 @@ Deno.serve(async (req) => {
       ? `${baseNotes}\nאושר אוטומטית לאחר מעבר כל בדיקות התקינות (${gate.validation_version}).`
       : `${baseNotes}\nנדרש אימות ידני: ${(gate.failures.length ? gate.failures : validation.review_reasons_he).join(' | ')}${supplierId ? '' : `\n${supplierResolution.reason_code}: ${supplierResolution.reason}`}`;
 
+    // D2b2 audit trail. Read the LATEST row so a retry appends to real history instead of
+    // overwriting it from a stale pre-attempt snapshot; written inside the single update below.
+    const latestInvoice = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0] || invoice;
+    const auditAt = new Date().toISOString();
+    const provenance = applyExtractionProvenance({
+      existingJson: latestInvoice.field_provenance_json,
+      values: {
+        supplier: supplierId ?? null,
+        doc_number: extraction.doc_number ?? null,
+        doc_date: extraction.doc_date ?? null,
+        subtotal_before_vat: extraction.subtotal_before_vat ?? null,
+        vat_amount: extraction.vat_amount ?? null,
+        total_with_vat: extraction.total_with_vat ?? null
+      },
+      supplierName: extraction.supplier_name || null,
+      reason: `gate ${gate.validation_version}`,
+      at: auditAt
+    });
+    const history = appendProcessingEvents(latestInvoice.processing_events_json, [
+      { type: EVENT_TYPES.ATTEMPT_STARTED, at: attemptPlan.writes.last_attempt_at || auditAt, outcome: 'started', meta: { intake_id: intake.id } },
+      { type: EVENT_TYPES.GATE_EVALUATED, at: auditAt, outcome: gate.passed ? 'passed' : 'failed', reason: gate.failures[0] || null, meta: { version: gate.validation_version, auto_approved: canAutoApprove } },
+      ...(businessDuplicate ? [{ type: EVENT_TYPES.BUSINESS_DUPLICATE, at: auditAt, outcome: 'manual_review', reason: businessDuplicate.reason || null, meta: { original_invoice_id: businessDuplicate.original_invoice_id || null } }] : []),
+      { type: EVENT_TYPES.ATTEMPT_SUCCEEDED, at: auditAt, outcome: finalStatus }
+    ]);
+
     const updatePayload = {
       // Unresolved/ambiguous identity clears the link explicitly so no stale supplier can survive.
       supplier: supplierId ?? null,
@@ -526,6 +552,8 @@ Deno.serve(async (req) => {
       auto_approved: canAutoApprove,
       extraction_status: finalStatus,
       notes: finalNotes,
+      field_provenance_json: provenance.json,
+      processing_events_json: history.json,
       invoice_classification: classificationResult.invoice_classification || undefined,
       classification_status: classificationResult.classification_status,
       classification_reason: classificationResult.classification_reason
@@ -657,6 +685,8 @@ Deno.serve(async (req) => {
       attempt_count: attemptPlan.writes.attempt_count,
       invoice_id: invoice.id, 
       supplier_id: supplierId, 
+      provenance_original_captured: provenance.original_captured,
+      processing_events_count: history.events.length,
       line_items_count: lineItems.length,
       business_duplicate: businessDuplicate || null,
       canonical_supplier_family: family.family || null,
@@ -672,6 +702,15 @@ Deno.serve(async (req) => {
       if (invoiceId) {
         const invList = await base44.asServiceRole.entities.Invoices.filter({ id: invoiceId });
         const invoice = invList?.[0];
+        if (invoice) {
+          // D2b2: record the failed attempt in the compact history; provenance stays untouched.
+          const failedHistory = appendProcessingEvent(invoice.processing_events_json, {
+            type: EVENT_TYPES.ATTEMPT_FAILED,
+            outcome: 'error',
+            reason: error?.message || String(error)
+          });
+          await base44.asServiceRole.entities.Invoices.update(invoice.id, { processing_events_json: failedHistory.json });
+        }
         if (invoice?.source_intake) {
           // D2b1: transient extraction/PDF errors → RETRYABLE, structurally invalid response → FAILED.
           // The intake/invoice pair and the original file are preserved for the next retry.

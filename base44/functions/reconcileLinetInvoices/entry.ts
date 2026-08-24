@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { normalizeInvoiceNumber, evaluateLinetMatch, selectLinetCandidate, LINET_MATCH_RULE_VERSION, LINET_REASON_CODES } from '../../shared/linetInvoiceReconciliation.ts';
+import { EVENT_TYPES, LINET_SELECTION_LEVELS, appendProcessingEvent, applyLinetProvenance } from '../../shared/invoiceProvenance.ts';
 
 /**
  * Invoice ↔ Linet purchase-document reconciliation.
@@ -99,6 +100,17 @@ Deno.serve(async (req) => {
     const gapUpdates = [];
     const activeGapKeys = new Set();
 
+    /**
+     * D2b2 audit fields for one reconciliation outcome. `appliedAsSourceOfTruth` is the ONLY way
+     * the selected provenance may move to LINET — conflict / possible / missing keep the existing
+     * selection untouched and are recorded as history only.
+     */
+    const auditFields = (invoice, { level, eventType, values = {}, appliedAsSourceOfTruth = false, reason = null, meta = undefined }) => {
+      const provenance = applyLinetProvenance({ existingJson: invoice.field_provenance_json, level, values, appliedAsSourceOfTruth, reason, at: now });
+      const history = appendProcessingEvent(invoice.processing_events_json, { type: eventType, at: now, outcome: level, reason, meta });
+      return { field_provenance_json: provenance.json, processing_events_json: history.json };
+    };
+
     const queueGap = (data) => {
       if (data.status === 'open') activeGapKeys.add(data.gap_key);
       const existing = gapByKey.get(data.gap_key);
@@ -152,7 +164,9 @@ Deno.serve(async (req) => {
           auto_approved: false,
           validation_passed: false,
           extraction_status: invoice.extraction_status === 'אושר' || invoice.extraction_status === 'נדחה' ? 'ממתין לאימות' : invoice.extraction_status,
-          notes: String(invoice.notes || '').includes('[linet_conflict]') ? invoice.notes : `${invoice.notes || ''}\n[linet_conflict] ${reason}`.trim()
+          notes: String(invoice.notes || '').includes('[linet_conflict]') ? invoice.notes : `${invoice.notes || ''}\n[linet_conflict] ${reason}`.trim(),
+          // Blocked/ambiguous: history only — the existing selection stays exactly as it was.
+          ...auditFields(invoice, { level: LINET_SELECTION_LEVELS.CONFLICT, eventType: EVENT_TYPES.LINET_CONFLICT, reason, meta: { reason_code: code, candidates: (selection.candidates || []).length } })
         });
         results.push({ invoice_id: invoice.id, status: 'conflict', reason_codes: [code], reason, candidates: selection.candidates });
         queueGap({ gap_key: `ambiguous:${invoice.id}`, direction: 'ambiguous_match', invoice_id: invoice.id, doc_number: invoice.doc_number, supplier_name: supplierName, doc_date: invoice.doc_date, total_with_vat: invoice.total_with_vat, status: 'open', reason, detected_at: now });
@@ -197,6 +211,19 @@ Deno.serve(async (req) => {
           update.total_with_vat = linetTotal;
           update.source_of_truth = 'LINET';
         }
+        // Selection may move to LINET ONLY when the confirmed match actually applied LINET header
+        // values above; a confirmed non-merchandise match is recorded as history only.
+        const linetApplied = update.source_of_truth === 'LINET';
+        Object.assign(update, auditFields(invoice, {
+          level: LINET_SELECTION_LEVELS.CONFIRMED,
+          eventType: EVENT_TYPES.LINET_CONFIRMED,
+          appliedAsSourceOfTruth: linetApplied,
+          reason,
+          meta: { purchase_document_id: confirmed.purchase.id, applied_as_source_of_truth: linetApplied },
+          values: linetApplied
+            ? { doc_date: confirmed.match.values?.linet_doc_date ?? null, subtotal_before_vat: update.subtotal_before_vat ?? null, vat_amount: update.vat_amount ?? null, total_with_vat: linetTotal }
+            : { total_with_vat: linetTotal ?? null }
+        }));
         // Legacy recovery: an old duplicate-rejected record may return only to review, never straight to approved.
         if (invoice.linet_match_status === 'matched_duplicate' || invoice.extraction_status === 'נדחה') {
           stats.legacy_recovered++;
@@ -233,7 +260,9 @@ Deno.serve(async (req) => {
           auto_approved: false,
           validation_passed: false,
           extraction_status: invoice.extraction_status === 'אושר' ? 'ממתין לאימות' : (invoice.extraction_status === 'נדחה' ? 'ממתין לאימות' : invoice.extraction_status),
-          notes: String(invoice.notes || '').includes('[linet_conflict]') ? invoice.notes : `${invoice.notes || ''}\n[linet_conflict] ${reason}`.trim()
+          notes: String(invoice.notes || '').includes('[linet_conflict]') ? invoice.notes : `${invoice.notes || ''}\n[linet_conflict] ${reason}`.trim(),
+          // Conflict: both values are preserved in provenance, the selection is NOT touched.
+          ...auditFields(invoice, { level: LINET_SELECTION_LEVELS.CONFLICT, eventType: EVENT_TYPES.LINET_CONFLICT, reason, meta: { purchase_document_id: conflicted.purchase.id, reason_code: codes }, values: { total_with_vat: conflicted.match.values?.linet_total_with_vat ?? null, doc_date: conflicted.match.values?.linet_doc_date ?? null } })
         });
         if (!purchaseUpdates.has(conflicted.purchase.id)) purchaseUpdates.set(conflicted.purchase.id, { id: conflicted.purchase.id, reconciliation_status: 'ambiguous', match_reason: reason });
         results.push({ invoice_id: invoice.id, status: 'conflict', reason_codes: conflicted.match.conflict_codes, reason, linet_purchase_document_id: conflicted.purchase.id, values: conflicted.match.values });
@@ -242,7 +271,7 @@ Deno.serve(async (req) => {
         stats.possible_matches++;
         observedPurchaseIds.add(possible.purchase.id);
         const reason = `התאמה אפשרית הדורשת בדיקה: ${possible.match.reason}`;
-        invoiceUpdates.push({ id: invoice.id, normalized_doc_number: normalized, linet_match_status: 'possible_match', linet_purchase_document_id: possible.purchase.id, linet_total_with_vat: possible.match.values?.linet_total_with_vat ?? undefined, linet_doc_date: possible.match.values?.linet_doc_date ?? undefined, linet_match_reason: reason, linet_matched_at: now, linet_provenance_json: buildProvenance(possible.match, 'extracted', 'LINET_POSSIBLE_MATCH', now) });
+        invoiceUpdates.push({ id: invoice.id, normalized_doc_number: normalized, linet_match_status: 'possible_match', linet_purchase_document_id: possible.purchase.id, linet_total_with_vat: possible.match.values?.linet_total_with_vat ?? undefined, linet_doc_date: possible.match.values?.linet_doc_date ?? undefined, linet_match_reason: reason, linet_matched_at: now, linet_provenance_json: buildProvenance(possible.match, 'extracted', 'LINET_POSSIBLE_MATCH', now), ...auditFields(invoice, { level: LINET_SELECTION_LEVELS.POSSIBLE, eventType: EVENT_TYPES.LINET_POSSIBLE, reason, meta: { purchase_document_id: possible.purchase.id }, values: { total_with_vat: possible.match.values?.linet_total_with_vat ?? null, doc_date: possible.match.values?.linet_doc_date ?? null } }) });
         if (!purchaseUpdates.has(possible.purchase.id)) purchaseUpdates.set(possible.purchase.id, { id: possible.purchase.id, reconciliation_status: 'ambiguous', match_reason: reason });
         results.push({ invoice_id: invoice.id, status: 'possible_match', reason, linet_purchase_document_id: possible.purchase.id });
         queueGap({ gap_key: `ambiguous:${invoice.id}`, direction: 'ambiguous_match', invoice_id: invoice.id, linet_purchase_document_id: possible.purchase.id, doc_number: invoice.doc_number, supplier_name: supplierName || possible.purchase.supplier_name, doc_date: invoice.doc_date, total_with_vat: invoice.total_with_vat, status: 'open', reason, detected_at: now });
@@ -251,7 +280,7 @@ Deno.serve(async (req) => {
       } else {
         stats.missing_in_linet++;
         const reason = 'החשבונית נקלטה במערכת אך לא נמצא מסמך רכש 13 מאומת ב-Linet.';
-        invoiceUpdates.push({ id: invoice.id, normalized_doc_number: normalized, linet_match_status: 'missing_in_linet', linet_match_reason: reason, linet_matched_at: now });
+        invoiceUpdates.push({ id: invoice.id, normalized_doc_number: normalized, linet_match_status: 'missing_in_linet', linet_match_reason: reason, linet_matched_at: now, ...auditFields(invoice, { level: LINET_SELECTION_LEVELS.MISSING, eventType: EVENT_TYPES.LINET_MISSING, reason }) });
         results.push({ invoice_id: invoice.id, status: 'missing_in_linet', reason });
         queueGap({ gap_key: `invoice:${invoice.id}`, direction: 'missing_in_linet', invoice_id: invoice.id, doc_number: invoice.doc_number, supplier_name: supplierName, doc_date: invoice.doc_date, total_with_vat: invoice.total_with_vat, status: 'open', reason, detected_at: now });
       }

@@ -10,6 +10,7 @@ import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplic
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
 import { NON_ATTEMPT_REASONS, planAttemptStart, planAttemptSuccess, planNonAttempt, planRouteFailureTarget } from '../../shared/invoiceRetryLifecycle.ts';
 import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
+import { EVENT_TYPES, appendProcessingEvents, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -91,7 +92,7 @@ function buildDeterministicValidation(extraction) {
 }
 
 // Helper function to process a single invoice extraction
-async function processSingleInvoice(base44, intake, invoice, extraction, invoiceIndex = null) {
+async function processSingleInvoice(base44, intake, invoice, extraction, invoiceIndex = null, context = {}) {
   if (extraction.classification === 'OTHER' || extraction.should_skip === true) {
     // Update intake as skipped
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
@@ -164,6 +165,31 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     ? `${baseNotes}\nאושר אוטומטית לאחר מעבר כל בדיקות התקינות (${gate.validation_version}).`
     : `${baseNotes}\nנדרש אימות ידני: ${(gate.failures.length ? gate.failures : validation.review_reasons_he).join(' | ') || 'נדרשת בדיקה ידנית.'}`;
 
+  // D2b2 audit trail. Read the LATEST row so a retry appends to real history instead of
+  // overwriting it from a stale pre-attempt snapshot; written inside the single update below.
+  const latest = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0] || invoice;
+  const auditAt = new Date().toISOString();
+  const provenance = applyExtractionProvenance({
+    existingJson: latest.field_provenance_json,
+    values: {
+      supplier: supplierId ?? null,
+      doc_number: extraction.doc_number ?? null,
+      doc_date: extraction.invoice_date ?? null,
+      subtotal_before_vat: roundMoney(extraction.subtotal_before_vat) ?? null,
+      vat_amount: roundMoney(extraction.vat_amount) ?? null,
+      total_with_vat: roundMoney(extraction.total_with_vat) ?? null
+    },
+    supplierName: extraction.supplier_name || null,
+    reason: `gate ${gate.validation_version}`,
+    at: auditAt
+  });
+  const history = appendProcessingEvents(latest.processing_events_json, [
+    { type: EVENT_TYPES.ATTEMPT_STARTED, at: context.attemptStartedAt || auditAt, outcome: 'started', meta: { intake_id: intake.id, document_index: invoiceIndex === null ? 1 : invoiceIndex + 1 } },
+    { type: EVENT_TYPES.GATE_EVALUATED, at: auditAt, outcome: gate.passed ? 'passed' : 'failed', reason: gate.failures[0] || null, meta: { version: gate.validation_version, auto_approved: canAutoApprove } },
+    ...(businessDuplicate ? [{ type: EVENT_TYPES.BUSINESS_DUPLICATE, at: auditAt, outcome: 'manual_review', reason: businessDuplicate.reason || null, meta: { original_invoice_id: businessDuplicate.original_invoice_id || null } }] : []),
+    { type: EVENT_TYPES.ATTEMPT_SUCCEEDED, at: auditAt, outcome: finalStatus }
+  ]);
+
   const updatePayload = {
     // Unresolved/ambiguous identity clears the link explicitly so no stale supplier can survive.
     supplier: supplierId ?? null,
@@ -185,6 +211,8 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     auto_approved: canAutoApprove,
     extraction_status: finalStatus,
     notes: notes,
+    field_provenance_json: provenance.json,
+    processing_events_json: history.json,
     ai_debug_last_extraction_json: JSON.stringify(extraction),
     ai_debug_last_validation_json: JSON.stringify({ ...validation, gate, supplier_resolution: resolution })
   };
@@ -217,7 +245,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
   }
 
-  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, provenance_original_captured: provenance.original_captured, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
 }
 
 Deno.serve(async (req) => {
@@ -342,7 +370,7 @@ Ignore all other invoices in the document.`;
           });
         }
 
-        const result = await processSingleInvoice(base44, intake, targetInvoice, extraction, i);
+        const result = await processSingleInvoice(base44, intake, targetInvoice, extraction, i, { attemptStartedAt: attemptPlan.writes.last_attempt_at });
         results.push(result);
       }
 
@@ -377,7 +405,7 @@ Ignore all other invoices in the document.`;
     if (!extraction || typeof extraction !== 'object') throw new Error('Invalid extraction response');
     await prepareExtraction(extraction);
 
-    const result = await processSingleInvoice(base44, intake, invoice, extraction);
+    const result = await processSingleInvoice(base44, intake, invoice, extraction, null, { attemptStartedAt: attemptPlan.writes.last_attempt_at });
     
     if (result.skipped) {
       // Intentional non-invoice classification is a COMPLETED attempt → SUCCEEDED.
