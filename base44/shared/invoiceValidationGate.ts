@@ -9,8 +9,8 @@
 
 export const INVOICE_VALIDATION_VERSION = 'gate-1.0.0';
 
-// Rounding-only tolerance for subtotal + VAT ≈ total (Israeli agorot rounding).
-const ARITHMETIC_TOLERANCE = 1.0;
+// Rounding-only tolerance for subtotal + VAT ≈ total (single agora of rounding).
+export const ARITHMETIC_TOLERANCE = 0.02;
 
 function isNum(v: unknown): boolean {
   return typeof v === 'number' && Number.isFinite(v);
@@ -111,7 +111,8 @@ export function validateInvoiceForAutoApproval(candidate: any, context: any = {}
   const total = candidate?.total_with_vat;
   const sub = candidate?.subtotal_before_vat;
   const vat = candidate?.vat_amount;
-  if (!isNum(total) || Math.abs(total) < 0.01) {
+  // An explicitly extracted finite total of 0 is valid (e.g. fully discounted document).
+  if (!isNum(total)) {
     failures.push('סכום לתשלום חסר או לא תקין.');
   } else {
     validated_fields.push('total_with_vat');
