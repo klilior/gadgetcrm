@@ -14,7 +14,9 @@
  *  - Anything weak / ambiguous / unmatched is NOT eligible for auto-approval.
  */
 
-export const SUPPLIER_RESOLVER_VERSION = 'supplier-resolver-1.0.0';
+import { cleanEvidence, isSentinelValue } from './invoiceSentinelValues.ts';
+
+export const SUPPLIER_RESOLVER_VERSION = 'supplier-resolver-1.1.0';
 
 /** Our own company id — appears on invoices as the BUYER, never as the supplier. */
 export const OUR_BUYER_VAT_ID = '040638660';
@@ -25,9 +27,12 @@ export const REASON_WEAK = 'SUPPLIER_WEAK_EVIDENCE';
 
 const MAX_REDIRECT_HOPS = 5;
 
-/** Deterministic VAT/company id normalization. Returns '' when unusable. */
+/**
+ * Deterministic VAT/company id normalization. Returns '' when unusable.
+ * D3b: sentinels ("null", "N/A", "-", "/", "לא ידוע") normalize to '' and can never match.
+ */
 export function normalizeVatId(raw: unknown): string {
-  const value = raw === null || raw === undefined ? '' : String(raw).trim();
+  const value = cleanEvidence(raw);
   if (!value) return '';
   const digits = value.replace(/\D/g, '');
   if (digits.length >= 8 && digits.length <= 9) return digits.padStart(9, '0');
@@ -41,9 +46,21 @@ export function isOurBuyerVatId(raw: unknown): boolean {
   return !!normalized && normalized === normalizeVatId(OUR_BUYER_VAT_ID);
 }
 
+/**
+ * A VAT match may run ONLY on a syntactically valid identifier: 8–9 Israeli digits (or a longer
+ * digit run), or an alphanumeric foreign id of at least 6 chars containing digits. Anything
+ * shorter/placeholder-shaped is not an identifier and must not be compared to stored data.
+ */
+export function isValidVatIdentifier(raw: unknown): boolean {
+  const normalized = normalizeVatId(raw);
+  if (!normalized) return false;
+  if (/^\d{8,}$/.test(normalized)) return true;
+  return normalized.length >= 6 && /\d/.test(normalized) && /^[A-Z0-9]+$/.test(normalized);
+}
+
 /** Deterministic supplier-name normalization for EXACT comparison only. */
 export function normalizeSupplierName(raw: unknown): string {
-  const value = raw === null || raw === undefined ? '' : String(raw);
+  const value = cleanEvidence(raw);
   return value
     .replace(/["'״׳`]/g, '')
     .replace(/[.,\-_()]/g, ' ')
@@ -60,7 +77,7 @@ export function parseAliases(aliases: unknown): string[] {
   return value
     .split(/[|,]/)
     .map((part) => part.trim())
-    .filter(Boolean);
+    .filter((part) => part && !isSentinelValue(part));
 }
 
 /** Follows canonical_supplier_id, so duplicates always resolve to the canonical record. */
@@ -127,16 +144,18 @@ export function resolveSupplier(evidence: any = {}, context: any = {}) {
   const trustedSenderMap = context.trusted_sender_map || null;
 
   // ── a. exact normalized company / VAT id ────────────────────────────────
-  const rawVat = evidence.vat_id;
+  // D3b: only a syntactically valid, non-sentinel identifier may take part in a VAT comparison.
+  const rawVat = isValidVatIdentifier(evidence.vat_id) ? evidence.vat_id : null;
   if (rawVat && isOurBuyerVatId(rawVat)) {
     // Our own buyer id was read off the document — it is not supplier identity.
     // Fall through to the remaining evidence instead of matching on it.
   } else if (rawVat) {
     const normalizedVat = normalizeVatId(rawVat);
     if (normalizedVat) {
-      const byVat = suppliers.filter((s: any) => normalizeVatId(s.vat_id) === normalizedVat);
+      // A stored sentinel/invalid value on a legacy Supplier record is never a comparable id.
+      const byVat = suppliers.filter((s: any) => isValidVatIdentifier(s.vat_id) && normalizeVatId(s.vat_id) === normalizedVat);
       const byAliasVat = suppliers.filter(
-        (s: any) => !byVat.includes(s) && parseAliases(s.aliases).some((alias) => normalizeVatId(alias) === normalizedVat)
+        (s: any) => !byVat.includes(s) && parseAliases(s.aliases).some((alias) => isValidVatIdentifier(alias) && normalizeVatId(alias) === normalizedVat)
       );
       const hits = byVat.length ? byVat : byAliasVat;
       if (hits.length === 1) {
@@ -167,7 +186,7 @@ export function resolveSupplier(evidence: any = {}, context: any = {}) {
   }
 
   // ── b. Linet supplier identifier ────────────────────────────────────────
-  const linetId = evidence.linet_supplier_id ? String(evidence.linet_supplier_id).trim() : '';
+  const linetId = cleanEvidence(evidence.linet_supplier_id);
   if (linetId) {
     const hits = suppliers.filter((s: any) => String(s.linet_supplier_account_id || '').trim() === linetId);
     if (hits.length === 1) return finish(hits[0], suppliers, 'linet_supplier_id', 'strong');
@@ -183,7 +202,7 @@ export function resolveSupplier(evidence: any = {}, context: any = {}) {
   }
 
   // ── c. trusted sender / domain mapping ──────────────────────────────────
-  const senderDomain = evidence.sender_domain ? String(evidence.sender_domain).trim().toLowerCase() : '';
+  const senderDomain = cleanEvidence(evidence.sender_domain).toLowerCase();
   if (senderDomain && trustedSenderMap) {
     const mappedId = trustedSenderMap[senderDomain];
     const mapped = mappedId ? suppliers.find((s: any) => s.id === mappedId) : null;
@@ -203,7 +222,7 @@ export function resolveSupplier(evidence: any = {}, context: any = {}) {
   }
 
   // ── d. exact canonical alias (name alias, exact after normalization) ─────
-  const rawName = evidence.supplier_name ? String(evidence.supplier_name) : '';
+  const rawName = cleanEvidence(evidence.supplier_name);
   const normalizedName = normalizeSupplierName(evidence.supplier_name_normalized || rawName);
   if (normalizedName) {
     const aliasHits = suppliers.filter((s: any) =>

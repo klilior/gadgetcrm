@@ -274,6 +274,34 @@ export function roundMoney(value) {
  */
 export const LINE_ROUNDING_UNIT = 0.02;
 
+function isFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** A credit note may legitimately carry negative quantities / amounts. */
+export function isCreditNoteExtraction(extraction) {
+  const type = `${extraction?.doc_type_he || ''} ${extraction?.classification || ''} ${extraction?.document_title || ''}`.toLowerCase();
+  return type.includes('זיכוי') || type.includes('credit');
+}
+
+/**
+ * True when unit price and line total are printed on DIFFERENT bases, so qty × unit price is not
+ * comparable to the line total: explicit discounts, VAT-inclusive unit prices, or service /
+ * rounding / shipping-fee style lines.
+ */
+export function hasAlternateLineBase(item) {
+  if (!item) return false;
+  if (item.unit_price_includes_vat === true || item.price_includes_vat === true) return true;
+  if (isFiniteNumber(item.discount_amount) && item.discount_amount !== 0) return true;
+  if (isFiniteNumber(item.discount_percent) && item.discount_percent !== 0) return true;
+  if (isFiniteNumber(item.line_total_with_vat) && isFiniteNumber(item.line_total_before_vat)
+    && Math.abs(item.line_total_with_vat - item.line_total_before_vat) > 0.02
+    && isFiniteNumber(item.quantity) && isFiniteNumber(item.unit_price_before_vat)
+    && Math.abs(Math.abs(item.quantity * item.unit_price_before_vat) - Math.abs(item.line_total_with_vat)) <= 0.02) return true;
+  const name = `${item.product_name || ''} ${item.description || ''} ${item.sku || ''}`.toLowerCase();
+  return /(הנחה|discount|זיכוי|עיגול|rounding|מע"?מ|מע״מ|\bvat\b|דמי טיפול|שירות חודשי|subscription|מנוי|proration|יחסי)/.test(name);
+}
+
 export function getLineRoundingTolerance(lineCount) {
   const lines = Number.isFinite(lineCount) && lineCount > 0 ? Math.floor(lineCount) : 0;
   return Math.round(Math.max(LINE_ROUNDING_UNIT, lines * LINE_ROUNDING_UNIT) * 100) / 100;
@@ -297,24 +325,44 @@ export function getLineItemsCheck(extraction) {
     return { applicable: false, hasMismatch: false, delta: 0, tolerance: getLineRoundingTolerance(0), hasBadQuantity: false, hasLineArithmeticMismatch: false, hasAnyFailure: false, failures, warnings, reason_codes };
   }
 
-  // Per-line arithmetic, only where quantity, unit price and line total are all present.
+  // D3b: a blocking qty × unit-price check runs ONLY on semantically comparable operands.
+  const isCreditNote = isCreditNoteExtraction(extraction);
   const lineArithmeticFailures = [];
+  const nonComparableLines = [];
+  const negativeQuantityLines = [];
   for (const [index, item] of items.entries()) {
+    const lineNumber = item?.line_number || index + 1;
     const qty = item?.quantity;
     const unit = item?.unit_price_before_vat;
     const total = item?.line_total_before_vat;
-    if (typeof qty !== 'number' || typeof unit !== 'number' || typeof total !== 'number') continue;
-    const delta = Math.round(Math.abs(qty * unit - total) * 100) / 100;
-    if (delta > getLineRoundingTolerance(1)) {
-      lineArithmeticFailures.push({ line_number: item.line_number || index + 1, quantity: qty, unit_price_before_vat: unit, line_total_before_vat: total, delta });
-    }
+    if (typeof qty === 'number' && Number.isFinite(qty) && qty < 0) negativeQuantityLines.push(lineNumber);
+    if (!isFiniteNumber(qty) || !isFiniteNumber(unit) || !isFiniteNumber(total)) continue;
+    if (qty === 0) continue;
+    // Signs may legitimately differ in a credit-note presentation → compare magnitudes.
+    const delta = Math.round(Math.abs(Math.abs(qty * unit) - Math.abs(total)) * 100) / 100;
+    if (delta <= getLineRoundingTolerance(1)) continue;
+    const detail = { line_number: lineNumber, quantity: qty, unit_price_before_vat: unit, line_total_before_vat: total, delta };
+    // Discount / service / VAT-inclusive presentations use a different base for unit price and
+    // line total, so a numeric gap there is NOT a proven contradiction — review only.
+    if (hasAlternateLineBase(item)) nonComparableLines.push(detail);
+    else lineArithmeticFailures.push(detail);
   }
   if (lineArithmeticFailures.length) {
     reason_codes.push('LINE_TOTAL_MISMATCH');
     failures.push(`שורות עם אי-התאמה בין כמות × מחיר יחידה לסה״כ שורה: ${lineArithmeticFailures.map((l) => l.line_number).join(', ')}.`);
   }
+  if (nonComparableLines.length) {
+    reason_codes.push('LINE_BASE_NOT_COMPARABLE');
+    warnings.push(`שורות שירות/הנחה/כולל מע״מ שאינן ברות-השוואה אריתמטית: ${nonComparableLines.map((l) => l.line_number).join(', ')} — נדרשת בדיקה ולא נקבעה אי-התאמה.`);
+  }
+  if (negativeQuantityLines.length && !isCreditNote) {
+    reason_codes.push('LINE_QUANTITY_NEGATIVE_REVIEW');
+    warnings.push(`שורות עם כמות שלילית (החזרה/הנחה) במסמך שאינו זיכוי: ${negativeQuantityLines.join(', ')}.`);
+  }
 
-  const hasBadQuantity = items.some((item) => typeof item.quantity !== 'number' || item.quantity <= 0);
+  // Missing / non-numeric / zero quantity stays a real failure. A negative quantity is valid on a
+  // credit note and is never treated as invalid data.
+  const hasBadQuantity = items.some((item) => !isFiniteNumber(item?.quantity) || item.quantity === 0);
   if (hasBadQuantity) {
     reason_codes.push('LINE_QUANTITY_INVALID');
     failures.push('קיימות שורות מוצר עם כמות חסרה או לא תקינה.');
@@ -331,7 +379,11 @@ export function getLineItemsCheck(extraction) {
       : (typeof item.unit_price_before_vat === 'number' && typeof item.quantity === 'number' ? item.unit_price_before_vat * item.quantity : 0);
     return sum + total;
   }, 0);
-  const delta = Math.round(Math.abs(lineSum - subtotal) * 100) / 100;
+  // Credit notes may print lines and header with opposite signs → compare magnitudes there.
+  const signsDiffer = isCreditNote && lineSum !== 0 && subtotal !== 0 && Math.sign(lineSum) !== Math.sign(subtotal);
+  const delta = signsDiffer
+    ? Math.round(Math.abs(Math.abs(lineSum) - Math.abs(subtotal)) * 100) / 100
+    : Math.round(Math.abs(lineSum - subtotal) * 100) / 100;
   const tolerance = getLineRoundingTolerance(items.length);
   const hasMismatch = delta > tolerance;
   if (hasMismatch) {

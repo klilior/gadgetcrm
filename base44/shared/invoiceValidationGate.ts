@@ -8,6 +8,7 @@
  */
 
 import { CLASSIFICATION_REASON_CODES, isSupportedDocType } from './invoiceDocumentClassification.ts';
+import { cleanEvidence } from './invoiceSentinelValues.ts';
 
 export const INVOICE_VALIDATION_VERSION = 'gate-1.0.0';
 
@@ -72,13 +73,23 @@ export function validateInvoiceForAutoApproval(candidate: any, context: any = {}
     : RELIABLE_MATCHES.includes(matchMethod);
 
   // ── Supplier identity ────────────────────────────────────────────────
-  const supplierName = cleanStr(candidate?.supplier_name);
-  const GENERIC_NAMES = ['לא ידוע', 'לא ניתן לקרוא', 'unknown', 'n/a'];
+  // D3b: sentinels ("null", "N/A", "-") count as blank, not as a readable name.
+  const supplierName = cleanEvidence(candidate?.supplier_name);
+  // The gate contract is: resolved to a STORED supplier id with reliable evidence. When that
+  // evidence is an exact valid VAT/company id, a blank or generic raw name cannot add a critical
+  // failure — the stored record already carries the authoritative name. Weak (name-only)
+  // resolution still fails.
+  const VAT_METHODS = ['vat_id', 'canonical_alias_vat'];
+  const identityFromVat = reliableIdentity && VAT_METHODS.includes(resolution?.method);
+  const nameUnusable = !supplierName;
   if (!supplier?.id) {
     failures.push(resolution?.reason
       ? `לא זוהה ספק במערכת (${resolution.reason_code || 'SUPPLIER_UNRESOLVED'}): ${resolution.reason}`
       : 'לא זוהה ספק במערכת.');
-  } else if (!supplierName || GENERIC_NAMES.includes(supplierName.toLowerCase())) {
+  } else if (nameUnusable && identityFromVat) {
+    warnings.push('שם הספק לא נקרא מהמסמך; הזהות נקבעה לפי ח.פ/מזהה מדויק מול רשומת הספק.');
+    validated_fields.push('supplier');
+  } else if (nameUnusable) {
     failures.push('שם הספק אינו קריא או כללי מדי.');
   } else if (!reliableIdentity) {
     failures.push(resolution
