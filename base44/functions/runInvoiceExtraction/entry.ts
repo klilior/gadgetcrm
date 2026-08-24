@@ -184,8 +184,8 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     : `${baseNotes}\nנדרש אימות ידני: ${(gate.failures.length ? gate.failures : validation.review_reasons_he).join(' | ') || 'נדרשת בדיקה ידנית.'}`;
 
   const updatePayload = {
-    // Unresolved identity persists NO supplier id — the invoice goes to review instead.
-    supplier: supplierId || undefined,
+    // Unresolved/ambiguous identity clears the link explicitly so no stale supplier can survive.
+    supplier: supplierId ?? null,
     doc_type: extraction.doc_type_he || undefined,
     doc_number: extraction.doc_number || undefined,
     normalized_doc_number: normalizeInvoiceNumber(extraction.doc_number) || undefined,

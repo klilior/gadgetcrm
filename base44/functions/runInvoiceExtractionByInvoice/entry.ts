@@ -100,15 +100,21 @@ Deno.serve(async (req) => {
       );
       // P0.1: never approve an existing record based on AI self-confidence.
       // Re-running the deterministic gate on the stored values is the only approval path.
-      const existingSupplier = invoice.supplier
-        ? (await base44.asServiceRole.entities.Suppliers.filter({ id: invoice.supplier }, undefined, 1))?.[0] || null
-        : null;
-      const existingDuplicates = invoice.supplier
-        ? await base44.asServiceRole.entities.Invoices.filter({ supplier: invoice.supplier }, undefined, 200)
+      // Identity comes ONLY from stored document evidence — never synthesized from the linked Supplier record.
+      const existingSuppliers = await base44.asServiceRole.entities.Suppliers.list('-created_date', 1000);
+      const existingPatterns = await base44.asServiceRole.entities.SupplierPattern.filter({ is_active: true }, undefined, 1000);
+      const existingResolution = resolveSupplier({
+        vat_id: parsedExtraction?.supplier_vat_id,
+        supplier_name: parsedExtraction?.supplier_name,
+        supplier_name_normalized: parsedExtraction?.supplier_name_normalized
+      }, { suppliers: existingSuppliers, patterns: existingPatterns });
+      const existingSupplier = existingResolution.supplier;
+      const existingDuplicates = existingResolution.supplier_id
+        ? await base44.asServiceRole.entities.Invoices.filter({ supplier: existingResolution.supplier_id }, undefined, 200)
         : [];
       const existingGate = validateInvoiceForAutoApproval({
-        supplier_name: existingSupplier?.name || parsedExtraction?.supplier_name,
-        supplier_vat_id: existingSupplier?.vat_id,
+        supplier_name: parsedExtraction?.supplier_name,
+        supplier_vat_id: parsedExtraction?.supplier_vat_id,
         doc_number: invoice.doc_number,
         invoice_date: invoice.doc_date,
         due_date: invoice.due_date,
@@ -118,7 +124,8 @@ Deno.serve(async (req) => {
         doc_type_he: invoice.doc_type
       }, {
         supplier: existingSupplier,
-        supplier_match_method: existingSupplier?.vat_id ? 'vat_id' : 'name',
+        supplier_match_method: existingResolution.method,
+        supplier_resolution: existingResolution,
         duplicates: existingDuplicates,
         invoice_id: invoice.id,
         line_check: lineCheck
@@ -490,8 +497,8 @@ Deno.serve(async (req) => {
       : `${baseNotes}\nנדרש אימות ידני: ${(gate.failures.length ? gate.failures : validation.review_reasons_he).join(' | ')}${supplierId ? '' : `\n${supplierResolution.reason_code}: ${supplierResolution.reason}`}`;
 
     const updatePayload = {
-      // Unresolved identity persists NO supplier id — the invoice goes to review instead.
-      supplier: supplierId || undefined,
+      // Unresolved/ambiguous identity clears the link explicitly so no stale supplier can survive.
+      supplier: supplierId ?? null,
       doc_type: extraction.doc_type_he || undefined,
       doc_number: extraction.doc_number || undefined,
       doc_date: extraction.doc_date || undefined,
