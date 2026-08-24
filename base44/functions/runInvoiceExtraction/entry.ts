@@ -10,7 +10,7 @@ import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplic
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
 import { NON_ATTEMPT_REASONS, planAttemptStart, planAttemptSuccess, planNonAttempt, planRouteFailureTarget } from '../../shared/invoiceRetryLifecycle.ts';
 import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
-import { EVENT_TYPES, appendProcessingEvent, appendProcessingEvents, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
+import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -255,7 +255,7 @@ Deno.serve(async (req) => {
   let intakeId = null;
   // D2b2: a failure event is recorded ONLY when a real AI attempt started, and only on the
   // root/linked invoice. Preflight errors (auth/body/missing/not-ready/no-link/finalized) record nothing.
-  let attemptStarted = false;
+  let attemptStartedAt = null;
   let rootInvoiceId = null;
   try {
     const user = await base44.auth.me();
@@ -302,7 +302,7 @@ Deno.serve(async (req) => {
 
     // D2b1: an actual AI extraction attempt begins here — the ONLY attempt_count increment.
     const attemptPlan = await applyLifecycle(planAttemptStart(intake));
-    attemptStarted = true;
+    attemptStartedAt = attemptPlan.writes.last_attempt_at || new Date().toISOString();
     rootInvoiceId = invoice.id;
 
     // Step 0: Detect if multiple invoices in file
@@ -434,15 +434,17 @@ Ignore all other invoices in the document.`;
     // Stale-safe: read the LATEST invoice row and append to ITS history. No child shell is
     // created or updated here — the root/linked invoice carries the failure for the whole file.
     try {
-      if (attemptStarted && rootInvoiceId) {
+      if (attemptStartedAt && rootInvoiceId) {
         const latest = (await base44.asServiceRole.entities.Invoices.filter({ id: rootInvoiceId }, undefined, 1))?.[0];
         if (latest) {
-          const failedHistory = appendProcessingEvent(latest.processing_events_json, {
-            type: EVENT_TYPES.ATTEMPT_FAILED,
-            outcome: 'error',
-            reason: error?.message || String(error)
+          const failedHistory = appendFailedAttemptPair(latest.processing_events_json, {
+            startedAt: attemptStartedAt,
+            reason: error?.message || String(error),
+            meta: { intake_id: intakeId }
           });
-          await base44.asServiceRole.entities.Invoices.update(rootInvoiceId, { processing_events_json: failedHistory.json });
+          if (failedHistory.changed) {
+            await base44.asServiceRole.entities.Invoices.update(rootInvoiceId, { processing_events_json: failedHistory.json });
+          }
         }
       }
     } catch (_) {}

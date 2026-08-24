@@ -206,3 +206,23 @@ export function appendProcessingEvents(existingJson, events = []) {
 export function appendProcessingEvent(existingJson, event) {
   return appendProcessingEvents(existingJson, [event]);
 }
+
+/**
+ * A real AI attempt failed. Writes the coherent ATTEMPT_STARTED → ATTEMPT_FAILED pair using the
+ * SAME startedAt, so failures read like successes do. If the latest history already holds an
+ * ATTEMPT_STARTED with that exact timestamp, only ATTEMPT_FAILED is appended.
+ * Without a real startedAt (exception before the attempt began) NOTHING is written.
+ */
+export function appendFailedAttemptPair(existingJson, { startedAt, reason = null, meta = undefined, at = new Date().toISOString() }) {
+  if (!startedAt) {
+    return { json: existingJson ?? null, events: parseProcessingEvents(existingJson), changed: false, started_appended: false };
+  }
+  const history = parseProcessingEvents(existingJson);
+  const alreadyStarted = history.some((event) => event.type === EVENT_TYPES.ATTEMPT_STARTED && event.at === startedAt);
+  const events = [
+    ...(alreadyStarted ? [] : [{ type: EVENT_TYPES.ATTEMPT_STARTED, at: startedAt, outcome: 'started', meta }]),
+    { type: EVENT_TYPES.ATTEMPT_FAILED, at, outcome: 'error', reason }
+  ];
+  const appended = appendProcessingEvents(existingJson, events);
+  return { ...appended, changed: true, started_appended: !alreadyStarted };
+}

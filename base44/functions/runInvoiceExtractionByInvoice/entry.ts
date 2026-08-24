@@ -5,7 +5,7 @@ import { needsFileHashRecompute, trustedFileHash } from '../../shared/invoiceInt
 import { planExtractionRoutePreflight } from '../../shared/invoiceExtractionRoutePreflight.ts';
 import { NON_ATTEMPT_REASONS, planAttemptFailure, planAttemptStart, planAttemptSuccess, planNonAttempt } from '../../shared/invoiceRetryLifecycle.ts';
 import { planSupplierPricePurchase } from '../../shared/supplierPriceRetry.ts';
-import { EVENT_TYPES, appendProcessingEvent, appendProcessingEvents, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
+import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
 import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
 import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
@@ -28,6 +28,8 @@ Deno.serve(async (req) => {
       } catch (__) {}
     }
     const base44 = createClientFromRequest(req);
+    // D2b2: set ONLY once a real AI attempt started. Without it the catch writes no event.
+    let attemptStartedAt = null;
     try {
       const invoiceId = body.invoice_id;
       if (!invoiceId) return Response.json({ error: 'Missing invoice_id' }, { status: 400 });
@@ -246,6 +248,7 @@ Deno.serve(async (req) => {
     
     // D2b1: an actual AI extraction attempt begins here — the ONLY attempt_count increment.
     const attemptPlan = await applyLifecycle(intake.id, planAttemptStart(intake));
+    attemptStartedAt = attemptPlan.writes.last_attempt_at || new Date().toISOString();
 
     try {
       extraction = await base44.integrations.Core.InvokeLLM({
@@ -525,7 +528,7 @@ Deno.serve(async (req) => {
       at: auditAt
     });
     const history = appendProcessingEvents(latestInvoice.processing_events_json, [
-      { type: EVENT_TYPES.ATTEMPT_STARTED, at: attemptPlan.writes.last_attempt_at || auditAt, outcome: 'started', meta: { intake_id: intake.id } },
+      { type: EVENT_TYPES.ATTEMPT_STARTED, at: attemptStartedAt || auditAt, outcome: 'started', meta: { intake_id: intake.id } },
       { type: EVENT_TYPES.GATE_EVALUATED, at: auditAt, outcome: gate.passed ? 'passed' : 'failed', reason: gate.failures[0] || null, meta: { version: gate.validation_version, auto_approved: canAutoApprove } },
       ...(businessDuplicate ? [{ type: EVENT_TYPES.BUSINESS_DUPLICATE, at: auditAt, outcome: 'manual_review', reason: businessDuplicate.reason || null, meta: { original_invoice_id: businessDuplicate.original_invoice_id || null } }] : []),
       { type: EVENT_TYPES.ATTEMPT_SUCCEEDED, at: auditAt, outcome: finalStatus }
@@ -702,14 +705,17 @@ Deno.serve(async (req) => {
       if (invoiceId) {
         const invList = await base44.asServiceRole.entities.Invoices.filter({ id: invoiceId });
         const invoice = invList?.[0];
-        if (invoice) {
-          // D2b2: record the failed attempt in the compact history; provenance stays untouched.
-          const failedHistory = appendProcessingEvent(invoice.processing_events_json, {
-            type: EVENT_TYPES.ATTEMPT_FAILED,
-            outcome: 'error',
-            reason: error?.message || String(error)
+        if (invoice && attemptStartedAt) {
+          // D2b2: coherent STARTED→FAILED pair on the latest history; provenance stays untouched.
+          // Nothing is written when no real AI attempt started.
+          const failedHistory = appendFailedAttemptPair(invoice.processing_events_json, {
+            startedAt: attemptStartedAt,
+            reason: error?.message || String(error),
+            meta: { intake_id: invoice.source_intake || null }
           });
-          await base44.asServiceRole.entities.Invoices.update(invoice.id, { processing_events_json: failedHistory.json });
+          if (failedHistory.changed) {
+            await base44.asServiceRole.entities.Invoices.update(invoice.id, { processing_events_json: failedHistory.json });
+          }
         }
         if (invoice?.source_intake) {
           // D2b1: transient extraction/PDF errors → RETRYABLE, structurally invalid response → FAILED.

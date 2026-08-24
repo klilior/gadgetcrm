@@ -4,6 +4,7 @@ import {
   LINET_SELECTION_LEVELS,
   MAX_PROCESSING_EVENTS,
   PROVENANCE_SOURCES,
+  appendFailedAttemptPair,
   appendProcessingEvent,
   appendProcessingEvents,
   applyExtractionProvenance,
@@ -142,6 +143,46 @@ Deno.serve(async (req) => {
     check('14_missing_values_stay_absent',
       { fields: { total_with_vat: 50 }, selected_keys: ['total_with_vat'] },
       { fields: partialState.original?.fields, selected_keys: Object.keys(partialState.selected) });
+
+    // 15. No real startedAt (exception before the attempt began) → nothing is written.
+    const noStart = appendFailedAttemptPair('[{"type":"GATE_EVALUATED","at":"2026-03-01T10:00:00Z"}]', { startedAt: null, reason: 'preflight' });
+    check('15_no_started_at_writes_no_event',
+      { changed: false, json: '[{"type":"GATE_EVALUATED","at":"2026-03-01T10:00:00Z"}]', count: 1 },
+      { changed: noStart.changed, json: noStart.json, count: noStart.events.length });
+
+    // 16. Empty history + real startedAt → coherent STARTED then FAILED, same startedAt.
+    const pair = appendFailedAttemptPair(null, { startedAt: '2026-03-02T10:00:00Z', reason: 'timeout', at: '2026-03-02T10:00:09Z' });
+    check('16_empty_history_appends_started_then_failed',
+      { changed: true, started_appended: true, types: [EVENT_TYPES.ATTEMPT_STARTED, EVENT_TYPES.ATTEMPT_FAILED], started_at: '2026-03-02T10:00:00Z', failed_reason: 'timeout' },
+      {
+        changed: pair.changed,
+        started_appended: pair.started_appended,
+        types: pair.events.map((event) => event.type),
+        started_at: pair.events[0]?.at,
+        failed_reason: pair.events[1]?.reason
+      });
+
+    // 17. An ATTEMPT_STARTED with the SAME timestamp already exists → only FAILED is appended.
+    const existingStarted = appendProcessingEvent(null, { type: EVENT_TYPES.ATTEMPT_STARTED, at: '2026-03-03T10:00:00Z', outcome: 'started' }).json;
+    const deduped = appendFailedAttemptPair(existingStarted, { startedAt: '2026-03-03T10:00:00Z', reason: 'child failed', at: '2026-03-03T10:00:09Z' });
+    check('17_existing_same_started_is_not_duplicated',
+      { changed: true, started_appended: false, started_count: 1, types: [EVENT_TYPES.ATTEMPT_STARTED, EVENT_TYPES.ATTEMPT_FAILED] },
+      {
+        changed: deduped.changed,
+        started_appended: deduped.started_appended,
+        started_count: deduped.events.filter((event) => event.type === EVENT_TYPES.ATTEMPT_STARTED).length,
+        types: deduped.events.map((event) => event.type)
+      });
+
+    // 18. The pair respects the same cap of 20.
+    let fullJson = null;
+    for (let i = 1; i <= 20; i++) {
+      fullJson = appendProcessingEvent(fullJson, { type: EVENT_TYPES.GATE_EVALUATED, at: `2026-03-04T10:00:${String(i).padStart(2, '0')}Z`, outcome: `g${i}` }).json;
+    }
+    const cappedPair = appendFailedAttemptPair(fullJson, { startedAt: '2026-03-04T11:00:00Z', reason: 'boom', at: '2026-03-04T11:00:09Z' });
+    check('18_failed_pair_respects_cap_20',
+      { count: MAX_PROCESSING_EVENTS, last: EVENT_TYPES.ATTEMPT_FAILED, second_last: EVENT_TYPES.ATTEMPT_STARTED },
+      { count: cappedPair.events.length, last: cappedPair.events[cappedPair.events.length - 1]?.type, second_last: cappedPair.events[cappedPair.events.length - 2]?.type });
 
     const passed = cases.filter((row) => row.passed).length;
     return Response.json({ success: passed === cases.length, dry_run: true, total: cases.length, passed, failed: cases.length - passed, cases });
