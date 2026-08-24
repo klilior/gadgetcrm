@@ -10,7 +10,7 @@ import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplic
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
 import { NON_ATTEMPT_REASONS, planAttemptStart, planAttemptSuccess, planNonAttempt, planRouteFailureTarget } from '../../shared/invoiceRetryLifecycle.ts';
 import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
-import { EVENT_TYPES, appendProcessingEvents, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
+import { EVENT_TYPES, appendProcessingEvent, appendProcessingEvents, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -253,6 +253,10 @@ Deno.serve(async (req) => {
   // The body can be read ONCE — capture intake_id in outer scope so the catch below can always
   // reach the original intake without re-reading the (already consumed) request.
   let intakeId = null;
+  // D2b2: a failure event is recorded ONLY when a real AI attempt started, and only on the
+  // root/linked invoice. Preflight errors (auth/body/missing/not-ready/no-link/finalized) record nothing.
+  let attemptStarted = false;
+  let rootInvoiceId = null;
   try {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
@@ -298,6 +302,8 @@ Deno.serve(async (req) => {
 
     // D2b1: an actual AI extraction attempt begins here — the ONLY attempt_count increment.
     const attemptPlan = await applyLifecycle(planAttemptStart(intake));
+    attemptStarted = true;
+    rootInvoiceId = invoice.id;
 
     // Step 0: Detect if multiple invoices in file
     const multiDetect = await base44.integrations.Core.InvokeLLM({
@@ -425,6 +431,21 @@ Ignore all other invoices in the document.`;
     // Transient errors → RETRYABLE and the intake stays 'מוכן לניתוח' so a retry is possible;
     // structurally invalid responses → FAILED (still ready for manual recovery).
     const failureTarget = planRouteFailureTarget({ intakeId, error });
+    // Stale-safe: read the LATEST invoice row and append to ITS history. No child shell is
+    // created or updated here — the root/linked invoice carries the failure for the whole file.
+    try {
+      if (attemptStarted && rootInvoiceId) {
+        const latest = (await base44.asServiceRole.entities.Invoices.filter({ id: rootInvoiceId }, undefined, 1))?.[0];
+        if (latest) {
+          const failedHistory = appendProcessingEvent(latest.processing_events_json, {
+            type: EVENT_TYPES.ATTEMPT_FAILED,
+            outcome: 'error',
+            reason: error?.message || String(error)
+          });
+          await base44.asServiceRole.entities.Invoices.update(rootInvoiceId, { processing_events_json: failedHistory.json });
+        }
+      }
+    } catch (_) {}
     try {
       if (failureTarget.can_persist) {
         await base44.asServiceRole.entities.InvoiceIntakeRaw.update(failureTarget.intake_id, failureTarget.writes);

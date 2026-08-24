@@ -108,6 +108,41 @@ Deno.serve(async (req) => {
         forbidden_keys: hasForbiddenKey(first) || hasForbiddenKey(confirmedApplied) || hasForbiddenKey(human) || hasForbiddenKey(failure)
       });
 
+    // 11. Malformed / missing provenance JSON parses into a coherent empty state, never throws.
+    const malformed = ['{not json', '[]', 'null', '', undefined, '{"selected":"oops","original":5}'];
+    check('11_malformed_provenance_parses_safely',
+      malformed.map(() => ({ original: null, ai: null, linet: null, selected: {} })),
+      malformed.map((json) => {
+        const state = parseProvenance(json);
+        return { original: state.original, ai: state.ai, linet: state.linet, selected: state.selected };
+      }));
+
+    // 12. Malformed / missing events JSON parses to an empty list and drops non-object entries.
+    check('12_malformed_events_parse_safely',
+      [0, 0, 0, 0, 0, 1],
+      ['{not json', '{"a":1}', 'null', '', undefined, '[{"type":"X"},"junk",null,7]'].map((json) => parseProcessingEvents(json).length));
+
+    // 13. Appending onto malformed strings recovers to valid compact JSON with only the new data.
+    const recoveredProvenance = applyExtractionProvenance({ existingJson: '{not json', values: AI_1, reason: 'recovery', at: '2026-02-01T10:00:00Z' });
+    const recoveredEvents = appendProcessingEvent('{not json', { type: EVENT_TYPES.ATTEMPT_FAILED, at: '2026-02-01T10:00:00Z', outcome: 'error', reason: 'timeout' });
+    check('13_append_recovers_to_valid_compact_json',
+      { original_captured: true, total: 118, parses: true, event_count: 1, event_type: EVENT_TYPES.ATTEMPT_FAILED, events_parse: true },
+      {
+        original_captured: recoveredProvenance.original_captured,
+        total: parseProvenance(recoveredProvenance.json).original?.fields?.total_with_vat,
+        parses: (() => { try { return !!JSON.parse(recoveredProvenance.json); } catch (_) { return false; } })(),
+        event_count: recoveredEvents.events.length,
+        event_type: parseProcessingEvents(recoveredEvents.json)[0]?.type,
+        events_parse: (() => { try { return Array.isArray(JSON.parse(recoveredEvents.json)); } catch (_) { return false; } })()
+      });
+
+    // 14. Missing values: a partial candidate stays partial and no field is invented.
+    const partial = applyExtractionProvenance({ existingJson: null, values: { total_with_vat: 50 }, at: '2026-02-02T10:00:00Z' });
+    const partialState = parseProvenance(partial.json);
+    check('14_missing_values_stay_absent',
+      { fields: { total_with_vat: 50 }, selected_keys: ['total_with_vat'] },
+      { fields: partialState.original?.fields, selected_keys: Object.keys(partialState.selected) });
+
     const passed = cases.filter((row) => row.passed).length;
     return Response.json({ success: passed === cases.length, dry_run: true, total: cases.length, passed, failed: cases.length - passed, cases });
   } catch (error) {
