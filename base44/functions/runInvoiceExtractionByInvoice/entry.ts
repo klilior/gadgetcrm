@@ -5,6 +5,8 @@ import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDAT
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 import { resolveSupplier, normalizeVatId, isOurBuyerVatId } from '../../shared/supplierResolver.ts';
+import { buildInvoiceLineRecords, persistInvoiceLines, applyLinetLinesToInvoice } from '../../shared/invoiceLinePersistence.ts';
+import { parseLinetLines, LINET_MATCH_RULE_VERSION } from '../../shared/linetInvoiceReconciliation.ts';
 
 Deno.serve(async (req) => {
     // Read body BEFORE creating base44 client (body can only be read once)
@@ -524,42 +526,16 @@ Deno.serve(async (req) => {
 
     await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
 
-    // Linet is the source of truth: stop financial ingestion when an exact type-13 duplicate exists.
-    try {
-      const reconciliation = await base44.asServiceRole.functions.invoke('reconcileLinetInvoices', { invoice_ids: [invoice.id] });
-      const result = reconciliation?.data || reconciliation;
-      if (result?.stats?.matched_duplicates === 1) {
-        return Response.json({ success: true, skipped: true, reason: 'duplicate_in_linet', invoice_id: invoice.id, reconciliation: result.stats });
-      }
-    } catch (reconciliationError) {
-      console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
-    }
+    // Step 6: persist EVERY usable line (service/subscription lines without SKU included) BEFORE
+    // reconciliation can influence the flow. Upsert by invoice_id + line_number, so a retry never duplicates.
+    const lineRecords = buildInvoiceLineRecords(extraction, { invoiceId: invoice.id, supplierId, classifiedByLineNumber });
+    const linePersistence = await persistInvoiceLines(base44, invoice.id, lineRecords);
+    console.log('Invoice lines persisted:', JSON.stringify(linePersistence));
 
-    // Step 6: Create InvoiceLine records and update SupplierProductPrice + PriceAlert
     const priceAlerts = [];
-    
-    for (const item of lineItems) {
-      if (!item.sku && !item.product_name) continue;
-      const classifiedLine = classifiedByLineNumber.get(Number(item.line_number || 1));
-      
-      // Create InvoiceLine, including service/subscription lines that have no SKU.
-      await base44.asServiceRole.entities.InvoiceLine.create({
-        invoice_id: invoice.id,
-        line_number: item.line_number || 1,
-        sku: item.sku || '',
-        product_name: item.product_name || item.sku,
-        quantity: item.quantity ?? 1,
-        unit_price_before_vat: roundMoney(item.unit_price_before_vat) || null,
-        line_total_before_vat: roundMoney(item.line_total_before_vat) || null,
-        line_total_with_vat: roundMoney(item.line_total_with_vat) || null,
-        supplier_id: supplierId || undefined,
-        line_category: classifiedLine?.line_category || undefined,
-        classification_source: classifiedLine?.classification_source || 'keywords',
-        classification_reason: classifiedLine?.classification_reason || ''
-      });
 
-      // Service/subscription lines without SKU are classified and saved, but do not belong in product price tracking.
-      // Without a resolved supplier there is no identity to track a price against.
+    for (const item of lineItems) {
+      // Price tracking only: no SKU or no resolved supplier means there is no price identity to track.
       if (!item.sku || !supplierId) continue;
       
       // Check/update SupplierProductPrice
@@ -631,6 +607,29 @@ Deno.serve(async (req) => {
         }
     }
 
+    // Step 6b: targeted reconciliation AFTER lines are stored. matched/conflict/possible are
+    // consumed as information only — a Linet match never terminates this flow.
+    let reconciliationResult = null;
+    try {
+      const reconciliation = await base44.asServiceRole.functions.invoke('reconcileLinetInvoices', { invoice_ids: [invoice.id] });
+      const result = reconciliation?.data || reconciliation;
+      reconciliationResult = result?.stats || null;
+      const invoiceResult = (result?.results || []).find((row) => row.invoice_id === invoice.id);
+      if (invoiceResult?.status === 'matched') {
+        const refreshed = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0];
+        const purchase = refreshed?.linet_purchase_document_id
+          ? (await base44.asServiceRole.entities.LinetPurchaseDocument.filter({ id: refreshed.linet_purchase_document_id }, undefined, 1))?.[0]
+          : null;
+        if (purchase) {
+          const linetLines = parseLinetLines(purchase);
+          const applyResult = await applyLinetLinesToInvoice(base44, invoice.id, linetLines, { level: 'confirmed', values: { rule_version: LINET_MATCH_RULE_VERSION } });
+          console.log('Linet line application:', JSON.stringify(applyResult));
+        }
+      }
+    } catch (reconciliationError) {
+      console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
+    }
+
     // Step 7: Update intake status_reason
     let intakeReason = '';
     if (validation.recommended_extraction_status_he === 'נקרא בהצלחה') {
@@ -647,6 +646,8 @@ Deno.serve(async (req) => {
       supplier_id: supplierId, 
       line_items_count: lineItems.length,
       price_alerts: priceAlerts,
+      lines_persisted: linePersistence,
+      reconciliation: reconciliationResult,
       extraction, 
       validation 
     });

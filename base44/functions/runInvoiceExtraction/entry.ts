@@ -3,6 +3,8 @@ import { validateInvoiceForAutoApproval, normalizeInvoiceNumber } from '../../sh
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
+import { buildInvoiceLineRecords, persistInvoiceLines, applyLinetLinesToInvoice } from '../../shared/invoiceLinePersistence.ts';
+import { parseLinetLines, LINET_MATCH_RULE_VERSION } from '../../shared/linetInvoiceReconciliation.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -210,17 +212,33 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
 
   await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
 
+  // Persist EVERY usable extracted line (service/subscription lines without SKU included) BEFORE
+  // reconciliation. Upsert by invoice_id + line_number, so a retry updates instead of duplicating.
+  const lineRecords = buildInvoiceLineRecords(extraction, { invoiceId: invoice.id, supplierId });
+  const linePersistence = await persistInvoiceLines(base44, invoice.id, lineRecords);
+
+  // Targeted reconciliation AFTER lines exist. matched/conflict/possible are informational —
+  // a Linet match is the same transaction, never a duplicate, and never ends this flow.
+  let reconciliationResult = null;
   try {
     const reconciliation = await base44.asServiceRole.functions.invoke('reconcileLinetInvoices', { invoice_ids: [invoice.id] });
     const result = reconciliation?.data || reconciliation;
-    if (result?.stats?.matched_duplicates === 1) {
-      return { success: true, skipped: true, reason: 'duplicate_in_linet', invoice_id: invoice.id, reconciliation: result.stats };
+    reconciliationResult = result?.stats || null;
+    const invoiceResult = (result?.results || []).find((row) => row.invoice_id === invoice.id);
+    if (invoiceResult?.status === 'matched') {
+      const refreshed = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0];
+      const purchase = refreshed?.linet_purchase_document_id
+        ? (await base44.asServiceRole.entities.LinetPurchaseDocument.filter({ id: refreshed.linet_purchase_document_id }, undefined, 1))?.[0]
+        : null;
+      if (purchase) {
+        await applyLinetLinesToInvoice(base44, invoice.id, parseLinetLines(purchase), { level: 'confirmed', values: { rule_version: LINET_MATCH_RULE_VERSION } });
+      }
     }
   } catch (reconciliationError) {
     console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
   }
 
-  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, extraction, validation, gate };
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
 }
 
 Deno.serve(async (req) => {
