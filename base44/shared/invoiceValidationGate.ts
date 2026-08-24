@@ -142,12 +142,13 @@ export function validateInvoiceForAutoApproval(candidate: any, context: any = {}
   }
 
   // ── Line items consistency (when available) ──────────────────────────
+  // Every deterministic line failure blocks approval — including a per-line
+  // quantity × unit_price ≠ line_total contradiction that leaves the line SUM intact.
   const lineCheck = context.line_check;
-  if (lineCheck?.hasMismatch) {
-    failures.push(`סכום שורות המוצרים אינו תואם לסכום החשבונית (הפרש ${lineCheck.delta} ש״ח).`);
-  }
-  if (lineCheck?.hasBadQuantity) {
-    failures.push('קיימות שורות מוצר עם כמות חסרה או לא תקינה.');
+  if (Array.isArray(lineCheck?.failures) && lineCheck.failures.length) {
+    for (const failure of lineCheck.failures) failures.push(failure);
+  } else if (lineCheck?.hasAnyFailure || lineCheck?.hasMismatch || lineCheck?.hasBadQuantity) {
+    failures.push('בדיקת שורות המוצרים נכשלה.');
   }
 
   // ── Duplicate: supplier identity + normalized invoice number ─────────

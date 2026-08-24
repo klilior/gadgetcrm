@@ -214,11 +214,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    const eligiblePurchases = purchases.filter((purchase) => (!body.from_date || purchase.doc_date >= body.from_date) && (!body.to_date || purchase.doc_date <= body.to_date));
-    for (const purchase of eligiblePurchases) {
-      if (purchase.matched_invoice_id || matchedPurchaseIds.has(purchase.id)) continue;
-      stats.missing_in_system++;
-      queueGap({ gap_key: `linet:${purchase.id}`, direction: 'missing_in_system', linet_purchase_document_id: purchase.id, doc_number: purchase.supplier_invoice_number, supplier_name: purchase.supplier_name, doc_date: purchase.doc_date, total_with_vat: purchase.total_with_vat, status: 'open', reason: 'מסמך רכש 13 קיים ב-Linet אך לא נמצאה חשבונית תואמת במערכת.', detected_at: now });
+    // Targeted runs (invoice_ids) never scan the global purchase set: no unrelated
+    // missing_in_system gap may be created or touched, so targeted stats stay at 0.
+    if (!requestedIds.size) {
+      const eligiblePurchases = purchases.filter((purchase) => (!body.from_date || purchase.doc_date >= body.from_date) && (!body.to_date || purchase.doc_date <= body.to_date));
+      for (const purchase of eligiblePurchases) {
+        if (purchase.matched_invoice_id || matchedPurchaseIds.has(purchase.id)) continue;
+        stats.missing_in_system++;
+        queueGap({ gap_key: `linet:${purchase.id}`, direction: 'missing_in_system', linet_purchase_document_id: purchase.id, doc_number: purchase.supplier_invoice_number, supplier_name: purchase.supplier_name, doc_date: purchase.doc_date, total_with_vat: purchase.total_with_vat, status: 'open', reason: 'מסמך רכש 13 קיים ב-Linet אך לא נמצאה חשבונית תואמת במערכת.', detected_at: now });
+      }
     }
 
     // Targeted single-invoice runs must not close unrelated gaps.

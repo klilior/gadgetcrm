@@ -72,8 +72,8 @@ function buildDeterministicValidation(extraction) {
   const lineCheck = getLineItemsCheck(extraction);
   const reviewReasons = [];
   if (missing.length) reviewReasons.push(`שדות חסרים: ${missing.join(', ')}`);
-  if (lineCheck.hasMismatch) reviewReasons.push(`סכום שורות המוצרים אינו תואם לסכום החשבונית (הפרש ${lineCheck.delta} ש״ח).`);
-  if (lineCheck.hasBadQuantity) reviewReasons.push('קיימות שורות מוצר עם כמות חסרה או לא תקינה.');
+  // Use the concrete line failures so an arithmetic-only contradiction is described accurately.
+  for (const failure of (lineCheck.failures || [])) reviewReasons.push(failure);
   const provenance = extraction.amount_provenance;
   if (provenance?.ambiguous) reviewReasons.push(`הסכומים אינם חד-משמעיים: ${(provenance.reasons || []).join(' | ') || 'אין תיוג מודפס ישיר.'}`);
   return {

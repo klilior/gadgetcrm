@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { evaluateLinetMatch, parseLinetLines } from '../../shared/linetInvoiceReconciliation.ts';
 import { getLineItemsCheck } from '../../shared/invoiceExtraction.ts';
+import { validateInvoiceForAutoApproval } from '../../shared/invoiceValidationGate.ts';
 
 /**
  * Read-only matching harness: evaluates SYNTHETIC invoice/purchase payloads against the shared
@@ -19,8 +20,14 @@ Deno.serve(async (req) => {
 
     const results = cases.map((testCase) => {
       const match = evaluateLinetMatch(testCase.invoice || {}, testCase.purchase || {}, testCase.invoice_lines || [], testCase.supplier || null);
+      const lineCheck = testCase.extraction ? getLineItemsCheck(testCase.extraction) : null;
+      // Optional: run the deterministic approval gate on a synthetic header (no DB access).
+      const gate = testCase.gate_candidate
+        ? validateInvoiceForAutoApproval(testCase.gate_candidate, { ...(testCase.gate_context || {}), line_check: lineCheck })
+        : null;
       return {
         name: testCase.name || null,
+        gate: gate ? { passed: gate.passed, failures: gate.failures } : null,
         level: match.level,
         supplier_identity: match.supplier_identity || null,
         conflict_codes: match.conflict_codes || [],
@@ -30,7 +37,7 @@ Deno.serve(async (req) => {
         linet_lines_parsed: parseLinetLines(testCase.purchase || {}).length,
         values: match.values,
         reason: match.reason,
-        line_validation: testCase.extraction ? getLineItemsCheck(testCase.extraction) : null
+        line_validation: lineCheck
       };
     });
     return Response.json({ success: true, read_only: true, results });

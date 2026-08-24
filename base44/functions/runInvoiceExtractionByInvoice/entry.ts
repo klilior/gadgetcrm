@@ -97,8 +97,7 @@ Deno.serve(async (req) => {
         parsedValidation.is_math_consistent !== false &&
         missingFields.length === 0 &&
         parsedValidation.recommended_extraction_status_he !== 'ממתין לאימות' &&
-        !lineCheck.hasMismatch &&
-        !lineCheck.hasBadQuantity
+        !lineCheck.hasAnyFailure
       );
       // P0.1: never approve an existing record based on AI self-confidence.
       // Re-running the deterministic gate on the stored values is the only approval path.
@@ -132,12 +131,12 @@ Deno.serve(async (req) => {
         invoice_id: invoice.id,
         line_check: lineCheck
       });
-      const canAutoApproveExisting = validationOk && existingGate.passed;
+      const canAutoApproveExisting = validationOk && existingGate.passed && !lineCheck.hasAnyFailure;
       const normalizedStatus = canAutoApproveExisting ? 'אושר' : 'ממתין לאימות';
 
       if (invoice.extraction_status !== normalizedStatus) {
-        const lineNote = lineCheck.hasMismatch
-          ? `נדרש אימות שורות מוצרים: סכום השורות לפני מע״מ (${lineCheck.lineSum}) לא תואם לסכום החשבונית לפני מע״מ (${parsedExtraction?.subtotal_before_vat}), הפרש ${lineCheck.delta} ש״ח.`
+        const lineNote = (lineCheck.failures || []).length
+          ? `נדרש אימות שורות מוצרים: ${lineCheck.failures.join(' | ')}`
           : '';
         await base44.asServiceRole.entities.Invoices.update(invoice.id, {
           extraction_status: normalizedStatus,
@@ -374,11 +373,11 @@ Deno.serve(async (req) => {
       const lineCheck = getLineItemsCheck(extraction);
       
       // Determine status
-      const allGood = missing.length === 0 && isMathConsistent && !lineCheck.hasMismatch && !lineCheck.hasBadQuantity;
+      const allGood = missing.length === 0 && isMathConsistent && !lineCheck.hasAnyFailure;
       const reviewReasons = [];
       if (!isMathConsistent) reviewReasons.push(`סכום כולל אינו תואם לסכום לפני מע"מ וסכום המע"מ (הפרש: ${mathDelta} ש"ח).`);
-      if (lineCheck.hasMismatch) reviewReasons.push(`סכום שורות המוצרים לפני מע״מ (${lineCheck.lineSum}) אינו תואם לסכום החשבונית לפני מע״מ (${extraction.subtotal_before_vat}), הפרש: ${lineCheck.delta} ש"ח.`);
-      if (lineCheck.hasBadQuantity) reviewReasons.push('קיימות שורות מוצר עם כמות חסרה או לא תקינה.');
+      // Concrete per-line failures (including qty × unit ≠ line total) instead of a generic sum claim.
+      for (const failure of (lineCheck.failures || [])) reviewReasons.push(failure);
       if (missing.length > 0) reviewReasons.push(`שדות חסרים: ${missing.join(', ')}`);
       
       const displayValidation = allGood ? 'חשבונית תקנית' : `חשבונית לא תקנית: ${reviewReasons.join('; ')}`;
