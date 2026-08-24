@@ -6,6 +6,15 @@
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { BUSINESS_DUPLICATE_CODE, buildCanonicalSupplierFamily, findBusinessDuplicate, isUsableInvoiceRecord } from '../../shared/invoiceBusinessDuplicate.ts';
+import { FORBIDDEN_BUSINESS_DUPLICATE_WRITES, applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
+
+/** Pure mirror of the routes' decision, using the shared outcome helper (no DB, no writes). */
+function planRoute(candidates, { invoiceId = 'inv-new', docNumber = '264002392' } = {}) {
+  const gate = { passed: true, failures: [], warnings: [], validated_fields: ['supplier', 'total'], validation_version: 'test' };
+  const duplicate = findBusinessDuplicate({ docNumber, invoiceId, candidates });
+  const outcome = applyBusinessDuplicateToGate(gate, duplicate, true);
+  return { gate, duplicate, outcome };
+}
 
 const CANONICAL_STS = '696f8b608af51a27cabb505e';
 const LEGACY_STS = '69f0c0d5c65ea17859f458f7';
@@ -81,6 +90,50 @@ Deno.serve(async (req) => {
         return !('linet_match_status' in result) && !serialized.includes('matched_duplicate') && !serialized.toLowerCase().includes('linet');
       })(),
       detail: 'BUSINESS_DUPLICATE is never a Linet match and never matched_duplicate'
+    });
+
+    // 1. Same CURRENT supplier, same number → BUSINESS_DUPLICATE + manual review (no legacy 'duplicate').
+    const currentSupplierInvoice = { id: 'inv-current', supplier: CANONICAL_STS, doc_number: '264002392', extraction_status: 'אושר' };
+    const currentRoute = planRoute([currentSupplierInvoice]);
+    fixtures.push({
+      name: 'same_current_supplier_same_number_is_business_duplicate_manual_review',
+      pass: currentRoute.outcome.reason_code === BUSINESS_DUPLICATE_CODE &&
+        currentRoute.outcome.extraction_status === 'ממתין לאימות' &&
+        currentRoute.outcome.auto_approved === false &&
+        currentRoute.outcome.validation_passed === false &&
+        currentRoute.gate.failures.some((f) => f.includes(BUSINESS_DUPLICATE_CODE)),
+      detail: currentRoute.outcome
+    });
+
+    // 2. Canonical-vs-legacy STS, same number → identical outcome.
+    const legacyRoute = planRoute([legacyInvoice]);
+    fixtures.push({
+      name: 'canonical_vs_legacy_sts_same_number_same_outcome',
+      pass: JSON.stringify({ ...legacyRoute.outcome, duplicate_of: null }) === JSON.stringify({ ...currentRoute.outcome, duplicate_of: null }) &&
+        legacyRoute.outcome.duplicate_of === 'inv-legacy',
+      detail: legacyRoute.outcome
+    });
+
+    // 3. Route outcome writes nothing rejection/כפילות/duplicate_key/Linet-related.
+    const outcomeText = JSON.stringify([currentRoute, legacyRoute]);
+    fixtures.push({
+      name: 'route_outcome_has_no_reject_intake_duplicate_or_linet_writes',
+      pass: currentRoute.outcome.intake_status_change === null &&
+        currentRoute.outcome.duplicate_key === null &&
+        currentRoute.outcome.linet_state_change === null &&
+        !FORBIDDEN_BUSINESS_DUPLICATE_WRITES.some((token) => currentRoute.gate.failures.join(' ').includes(token)) &&
+        !outcomeText.includes('duplicate_key":"') && !outcomeText.includes('linet_match_status') &&
+        !outcomeText.includes('matched_duplicate') && !outcomeText.includes('"נדחה"') && !outcomeText.includes('"כפילות"') &&
+        !outcomeText.includes('"reason":"duplicate"'),
+      detail: { forbidden_tokens: FORBIDDEN_BUSINESS_DUPLICATE_WRITES }
+    });
+
+    // Clean invoice still auto-approves — the block does not over-reach.
+    const cleanRoute = planRoute([], { docNumber: '900000111' });
+    fixtures.push({
+      name: 'no_duplicate_still_auto_approves',
+      pass: cleanRoute.outcome.auto_approved === true && cleanRoute.outcome.extraction_status === 'אושר' && cleanRoute.outcome.reason_code === null,
+      detail: cleanRoute.outcome
     });
 
     const passed = fixtures.filter((f) => f.pass).length;

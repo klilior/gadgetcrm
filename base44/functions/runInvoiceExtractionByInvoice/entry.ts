@@ -3,12 +3,13 @@ import { classifyInvoiceLines } from '../../shared/invoiceClassification.ts';
 import { calculateFileHash, getEarlyNonInvoiceReason } from '../../shared/invoiceIntakeGuards.ts';
 import { needsFileHashRecompute, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
 import { planExtractionRoutePreflight } from '../../shared/invoiceExtractionRoutePreflight.ts';
-import { BUSINESS_DUPLICATE_CODE, findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
+import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
+import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDATION_VERSION, ARITHMETIC_TOLERANCE } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
-import { resolveSupplier, normalizeVatId, isOurBuyerVatId } from '../../shared/supplierResolver.ts';
+import { resolveSupplier } from '../../shared/supplierResolver.ts';
 import { buildInvoiceLineRecords, persistInvoiceLines, applyLinetLinesToInvoice } from '../../shared/invoiceLinePersistence.ts';
 import { parseLinetLines, LINET_MATCH_RULE_VERSION } from '../../shared/linetInvoiceReconciliation.ts';
 
@@ -438,52 +439,7 @@ Deno.serve(async (req) => {
 
     const supplierId = supplierResolution.supplier_id;
     const supplierMatchMethod = supplierResolution.method;
-    const rawVatId = extraction.supplier_vat_id && String(extraction.supplier_vat_id).trim();
-    const isOurVatId = isOurBuyerVatId(rawVatId);
-    const normalizedVatId = isOurVatId ? null : (normalizeVatId(rawVatId) || null);
     console.log(`Supplier resolution: ${supplierMatchMethod} / ${supplierResolution.evidence_strength} → ${supplierId || 'UNRESOLVED'} (${supplierResolution.reason_code || 'ok'})`);
-
-    // Step 4b: Duplicate check - same doc_number + same supplier (by vat_id)
-    const extractedDocNumber = extraction.doc_number?.trim();
-    const extractedVatId = normalizedVatId && !isOurVatId ? normalizedVatId : null;
-    
-    if (extractedDocNumber && supplierId) {
-      // Find all existing invoices with the same doc_number
-      const existingWithSameDocNum = await base44.asServiceRole.entities.Invoices.filter({ doc_number: extractedDocNumber }, undefined, 50);
-      const duplicate = existingWithSameDocNum.find(inv => 
-        inv.id !== invoice.id && 
-        inv.supplier === supplierId && 
-        inv.extraction_status !== 'נדחה'
-      );
-      
-      if (duplicate) {
-        const dupKey = `${extractedDocNumber}|${extractedVatId || supplierId}`;
-        const dupNote = `כפילות - חשבונית ${extractedDocNumber} מספק זה כבר קיימת במערכת (מזהה: ${duplicate.id}). נדחתה אוטומטית.`;
-        await base44.asServiceRole.entities.Invoices.update(invoice.id, {
-          supplier: supplierId,
-          doc_type: extraction.doc_type_he || undefined,
-          doc_number: extractedDocNumber,
-          doc_date: extraction.doc_date || undefined,
-          currency: extraction.currency || undefined,
-          subtotal_before_vat: roundMoney(extraction.subtotal_before_vat),
-          vat_amount: roundMoney(extraction.vat_amount),
-          total_with_vat: roundMoney(extraction.total_with_vat),
-          confidence_score: extraction.overall_confidence ?? undefined,
-          extraction_status: 'נדחה',
-          duplicate_key: dupKey,
-          notes: dupNote,
-          ai_debug_last_extraction_json: JSON.stringify(extraction),
-          ai_debug_last_validation_json: JSON.stringify(validation)
-        });
-        // Update intake
-        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
-          status: 'כפילות',
-          status_reason: dupNote
-        });
-        console.log(`Duplicate invoice rejected: ${extractedDocNumber} for supplier ${supplierId}`);
-        return Response.json({ success: true, skipped: true, reason: 'duplicate', duplicate_of: duplicate.id, doc_number: extractedDocNumber });
-      }
-    }
 
     // Step 5: Classify every extracted line, then summarize the invoice.
     const lineItems = extraction.line_items || [];
@@ -523,14 +479,10 @@ Deno.serve(async (req) => {
     });
     console.log('Validation gate:', JSON.stringify(gate));
 
-    // Stable BUSINESS_DUPLICATE failure — distinct from FILE_DUPLICATE and from Linet conflicts,
-    // and it never writes linet_match_status/matched_duplicate.
-    if (businessDuplicate && !gate.failures.some((failure) => failure.includes(BUSINESS_DUPLICATE_CODE))) {
-      gate.failures.push(businessDuplicate.failure_he);
-      gate.passed = false;
-    }
-    const canAutoApprove = gate.passed && !businessDuplicate && validation.recommended_extraction_status_he === 'נקרא בהצלחה';
-    const finalStatus = canAutoApprove ? 'אושר' : 'ממתין לאימות';
+    // Stable BUSINESS_DUPLICATE failure — manual review only, never rejection/כפילות/Linet state.
+    const duplicateOutcome = applyBusinessDuplicateToGate(gate, businessDuplicate, validation.recommended_extraction_status_he === 'נקרא בהצלחה');
+    const canAutoApprove = duplicateOutcome.can_auto_approve;
+    const finalStatus = duplicateOutcome.extraction_status;
     const finalNotes = canAutoApprove
       ? `${baseNotes}\nאושר אוטומטית לאחר מעבר כל בדיקות התקינות (${gate.validation_version}).`
       : `${baseNotes}\nנדרש אימות ידני: ${(gate.failures.length ? gate.failures : validation.review_reasons_he).join(' | ')}${supplierId ? '' : `\n${supplierResolution.reason_code}: ${supplierResolution.reason}`}`;
