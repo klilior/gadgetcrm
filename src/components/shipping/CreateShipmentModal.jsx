@@ -414,6 +414,18 @@ iframe{width:100%;height:100%;border:none;}</style></head>
                         הנקודה נבחרה על ידי הלקוח ולכן מאושרת ללא בדיקת מרחק/עיר.
                       </div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                      onClick={() => {
+                        setWooPickupPoint(null);
+                        setSelectedPoint(null);
+                        if (city) autoSearchPickupPoints(city, street);
+                      }}
+                    >
+                      נקודה לא פעילה? בחר אחרת
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
