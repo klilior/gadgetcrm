@@ -1,5 +1,17 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
-import { calculateFileHash, findReusableDuplicate, getEarlyNonInvoiceReason, isValidInvoiceFile } from '../../shared/invoiceIntakeGuards.ts';
+import { calculateFileHash, getEarlyNonInvoiceReason, isValidInvoiceFile } from '../../shared/invoiceIntakeGuards.ts';
+import { FILE_HASH_ALGORITHM, decideIntakeShellAction, gmailIdentity, needsFileHashRecompute, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
+
+/** Shared D1 helper: gather the exact-identity duplicate candidates for one intake. */
+async function loadDuplicateCandidates(base44, intake) {
+  const candidates = [];
+  const hash = trustedFileHash(intake);
+  if (hash) candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ file_hash: hash }, 'id', 1000));
+  const identity = gmailIdentity(intake);
+  if (identity.attachment_id) candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ gmail_attachment_id: identity.attachment_id }, 'id', 50));
+  else if (identity.message_id) candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ gmail_message_id: identity.message_id }, 'id', 50));
+  return [...new Map(candidates.map((item) => [item.id, item])).values()];
+}
 
 /**
  * Automation handler for InvoiceIntakeRaw entity creation
@@ -45,11 +57,12 @@ Deno.serve(async (req) => {
     }
     
     console.log(`Intake status: ${intake.status}, has file: ${!!intake.file}, linked_invoice: ${intake.linked_invoice || 'none'}`);
-    if (!intake.file_hash && intake.file) {
+    // Legacy/non-64-hex values are untrusted: recompute from the actual bytes before any dedupe.
+    if (needsFileHashRecompute(intake)) {
       const hash = await calculateFileHash(intake.file).catch(() => null);
       if (hash) {
         intake.file_hash = hash;
-        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, { file_hash: hash });
+        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, { file_hash: hash, file_hash_algorithm: FILE_HASH_ALGORITHM });
       }
     }
     
@@ -74,55 +87,47 @@ Deno.serve(async (req) => {
       console.log(`Applied status updates: ${JSON.stringify(updates)}`);
     }
 
-    // C2: permanent cache by exact file hash. Reuse the existing extraction instead of calling AI again.
-    if (intake.file_hash && intake.status !== 'דולג') {
-      const matches = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ file_hash: intake.file_hash }, 'id', 1000);
-      const dup = findReusableDuplicate(matches, intakeId);
-      if (dup?.linked_invoice) {
-        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, {
-          status: 'כפילות',
-          status_reason: 'זוהתה כפילות לפי חתימת קובץ; נעשה שימוש בתוצאת החילוץ הקיימת.',
-          linked_invoice: dup.linked_invoice || undefined,
-          ai_debug_last_extraction_json: dup.ai_debug_last_extraction_json || undefined
-        });
-        console.log(`Reused duplicate extraction from intake: ${dup.id}`);
-        return Response.json({ success: true, status: 'duplicate_cached', original_id: dup.id, invoice_id: dup.linked_invoice || null, extraction_triggered: false });
-      }
+    // C2 + C3 via the SHARED decision function (same logic as processIntake), so a sequential
+    // retry of the same intake returns the existing invoice and never creates a second shell.
+    const decision = decideIntakeShellAction({
+      intake,
+      invoicesForIntake: await base44.asServiceRole.entities.Invoices.filter({ source_intake: intakeId }, undefined, 5),
+      duplicateCandidates: intake.status === 'דולג' ? [] : await loadDuplicateCandidates(base44, intake),
+      isValidFile: isValidInvoiceFile(intake)
+    });
+
+    if (decision.action === 'reuse_duplicate') {
+      // Technical duplicate: reuse the original intake's invoice and extraction. No new shell,
+      // no rejection, and never a Linet/matched_duplicate concern.
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, {
+        status: 'כפילות',
+        status_reason: decision.reason,
+        duplicate_reason_code: decision.reason_code,
+        linked_invoice: decision.invoice_id,
+        ai_debug_last_extraction_json: decision.reuse_extraction_json || undefined
+      });
+      console.log(`Reused duplicate (${decision.reason_code}) from intake: ${decision.original_intake_id}`);
+      return Response.json({ success: true, status: 'duplicate_cached', reason_code: decision.reason_code, original_id: decision.original_intake_id, invoice_id: decision.invoice_id, extraction_triggered: false });
     }
 
-    // C3: ensure invoice shell exists
-    let invoiceId = intake.linked_invoice;
-    
-    if (invoiceId) {
-      // Link exists, ensure bidirectional link
-      try { 
-        await base44.asServiceRole.entities.Invoices.update(invoiceId, { source_intake: intakeId }); 
-      } catch (_) {}
-    } else {
-      // Check if invoice already exists for this intake
-      const existing = await base44.asServiceRole.entities.Invoices.filter({ source_intake: intakeId }, undefined, 1);
-      invoiceId = existing?.[0]?.id || null;
-
-      const validForCreation = isValidInvoiceFile(intake) && intake.status !== 'דולג' && intake.status !== 'כפילות';
-
-      if (!invoiceId && validForCreation) {
-        const created = await base44.asServiceRole.entities.Invoices.create({
-          source_intake: intakeId,
-          extraction_status: 'ממתין לאימות',
-          notes: 'נוצר אוטומטית ממסמך שנקלט. ממתין לניתוח/הזנה.'
-        });
-        invoiceId = created.id;
-        console.log(`Created invoice: ${invoiceId}`);
-      }
-
-      if (invoiceId) {
-        await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, { linked_invoice: invoiceId });
-      }
-    }
-
-    if (!invoiceId) {
+    if (decision.action === 'skip') {
       console.log('No invoice created (invalid file or skipped status)');
-      return Response.json({ success: true, status: 'skipped', reason: intake.status_reason || 'No valid file' });
+      return Response.json({ success: true, status: 'skipped', reason: decision.reason || 'No valid file' });
+    }
+
+    let invoiceId = decision.invoice_id;
+    if (invoiceId) {
+      try { await base44.asServiceRole.entities.Invoices.update(invoiceId, { source_intake: intakeId }); } catch (_) {}
+      if (!intake.linked_invoice) await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, { linked_invoice: invoiceId });
+    } else {
+      const created = await base44.asServiceRole.entities.Invoices.create({
+        source_intake: intakeId,
+        extraction_status: 'ממתין לאימות',
+        notes: 'נוצר אוטומטית ממסמך שנקלט. ממתין לניתוח/הזנה.'
+      });
+      invoiceId = created.id;
+      console.log(`Created invoice: ${invoiceId}`);
+      await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, { linked_invoice: invoiceId });
     }
 
     // Update intake status to show processing

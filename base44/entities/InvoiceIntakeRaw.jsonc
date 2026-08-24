@@ -25,7 +25,12 @@
     },
     "file_hash": {
       "type": "string",
-      "description": "\u05d7\u05ea\u05d9\u05de\u05ea \u05e7\u05d5\u05d1\u05e5 (Hash)"
+      "description": "SHA-256 \u05e9\u05dc \u05d1\u05d9\u05d9\u05d8\u05d9 \u05d4\u05e7\u05d5\u05d1\u05e5 \u05d1\u05dc\u05d1\u05d3 (64 \u05ea\u05d5\u05d5\u05d9 hex, \u05d0\u05d5\u05ea\u05d9\u05d5\u05ea \u05e7\u05d8\u05e0\u05d5\u05ea). \u05e2\u05e8\u05db\u05d9\u05dd \u05e9\u05d0\u05d9\u05e0\u05dd 64-hex \u05d4\u05dd \u05de\u05d3\u05d5\u05e8 \u05e7\u05d5\u05d3\u05dd \u05d5\u05d0\u05d9\u05e0\u05dd \u05d0\u05de\u05d9\u05e0\u05d9\u05dd",
+      "index": true
+    },
+    "file_hash_algorithm": {
+      "type": "string",
+      "description": "\u05d0\u05dc\u05d2\u05d5\u05e8\u05d9\u05ea\u05dd \u05d4\u05d7\u05ea\u05d9\u05de\u05d4. 'SHA-256' = \u05d7\u05ea\u05d9\u05de\u05d4 \u05d0\u05de\u05d9\u05e0\u05d4 \u05e2\u05dc \u05d1\u05d9\u05d9\u05d8\u05d9 \u05d4\u05e7\u05d5\u05d1\u05e5"
     },
     "file_name": {
       "type": "string",
@@ -37,7 +42,13 @@
     },
     "gmail_message_id": {
       "type": "string",
-      "description": "Gmail Message ID"
+      "description": "Gmail Message ID \u05de\u05d3\u05d5\u05d9\u05e7 (\u05dc\u05dc\u05d0 \u05e9\u05e8\u05e9\u05d5\u05e8). \u05e2\u05e8\u05db\u05d9\u05dd \u05de\u05d3\u05d5\u05e8 \u05e7\u05d5\u05d3\u05dd \u05e2\u05e9\u05d5\u05d9\u05d9\u05dd \u05dc\u05d4\u05db\u05d9\u05dc message__attachment",
+      "index": true
+    },
+    "gmail_attachment_id": {
+      "type": "string",
+      "description": "Gmail Attachment ID \u05de\u05d3\u05d5\u05d9\u05e7 (nullable) \u2014 \u05de\u05e4\u05ea\u05d7 \u05d4\u05d6\u05d4\u05d5\u05ea \u05d4\u05d7\u05d6\u05e7 \u05dc\u05e7\u05dc\u05d9\u05d8\u05d4 \u05de\u05d2\u05d5\u05d2\u05dc",
+      "index": true
     },
     "gmail_from": {
       "type": "string",
@@ -66,6 +77,10 @@
     "status_reason": {
       "type": "string",
       "description": "\u05e1\u05d9\u05d1\u05ea \u05e1\u05d8\u05d8\u05d5\u05e1"
+    },
+    "duplicate_reason_code": {
+      "type": "string",
+      "description": "\u05e7\u05d5\u05d3 \u05db\u05e4\u05d9\u05dc\u05d5\u05ea \u05d8\u05db\u05e0\u05d9\u05ea: FILE_DUPLICATE / GMAIL_ATTACHMENT_DUPLICATE / GMAIL_MESSAGE_DUPLICATE"
     },
     "linked_invoice": {
       "type": "string",

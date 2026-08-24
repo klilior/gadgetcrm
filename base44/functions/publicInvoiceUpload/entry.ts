@@ -50,6 +50,7 @@ Deno.serve(async (req) => {
       uploaded_by: uploadedBy,
       file: fileUrl,
       file_hash: fileHash,
+      file_hash_algorithm: 'SHA-256',
       file_name: fileName,
       file_mime: fileMime,
       status: 'חדש',

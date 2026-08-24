@@ -1,18 +1,16 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { calculateFileHash } from '../../shared/invoiceIntakeGuards.ts';
+import { FILE_HASH_ALGORITHM, findGmailDuplicate } from '../../shared/invoiceIntakeIdentity.ts';
 
 /**
  * Webhook for receiving invoice emails from Make.com
  * Supports both multipart/form-data (with file) and JSON (with file_url)
- * 
- * FormData fields:
- * - token: GMAIL_INBOUND_WEBHOOK_TOKEN
- * - from: sender email
- * - subject: email subject
- * - date: email date
- * - message_id: unique message id
- * - attachment_id: attachment id for idempotency
- * - file: binary file (PDF/image)
- * - file_name: original filename (optional)
+ *
+ * D1 identity rules:
+ * - file_hash is ALWAYS the SHA-256 of the actual file bytes (never a hash of url/name/ids).
+ * - gmail_message_id stays the exact message id; gmail_attachment_id is stored separately.
+ * - Dedupe is exact-equality on attachment id first, else exact message id (no regex/substring),
+ *   so a repeated identical webhook returns the existing intake/invoice and creates nothing.
  */
 
 function isLikelyInlineOrPreviewImage(fileName, fileMime) {
@@ -85,48 +83,52 @@ Deno.serve(async (req) => {
         reason: 'Inline or preview image attachment - not an invoice source file'
       });
     }
-    
-    // Check for duplicate by attachment_id (primary) or message_id
-    const dedupeId = attachment_id || message_id;
-    if (dedupeId) {
-      const filterQuery = attachment_id 
-        ? { gmail_message_id: { $regex: attachment_id } }
-        : { gmail_message_id: message_id };
-      
-      const existing = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter(
-        filterQuery, undefined, 1
-      );
-      
-      if (existing.length > 0) {
-        console.log(`Duplicate detected: ${dedupeId}`);
-        return Response.json({ 
-          success: true, 
-          skipped: true, 
+
+    const exactAttachmentId = String(attachment_id || '').trim() || null;
+    const exactMessageId = String(message_id || '').trim() || null;
+
+    // Exact-identity dedupe. Legacy combined ids are read as a fallback by gmailIdentity().
+    if (exactAttachmentId || exactMessageId) {
+      const candidates = [];
+      if (exactAttachmentId) {
+        candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ gmail_attachment_id: exactAttachmentId }, undefined, 50));
+      }
+      if (exactMessageId) {
+        candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ gmail_message_id: exactMessageId }, undefined, 50));
+        if (exactAttachmentId) {
+          // Legacy combined form: `${message_id}__${attachment_id}`.
+          candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ gmail_message_id: `${exactMessageId}__${exactAttachmentId}` }, undefined, 50));
+        }
+      }
+      const duplicate = findGmailDuplicate(candidates, { gmail_attachment_id: exactAttachmentId, gmail_message_id: exactMessageId }, null);
+      if (duplicate) {
+        console.log(`Duplicate detected (${duplicate.reason_code}): ${exactAttachmentId || exactMessageId}`);
+        return Response.json({
+          success: true,
+          skipped: true,
           reason: 'Duplicate attachment',
-          intake_id: existing[0].id,
-          linked_invoice_id: existing[0].linked_invoice || null
+          reason_code: duplicate.reason_code,
+          intake_id: duplicate.intake.id,
+          linked_invoice_id: duplicate.intake.linked_invoice || null
         });
       }
     }
-    
-    // Generate file hash
-    const fileHash = await generateSimpleHash(file_url + (file_name || '') + (attachment_id || ''));
-    
-    // Store combined ID for future dedup
-    const storedMessageId = attachment_id 
-      ? `${message_id || 'msg'}__${attachment_id}` 
-      : message_id;
-    
+
+    // Real file identity: SHA-256 of the actual file bytes only.
+    const fileHash = await calculateFileHash(file_url).catch(() => null);
+
     // Create intake record with status "מוכן לניתוח"
     const intake = await base44.asServiceRole.entities.InvoiceIntakeRaw.create({
       source: 'GMAIL',
       received_at: date || new Date().toISOString(),
       uploaded_by: 'מערכת (Gmail Auto)',
       file: file_url,
-      file_hash: fileHash,
+      file_hash: fileHash || undefined,
+      file_hash_algorithm: fileHash ? FILE_HASH_ALGORITHM : undefined,
       file_name: file_name || 'invoice',
       file_mime: file_mime || 'application/pdf',
-      gmail_message_id: storedMessageId || null,
+      gmail_message_id: exactMessageId,
+      gmail_attachment_id: exactAttachmentId,
       gmail_from: from || null,
       gmail_subject: subject || null,
       gmail_date: date || null,
@@ -154,11 +156,3 @@ Deno.serve(async (req) => {
     }, { status: 500 });
   }
 });
-
-async function generateSimpleHash(str) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32);
-}
