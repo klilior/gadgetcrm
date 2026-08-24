@@ -90,8 +90,22 @@ If CREDIT_NOTE:
 - If the displayed total is negative or has a minus sign => credit_sign = "NEGATIVE"
 - Otherwise => credit_sign = "POSITIVE"
 
-CONFIDENCE
-Provide overall_confidence (0..100) and per-field confidence (0..100).
+DATES — INVOICE DATE vs DUE DATE (CRITICAL)
+- doc_date = the date the document was ISSUED ("תאריך חשבונית", "תאריך המסמך", "Invoice Date").
+- due_date = the PAYMENT date only ("לתשלום עד", "מועד תשלום", "שוטף +", "Due Date").
+- NEVER use the due date as the invoice date. If no issue date is printed, doc_date = null.
+- If there is no payment date, due_date = null.
+
+TOTAL — AMOUNT DUE FOR THIS DOCUMENT (CRITICAL)
+- total_with_vat = the final amount due for THIS document ("סה״כ לתשלום", "לתשלום",
+  "סה״כ כולל מע״מ", "Total", "Amount Due", "Grand Total").
+- NEVER choose a number because it is the largest on the page.
+- It is NOT turnover/מחזור, accumulated or previous balance/יתרה, sum of transactions,
+  credit limit, or account total. Cross-check with subtotal + VAT.
+
+CONFIDENCE (TELEMETRY ONLY — NEVER AN APPROVAL SIGNAL)
+Provide overall_confidence (0..100) and per-field confidence (0..100) for debugging only.
+Approval is decided by a deterministic validation gate in the system.
 Do not inflate confidence if key fields are missing.
 
 CRITICAL FIELDS
