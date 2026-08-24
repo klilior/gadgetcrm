@@ -271,13 +271,52 @@ export function getLineRoundingTolerance(lineCount) {
   return Math.round(Math.max(LINE_ROUNDING_UNIT, lines * LINE_ROUNDING_UNIT) * 100) / 100;
 }
 
-/** Line-items sum vs subtotal consistency (separate from the header VAT arithmetic). */
+/**
+ * Deterministic line validation (Task C).
+ * Applicability is explicit: a summary invoice with no usable line structure is NOT a failure —
+ * it returns applicable:false with a warning. Real arithmetic contradictions return reason codes.
+ * Checks: quantity × unit_price ≈ line_total (per line) and SUM(line_total_before_vat) ≈ subtotal.
+ */
 export function getLineItemsCheck(extraction) {
   const items = extraction?.line_items || [];
   const subtotal = typeof extraction?.subtotal_before_vat === 'number' ? extraction.subtotal_before_vat : null;
-  if (!items.length || subtotal === null) {
-    return { hasMismatch: false, delta: 0, tolerance: getLineRoundingTolerance(0) };
+  const failures = [];
+  const warnings = [];
+  const reason_codes = [];
+
+  if (!items.length) {
+    warnings.push('אין שורות מוצר במסמך — בדיקת שורות אינה ישימה.');
+    return { applicable: false, hasMismatch: false, delta: 0, tolerance: getLineRoundingTolerance(0), hasBadQuantity: false, failures, warnings, reason_codes };
   }
+
+  // Per-line arithmetic, only where quantity, unit price and line total are all present.
+  const lineArithmeticFailures = [];
+  for (const [index, item] of items.entries()) {
+    const qty = item?.quantity;
+    const unit = item?.unit_price_before_vat;
+    const total = item?.line_total_before_vat;
+    if (typeof qty !== 'number' || typeof unit !== 'number' || typeof total !== 'number') continue;
+    const delta = Math.round(Math.abs(qty * unit - total) * 100) / 100;
+    if (delta > getLineRoundingTolerance(1)) {
+      lineArithmeticFailures.push({ line_number: item.line_number || index + 1, quantity: qty, unit_price_before_vat: unit, line_total_before_vat: total, delta });
+    }
+  }
+  if (lineArithmeticFailures.length) {
+    reason_codes.push('LINE_TOTAL_MISMATCH');
+    failures.push(`שורות עם אי-התאמה בין כמות × מחיר יחידה לסה״כ שורה: ${lineArithmeticFailures.map((l) => l.line_number).join(', ')}.`);
+  }
+
+  const hasBadQuantity = items.some((item) => typeof item.quantity !== 'number' || item.quantity <= 0);
+  if (hasBadQuantity) {
+    reason_codes.push('LINE_QUANTITY_INVALID');
+    failures.push('קיימות שורות מוצר עם כמות חסרה או לא תקינה.');
+  }
+
+  if (subtotal === null) {
+    warnings.push('אין סה״כ לפני מע״מ להשוואה מול סכום השורות.');
+    return { applicable: lineArithmeticFailures.length > 0 || hasBadQuantity, hasMismatch: false, delta: 0, tolerance: getLineRoundingTolerance(items.length), hasBadQuantity, failures, warnings, reason_codes, line_arithmetic_failures: lineArithmeticFailures };
+  }
+
   const lineSum = items.reduce((sum, item) => {
     const total = typeof item.line_total_before_vat === 'number'
       ? item.line_total_before_vat
@@ -285,9 +324,13 @@ export function getLineItemsCheck(extraction) {
     return sum + total;
   }, 0);
   const delta = Math.round(Math.abs(lineSum - subtotal) * 100) / 100;
-  const hasBadQuantity = items.some((item) => typeof item.quantity !== 'number' || item.quantity <= 0);
   const tolerance = getLineRoundingTolerance(items.length);
-  return { hasMismatch: delta > tolerance, delta, tolerance, lineSum: roundMoney(lineSum), hasBadQuantity };
+  const hasMismatch = delta > tolerance;
+  if (hasMismatch) {
+    reason_codes.push('LINE_SUM_MISMATCH');
+    failures.push(`סכום שורות המוצרים (${roundMoney(lineSum)}) אינו תואם לסה״כ לפני מע״מ (${subtotal}), הפרש ${delta} ש״ח.`);
+  }
+  return { applicable: true, hasMismatch, delta, tolerance, lineSum: roundMoney(lineSum), hasBadQuantity, failures, warnings, reason_codes, line_arithmetic_failures: lineArithmeticFailures };
 }
 
 /** invoice_date and due_date are strictly separate; due_date must never become the invoice date. */

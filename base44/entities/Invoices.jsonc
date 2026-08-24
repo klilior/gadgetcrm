@@ -60,6 +60,18 @@
       "type": "number",
       "description": "\u05e1\u05d4\u05f4\u05db \u05db\u05d5\u05dc\u05dc \u05de\u05e2\u05f4\u05de"
     },
+    "extracted_subtotal_before_vat": {
+      "type": "number",
+      "description": "\u05d4\u05e2\u05e8\u05da \u05e9\u05d7\u05d5\u05dc\u05e5 \u05de\u05d4\u05de\u05e1\u05de\u05da \u05dc\u05e4\u05e0\u05d9 \u05d4\u05d7\u05dc\u05e4\u05d4 \u05d1\u05de\u05e7\u05d5\u05e8 \u05dc\u05d9\u05e0\u05d8"
+    },
+    "extracted_vat_amount": {
+      "type": "number",
+      "description": "\u05de\u05e2\u05f4\u05de \u05e9\u05d7\u05d5\u05dc\u05e5 \u05de\u05d4\u05de\u05e1\u05de\u05da \u05dc\u05e4\u05e0\u05d9 \u05d4\u05d7\u05dc\u05e4\u05d4 \u05d1\u05de\u05e7\u05d5\u05e8 \u05dc\u05d9\u05e0\u05d8"
+    },
+    "extracted_total_with_vat": {
+      "type": "number",
+      "description": "\u05e1\u05d4\u05f4\u05db \u05e9\u05d7\u05d5\u05dc\u05e5 \u05de\u05d4\u05de\u05e1\u05de\u05da \u05dc\u05e4\u05e0\u05d9 \u05d4\u05d7\u05dc\u05e4\u05d4 \u05d1\u05de\u05e7\u05d5\u05e8 \u05dc\u05d9\u05e0\u05d8"
+    },
     "confidence_score": {
       "type": "number",
       "minimum": 0,
@@ -125,13 +137,41 @@
       "type": "string",
       "enum": [
         "unchecked",
-        "matched_duplicate",
+        "matched",
+        "conflict",
         "possible_match",
-        "missing_in_linet"
+        "missing_in_linet",
+        "matched_duplicate"
       ],
       "default": "unchecked",
-      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05e6\u05dc\u05d1\u05d4 \u05de\u05d5\u05dc \u05dc\u05d9\u05e0\u05d8",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d4\u05e6\u05dc\u05d1\u05d4 \u05de\u05d5\u05dc \u05dc\u05d9\u05e0\u05d8. matched = \u05d0\u05d5\u05ea\u05d4 \u05e2\u05e1\u05e7\u05d4 \u05d0\u05d5\u05de\u05ea\u05d4. matched_duplicate = \u05de\u05d9\u05d5\u05e9\u05df, \u05dc\u05ea\u05d0\u05d9\u05de\u05d5\u05ea \u05dc\u05d0\u05d7\u05d5\u05e8 \u05d1\u05dc\u05d1\u05d3",
       "index": true
+    },
+    "source_of_truth": {
+      "type": "string",
+      "enum": [
+        "extracted",
+        "LINET"
+      ],
+      "default": "extracted",
+      "description": "\u05de\u05e7\u05d5\u05e8 \u05d4\u05e2\u05e8\u05db\u05d9\u05dd \u05d4\u05e2\u05e1\u05e7\u05d9\u05d9\u05dd \u05d4\u05e1\u05d5\u05e4\u05d9\u05d9\u05dd \u05d1\u05db\u05d5\u05ea\u05e8\u05ea \u05d4\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea"
+    },
+    "linet_provenance_json": {
+      "type": "string",
+      "description": "JSON \u05e7\u05d5\u05de\u05e4\u05e7\u05d8\u05d9: \u05e2\u05e8\u05da \u05de\u05e7\u05d5\u05de\u05d9, \u05e2\u05e8\u05da \u05dc\u05d9\u05e0\u05d8, \u05d4\u05de\u05e7\u05d5\u05e8 \u05e9\u05e0\u05d1\u05d7\u05e8, \u05d4\u05e1\u05d9\u05d1\u05d4, \u05d2\u05e8\u05e1\u05ea \u05d4\u05db\u05dc\u05dc \u05d5\u05d7\u05d5\u05ea\u05de\u05ea \u05d6\u05de\u05df"
+    },
+    "linet_conflict_reason_code": {
+      "type": "string",
+      "description": "\u05e7\u05d5\u05d3 \u05e1\u05ea\u05d9\u05e8\u05d4: LINET_TOTAL_CONFLICT / LINET_DATE_CONFLICT / LINET_SUPPLIER_CONFLICT / LINET_LINE_CONFLICT",
+      "index": true
+    },
+    "linet_total_with_vat": {
+      "type": "number",
+      "description": "\u05e1\u05d4\u05f4\u05db \u05db\u05d5\u05dc\u05dc \u05de\u05e2\u05f4\u05de \u05dc\u05e4\u05d9 \u05de\u05e1\u05de\u05da \u05d4\u05e8\u05db\u05e9 \u05d1\u05dc\u05d9\u05e0\u05d8 (\u05dc\u05d4\u05e9\u05d5\u05d5\u05d0\u05d4)"
+    },
+    "linet_doc_date": {
+      "type": "string",
+      "description": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05de\u05e1\u05de\u05da \u05dc\u05e4\u05d9 \u05dc\u05d9\u05e0\u05d8 (\u05dc\u05d4\u05e9\u05d5\u05d5\u05d0\u05d4)"
     },
     "linet_purchase_document_id": {
       "type": "string",
