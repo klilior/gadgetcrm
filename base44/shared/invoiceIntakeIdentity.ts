@@ -56,7 +56,9 @@ export function gmailIdentity(intake) {
 
 /**
  * Exact-equality Gmail dedupe against candidate intakes.
- * Attachment id wins; message id is used only when no attachment id is present.
+ * Semantics: INCOMING attachment id first; ELSE incoming message id. When the incoming has no
+ * attachment, a candidate matches on the same parsed message id whether or not that candidate
+ * carries its own attachment id (separate fields or legacy combined form).
  */
 export function findGmailDuplicate(candidates, incoming, currentId) {
   const wanted = gmailIdentity(incoming);
@@ -66,10 +68,7 @@ export function findGmailDuplicate(candidates, incoming, currentId) {
     return hit ? { intake: hit, reason_code: INTAKE_DUPLICATE_CODES.GMAIL_ATTACHMENT_DUPLICATE } : null;
   }
   if (wanted.message_id) {
-    const hit = others.find((item) => {
-      const identity = gmailIdentity(item);
-      return !identity.attachment_id && identity.message_id === wanted.message_id;
-    });
+    const hit = others.find((item) => gmailIdentity(item).message_id === wanted.message_id);
     return hit ? { intake: hit, reason_code: INTAKE_DUPLICATE_CODES.GMAIL_MESSAGE_DUPLICATE } : null;
   }
   return null;

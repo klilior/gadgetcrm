@@ -1,17 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { calculateFileHash, getEarlyNonInvoiceReason, isValidInvoiceFile } from '../../shared/invoiceIntakeGuards.ts';
-import { FILE_HASH_ALGORITHM, decideIntakeShellAction, gmailIdentity, needsFileHashRecompute, trustedFileHash } from '../../shared/invoiceIntakeIdentity.ts';
-
-/** Shared D1 helper: gather the exact-identity duplicate candidates for one intake. */
-async function loadDuplicateCandidates(base44, intake) {
-  const candidates = [];
-  const hash = trustedFileHash(intake);
-  if (hash) candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ file_hash: hash }, 'id', 1000));
-  const identity = gmailIdentity(intake);
-  if (identity.attachment_id) candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ gmail_attachment_id: identity.attachment_id }, 'id', 50));
-  else if (identity.message_id) candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ gmail_message_id: identity.message_id }, 'id', 50));
-  return [...new Map(candidates.map((item) => [item.id, item])).values()];
-}
+import { FILE_HASH_ALGORITHM, decideIntakeShellAction, needsFileHashRecompute } from '../../shared/invoiceIntakeIdentity.ts';
+import { loadIntakeDuplicateCandidates } from '../../shared/invoiceIntakeCandidates.ts';
 
 Deno.serve(async (req) => {
   try {
@@ -96,7 +86,7 @@ Deno.serve(async (req) => {
     const decision = decideIntakeShellAction({
       intake,
       invoicesForIntake: await base44.asServiceRole.entities.Invoices.filter({ source_intake: intake.id }, undefined, 5),
-      duplicateCandidates: intake.status === 'דולג' ? [] : await loadDuplicateCandidates(base44, intake),
+      duplicateCandidates: intake.status === 'דולג' ? [] : await loadIntakeDuplicateCandidates(base44, intake),
       isValidFile: isValidInvoiceFile(intake)
     });
 

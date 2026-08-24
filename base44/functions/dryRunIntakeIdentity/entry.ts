@@ -62,6 +62,30 @@ Deno.serve(async (req) => {
       detail: gmailIdentity({ gmail_message_id: 'msg-9__ATT-999' })
     });
 
+    // Incoming message-only: matches by exact parsed message id whether the candidate stores the
+    // attachment separately or inside a legacy combined id.
+    const separateIdCandidate = { id: 'i5', gmail_message_id: 'msg-5', gmail_attachment_id: 'ATT-55555', linked_invoice: 'inv5' };
+    const messageOnlyVsSeparate = findGmailDuplicate([separateIdCandidate], { gmail_message_id: 'msg-5' }, null);
+    fixtures.push({
+      name: 'incoming_message_only_matches_candidate_with_separate_attachment',
+      pass: messageOnlyVsSeparate?.intake?.id === 'i5' && messageOnlyVsSeparate?.reason_code === 'GMAIL_MESSAGE_DUPLICATE',
+      detail: messageOnlyVsSeparate ? { intake_id: messageOnlyVsSeparate.intake.id, reason_code: messageOnlyVsSeparate.reason_code } : null
+    });
+
+    const legacyCombinedCandidate = { id: 'i6', gmail_message_id: 'msg-6__ATT-66666', linked_invoice: 'inv6' };
+    const messageOnlyVsLegacy = findGmailDuplicate([legacyCombinedCandidate], { gmail_message_id: 'msg-6' }, null);
+    fixtures.push({
+      name: 'incoming_message_only_matches_legacy_combined_candidate',
+      pass: messageOnlyVsLegacy?.intake?.id === 'i6' && messageOnlyVsLegacy?.reason_code === 'GMAIL_MESSAGE_DUPLICATE',
+      detail: messageOnlyVsLegacy ? { intake_id: messageOnlyVsLegacy.intake.id, reason_code: messageOnlyVsLegacy.reason_code } : null
+    });
+
+    fixtures.push({
+      name: 'incoming_message_only_different_message_does_not_match',
+      pass: findGmailDuplicate([separateIdCandidate, legacyCombinedCandidate], { gmail_message_id: 'msg-7' }, null) === null,
+      detail: { probed: 'msg-7 vs stored msg-5 / msg-6__ATT-66666' }
+    });
+
     const gmailDupDecision = decideIntakeShellAction({
       intake: { id: 'i2', file: 'u2', gmail_message_id: 'msg-1', gmail_attachment_id: 'ATT-12345', status: 'מוכן לניתוח' },
       invoicesForIntake: [],

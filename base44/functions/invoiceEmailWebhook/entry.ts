@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { calculateFileHash } from '../../shared/invoiceIntakeGuards.ts';
 import { FILE_HASH_ALGORITHM, findGmailDuplicate } from '../../shared/invoiceIntakeIdentity.ts';
+import { loadIntakeDuplicateCandidates } from '../../shared/invoiceIntakeCandidates.ts';
 
 /**
  * Webhook for receiving invoice emails from Make.com
@@ -89,18 +90,9 @@ Deno.serve(async (req) => {
 
     // Exact-identity dedupe. Legacy combined ids are read as a fallback by gmailIdentity().
     if (exactAttachmentId || exactMessageId) {
-      const candidates = [];
-      if (exactAttachmentId) {
-        candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ gmail_attachment_id: exactAttachmentId }, undefined, 50));
-      }
-      if (exactMessageId) {
-        candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ gmail_message_id: exactMessageId }, undefined, 50));
-        if (exactAttachmentId) {
-          // Legacy combined form: `${message_id}__${attachment_id}`.
-          candidates.push(...await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ gmail_message_id: `${exactMessageId}__${exactAttachmentId}` }, undefined, 50));
-        }
-      }
-      const duplicate = findGmailDuplicate(candidates, { gmail_attachment_id: exactAttachmentId, gmail_message_id: exactMessageId }, null);
+      const incoming = { gmail_attachment_id: exactAttachmentId, gmail_message_id: exactMessageId };
+      const candidates = await loadIntakeDuplicateCandidates(base44, incoming);
+      const duplicate = findGmailDuplicate(candidates, incoming, null);
       if (duplicate) {
         console.log(`Duplicate detected (${duplicate.reason_code}): ${exactAttachmentId || exactMessageId}`);
         return Response.json({
