@@ -4,6 +4,7 @@ import { EXTRACT_PROMPT, EXTRACT_SCHEMA, getLineItemsCheck, normalizeExtractionD
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 import { applyDocumentClassificationGuard } from '../../shared/invoiceDocumentClassification.ts';
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
+import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 
 /**
  * SAFE, STRICTLY READ-ONLY regression harness (admins only).
@@ -73,6 +74,10 @@ Deno.serve(async (req) => {
       // Stored invoice amounts are never fed into extraction or selection.
       await auditAndApplyAmounts(base44, extraction, intake.file);
 
+      // P1-A: fail-closed critical-field recovery, evaluated BEFORE supplier resolution and the
+      // gate. Read-only: only the in-memory extraction object is touched.
+      const recovery = await recoverCriticalFields(base44, extraction, intake.file);
+
       // Read-only supplier resolution via the shared deterministic resolver.
       const resolution = resolveSupplier({
         vat_id: extraction.supplier_vat_id,
@@ -135,6 +140,28 @@ Deno.serve(async (req) => {
             .filter((c: any) => ['document_payable', 'document_subtotal', 'document_vat', 'fee_or_commission'].includes(c.role))
             .slice(0, 12)
         } : null,
+        critical_field_recovery: {
+          needed: recovery.plan.needed,
+          attempted: recovery.attempted,
+          requested_fields: recovery.plan.request_fields,
+          plan_reasons_he: recovery.plan.reasons_he,
+          applied_fields: recovery.merge?.applied_fields || [],
+          unresolved_fields: recovery.merge?.unresolved_fields || [],
+          conflict_fields: recovery.merge?.conflict_fields || [],
+          requires_manual_review: recovery.merge?.requires_manual_review === true,
+          outcome: recovery.merge?.outcome || null,
+          review_reasons_he: recovery.merge?.review_reasons_he || [],
+          error: recovery.error || null,
+          decisions: recovery.merge?.decisions || []
+        },
+        // The exact header candidate the deterministic gate evaluated below.
+        gate_candidate: {
+          supplier_name: extraction.supplier_name ?? null,
+          supplier_vat_id: extraction.supplier_vat_id ?? null,
+          doc_number: extraction.doc_number ?? null,
+          invoice_date: extraction.invoice_date ?? null,
+          total_with_vat: extraction.total_with_vat ?? null
+        },
         line_check: lineCheck,
         supplier_resolution: {
           supplier_id: resolution.supplier_id,

@@ -48,7 +48,12 @@ export const EVENT_TYPES = {
   LINET_CONFLICT: 'LINET_CONFLICT',
   LINET_POSSIBLE: 'LINET_POSSIBLE',
   LINET_MISSING: 'LINET_MISSING',
-  HUMAN_EDIT: 'HUMAN_EDIT'
+  HUMAN_EDIT: 'HUMAN_EDIT',
+  // P1-A: narrow second-pass recovery of critical header fields (audit only).
+  RECOVERY_ATTEMPTED: 'RECOVERY_ATTEMPTED',
+  RECOVERY_APPLIED: 'RECOVERY_APPLIED',
+  RECOVERY_CONFLICT: 'RECOVERY_CONFLICT',
+  RECOVERY_UNRESOLVED: 'RECOVERY_UNRESOLVED'
 };
 
 export const MAX_PROCESSING_EVENTS = 20;
@@ -94,7 +99,8 @@ export function parseProvenance(json) {
   const ai = raw.ai && typeof raw.ai === 'object' ? raw.ai : null;
   const linet = raw.linet && typeof raw.linet === 'object' ? raw.linet : null;
   const selected = raw.selected && typeof raw.selected === 'object' ? raw.selected : {};
-  return { version: raw.version || PROVENANCE_VERSION, original, ai, linet, selected };
+  const recovery = raw.recovery && typeof raw.recovery === 'object' ? raw.recovery : null;
+  return { version: raw.version || PROVENANCE_VERSION, original, ai, linet, selected, recovery };
 }
 
 export function parseProcessingEvents(json) {
@@ -108,6 +114,7 @@ function serialize(state) {
     original: state.original || null,
     ai: state.ai || null,
     linet: state.linet || null,
+    recovery: state.recovery || null,
     selected: state.selected || {}
   });
 }
@@ -184,6 +191,59 @@ export function applyHumanSelection({ existingJson, values, user = null, reason 
   const state = parseProvenance(existingJson);
   state.selected = selectAll(state, { values, source: PROVENANCE_SOURCES.HUMAN, reason: reason || (user ? `נערך ידנית על ידי ${user}` : 'נערך ידנית'), at });
   return { json: serialize(state), state, selection_changed: true };
+}
+
+/**
+ * P1-A — records the narrow critical-field recovery decision per field, WITHOUT touching the
+ * immutable original snapshot, the AI candidate or the selected values written by
+ * applyExtractionProvenance. Both candidates are kept on disagreement. Compact only:
+ * value + printed label + short reason, never document text and never line arrays.
+ */
+export function applyRecoveryProvenance({ existingJson, merge, at = new Date().toISOString() }) {
+  const state = parseProvenance(existingJson);
+  if (!merge || !Array.isArray(merge.decisions) || !merge.decisions.length) {
+    return { json: serialize(state), state, recorded: false };
+  }
+  const fields = {};
+  for (const decision of merge.decisions) {
+    if (!decision?.field) continue;
+    fields[decision.field] = {
+      first: decision.first_pass ? { value: decision.first_pass.value ?? null, valid: decision.first_pass.valid === true } : null,
+      second: decision.second_pass ? { value: decision.second_pass.value ?? null, valid: decision.second_pass.valid === true, printed_label: trim(decision.second_pass.printed_label), confidence: decision.second_pass.confidence ?? null } : null,
+      selected: { value: decision.selected_value ?? null, source: decision.selected_source || null },
+      reason_code: decision.reason_code || null,
+      reason: trim(decision.reason)
+    };
+  }
+  state.recovery = {
+    version: merge.version || null,
+    updated_at: at,
+    requested_fields: merge.requested_fields || [],
+    applied_fields: merge.applied_fields || [],
+    unresolved_fields: merge.unresolved_fields || [],
+    conflict_fields: merge.conflict_fields || [],
+    requires_manual_review: merge.requires_manual_review === true,
+    outcome: merge.outcome || null,
+    fields
+  };
+  return { json: serialize(state), state, recorded: true };
+}
+
+/** Compact events for a recovery attempt: attempted + applied/conflict/unresolved. */
+export function buildRecoveryEvents(merge, at = new Date().toISOString()) {
+  if (!merge) return [];
+  const meta = { requested: merge.requested_fields || [], applied: merge.applied_fields || [] };
+  const events = [{ type: EVENT_TYPES.RECOVERY_ATTEMPTED, at, outcome: 'attempted', reason: null, meta }];
+  if ((merge.conflict_fields || []).length) {
+    events.push({ type: EVENT_TYPES.RECOVERY_CONFLICT, at, outcome: 'manual_review', reason: (merge.review_reasons_he || [])[0] || null, meta: { fields: merge.conflict_fields } });
+  }
+  if ((merge.unresolved_fields || []).length) {
+    events.push({ type: EVENT_TYPES.RECOVERY_UNRESOLVED, at, outcome: 'manual_review', reason: (merge.review_reasons_he || [])[0] || null, meta: { fields: merge.unresolved_fields } });
+  }
+  if ((merge.applied_fields || []).length) {
+    events.push({ type: EVENT_TYPES.RECOVERY_APPLIED, at, outcome: 'applied', reason: null, meta: { fields: merge.applied_fields } });
+  }
+  return events;
 }
 
 /** Appends compact events in chronological order, keeping only the newest MAX_PROCESSING_EVENTS. */

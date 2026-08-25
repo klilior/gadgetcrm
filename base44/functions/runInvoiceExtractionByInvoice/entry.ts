@@ -5,7 +5,8 @@ import { needsFileHashRecompute, trustedFileHash } from '../../shared/invoiceInt
 import { planExtractionRoutePreflight } from '../../shared/invoiceExtractionRoutePreflight.ts';
 import { NON_ATTEMPT_REASONS, planAttemptFailure, planAttemptStart, planAttemptSuccess, planNonAttempt } from '../../shared/invoiceRetryLifecycle.ts';
 import { planSupplierPricePurchase } from '../../shared/supplierPriceRetry.ts';
-import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
+import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
+import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
 import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
@@ -376,6 +377,12 @@ Deno.serve(async (req) => {
     const amountSelection = await auditAndApplyAmounts(base44, extraction, fileUrlToUse);
     console.log('Monetary audit:', JSON.stringify(amountSelection.provenance));
 
+    // P1-A: fail-closed second pass for CRITICAL header fields only, and ONLY when one is
+    // deterministically missing/implausible. Runs BEFORE supplier resolution, line
+    // classification, duplicate checks and the validation gate. It can never approve anything.
+    const recovery = await recoverCriticalFields(base44, extraction, fileUrlToUse);
+    if (recovery.attempted) console.log('Critical field recovery:', JSON.stringify(extraction.critical_field_recovery));
+
     // DEBUG: Save raw extraction JSON (after post-processing)
     const extractionJson = JSON.stringify(extraction);
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, { ai_debug_last_extraction_json: extractionJson });
@@ -503,6 +510,13 @@ Deno.serve(async (req) => {
       invoice_id: invoice.id,
       line_check: getLineItemsCheck(extraction)
     });
+    // P1-A: an unresolved/conflicting critical field forces manual review deterministically.
+    if (recovery.merge?.requires_manual_review) {
+      for (const reason of recovery.merge.review_reasons_he) {
+        if (!gate.failures.includes(reason)) gate.failures.push(reason);
+      }
+      gate.passed = false;
+    }
     console.log('Validation gate:', JSON.stringify(gate));
 
     // Stable BUSINESS_DUPLICATE failure — manual review only, never rejection/כפילות/Linet state.
@@ -531,8 +545,11 @@ Deno.serve(async (req) => {
       reason: `gate ${gate.validation_version}`,
       at: auditAt
     });
+    // P1-A audit: both candidates per recovered/conflicting field, appended to the same JSON.
+    const provenanceWithRecovery = applyRecoveryProvenance({ existingJson: provenance.json, merge: recovery.merge, at: auditAt });
     const history = appendProcessingEvents(latestInvoice.processing_events_json, [
       { type: EVENT_TYPES.ATTEMPT_STARTED, at: attemptStartedAt || auditAt, outcome: 'started', meta: { intake_id: intake.id } },
+      ...buildRecoveryEvents(recovery.merge, auditAt),
       { type: EVENT_TYPES.GATE_EVALUATED, at: auditAt, outcome: gate.passed ? 'passed' : 'failed', reason: gate.failures[0] || null, meta: { version: gate.validation_version, auto_approved: canAutoApprove } },
       ...(businessDuplicate ? [{ type: EVENT_TYPES.BUSINESS_DUPLICATE, at: auditAt, outcome: 'manual_review', reason: businessDuplicate.reason || null, meta: { original_invoice_id: businessDuplicate.original_invoice_id || null } }] : []),
       { type: EVENT_TYPES.ATTEMPT_SUCCEEDED, at: auditAt, outcome: finalStatus }
@@ -559,7 +576,7 @@ Deno.serve(async (req) => {
       auto_approved: canAutoApprove,
       extraction_status: finalStatus,
       notes: finalNotes,
-      field_provenance_json: provenance.json,
+      field_provenance_json: provenanceWithRecovery.json,
       processing_events_json: history.json,
       invoice_classification: classificationResult.invoice_classification || undefined,
       classification_status: classificationResult.classification_status,
@@ -693,6 +710,7 @@ Deno.serve(async (req) => {
       invoice_id: invoice.id, 
       supplier_id: supplierId, 
       provenance_original_captured: provenance.original_captured,
+      critical_field_recovery: extraction.critical_field_recovery || null,
       processing_events_count: history.events.length,
       line_items_count: lineItems.length,
       business_duplicate: businessDuplicate || null,

@@ -11,7 +11,8 @@ import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplic
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
 import { NON_ATTEMPT_REASONS, planAttemptStart, planAttemptSuccess, planNonAttempt, planRouteFailureTarget } from '../../shared/invoiceRetryLifecycle.ts';
 import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
-import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
+import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
+import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -154,6 +155,15 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     line_check: validation.line_check
   });
 
+  // P1-A: an unresolved/conflicting critical field forces manual review deterministically.
+  const recoveryMerge = extraction.critical_field_recovery || null;
+  if (recoveryMerge?.requires_manual_review) {
+    for (const reason of (recoveryMerge.review_reasons_he || [])) {
+      if (!gate.failures.includes(reason)) gate.failures.push(reason);
+    }
+    gate.passed = false;
+  }
+
   // Stable BUSINESS_DUPLICATE failure — manual review only, never rejection/כפילות/Linet state.
   const amountsAmbiguous = extraction.amount_provenance?.ambiguous === true;
   const duplicateOutcome = applyBusinessDuplicateToGate(gate, businessDuplicate, !amountsAmbiguous && validation.missing_critical_fields.length === 0);
@@ -184,8 +194,11 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     reason: `gate ${gate.validation_version}`,
     at: auditAt
   });
+  // P1-A audit: both candidates per recovered/conflicting field.
+  const provenanceWithRecovery = applyRecoveryProvenance({ existingJson: provenance.json, merge: recoveryMerge, at: auditAt });
   const history = appendProcessingEvents(latest.processing_events_json, [
     { type: EVENT_TYPES.ATTEMPT_STARTED, at: context.attemptStartedAt || auditAt, outcome: 'started', meta: { intake_id: intake.id, document_index: invoiceIndex === null ? 1 : invoiceIndex + 1 } },
+    ...buildRecoveryEvents(recoveryMerge, auditAt),
     { type: EVENT_TYPES.GATE_EVALUATED, at: auditAt, outcome: gate.passed ? 'passed' : 'failed', reason: gate.failures[0] || null, meta: { version: gate.validation_version, auto_approved: canAutoApprove } },
     ...(businessDuplicate ? [{ type: EVENT_TYPES.BUSINESS_DUPLICATE, at: auditAt, outcome: 'manual_review', reason: businessDuplicate.reason || null, meta: { original_invoice_id: businessDuplicate.original_invoice_id || null } }] : []),
     { type: EVENT_TYPES.ATTEMPT_SUCCEEDED, at: auditAt, outcome: finalStatus }
@@ -212,7 +225,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     auto_approved: canAutoApprove,
     extraction_status: finalStatus,
     notes: notes,
-    field_provenance_json: provenance.json,
+    field_provenance_json: provenanceWithRecovery.json,
     processing_events_json: history.json,
     ai_debug_last_extraction_json: JSON.stringify(extraction),
     ai_debug_last_validation_json: JSON.stringify({ ...validation, gate, supplier_resolution: resolution })
@@ -246,7 +259,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
   }
 
-  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, provenance_original_captured: provenance.original_captured, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
 }
 
 Deno.serve(async (req) => {
@@ -300,6 +313,9 @@ Deno.serve(async (req) => {
       applyDocumentClassificationGuard(extraction);
       normalizeExtractionDates(extraction);
       await auditAndApplyAmounts(base44, extraction, intake.file, 'gpt_5_mini', targetScope);
+      // P1-A: fail-closed narrow second pass, ONLY when a critical header field is
+      // deterministically missing/implausible. Still before supplier resolution / lines / gate.
+      await recoverCriticalFields(base44, extraction, intake.file);
       return extraction;
     };
 
