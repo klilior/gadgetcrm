@@ -19,13 +19,24 @@ export const CLASSIFICATION_REASON_CODES = {
   UNSUPPORTED_DOC_TYPE: 'UNSUPPORTED_DOC_TYPE'
 };
 
-/** Titles that are never a tax invoice / credit note, whatever amounts they carry. */
-const NON_TAX_TITLE = /(קבלה|חשבון\s*עסקה|דרישת\s*תשלום|תעודת\s*משלוח|תעודת\s*החזרה|שובר|הזמנת\s*רכש|הזמנה|הצעת\s*מחיר|דוח|ריכוז|הודעת\s*חיוב|receipt|payment\s*confirmation|delivery\s*note|packing\s*slip|proforma|pro\s*forma|quote|quotation|purchase\s*order|order\s*confirmation|statement|report|remittance)/i;
+/**
+ * Titles that are never a tax invoice / credit note, whatever amounts they carry.
+ * Exported so P1-E classification recovery uses the SAME patterns (never a copy).
+ */
+export const NON_TAX_TITLE_PATTERN = /(קבלה|חשבון\s*עסקה|דרישת\s*תשלום|תעודת\s*משלוח|תעודת\s*החזרה|שובר|הזמנת\s*רכש|הזמנה|הצעת\s*מחיר|דוח|ריכוז|הודעת\s*חיוב|receipt|payment\s*confirmation|delivery\s*note|packing\s*slip|proforma|pro\s*forma|quote|quotation|purchase\s*order|order\s*confirmation|statement|report|remittance)/i;
 
 /** Explicit tax-invoice qualification. A bare "Invoice"/"חשבונית" is NOT one of these. */
-const TAX_INVOICE_TITLE = /(חשבונית\s*מס|חשבונית-מס|מס\s*\/?\s*קבלה|tax\s*invoice|vat\s*invoice)/i;
+export const TAX_INVOICE_TITLE_PATTERN = /(חשבונית\s*מס|חשבונית-מס|מס\s*\/?\s*קבלה|tax\s*invoice|vat\s*invoice)/i;
 
-const CREDIT_NOTE_TITLE = /(חשבונית\s*זיכוי|חשבון\s*זיכוי|תעודת\s*זיכוי|credit\s*note|credit\s*memo)/i;
+export const CREDIT_NOTE_TITLE_PATTERN = /(חשבונית\s*זיכוי|חשבון\s*זיכוי|תעודת\s*זיכוי|credit\s*note|credit\s*memo)/i;
+
+/** A bare, unqualified "Invoice" / "חשבונית" heading — never upgradable. */
+export const GENERIC_INVOICE_TITLE_PATTERN = /(^|[\s:#\-])(invoice|חשבונית)([\s:#\-]|$)/i;
+
+// Internal aliases keep the guard body unchanged.
+const NON_TAX_TITLE = NON_TAX_TITLE_PATTERN;
+const TAX_INVOICE_TITLE = TAX_INVOICE_TITLE_PATTERN;
+const CREDIT_NOTE_TITLE = CREDIT_NOTE_TITLE_PATTERN;
 
 function text(...values: unknown[]): string {
   return values

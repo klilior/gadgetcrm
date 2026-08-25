@@ -93,6 +93,14 @@ ABSOLUTE PRECISION RULES — READ CAREFULLY
      - unit_price_with_vat = null
      - line_total_before_vat = the line total as printed
      - line_total_with_vat = null
+4. OPTIONAL LINE METADATA — copy or derive ONLY from what is VISIBLE on the row / its column
+   headers. If it is not visible, omit the field or use "UNKNOWN" / null. Never guess:
+   - line_role: PRODUCT | SERVICE | SHIPPING | DISCOUNT | ROUNDING | SUMMARY | UNKNOWN
+   - unit_price_basis / line_total_basis: BEFORE_DISCOUNT | AFTER_DISCOUNT | UNKNOWN
+     (AFTER_DISCOUNT only when the printed column/row states the value is net of a discount)
+   - unit_price_includes_vat / line_total_includes_vat: true only when the printed column header
+     says the value includes VAT, false when it says it excludes VAT, otherwise null
+   - sign_convention: DEBIT | CREDIT | ABSOLUTE | UNKNOWN (as the row presents its sign)
 
 *** SUPPLIER IDENTIFICATION ***
 1. The supplier name is the COMPANY that ISSUED the invoice (the seller), NOT the customer/buyer.
@@ -168,7 +176,13 @@ OUTPUT SCHEMA (EXACT)
       "unit_price_before_vat": number,
       "unit_price_with_vat": number | null,
       "line_total_before_vat": number,
-      "line_total_with_vat": number | null
+      "line_total_with_vat": number | null,
+      "line_role": "PRODUCT" | "SERVICE" | "SHIPPING" | "DISCOUNT" | "ROUNDING" | "SUMMARY" | "UNKNOWN",
+      "unit_price_basis": "BEFORE_DISCOUNT" | "AFTER_DISCOUNT" | "UNKNOWN",
+      "line_total_basis": "BEFORE_DISCOUNT" | "AFTER_DISCOUNT" | "UNKNOWN",
+      "unit_price_includes_vat": boolean | null,
+      "line_total_includes_vat": boolean | null,
+      "sign_convention": "DEBIT" | "CREDIT" | "ABSOLUTE" | "UNKNOWN"
     }
   ],
 
@@ -236,7 +250,14 @@ export const EXTRACT_SCHEMA = {
           unit_price_before_vat: { type: 'number' },
           unit_price_with_vat: { type: 'number' },
           line_total_before_vat: { type: 'number' },
-          line_total_with_vat: { type: 'number' }
+          line_total_with_vat: { type: 'number' },
+          // P1-E optional applicability metadata — no entity schema change.
+          line_role: { type: 'string', enum: ['PRODUCT', 'SERVICE', 'SHIPPING', 'DISCOUNT', 'ROUNDING', 'SUMMARY', 'UNKNOWN'] },
+          unit_price_basis: { type: 'string', enum: ['BEFORE_DISCOUNT', 'AFTER_DISCOUNT', 'UNKNOWN'] },
+          line_total_basis: { type: 'string', enum: ['BEFORE_DISCOUNT', 'AFTER_DISCOUNT', 'UNKNOWN'] },
+          unit_price_includes_vat: { type: 'boolean' },
+          line_total_includes_vat: { type: 'boolean' },
+          sign_convention: { type: 'string', enum: ['DEBIT', 'CREDIT', 'ABSOLUTE', 'UNKNOWN'] }
         },
         required: ['line_number', 'sku', 'product_name', 'quantity']
       }
@@ -325,8 +346,13 @@ export function getLineItemsCheck(extraction) {
     return { applicable: false, hasMismatch: false, delta: 0, tolerance: getLineRoundingTolerance(0), hasBadQuantity: false, hasLineArithmeticMismatch: false, hasAnyFailure: false, failures, warnings, reason_codes };
   }
 
-  // D3b: a blocking qty × unit-price check runs ONLY on semantically comparable operands.
+  // D3b + P1-E: a blocking qty × unit-price check runs ONLY on semantically comparable operands,
+  // decided by the SHARED pure applicability layer (explicit printed metadata first, then the
+  // legacy-safe inference — so a normal product row stays comparable exactly as before).
   const isCreditNote = isCreditNoteExtraction(extraction);
+  const applicabilityDecisions = items.map((item) => decideLineApplicability(item, { isCreditNote }));
+  const applicability = summarizeLineApplicability(applicabilityDecisions);
+  const decisionFor = (index) => applicabilityDecisions[index];
   const lineArithmeticFailures = [];
   const nonComparableLines = [];
   const negativeQuantityLines = [];
@@ -342,9 +368,9 @@ export function getLineItemsCheck(extraction) {
     const delta = Math.round(Math.abs(Math.abs(qty * unit) - Math.abs(total)) * 100) / 100;
     if (delta <= getLineRoundingTolerance(1)) continue;
     const detail = { line_number: lineNumber, quantity: qty, unit_price_before_vat: unit, line_total_before_vat: total, delta };
-    // Discount / service / VAT-inclusive presentations use a different base for unit price and
-    // line total, so a numeric gap there is NOT a proven contradiction — review only.
-    if (hasAlternateLineBase(item)) nonComparableLines.push(detail);
+    // Discount / service / VAT-inclusive / summary presentations use a different base for unit
+    // price and line total, so a numeric gap there is NOT a proven contradiction — review only.
+    if (!decisionFor(index).comparable) nonComparableLines.push({ ...detail, reason_code: decisionFor(index).reason_code, blockers: decisionFor(index).blockers });
     else lineArithmeticFailures.push(detail);
   }
   if (lineArithmeticFailures.length) {
@@ -362,7 +388,9 @@ export function getLineItemsCheck(extraction) {
 
   // Missing / non-numeric / zero quantity stays a real failure. A negative quantity is valid on a
   // credit note and is never treated as invalid data.
-  const hasBadQuantity = items.some((item) => !isFiniteNumber(item?.quantity) || item.quantity === 0);
+  // P1-E: a missing/zero quantity is critical only on a real detail row — an explicitly
+  // non-quantity SUMMARY / DISCOUNT / ROUNDING row legitimately carries no quantity.
+  const hasBadQuantity = items.some((item, index) => decisionFor(index).quantity_required && (!isFiniteNumber(item?.quantity) || item.quantity === 0));
   if (hasBadQuantity) {
     reason_codes.push('LINE_QUANTITY_INVALID');
     failures.push('קיימות שורות מוצר עם כמות חסרה או לא תקינה.');
