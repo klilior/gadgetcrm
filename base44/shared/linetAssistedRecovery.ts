@@ -101,6 +101,16 @@ function isFiniteNumber(value: unknown): boolean {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+/**
+ * Money reader for Linet fields. numberValue('') / numberValue(null) is 0, which would let an
+ * ABSENT Linet amount masquerade as a real 0 and even satisfy post-fill confirmation. An absent or
+ * blank value must stay null here.
+ */
+function money(value: unknown): number | null {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  return numberValue(value);
+}
+
 /** compareLines-compatible shape from the extraction's own line items (no persistence needed). */
 export function invoiceLinesFromExtraction(extraction: any = {}) {
   return (extraction?.line_items || []).map((item: any, index: number) => ({
@@ -275,7 +285,7 @@ export function scoreLinetCandidate(purchase: any, context: any = {}) {
   const localDate = dateOnly(extraction?.invoice_date ?? extraction?.doc_date);
   const linetDate = dateOnly(purchase?.doc_date);
   const localTotal = isFiniteNumber(extraction?.total_with_vat) ? roundMoney(extraction.total_with_vat) : null;
-  const linetTotal = numberValue(purchase?.total_with_vat);
+  const linetTotal = money(purchase?.total_with_vat);
   const localVat = digits(supplier?.vat_id) || digits(identity.vat_id);
   const linetVat = digits(purchase?.supplier_vat_id);
   const localAccount = cleanEvidence(supplier?.linet_supplier_account_id) || cleanEvidence(identity.linet_supplier_account_id);
@@ -504,16 +514,28 @@ export function decideLinetAssistedRecovery({ extraction = {}, plan, purchases =
     if (date) apply.invoice_date = date;
   }
   if (plan.target_fields.includes('total_with_vat')) {
-    const total = numberValue(purchase?.total_with_vat);
+    const total = money(purchase?.total_with_vat);
     if (total !== null) apply.total_with_vat = total;
   }
   for (const field of (plan.optional_fields || [])) {
-    const value = numberValue(purchase?.[field]);
+    const value = money(purchase?.[field]);
     if (value !== null) apply[field] = value;
   }
   const appliedSupplierId = plan.supplier_unresolved
     ? (supplier?.id || (profile_match?.matched && profile_match.reliable_for_auto_approval && profile_match.supplier?.is_active !== false ? profile_match.supplier_id : null))
     : null;
+
+  // A candidate that cannot actually supply every missing field is useless here. This check also
+  // keeps an ABSENT Linet amount from being read as 0 by the shared matcher's own null handling.
+  const unfilled = (plan.target_fields || []).filter((field: string) => apply[field] === undefined);
+  if (unfilled.length) {
+    return {
+      ...review(LINET_ASSISTED_REASON_CODES.POST_FILL_UNCONFIRMED, `מסמך הרכש בלינט אינו מכיל ערך עבור: ${unfilled.join(', ')}; לא בוצע שינוי כלשהו.`, 'post_fill_unconfirmed'),
+      unfilled_target_fields: unfilled,
+      runner_up_score: runnerUp,
+      margin
+    };
+  }
 
   // Post-fill verification through the EXISTING matcher — the only thing that authorizes an apply.
   const effectiveSupplier = supplier || (appliedSupplierId ? profile_match?.supplier : null) || null;

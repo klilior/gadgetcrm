@@ -262,10 +262,12 @@ Deno.serve(async (req) => {
     });
     const nearRefMissing = runRecovery(extractionFixture({ doc_number: 'IN2640002281' }), [purchaseFixture({ supplier_invoice_number: '2640002', normalized_invoice_number: '2640002', total_with_vat: 7, doc_date: '2026-03-03', lines_json: null })]);
     check('n1_prefix_or_substring_reference_is_never_exact_and_never_selects',
-      { clear_prefix: { has_exact_reference_anchor: false, conflicts: ['LINET_REFERENCE_CONFLICT'], strong: false }, unclear_prefix: { weak_context: false, outcome: 'none', applied: false } },
+      // An unclear reference gives the near-text candidate NO exact-reference credit, so it can only
+      // ever end as conflict/none — never as a selection.
+      { clear_prefix: { has_exact_reference_anchor: false, conflicts: ['LINET_REFERENCE_CONFLICT'], strong: false }, unclear_prefix: { weak_context: false, has_exact_reference_anchor: false, outcome: 'conflict', applied: false } },
       {
         clear_prefix: { has_exact_reference_anchor: nearRefClear.anchors.includes('exact_reference'), conflicts: nearRefClear.conflicts, strong: nearRefClear.strong },
-        unclear_prefix: { weak_context: nearRefMissing.decision.candidates[0].weak_reference_context, outcome: nearRefMissing.decision.outcome, applied: nearRefMissing.decision.applied }
+        unclear_prefix: { weak_context: nearRefMissing.decision.candidates[0].weak_reference_context, has_exact_reference_anchor: nearRefMissing.decision.candidates[0].anchors.includes('exact_reference'), outcome: nearRefMissing.decision.outcome, applied: nearRefMissing.decision.applied }
       });
 
     // ── post-fill confirmation is mandatory ─────────────────────────────────
@@ -273,8 +275,16 @@ Deno.serve(async (req) => {
     const unconfirmed = runRecovery(unconfirmedExtraction, [purchaseFixture({ total_with_vat: null })]);
     applyLinetAssistedRecovery(unconfirmedExtraction, unconfirmed.decision);
     check('p1_post_fill_not_confirmed_applies_nothing',
-      { outcome: 'post_fill_unconfirmed', reason_code: LINET_ASSISTED_REASON_CODES.POST_FILL_UNCONFIRMED, applied: false, post_fill: 'possible', total_still_null: true, review: true },
-      { outcome: unconfirmed.decision.outcome, reason_code: unconfirmed.decision.reason_code, applied: unconfirmed.decision.applied, post_fill: unconfirmed.decision.post_fill.level, total_still_null: unconfirmedExtraction.total_with_vat === null, review: unconfirmed.decision.requires_manual_review });
+      { outcome: 'post_fill_unconfirmed', reason_code: LINET_ASSISTED_REASON_CODES.POST_FILL_UNCONFIRMED, applied: false, unfilled: ['total_with_vat'], total_still_null: true, review: true },
+      { outcome: unconfirmed.decision.outcome, reason_code: unconfirmed.decision.reason_code, applied: unconfirmed.decision.applied, unfilled: unconfirmed.decision.unfilled_target_fields, total_still_null: unconfirmedExtraction.total_with_vat === null, review: unconfirmed.decision.requires_manual_review });
+
+    // Every target field filled, yet the shared matcher still refuses → nothing is applied.
+    const simRejectExtraction = extractionFixture({ doc_number: null });
+    const simReject = runRecovery(simRejectExtraction, [purchaseFixture({ supplier_invoice_number: 'REF-ABC', normalized_invoice_number: 'REF-ABC' }), noiseFixture()]);
+    applyLinetAssistedRecovery(simRejectExtraction, simReject.decision);
+    check('p2_simulated_post_fill_match_must_return_confirmed_or_nothing_is_applied',
+      { outcome: 'post_fill_unconfirmed', post_fill: 'none', applied: false, doc_number_still_null: true, review: true },
+      { outcome: simReject.decision.outcome, post_fill: simReject.decision.post_fill.level, applied: simReject.decision.applied, doc_number_still_null: simRejectExtraction.doc_number === null, review: simReject.decision.requires_manual_review });
 
     // ── existing exact reconciliation semantics still hold post-fill ─────────
     const reconciledInvoice = { doc_number: '264002392', doc_date: '2026-05-14', total_with_vat: 1180 };
