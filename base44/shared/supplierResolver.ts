@@ -143,6 +143,24 @@ export function resolveSupplier(evidence: any = {}, context: any = {}) {
   const patterns: any[] = Array.isArray(context.patterns) ? context.patterns : [];
   const trustedSenderMap = context.trusted_sender_map || null;
 
+  // ── 0. P1-B: a RELIABLE curated supplier-profile match (exact VAT / proven Linet account /
+  // exact trusted sender email / exact trusted non-public domain / exact curated alias) that
+  // already resolved to an EXISTING canonical Suppliers row. Weak, ambiguous or conflicting
+  // profile evidence never reaches here, and nothing is created or renamed.
+  const profileMatch = context.profile_match || null;
+  if (profileMatch?.matched === true && profileMatch.reliable_for_auto_approval === true && profileMatch.supplier_id) {
+    const row = suppliers.find((s: any) => s.id === profileMatch.supplier_id);
+    if (row) {
+      return finish(row, suppliers, `supplier_profile:${profileMatch.profile_key}`, 'strong', {
+        profile_match: {
+          profile_key: profileMatch.profile_key,
+          method: profileMatch.method,
+          matched_values: profileMatch.matched_values || []
+        }
+      });
+    }
+  }
+
   // ── a. exact normalized company / VAT id ────────────────────────────────
   // D3b: only a syntactically valid, non-sentinel identifier may take part in a VAT comparison.
   const rawVat = isValidVatIdentifier(evidence.vat_id) ? evidence.vat_id : null;

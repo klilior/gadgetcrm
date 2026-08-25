@@ -13,6 +13,7 @@ import { NON_ATTEMPT_REASONS, planAttemptStart, planAttemptSuccess, planNonAttem
 import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
 import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
+import { matchSupplierProfile, summarizeProfileMatch } from '../../shared/invoiceSupplierProfiles.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -116,11 +117,21 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
   // Supplier resolution ONLY — this route may never create, rename or update a supplier.
   const suppliers = await base44.asServiceRole.entities.Suppliers.list('-created_date', 1000);
   const supplierPatterns = await base44.asServiceRole.entities.SupplierPattern.filter({ is_active: true }, undefined, 1000);
+  // P1-B: re-evaluate the curated profile with the FINAL (post-recovery) identity evidence. The
+  // raw AI-read supplier_name / VAT are never overwritten — only the resolution may use the profile.
+  const profileMatch = matchSupplierProfile({
+    vat_id: extraction.supplier_vat_id,
+    supplier_name: extraction.supplier_name,
+    supplier_name_normalized: extraction.supplier_name_normalized,
+    sender_email: context.sender_email || null,
+    sender_domain: context.sender_email || null
+  }, { suppliers });
+  extraction.profile_match_final = summarizeProfileMatch(profileMatch);
   const resolution = resolveSupplier({
     vat_id: extraction.supplier_vat_id,
     supplier_name: extraction.supplier_name,
     supplier_name_normalized: extraction.supplier_name_normalized
-  }, { suppliers, patterns: supplierPatterns });
+  }, { suppliers, patterns: supplierPatterns, profile_match: profileMatch });
 
   const supplierId = resolution.supplier_id;
   const supplierMatchMethod = resolution.method;
@@ -259,7 +270,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
   }
 
-  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, profile_match: extraction.profile_match_final, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
 }
 
 Deno.serve(async (req) => {
@@ -308,6 +319,14 @@ Deno.serve(async (req) => {
     // Prepares every extraction result identically: separate dates + evidence-based amounts.
     // targetScope is passed ONLY for multi-invoice files, so the monetary audit reads
     // amounts from the same invoice the extraction prompt was scoped to.
+    // P1-B: suppliers are loaded once per request for the profile match (read-only).
+    let suppliersCache = null;
+    const loadSuppliers = async () => {
+      if (!suppliersCache) suppliersCache = await base44.asServiceRole.entities.Suppliers.list('-created_date', 1000);
+      return suppliersCache;
+    };
+    const senderEmail = intake.gmail_from || null;
+
     const prepareExtraction = async (extraction, targetScope = undefined) => {
       // D3a: deterministic classification guard — receipts and generic "Invoice" titles stay OTHER.
       applyDocumentClassificationGuard(extraction);
@@ -317,7 +336,20 @@ Deno.serve(async (req) => {
       // deterministically missing/implausible. Still before supplier resolution / lines / gate.
       // The SAME targetScope used by the monetary audit is threaded through, so on a multi-invoice
       // file the recovery can never read a number/date/total from a different invoice.
-      await recoverCriticalFields(base44, extraction, intake.file, targetScope ? { target_scope: targetScope } : {});
+      // P1-B: an initial curated profile (first-pass identity + intake sender) may narrow labels and
+      // flag a profile-implausible document number. Only a reliable, non-conflicting match is passed.
+      const initialProfile = matchSupplierProfile({
+        vat_id: extraction.supplier_vat_id,
+        supplier_name: extraction.supplier_name,
+        supplier_name_normalized: extraction.supplier_name_normalized,
+        sender_email: senderEmail,
+        sender_domain: senderEmail
+      }, { suppliers: await loadSuppliers() });
+      extraction.profile_match_initial = summarizeProfileMatch(initialProfile);
+      await recoverCriticalFields(base44, extraction, intake.file, {
+        ...(targetScope ? { target_scope: targetScope } : {}),
+        profile_match: initialProfile.reliable_for_auto_approval ? initialProfile : null
+      });
       return extraction;
     };
 
@@ -397,7 +429,7 @@ Ignore all other invoices in the document.`;
           });
         }
 
-        const result = await processSingleInvoice(base44, intake, targetInvoice, extraction, i, { attemptStartedAt: attemptPlan.writes.last_attempt_at });
+        const result = await processSingleInvoice(base44, intake, targetInvoice, extraction, i, { attemptStartedAt: attemptPlan.writes.last_attempt_at, sender_email: senderEmail });
         results.push(result);
       }
 
@@ -432,7 +464,7 @@ Ignore all other invoices in the document.`;
     if (!extraction || typeof extraction !== 'object') throw new Error('Invalid extraction response');
     await prepareExtraction(extraction);
 
-    const result = await processSingleInvoice(base44, intake, invoice, extraction, null, { attemptStartedAt: attemptPlan.writes.last_attempt_at });
+    const result = await processSingleInvoice(base44, intake, invoice, extraction, null, { attemptStartedAt: attemptPlan.writes.last_attempt_at, sender_email: senderEmail });
     
     if (result.skipped) {
       // Intentional non-invoice classification is a COMPLETED attempt → SUCCEEDED.

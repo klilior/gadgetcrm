@@ -5,6 +5,7 @@ import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 import { applyDocumentClassificationGuard } from '../../shared/invoiceDocumentClassification.ts';
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
+import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber, normalizeProfileReference } from '../../shared/invoiceSupplierProfiles.ts';
 
 /**
  * SAFE, STRICTLY READ-ONLY regression harness (admins only).
@@ -76,14 +77,33 @@ Deno.serve(async (req) => {
 
       // P1-A: fail-closed critical-field recovery, evaluated BEFORE supplier resolution and the
       // gate. Read-only: only the in-memory extraction object is touched.
-      const recovery = await recoverCriticalFields(base44, extraction, intake.file);
+      // P1-B: initial curated profile from first-pass identity + intake sender metadata.
+      const initialProfile = matchSupplierProfile({
+        vat_id: extraction.supplier_vat_id,
+        supplier_name: extraction.supplier_name,
+        supplier_name_normalized: extraction.supplier_name_normalized,
+        sender_email: intake.gmail_from || null,
+        sender_domain: intake.gmail_from || null
+      }, { suppliers });
+      const initialProfileDocCheck = validateProfileDocNumber(initialProfile, extraction.doc_number);
+      const recovery = await recoverCriticalFields(base44, extraction, intake.file, {
+        profile_match: initialProfile.reliable_for_auto_approval ? initialProfile : null
+      });
 
-      // Read-only supplier resolution via the shared deterministic resolver.
+      // P1-B: re-evaluate with the post-recovery identity evidence, then feed the reliable match
+      // into the shared deterministic resolver as an audited method. Read-only throughout.
+      const finalProfile = matchSupplierProfile({
+        vat_id: extraction.supplier_vat_id,
+        supplier_name: extraction.supplier_name,
+        supplier_name_normalized: extraction.supplier_name_normalized,
+        sender_email: intake.gmail_from || null,
+        sender_domain: intake.gmail_from || null
+      }, { suppliers });
       const resolution = resolveSupplier({
         vat_id: extraction.supplier_vat_id,
         supplier_name: extraction.supplier_name,
         supplier_name_normalized: extraction.supplier_name_normalized
-      }, { suppliers, patterns });
+      }, { suppliers, patterns, profile_match: finalProfile });
       const supplier = resolution.supplier;
       const matchMethod = resolution.method;
       const duplicates = supplier
@@ -153,6 +173,13 @@ Deno.serve(async (req) => {
           review_reasons_he: recovery.merge?.review_reasons_he || [],
           error: recovery.error || null,
           decisions: recovery.merge?.decisions || []
+        },
+        supplier_profile: {
+          initial: summarizeProfileMatch(initialProfile),
+          final: summarizeProfileMatch(finalProfile),
+          initial_doc_number_check: initialProfileDocCheck,
+          final_doc_number_check: validateProfileDocNumber(finalProfile, extraction.doc_number),
+          contextual_reference: normalizeProfileReference(finalProfile, extraction.doc_number)
         },
         // The exact header candidate the deterministic gate evaluated below.
         gate_candidate: {

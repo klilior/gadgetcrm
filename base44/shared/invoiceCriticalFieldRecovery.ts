@@ -27,6 +27,7 @@ import { cleanEvidence, isSentinelValue } from './invoiceSentinelValues.ts';
 import { isValidVatIdentifier } from './supplierResolver.ts';
 import { roundMoney } from './invoiceExtraction.ts';
 import { selectPayableAmounts, isFinalPayableLabel, formatTargetScope } from './invoiceMonetaryAudit.ts';
+import { validateProfileDocNumber, profileRecoveryHints } from './invoiceSupplierProfiles.ts';
 
 export const CRITICAL_RECOVERY_VERSION = 'critical-recovery-1.0.0';
 
@@ -118,6 +119,13 @@ export function planCriticalFieldRecovery(extraction: any = {}, options: any = {
   }
   if (!isPlausibleDocNumberValue(extraction?.doc_number)) {
     missing.push({ field: 'doc_number', reason: 'מספר המסמך חסר או לא סביר.' });
+  } else if (options.profile_match) {
+    // P1-B: a generically plausible number can still be implausible for a RELIABLY matched
+    // supplier profile. That requests doc_number recovery ONLY — never a pattern-based repair.
+    const profileCheck = validateProfileDocNumber(options.profile_match, extraction?.doc_number);
+    if (profileCheck.applicable && !profileCheck.valid) {
+      missing.push({ field: 'doc_number', reason: profileCheck.reason, reason_code: profileCheck.reason_code });
+    }
   }
   const dateValue = extraction?.invoice_date ?? extraction?.doc_date;
   if (!isPlausibleDocDate(dateValue, now)) {
@@ -172,7 +180,7 @@ export const RECOVERY_SCHEMA = {
  * With a targetScope (multi-invoice file) every returned field and its evidence is restricted
  * to that ONE invoice, and fields belonging to any other invoice in the file must be refused.
  */
-export function buildRecoveryPrompt(requestFields: string[] = [], targetScope?: any): string {
+export function buildRecoveryPrompt(requestFields: string[] = [], targetScope?: any, profileHints?: any): string {
   const fields = requestFields.filter((f) => RECOVERABLE_FIELDS.includes(f));
   const perField: Record<string, string> = {
     supplier_name: `- supplier_name: the ISSUING supplier/vendor legal or trade name as printed in the document header ("שם הספק", "מאת", "From", "Vendor"). NEVER the recipient/customer ("לכבוד", "Bill to").`,
@@ -193,9 +201,22 @@ ${scopeText}
 - If you cannot confidently isolate the target invoice, set found = false for every requested field rather than mixing documents.
 - All other rules below still apply exactly as stated.` : '';
 
+  // P1-B hints NARROW where to look. They are never positive evidence, never an expected value,
+  // and can never turn a due/payment date into the invoice date.
+  const hintLines = profileHints ? [
+    profileHints.doc_number_patterns?.length ? `- doc_number reference shapes seen from this supplier: ${profileHints.doc_number_patterns.join(' , ')} (prefixes: ${(profileHints.reference_prefixes || []).join(', ') || 'none'}). Read what is PRINTED; if the printed number does not fit these shapes, report exactly what is printed. NEVER add, delete or change a digit to make it fit.` : '',
+    profileHints.invoice_date_labels?.length ? `- invoice_date is usually labelled: ${profileHints.invoice_date_labels.join(' / ')}. A payment/due label still means found = false.` : '',
+    profileHints.payable_total_labels?.length ? `- total_with_vat is usually labelled: ${profileHints.payable_total_labels.join(' / ')}.` : ''
+  ].filter(Boolean) : [];
+  const hintBlock = hintLines.length ? `
+
+SUPPLIER LABEL HINTS (WHERE TO LOOK ONLY — NOT EVIDENCE, NOT EXPECTED VALUES)
+${hintLines.join('\n')}
+- These hints never justify a value: only what is actually printed in this document counts. If the printed evidence is missing, report found = false.` : '';
+
   return `SYSTEM / INSTRUCTION
 
-You are a NARROW FIELD RECOVERY engine for ONE business document.${scopeBlock} A first extraction pass failed to read a small number of CRITICAL header fields. You do ONE job: look at the attached document again and report ONLY those fields, each with the exact printed evidence that proves it.
+You are a NARROW FIELD RECOVERY engine for ONE business document.${scopeBlock}${hintBlock} A first extraction pass failed to read a small number of CRITICAL header fields. You do ONE job: look at the attached document again and report ONLY those fields, each with the exact printed evidence that proves it.
 
 INPUT
 ONE document file (PDF/JPG/PNG) is attached. Read ONLY what is printed in it.
@@ -490,9 +511,9 @@ export function applyCriticalFieldRecovery(extraction: any, merge: any) {
  * IMPURE helper — the ONLY LLM call in this module. Same original file, gpt_5_mini,
  * no internet context, narrow request. Callers must first check plan.needed === true.
  */
-export async function runCriticalFieldRecovery(base44: any, fileUrl: string, requestFields: string[], model = 'gpt_5_mini', targetScope?: any) {
+export async function runCriticalFieldRecovery(base44: any, fileUrl: string, requestFields: string[], model = 'gpt_5_mini', targetScope?: any, profileHints?: any) {
   let result = await base44.integrations.Core.InvokeLLM({
-    prompt: buildRecoveryPrompt(requestFields, targetScope),
+    prompt: buildRecoveryPrompt(requestFields, targetScope, profileHints),
     add_context_from_internet: false,
     response_json_schema: RECOVERY_SCHEMA,
     file_urls: [fileUrl],
@@ -518,7 +539,7 @@ export async function recoverCriticalFields(base44: any, extraction: any, fileUr
   try {
     // options.target_scope is passed ONLY for multi-invoice files, so the narrow second pass is
     // restricted to the same invoice the extraction and monetary audit were scoped to.
-    second = await runCriticalFieldRecovery(base44, fileUrl, plan.request_fields, options.model || 'gpt_5_mini', options.target_scope);
+    second = await runCriticalFieldRecovery(base44, fileUrl, plan.request_fields, options.model || 'gpt_5_mini', options.target_scope, profileRecoveryHints(options.profile_match));
   } catch (err: any) {
     error = err?.message || String(err);
   }

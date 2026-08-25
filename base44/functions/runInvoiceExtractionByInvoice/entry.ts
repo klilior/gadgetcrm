@@ -7,6 +7,7 @@ import { NON_ATTEMPT_REASONS, planAttemptFailure, planAttemptStart, planAttemptS
 import { planSupplierPricePurchase } from '../../shared/supplierPriceRetry.ts';
 import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
+import { matchSupplierProfile, summarizeProfileMatch } from '../../shared/invoiceSupplierProfiles.ts';
 import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
 import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
@@ -380,7 +381,20 @@ Deno.serve(async (req) => {
     // P1-A: fail-closed second pass for CRITICAL header fields only, and ONLY when one is
     // deterministically missing/implausible. Runs BEFORE supplier resolution, line
     // classification, duplicate checks and the validation gate. It can never approve anything.
-    const recovery = await recoverCriticalFields(base44, extraction, fileUrlToUse);
+    // P1-B: an initial curated profile match (first-pass identity + intake sender) may narrow the
+    // labels the second pass looks for and flag a profile-implausible document number. It is passed
+    // ONLY when reliable and non-conflicting, and it never supplies an expected value.
+    const profileSuppliers = await base44.asServiceRole.entities.Suppliers.list('-created_date', 1000);
+    const initialProfile = matchSupplierProfile({
+      vat_id: extraction.supplier_vat_id,
+      supplier_name: extraction.supplier_name,
+      supplier_name_normalized: extraction.supplier_name_normalized,
+      sender_email: intake.gmail_from || null,
+      sender_domain: intake.gmail_from || null
+    }, { suppliers: profileSuppliers });
+    const recovery = await recoverCriticalFields(base44, extraction, fileUrlToUse, {
+      profile_match: initialProfile.reliable_for_auto_approval ? initialProfile : null
+    });
     if (recovery.attempted) console.log('Critical field recovery:', JSON.stringify(extraction.critical_field_recovery));
 
     // DEBUG: Save raw extraction JSON (after post-processing)
@@ -462,13 +476,23 @@ Deno.serve(async (req) => {
     await base44.asServiceRole.entities.Invoices.update(invoice.id, { ai_debug_last_validation_json: validationJson });
 
     // Step 4: Supplier resolution ONLY — deterministic, shared, and never creates/renames a supplier.
-    const allSuppliers = await base44.asServiceRole.entities.Suppliers.list('-created_date', 1000);
+    const allSuppliers = profileSuppliers;
     const learnedPatterns = await base44.asServiceRole.entities.SupplierPattern.filter({ is_active: true }, undefined, 1000);
+    // P1-B: re-evaluate the curated profile with the FINAL (post-recovery) identity evidence.
+    // The raw AI-read supplier_name / VAT are never rewritten to the canonical values.
+    const finalProfile = matchSupplierProfile({
+      vat_id: extraction.supplier_vat_id,
+      supplier_name: extraction.supplier_name,
+      supplier_name_normalized: extraction.supplier_name_normalized,
+      sender_email: intake.gmail_from || null,
+      sender_domain: intake.gmail_from || null
+    }, { suppliers: allSuppliers });
+    const profileMatchSummary = summarizeProfileMatch(finalProfile);
     const supplierResolution = resolveSupplier({
       vat_id: extraction.supplier_vat_id,
       supplier_name: extraction.supplier_name,
       supplier_name_normalized: extraction.supplier_name_normalized
-    }, { suppliers: allSuppliers, patterns: learnedPatterns });
+    }, { suppliers: allSuppliers, patterns: learnedPatterns, profile_match: finalProfile });
 
     const supplierId = supplierResolution.supplier_id;
     const supplierMatchMethod = supplierResolution.method;
@@ -711,6 +735,7 @@ Deno.serve(async (req) => {
       supplier_id: supplierId, 
       provenance_original_captured: provenance.original_captured,
       critical_field_recovery: extraction.critical_field_recovery || null,
+      profile_match: profileMatchSummary,
       processing_events_count: history.events.length,
       line_items_count: lineItems.length,
       business_duplicate: businessDuplicate || null,
