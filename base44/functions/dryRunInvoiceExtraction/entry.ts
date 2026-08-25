@@ -6,6 +6,7 @@ import { applyDocumentClassificationGuard } from '../../shared/invoiceDocumentCl
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber, normalizeProfileReference } from '../../shared/invoiceSupplierProfiles.ts';
+import { applyRecoveryOutcomesToGate, runLinetAssistedRecovery } from '../../shared/linetAssistedRecovery.ts';
 
 /**
  * SAFE, STRICTLY READ-ONLY regression harness (admins only).
@@ -110,6 +111,15 @@ Deno.serve(async (req) => {
         ? await base44.asServiceRole.entities.Invoices.filter({ supplier: supplier.id }, undefined, 300)
         : [];
 
+      // P1-C: same deterministic Linet-assisted recovery as production. Read-only — it only reads
+      // existing LinetPurchaseDocument rows and mutates the in-memory extraction object.
+      const linetAssisted = await runLinetAssistedRecovery(base44, extraction, {
+        profile_match: finalProfile,
+        supplier: resolution.supplier,
+        supplier_resolution: resolution,
+        invoice_id: invoice.id
+      });
+
       const lineCheck = getLineItemsCheck(extraction);
       const gate = validateInvoiceForAutoApproval({
         supplier_name: extraction.supplier_name,
@@ -130,19 +140,14 @@ Deno.serve(async (req) => {
         line_check: lineCheck
       });
 
-      // Mirror BOTH production P1-A/P1-B gate guards exactly (in-memory only, nothing persisted).
-      if (recovery.merge?.requires_manual_review) {
-        for (const reason of (recovery.merge.review_reasons_he || [])) {
-          if (!gate.failures.includes(reason)) gate.failures.push(reason);
-        }
-        gate.passed = false;
-      }
+      // Production parity: the SAME shared helper folds P1-A, P1-C and the P1-B reference guard
+      // into the gate (in-memory only, nothing persisted).
       const finalDocCheck = validateProfileDocNumber(finalProfile, extraction.doc_number);
-      if (finalDocCheck.applicable && !finalDocCheck.valid) {
-        const profileFailure = `${finalDocCheck.reason_code}: ${finalDocCheck.reason}`;
-        if (!gate.failures.includes(profileFailure)) gate.failures.push(profileFailure);
-        gate.passed = false;
-      }
+      const recoveryOutcomes = applyRecoveryOutcomesToGate(gate, {
+        merge: recovery.merge,
+        decision: linetAssisted.decision,
+        profile_doc_check: finalDocCheck
+      });
 
       results.push({
         invoice_id: invoice.id,
@@ -188,6 +193,36 @@ Deno.serve(async (req) => {
           error: recovery.error || null,
           decisions: recovery.merge?.decisions || []
         },
+        linet_assisted_recovery: {
+          plan: {
+            needed: linetAssisted.plan.needed,
+            eligible: linetAssisted.plan.eligible,
+            target_fields: linetAssisted.plan.target_fields,
+            optional_fields: linetAssisted.plan.optional_fields,
+            clear: linetAssisted.plan.clear,
+            identity: linetAssisted.plan.identity,
+            reason_code: linetAssisted.plan.reason_code,
+            reason: linetAssisted.plan.reason
+          },
+          candidates_read: linetAssisted.purchases_count,
+          outcome: linetAssisted.decision.outcome,
+          reason_code: linetAssisted.decision.reason_code,
+          reason: linetAssisted.decision.reason,
+          applied: linetAssisted.decision.applied,
+          applied_fields: linetAssisted.decision.applied_fields,
+          applied_supplier_id: linetAssisted.decision.applied_supplier_id,
+          selected: linetAssisted.decision.selected,
+          runner_up_score: linetAssisted.decision.runner_up_score,
+          margin: linetAssisted.decision.margin,
+          post_fill: linetAssisted.decision.post_fill,
+          satisfies_profile_doc_guard: linetAssisted.decision.satisfies_profile_doc_guard,
+          requires_manual_review: linetAssisted.decision.requires_manual_review,
+          review_reasons_he: linetAssisted.decision.review_reasons_he,
+          top_candidates: (linetAssisted.decision.candidates || []).slice(0, 8),
+          error: linetAssisted.error || null
+        },
+        remaining_recovery_failures: recoveryOutcomes.remaining,
+        profile_doc_guard_kept: recoveryOutcomes.profile_guard_kept,
         supplier_profile: {
           initial: summarizeProfileMatch(initialProfile),
           final: summarizeProfileMatch(finalProfile),

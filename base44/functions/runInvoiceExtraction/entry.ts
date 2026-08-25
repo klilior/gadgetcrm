@@ -11,7 +11,8 @@ import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplic
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
 import { NON_ATTEMPT_REASONS, planAttemptStart, planAttemptSuccess, planNonAttempt, planRouteFailureTarget } from '../../shared/invoiceRetryLifecycle.ts';
 import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
-import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
+import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyLinetProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
+import { applyRecoveryOutcomesToGate, buildLinetAssistedEvents, linetProvenanceValues, runLinetAssistedRecovery } from '../../shared/linetAssistedRecovery.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber } from '../../shared/invoiceSupplierProfiles.ts';
 
@@ -133,11 +134,21 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     supplier_name_normalized: extraction.supplier_name_normalized
   }, { suppliers, patterns: supplierPatterns, profile_match: profileMatch });
 
-  const supplierId = resolution.supplier_id;
+  let supplierId = resolution.supplier_id;
   const supplierMatchMethod = resolution.method;
   if (!supplierId) {
     validation.review_reasons_he.unshift(`${resolution.reason_code}: ${resolution.reason}`);
   }
+
+  // P1-C: deterministic Linet-assisted recovery of fields still missing after P1-A. Read-only
+  // candidates, exact identity only, post-fill confirmation mandatory, and always BEFORE the gate.
+  const linetAssisted = await runLinetAssistedRecovery(base44, extraction, {
+    profile_match: profileMatch,
+    supplier: resolution.supplier,
+    supplier_resolution: resolution,
+    invoice_id: invoice.id
+  });
+  if (linetAssisted.decision.applied_supplier_id && !supplierId) supplierId = linetAssisted.decision.applied_supplier_id;
 
   // The deterministic gate is the ONLY thing that may approve an invoice here.
   // extraction.overall_confidence is telemetry and never part of this decision.
@@ -166,23 +177,15 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     line_check: validation.line_check
   });
 
-  // P1-A: an unresolved/conflicting critical field forces manual review deterministically.
+  // P1-A + P1-C + the P1-B reference guard, folded in through the ONE shared helper so the three
+  // routes stay identical. The gate is only ever made stricter here.
   const recoveryMerge = extraction.critical_field_recovery || null;
-  if (recoveryMerge?.requires_manual_review) {
-    for (const reason of (recoveryMerge.review_reasons_he || [])) {
-      if (!gate.failures.includes(reason)) gate.failures.push(reason);
-    }
-    gate.passed = false;
-  }
-
-  // P1-B QA fix: the profile may only become known AFTER recovery. Guard only — no third pass,
-  // no correction: a profile-implausible final document number forces manual review.
   const finalDocCheck = validateProfileDocNumber(profileMatch, extraction.doc_number);
-  if (finalDocCheck.applicable && !finalDocCheck.valid) {
-    const failure = `${finalDocCheck.reason_code}: ${finalDocCheck.reason}`;
-    if (!gate.failures.includes(failure)) gate.failures.push(failure);
-    gate.passed = false;
-  }
+  const recoveryOutcomes = applyRecoveryOutcomesToGate(gate, {
+    merge: recoveryMerge,
+    decision: linetAssisted.decision,
+    profile_doc_check: finalDocCheck
+  });
 
   // Stable BUSINESS_DUPLICATE failure — manual review only, never rejection/כפילות/Linet state.
   const amountsAmbiguous = extraction.amount_provenance?.ambiguous === true;
@@ -216,9 +219,15 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
   });
   // P1-A audit: both candidates per recovered/conflicting field.
   const provenanceWithRecovery = applyRecoveryProvenance({ existingJson: provenance.json, merge: recoveryMerge, at: auditAt });
+  // P1-C audit: LINET becomes the selected source ONLY for the fields it actually filled.
+  const linetProvenanceFields = linetProvenanceValues(linetAssisted.decision);
+  const provenanceWithLinet = Object.keys(linetProvenanceFields).length
+    ? applyLinetProvenance({ existingJson: provenanceWithRecovery.json, level: 'confirmed', values: linetProvenanceFields, appliedAsSourceOfTruth: true, reason: linetAssisted.decision.reason_code, at: auditAt })
+    : provenanceWithRecovery;
   const history = appendProcessingEvents(latest.processing_events_json, [
     { type: EVENT_TYPES.ATTEMPT_STARTED, at: context.attemptStartedAt || auditAt, outcome: 'started', meta: { intake_id: intake.id, document_index: invoiceIndex === null ? 1 : invoiceIndex + 1 } },
     ...buildRecoveryEvents(recoveryMerge, auditAt),
+    ...buildLinetAssistedEvents(linetAssisted.decision, auditAt),
     { type: EVENT_TYPES.GATE_EVALUATED, at: auditAt, outcome: gate.passed ? 'passed' : 'failed', reason: gate.failures[0] || null, meta: { version: gate.validation_version, auto_approved: canAutoApprove } },
     ...(businessDuplicate ? [{ type: EVENT_TYPES.BUSINESS_DUPLICATE, at: auditAt, outcome: 'manual_review', reason: businessDuplicate.reason || null, meta: { original_invoice_id: businessDuplicate.original_invoice_id || null } }] : []),
     { type: EVENT_TYPES.ATTEMPT_SUCCEEDED, at: auditAt, outcome: finalStatus }
@@ -245,7 +254,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     auto_approved: canAutoApprove,
     extraction_status: finalStatus,
     notes: notes,
-    field_provenance_json: provenanceWithRecovery.json,
+    field_provenance_json: provenanceWithLinet.json,
     processing_events_json: history.json,
     ai_debug_last_extraction_json: JSON.stringify(extraction),
     ai_debug_last_validation_json: JSON.stringify({ ...validation, gate, supplier_resolution: resolution })
@@ -279,7 +288,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
   }
 
-  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, profile_match: extraction.profile_match_final, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, linet_assisted_recovery: extraction.linet_assisted_recovery || null, remaining_recovery_failures: recoveryOutcomes.remaining, profile_match: extraction.profile_match_final, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
 }
 
 Deno.serve(async (req) => {
