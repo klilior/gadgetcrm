@@ -27,12 +27,7 @@
 import { cleanEvidence } from './invoiceSentinelValues.ts';
 import { isValidVatIdentifier, isOurBuyerVatId, normalizeVatId } from './supplierResolver.ts';
 import { validateProfileDocNumber, getProfile } from './invoiceSupplierProfiles.ts';
-import {
-  CREDIT_NOTE_TITLE_PATTERN,
-  GENERIC_INVOICE_TITLE_PATTERN,
-  NON_TAX_TITLE_PATTERN,
-  TAX_INVOICE_TITLE_PATTERN
-} from './invoiceDocumentClassification.ts';
+import { evaluateTitleVerdict } from './invoiceDocumentClassification.ts';
 
 export const CLASSIFICATION_RECOVERY_VERSION = 'classification-recovery-1.0.0';
 
@@ -81,29 +76,12 @@ function result(fields: any) {
 }
 
 /**
- * The ONE recognized supported Israeli combined title that legitimately contains the word
- * "קבלה": a tax-receipt. It is the sole exception to the negative-title precedence below.
- */
-const TAX_RECEIPT_TITLE_PATTERN = /(חשבונית\s*מס\s*[\/\\|,\-–]?\s*קבלה|^\s*מס\s*[\/\\|\-–]?\s*קבלה|מס\s*\/\s*קבלה)/;
-
-/**
- * Printed-title verdict: positive type, negative block, generic block, or absent.
- * PRECEDENCE: an explicit NEGATIVE phrase is evaluated FIRST and ALWAYS blocks, so a collision
- * such as "Tax Invoice / Delivery Note" or "חשבונית מס - תעודת משלוח" can never upgrade.
- * Sole exception: the combined tax-receipt title, which stays TAX_INVOICE.
+ * Printed-title verdict for recovery = sentinel-cleaned evidence + THE shared verdict owned by
+ * invoiceDocumentClassification.ts. No local title rules exist here, so the strict guard and
+ * recovery can never disagree about a collision title.
  */
 export function evaluatePrintedTitle(documentTitle: unknown) {
-  const title = cleanEvidence(documentTitle);
-  if (!title) return { present: false, verdict: 'absent', type: null };
-  const isTaxReceipt = TAX_RECEIPT_TITLE_PATTERN.test(title);
-  if (!isTaxReceipt && NON_TAX_TITLE_PATTERN.test(title)) return { present: true, verdict: 'negative', type: null };
-  const isTax = TAX_INVOICE_TITLE_PATTERN.test(title);
-  const isCredit = CREDIT_NOTE_TITLE_PATTERN.test(title);
-  if (isCredit && !isTax) return { present: true, verdict: 'positive', type: 'CREDIT_NOTE' };
-  if (isTax && !isCredit) return { present: true, verdict: 'positive', type: 'TAX_INVOICE' };
-  if (isTax && isCredit) return { present: true, verdict: 'ambiguous', type: null };
-  if (GENERIC_INVOICE_TITLE_PATTERN.test(title)) return { present: true, verdict: 'generic', type: null };
-  return { present: true, verdict: 'not_positive', type: null };
+  return evaluateTitleVerdict(cleanEvidence(documentTitle));
 }
 
 /**

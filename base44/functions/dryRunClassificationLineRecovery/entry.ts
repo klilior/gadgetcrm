@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
-import { applyDocumentClassificationGuard, CLASSIFICATION_GUARD_VERSION } from '../../shared/invoiceDocumentClassification.ts';
+import { applyDocumentClassificationGuard, evaluateDocumentClassification, evaluateTitleVerdict, CLASSIFICATION_GUARD_VERSION } from '../../shared/invoiceDocumentClassification.ts';
 import {
   CLASSIFICATION_RECOVERY_VERSION,
   RECOVERY_REASON_CODES,
@@ -386,7 +386,51 @@ Deno.serve(async (req) => {
         return { verdict: evaluatePrintedTitle(title).verdict, applied: d.applied, code: d.reason_code };
       }));
 
+    // The strict GUARD must block the same collisions, even when the model claimed a supported type.
+    check('d1b_strict_guard_blocks_a_claimed_supported_type_on_a_collision_title',
+      {
+        tax_claim_delivery_note: { classification: 'OTHER', doc_type_he: null, reason_code: 'NON_TAX_DOCUMENT', downgraded: true },
+        credit_claim_remittance_report: { classification: 'OTHER', doc_type_he: null, reason_code: 'NON_TAX_DOCUMENT', downgraded: true },
+        tax_receipt_plus_delivery_note: { classification: 'OTHER', reason_code: 'NON_TAX_DOCUMENT' }
+      },
+      {
+        tax_claim_delivery_note: (() => {
+          const r = evaluateDocumentClassification({ classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס', document_title: 'Tax Invoice / Delivery Note' });
+          return { classification: r.classification, doc_type_he: r.doc_type_he, reason_code: r.reason_code, downgraded: r.downgraded };
+        })(),
+        credit_claim_remittance_report: (() => {
+          const r = evaluateDocumentClassification({ classification: 'CREDIT_NOTE', doc_type_he: 'חשבונית זיכוי', document_title: 'Credit Note - Remittance Report' });
+          return { classification: r.classification, doc_type_he: r.doc_type_he, reason_code: r.reason_code, downgraded: r.downgraded };
+        })(),
+        tax_receipt_plus_delivery_note: (() => {
+          const r = evaluateDocumentClassification({ classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס', document_title: 'חשבונית מס/קבלה - תעודת משלוח' });
+          return { classification: r.classification, reason_code: r.reason_code };
+        })()
+      });
+
+    // The narrow tax-receipt exception must consume ONLY its own phrase.
+    check('d1c_tax_receipt_exception_is_narrow_and_any_remaining_negative_blocks',
+      {
+        recovery_blocked: { verdict: 'negative', applied: false, code: RECOVERY_REASON_CODES.NEGATIVE_TITLE },
+        guard_and_recovery_agree: true
+      },
+      (() => {
+        const collision = 'חשבונית מס/קבלה - תעודת משלוח';
+        const d = recover(strong({ document_title: collision }));
+        const guard = evaluateDocumentClassification({ classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס', document_title: collision });
+        return {
+          recovery_blocked: { verdict: evaluatePrintedTitle(collision).verdict, applied: d.applied, code: d.reason_code },
+          guard_and_recovery_agree: guard.classification === 'OTHER' && d.applied === false
+        };
+      })());
+
     const taxReceipts = ['חשבונית מס/קבלה', 'חשבונית מס קבלה', 'מס/קבלה', 'חשבונית מס - קבלה'];
+    check('d2b_bare_tax_receipt_is_supported_by_the_strict_guard_too',
+      taxReceipts.map(() => ({ classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס', should_skip: false, reason_code: null })),
+      taxReceipts.map((title) => {
+        const r = evaluateDocumentClassification({ classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס', document_title: title });
+        return { classification: r.classification, doc_type_he: r.doc_type_he, should_skip: r.should_skip, reason_code: r.reason_code };
+      }));
     check('d2_combined_tax_receipt_is_the_only_exception_and_stays_tax_invoice',
       taxReceipts.map(() => ({ verdict: 'positive', to: 'TAX_INVOICE', doc_type_he: 'חשבונית מס' })),
       taxReceipts.map((title) => {

@@ -33,6 +33,46 @@ export const CREDIT_NOTE_TITLE_PATTERN = /(חשבונית\s*זיכוי|חשבו�
 /** A bare, unqualified "Invoice" / "חשבונית" heading — never upgradable. */
 export const GENERIC_INVOICE_TITLE_PATTERN = /(^|[\s:#\-])(invoice|חשבונית)([\s:#\-]|$)/i;
 
+/**
+ * The ONE recognized supported Israeli combined title that legitimately contains the word
+ * "קבלה" — a tax-receipt. It is a NARROW exception: it consumes only its own phrase.
+ */
+export const TAX_RECEIPT_TITLE_PATTERN = /(חשבונית\s*מס\s*[\/\\|,\-–]?\s*קבלה|מס\s*[\/\\|\-–]\s*קבלה)/i;
+
+/**
+ * THE single shared printed-title verdict, owned here and used by BOTH the strict guard and P1-E
+ * classification recovery so the two can never diverge.
+ *
+ * PRECEDENCE:
+ *  1. The recognized tax-receipt phrase is consumed (only that phrase).
+ *  2. Any explicit negative phrase REMAINING afterwards blocks — even when a positive phrase is
+ *     also printed ("Tax Invoice / Delivery Note", "חשבונית מס/קבלה - תעודת משלוח").
+ *  3. A tax-receipt phrase with nothing negative left is a positive TAX_INVOICE.
+ *  4. Otherwise: explicit positive tax/credit → positive; bare generic → generic.
+ *
+ * @returns { present, verdict: 'absent'|'negative'|'positive'|'ambiguous'|'generic'|'not_positive', type }
+ */
+export function evaluateTitleVerdict(rawTitle: unknown) {
+  const title = String(rawTitle ?? '').trim();
+  if (!title) return { present: false, verdict: 'absent', type: null };
+
+  const isTaxReceipt = TAX_RECEIPT_TITLE_PATTERN.test(title);
+  // Consume ONLY the recognized tax-receipt phrase, then judge what is left.
+  const residual = isTaxReceipt
+    ? title.replace(new RegExp(TAX_RECEIPT_TITLE_PATTERN.source, 'gi'), ' ')
+    : title;
+  if (NON_TAX_TITLE_PATTERN.test(residual)) return { present: true, verdict: 'negative', type: null };
+  if (isTaxReceipt) return { present: true, verdict: 'positive', type: 'TAX_INVOICE' };
+
+  const isTax = TAX_INVOICE_TITLE_PATTERN.test(title);
+  const isCredit = CREDIT_NOTE_TITLE_PATTERN.test(title);
+  if (isCredit && !isTax) return { present: true, verdict: 'positive', type: 'CREDIT_NOTE' };
+  if (isTax && !isCredit) return { present: true, verdict: 'positive', type: 'TAX_INVOICE' };
+  if (isTax && isCredit) return { present: true, verdict: 'ambiguous', type: null };
+  if (GENERIC_INVOICE_TITLE_PATTERN.test(title)) return { present: true, verdict: 'generic', type: null };
+  return { present: true, verdict: 'not_positive', type: null };
+}
+
 // Internal aliases keep the guard body unchanged.
 const NON_TAX_TITLE = NON_TAX_TITLE_PATTERN;
 const TAX_INVOICE_TITLE = TAX_INVOICE_TITLE_PATTERN;
@@ -78,8 +118,9 @@ export function evaluateDocumentClassification(input: any = {}) {
     return otherResult(CLASSIFICATION_REASON_CODES.UNSUPPORTED_DOC_TYPE, 'המסמך אינו חשבונית מס או חשבונית זיכוי ולכן דולג.');
   }
 
-  // A receipt / delivery note / statement style title wins over the model's claim.
-  if (NON_TAX_TITLE.test(evidence) && !TAX_INVOICE_TITLE.test(evidence) && !CREDIT_NOTE_TITLE.test(evidence)) {
+  // A receipt / delivery note / statement style title wins over the model's claim — via the ONE
+  // shared verdict, so an explicit negative phrase blocks even alongside a positive one.
+  if (evaluateTitleVerdict(evidence).verdict === 'negative') {
     return otherResult(CLASSIFICATION_REASON_CODES.NON_TAX_DOCUMENT, 'המסמך הוא קבלה/אסמכתא שאינה חשבונית מס ולכן דולג.');
   }
 
