@@ -7,6 +7,7 @@ import {
   normalizeProfileReference,
   profileRecoveryHints,
   isPublicEmailDomain,
+  requiresProfileDateVerification,
   getProfile
 } from '../../shared/invoiceSupplierProfiles.ts';
 import { planCriticalFieldRecovery, mergeCriticalFieldRecovery, buildRecoveryPrompt, RECOVERY_REASON_CODES } from '../../shared/invoiceCriticalFieldRecovery.ts';
@@ -298,6 +299,53 @@ Deno.serve(async (req) => {
       good: { code: dynRecovered.decisions[0].reason_code, selected: dynRecovered.decisions[0].selected_value, source: dynRecovered.decisions[0].selected_source, applied: dynRecovered.applied_fields, review: dynRecovered.requires_manual_review, label: dynRecovered.decisions[0].second_pass.printed_label },
       bad_shape: { code: dynRecoveredBadShape.decisions[0].reason_code, selected: dynRecoveredBadShape.decisions[0].selected_value, applied: dynRecoveredBadShape.applied_fields, review: dynRecoveredBadShape.requires_manual_review, profile_code: dynRecoveredBadShape.decisions[0].profile_reason_code }
     });
+
+  // ── P1 FINAL SAFETY HOTFIX 2: STS CREDIT DATE VERIFICATION ──────────────
+  const stsMatch = match({ vat_id: '516542024' });
+  // The audited document is dated July 2026, so these cases evaluate at a later "now".
+  const NOW2 = '2026-08-01T00:00:00Z';
+  const stsCredit = (docDate: string) => ({ classification: 'CREDIT_NOTE', doc_type_he: 'חשבונית זיכוי', supplier_name: 'STS', supplier_vat_id: '516542024', doc_number: 'IK2600000469', invoice_date: docDate, doc_date: docDate, subtotal_before_vat: -9745.76, vat_amount: -1754.24, total_with_vat: -11500 });
+  const stsTax = { classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס', supplier_name: 'STS', supplier_vat_id: '516542024', doc_number: 'IN264002392', invoice_date: '2026-07-16', doc_date: '2026-07-16', subtotal_before_vat: 100, vat_amount: 18, total_with_vat: 118 };
+  const dateSecond = (value: string | null, label: string | null) => (value === null ? null : { fields: [{ field: 'invoice_date', found: true, normalized_value: value, printed_label: label, evidence_text: `${label} ${value}` }] });
+  const runDate = (first: string, second: any) => {
+    const ex = stsCredit(first);
+    const plan = planCriticalFieldRecovery(ex, { now: NOW2, profile_match: stsMatch });
+    const merge = mergeCriticalFieldRecovery({ extraction: ex, plan, now: NOW2, second });
+    const d = merge.decisions.find((x: any) => x.field === 'invoice_date');
+    return { requested: plan.request_fields, forced: plan.forced_date_verification.applicable, code: d?.reason_code, selected: d?.selected_value, first_kept: d?.first_pass.value, second_kept: d?.second_pass?.value ?? null, applied: merge.applied_fields, review: merge.requires_manual_review, extraction_date: ex.invoice_date };
+  };
+
+  check('dv1_forced_verification_is_data_driven_and_scoped_to_sts_credit_only',
+    {
+      sts_credit: { applicable: true, kind: 'credit_note', code: PROFILE_REASON_CODES.DATE_VERIFICATION_REQUIRED },
+      sts_tax: { applicable: false, kind: 'tax_invoice' },
+      other_supplier_credit: { applicable: false },
+      no_profile: { applicable: false },
+      healthy_sts_tax_requests_nothing: { needed: false, request_fields: [] }
+    },
+    {
+      sts_credit: (({ applicable, doc_kind, reason_code }) => ({ applicable, kind: doc_kind, code: reason_code }))(requiresProfileDateVerification(stsMatch, stsCredit('2026-07-16'))),
+      sts_tax: (({ applicable, doc_kind }) => ({ applicable, kind: doc_kind }))(requiresProfileDateVerification(stsMatch, stsTax)),
+      other_supplier_credit: { applicable: requiresProfileDateVerification(match({ vat_id: '514389246' }), stsCredit('2026-07-16')).applicable },
+      no_profile: { applicable: requiresProfileDateVerification(null, stsCredit('2026-07-16')).applicable },
+      healthy_sts_tax_requests_nothing: (({ needed, request_fields }) => ({ needed, request_fields }))(planCriticalFieldRecovery(stsTax, { now: NOW2, profile_match: stsMatch }))
+    });
+
+  check('dv2_plausible_but_wrong_first_date_vs_audited_second_is_conflict_and_review',
+    { requested: ['invoice_date'], forced: true, code: RECOVERY_REASON_CODES.CONFLICT, selected: null, first_kept: '2026-07-15', second_kept: '2026-07-16', applied: [], review: true, extraction_date: '2026-07-15' },
+    runDate('2026-07-15', dateSecond('2026-07-16', 'תאריך חשבונית')));
+
+  check('dv3_missing_second_pass_is_unresolved_never_a_fallback_to_the_plausible_first_date',
+    { requested: ['invoice_date'], forced: true, code: RECOVERY_REASON_CODES.UNRESOLVED, selected: null, first_kept: '2026-07-15', second_kept: null, applied: [], review: true, extraction_date: '2026-07-15' },
+    runDate('2026-07-15', null));
+
+  check('dv4_same_date_with_printed_invoice_date_label_is_verified_agreement',
+    { requested: ['invoice_date'], forced: true, code: RECOVERY_REASON_CODES.AGREEMENT, selected: '2026-07-16', first_kept: '2026-07-16', second_kept: '2026-07-16', applied: [], review: false, extraction_date: '2026-07-16' },
+    runDate('2026-07-16', dateSecond('2026-07-16', 'תאריך חשבונית')));
+
+  check('dv5_same_date_proved_only_by_a_due_payment_label_is_rejected_and_review',
+    { requested: ['invoice_date'], forced: true, code: RECOVERY_REASON_CODES.EVIDENCE_REJECTED, selected: null, applied: [], review: true, extraction_date: '2026-07-16' },
+    (({ requested, forced, code, selected, applied, review, extraction_date }) => ({ requested, forced, code, selected, applied, review, extraction_date }))(runDate('2026-07-16', dateSecond('2026-07-16', 'מועד תשלום'))));
 
   // ── Fail-closed behaviour ───────────────────────────────────────────────
   const conflict = match({ vat_id: '516542024', sender_email: 'allphonedocs@gmail.com' });

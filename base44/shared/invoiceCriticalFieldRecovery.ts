@@ -27,7 +27,7 @@ import { cleanEvidence, isSentinelValue } from './invoiceSentinelValues.ts';
 import { isValidVatIdentifier } from './supplierResolver.ts';
 import { roundMoney } from './invoiceExtraction.ts';
 import { selectPayableAmounts, isFinalPayableLabel, formatTargetScope } from './invoiceMonetaryAudit.ts';
-import { validateProfileDocNumber, profileRecoveryHints } from './invoiceSupplierProfiles.ts';
+import { validateProfileDocNumber, profileRecoveryHints, requiresProfileDateVerification } from './invoiceSupplierProfiles.ts';
 
 export const CRITICAL_RECOVERY_VERSION = 'critical-recovery-1.0.0';
 
@@ -138,8 +138,18 @@ export function planCriticalFieldRecovery(extraction: any = {}, options: any = {
     }
   }
   const dateValue = extraction?.invoice_date ?? extraction?.doc_date;
+  // P1 HOTFIX 2 — data-driven forced verification of a GENERICALLY PLAUSIBLE printed date, for the
+  // curated profile/document-kind combination only (STS credit notes). Verification requests
+  // invoice_date and nothing else; every other supplier/document keeps current behaviour.
+  let forced_date_verification: any = { applicable: false, profile_key: null, doc_kind: null, reason_code: null, reason: null };
   if (!isPlausibleDocDate(dateValue, now)) {
     missing.push({ field: 'invoice_date', reason: 'תאריך המסמך חסר או לא סביר.' });
+  } else if (options.profile_match) {
+    const dateCheck = requiresProfileDateVerification(options.profile_match, extraction);
+    forced_date_verification = dateCheck;
+    if (dateCheck.applicable) {
+      missing.push({ field: 'invoice_date', reason: dateCheck.reason, reason_code: dateCheck.reason_code });
+    }
   }
   if (!isPlausibleTotalValue(extraction?.total_with_vat)) {
     missing.push({ field: 'total_with_vat', reason: 'הסכום לתשלום חסר או לא תקין.' });
@@ -152,6 +162,7 @@ export function planCriticalFieldRecovery(extraction: any = {}, options: any = {
     skipped_document: skipped,
     request_fields,
     profile_doc_number,
+    forced_date_verification,
     // In-memory only (never persisted) — lets the pure merge re-validate a SECOND reading against
     // the same reliably matched profile without re-deriving the profile.
     profile_match: options.profile_match || null,
@@ -452,6 +463,43 @@ export function mergeCriticalFieldRecovery({ extraction = {}, plan, second = nul
           : (sameValue(field, first, secondValue)
             ? `שני המעברים קראו את אותו מספר מסמך שאינו תואם את תבניות הפרופיל ${profileDoc.profile_key}; נדרש אימות ידני (אין תיקון אוטומטי).`
             : `הקריאה החוזרת אף היא אינה תואמת את תבניות האסמכתא של הפרופיל ${profileDoc.profile_key}; נדרש אימות ידני (אין תיקון אוטומטי).`);
+        unresolved.push(field);
+        review_reasons_he.push(`${RECOVERY_REASON_CODES.UNRESOLVED} (${field}): ${decision.reason}`);
+      }
+      decisions.push(decision);
+      continue;
+    }
+
+    // P1 HOTFIX 2 — FORCED date verification (curated profile + document kind only). The plausible
+    // first-pass date may be KEPT only when the second pass returns the SAME date with ACCEPTED
+    // printed invoice/document-date label evidence (a due/payment label is never accepted).
+    // Different valid dates → conflict; anything else → unresolved. Never auto-corrected.
+    const forcedDate = plan?.forced_date_verification;
+    if (field === 'invoice_date' && forcedDate?.applicable === true && firstValid) {
+      decision.forced_verification = { profile_key: forcedDate.profile_key, doc_kind: forcedDate.doc_kind, reason_code: forcedDate.reason_code };
+      if (secondValid && !sameValue(field, first, secondValue)) {
+        decision.reason_code = RECOVERY_REASON_CODES.CONFLICT;
+        decision.reason = `סתירה בין המעברים בתאריך המסמך: "${first}" מול "${secondValue}"; אין תיקון אוטומטי.`;
+        conflicts.push(field);
+        review_reasons_he.push(`${RECOVERY_REASON_CODES.CONFLICT} (${field}): ${decision.reason}`);
+      } else if (secondValid) {
+        const evidence = evaluateEvidence(field, candidate, context);
+        if (evidence.ok) {
+          decision.selected_value = first;
+          decision.selected_source = 'FIRST_PASS';
+          decision.reason_code = RECOVERY_REASON_CODES.AGREEMENT;
+          decision.reason = `אימות ממוקד: שני המעברים קראו את אותו תאריך מודפס לפי התיוג "${candidate.printed_label || candidate.evidence_text}".`;
+        } else {
+          decision.reason_code = evidence.reason_code;
+          decision.reason = evidence.reason;
+          unresolved.push(field);
+          review_reasons_he.push(`${RECOVERY_REASON_CODES.UNRESOLVED} (${field}): ${evidence.reason}`);
+        }
+      } else {
+        decision.reason_code = RECOVERY_REASON_CODES.UNRESOLVED;
+        decision.reason = candidate && candidate.found
+          ? 'האימות הממוקד החזיר תאריך שאינו תקין/סביר; נדרש אימות ידני (אין נפילה חזרה לערך המעבר הראשון).'
+          : 'האימות הממוקד של תאריך המסמך לא הושלם מהמסמך; נדרש אימות ידני (אין נפילה חזרה לערך המעבר הראשון).';
         unresolved.push(field);
         review_reasons_he.push(`${RECOVERY_REASON_CODES.UNRESOLVED} (${field}): ${decision.reason}`);
       }

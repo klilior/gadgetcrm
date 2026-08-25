@@ -36,7 +36,8 @@ export const PROFILE_REASON_CODES = {
   SUPPLIER_MISSING: 'PROFILE_SUPPLIER_ROW_MISSING',
   SUPPLIER_INACTIVE: 'PROFILE_SUPPLIER_ROW_INACTIVE',
   PATTERN_ONLY: 'PROFILE_PATTERN_IS_NOT_IDENTITY',
-  DOC_NUMBER_IMPLAUSIBLE: 'PROFILE_DOC_NUMBER_IMPLAUSIBLE'
+  DOC_NUMBER_IMPLAUSIBLE: 'PROFILE_DOC_NUMBER_IMPLAUSIBLE',
+  DATE_VERIFICATION_REQUIRED: 'PROFILE_DATE_VERIFICATION_REQUIRED'
 };
 
 /** Shared/public mail domains — never identity evidence, whoever sends from them. */
@@ -73,7 +74,12 @@ export const SUPPLIER_PROFILES: any[] = [
     // …and IN + exactly 9 digits may be normalized to that core — ONLY inside a matched STS context.
     contextual_reference_normalization: { from: /^IN(\d{9})$/, to: '$1' },
     invoice_date_labels: ['תאריך חשבונית', 'תאריך מסמך', 'תאריך', 'invoice date', 'document date'],
-    payable_total_labels: ['סה״כ לתשלום', 'סה״כ כולל מע״מ', 'total', 'amount due']
+    payable_total_labels: ['סה״כ לתשלום', 'סה״כ כולל מע״מ', 'total', 'amount due'],
+    // P1 FINAL SAFETY HOTFIX 2 — verified evidence: on STS CREDIT notes (IK references) a first pass
+    // read a plausible but WRONG printed date (15.07 instead of the audited 16.07) and the gate
+    // passed nondeterministically. For this ONE curated case the printed date must be re-verified
+    // even when it is generically plausible. Verification only: never an auto-correction.
+    forced_date_verification_doc_kinds: ['credit_note']
   },
   {
     profile_key: 'INTECH',
@@ -343,6 +349,39 @@ export function validateProfileDocNumber(profileMatch: any, docNumber: unknown) 
     reason_code: PROFILE_REASON_CODES.DOC_NUMBER_IMPLAUSIBLE,
     reason: `מספר המסמך "${value}" אינו תואם את תבניות האסמכתא המאומתות של ${profile.profile_key}; נדרשת קריאה חוזרת של מספר המסמך מהמסמך (אין תיקון אוטומטי).`,
     expected
+  };
+}
+
+/**
+ * P1 HOTFIX 2 — data-driven, per-profile forced verification of the printed invoice date.
+ *
+ * Applicable ONLY when ALL of these hold:
+ *  - the profile was RELIABLY matched (exact curated identity evidence), and
+ *  - that profile declares the document kind in forced_date_verification_doc_kinds, and
+ *  - the supported document really is that kind (credit note = CREDIT_NOTE / חשבונית זיכוי).
+ *
+ * It requests targeted verification of invoice_date ONLY. It never corrects a date, never
+ * re-extracts anything else, and is inert for every other supplier and document kind.
+ */
+export function requiresProfileDateVerification(profileMatch: any, extraction: any = {}) {
+  const profile = profileMatch?.matched && profileMatch.reliable_for_auto_approval ? getProfile(profileMatch.profile_key) : null;
+  const kinds: string[] = profile?.forced_date_verification_doc_kinds || [];
+  if (!profile || !kinds.length) {
+    return { applicable: false, profile_key: profile?.profile_key ?? null, doc_kind: null, reason_code: null, reason: null };
+  }
+  const classification = String(extraction?.classification || '').trim().toUpperCase();
+  const docTypeHe = cleanEvidence(extraction?.doc_type_he);
+  const isCredit = classification === 'CREDIT_NOTE' || docTypeHe === 'חשבונית זיכוי';
+  const docKind = isCredit ? 'credit_note' : (classification === 'TAX_INVOICE' || docTypeHe === 'חשבונית מס' ? 'tax_invoice' : null);
+  if (!docKind || !kinds.includes(docKind)) {
+    return { applicable: false, profile_key: profile.profile_key, doc_kind: docKind, reason_code: null, reason: null };
+  }
+  return {
+    applicable: true,
+    profile_key: profile.profile_key,
+    doc_kind: docKind,
+    reason_code: PROFILE_REASON_CODES.DATE_VERIFICATION_REQUIRED,
+    reason: `נדרש אימות ממוקד של תאריך המסמך המודפס עבור מסמך זיכוי של ${profile.profile_key} (אימות בלבד, ללא תיקון אוטומטי).`
   };
 }
 
