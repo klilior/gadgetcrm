@@ -424,6 +424,38 @@ Deno.serve(async (req) => {
         };
       })());
 
+    // The strict guard must also enforce TYPE CONSISTENCY through the same shared verdict.
+    const ambiguousTitle = 'Tax Invoice / Credit Note';
+    check('d1d_strict_guard_enforces_type_consistency_and_fails_closed_on_ambiguity',
+      {
+        verdict: 'ambiguous',
+        ambiguous_tax_claim: { classification: 'OTHER', reason_code: 'GENERIC_INVOICE_TITLE', downgraded: true },
+        ambiguous_credit_claim: { classification: 'OTHER', reason_code: 'GENERIC_INVOICE_TITLE', downgraded: true },
+        credit_claim_on_tax_title: { classification: 'OTHER', reason_code: 'GENERIC_INVOICE_TITLE' },
+        tax_claim_on_credit_title: { classification: 'OTHER', reason_code: 'GENERIC_INVOICE_TITLE' },
+        correct_tax: { classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס' },
+        correct_credit: { classification: 'CREDIT_NOTE', doc_type_he: 'חשבונית זיכוי' },
+        no_title_fallback_tax: { classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס' }
+      },
+      (() => {
+        const g = (classification: string, document_title: any, extra: any = {}) => {
+          const r = evaluateDocumentClassification({ classification, document_title, ...extra });
+          return { classification: r.classification, doc_type_he: r.doc_type_he, reason_code: r.reason_code, downgraded: r.downgraded };
+        };
+        const slim = (r: any) => ({ classification: r.classification, reason_code: r.reason_code });
+        return {
+          verdict: evaluateTitleVerdict(ambiguousTitle).verdict,
+          ambiguous_tax_claim: (({ classification, reason_code, downgraded }) => ({ classification, reason_code, downgraded }))(g('TAX_INVOICE', ambiguousTitle)),
+          ambiguous_credit_claim: (({ classification, reason_code, downgraded }) => ({ classification, reason_code, downgraded }))(g('CREDIT_NOTE', ambiguousTitle)),
+          credit_claim_on_tax_title: slim(g('CREDIT_NOTE', 'חשבונית מס')),
+          tax_claim_on_credit_title: slim(g('TAX_INVOICE', 'תעודת זיכוי')),
+          correct_tax: (({ classification, doc_type_he }) => ({ classification, doc_type_he }))(g('TAX_INVOICE', 'חשבונית מס')),
+          correct_credit: (({ classification, doc_type_he }) => ({ classification, doc_type_he }))(g('CREDIT_NOTE', 'Credit Note')),
+          // no printed title → the documented doc_type_he / summary fallback still works
+          no_title_fallback_tax: (({ classification, doc_type_he }) => ({ classification, doc_type_he }))(g('TAX_INVOICE', null, { doc_type_he: 'חשבונית מס', display_summary_he: 'חשבונית מס מספק' }))
+        };
+      })());
+
     const taxReceipts = ['חשבונית מס/קבלה', 'חשבונית מס קבלה', 'מס/קבלה', 'חשבונית מס - קבלה'];
     check('d2b_bare_tax_receipt_is_supported_by_the_strict_guard_too',
       taxReceipts.map(() => ({ classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס', should_skip: false, reason_code: null })),

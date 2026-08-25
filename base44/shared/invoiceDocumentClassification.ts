@@ -73,11 +73,6 @@ export function evaluateTitleVerdict(rawTitle: unknown) {
   return { present: true, verdict: 'not_positive', type: null };
 }
 
-// Internal aliases keep the guard body unchanged.
-const NON_TAX_TITLE = NON_TAX_TITLE_PATTERN;
-const TAX_INVOICE_TITLE = TAX_INVOICE_TITLE_PATTERN;
-const CREDIT_NOTE_TITLE = CREDIT_NOTE_TITLE_PATTERN;
-
 function text(...values: unknown[]): string {
   return values
     .filter((v) => v !== null && v !== undefined)
@@ -118,22 +113,28 @@ export function evaluateDocumentClassification(input: any = {}) {
     return otherResult(CLASSIFICATION_REASON_CODES.UNSUPPORTED_DOC_TYPE, 'המסמך אינו חשבונית מס או חשבונית זיכוי ולכן דולג.');
   }
 
-  // A receipt / delivery note / statement style title wins over the model's claim — via the ONE
-  // shared verdict, so an explicit negative phrase blocks even alongside a positive one.
-  if (evaluateTitleVerdict(evidence).verdict === 'negative') {
+  // ONE shared verdict, computed once from the same evidence, decides everything below:
+  // a negative phrase blocks even alongside a positive one, and the claimed type must MATCH the
+  // printed type exactly. Anything else (ambiguous / generic / not positive / wrong type) fails closed.
+  const verdict = evaluateTitleVerdict(evidence);
+
+  if (verdict.verdict === 'negative') {
     return otherResult(CLASSIFICATION_REASON_CODES.NON_TAX_DOCUMENT, 'המסמך הוא קבלה/אסמכתא שאינה חשבונית מס ולכן דולג.');
   }
 
+  const positiveType = verdict.verdict === 'positive' ? verdict.type : null;
+
   if (claimed === 'CREDIT_NOTE') {
-    if (!CREDIT_NOTE_TITLE.test(evidence)) {
-      return otherResult(CLASSIFICATION_REASON_CODES.GENERIC_INVOICE_TITLE, 'לא נמצא תיוג מודפס מפורש של חשבונית זיכוי ולכן המסמך דולג.');
+    if (positiveType !== 'CREDIT_NOTE') {
+      return otherResult(CLASSIFICATION_REASON_CODES.GENERIC_INVOICE_TITLE, 'לא נמצא תיוג מודפס מפורש וחד-משמעי של חשבונית זיכוי ולכן המסמך דולג.');
     }
     return { classification: 'CREDIT_NOTE', doc_type_he: 'חשבונית זיכוי', should_skip: false, skip_reason_he: null, downgraded: false, reason_code: null, guard_version: CLASSIFICATION_GUARD_VERSION };
   }
 
-  // TAX_INVOICE requires explicit tax qualification — a generic "Invoice" heading is not enough.
-  if (!TAX_INVOICE_TITLE.test(evidence)) {
-    return otherResult(CLASSIFICATION_REASON_CODES.GENERIC_INVOICE_TITLE, 'המסמך נושא כותרת "חשבונית" כללית ללא תיוג "חשבונית מס" ולכן דולג.');
+  // TAX_INVOICE requires an explicit, unambiguous tax qualification (a tax-receipt counts);
+  // a generic "Invoice" heading or a credit-note title is not enough.
+  if (positiveType !== 'TAX_INVOICE') {
+    return otherResult(CLASSIFICATION_REASON_CODES.GENERIC_INVOICE_TITLE, 'המסמך אינו נושא תיוג מודפס חד-משמעי של "חשבונית מס" ולכן דולג.');
   }
   return { classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס', should_skip: false, skip_reason_he: null, downgraded: false, reason_code: null, guard_version: CLASSIFICATION_GUARD_VERSION };
 }
