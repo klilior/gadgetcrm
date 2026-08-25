@@ -60,7 +60,9 @@ Deno.serve(async (req) => {
     { needed: noNumberPlan.needed, request_fields: noNumberPlan.request_fields });
 
   // ── 3. Missing invoice date with a valid due date ───────────────────────
-  const noDate = { ...healthy(), invoice_date: null, doc_date: null, due_date: '2026-06-30' };
+  // The due date here is itself a plausible past date, so the rejection can only come from the
+  // due-date LABEL rule and not from a plausibility failure.
+  const noDate = { ...healthy(), invoice_date: null, doc_date: null, due_date: '2026-05-30' };
   const noDatePlan = planCriticalFieldRecovery(noDate, { now: NOW });
   check('f3a_missing_invoice_date_requests_only_invoice_date',
     { request_fields: ['invoice_date'] },
@@ -68,7 +70,7 @@ Deno.serve(async (req) => {
 
   const dueLabelMerge = mergeCriticalFieldRecovery({
     extraction: noDate, plan: noDatePlan, now: NOW,
-    second: { fields: [field('invoice_date', { normalized_value: '2026-06-30', printed_label: 'מועד תשלום', evidence_text: 'מועד תשלום: 30/06/2026' })] }
+    second: { fields: [field('invoice_date', { normalized_value: '2026-05-30', printed_label: 'מועד תשלום', evidence_text: 'מועד תשלום: 30/05/2026' })] }
   });
   check('f3b_due_date_label_never_becomes_invoice_date',
     { selected: null, reason_code: RECOVERY_REASON_CODES.EVIDENCE_REJECTED, review: true, applied: [] },
