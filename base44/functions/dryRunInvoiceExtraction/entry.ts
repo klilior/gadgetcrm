@@ -130,6 +130,20 @@ Deno.serve(async (req) => {
         line_check: lineCheck
       });
 
+      // Mirror BOTH production P1-A/P1-B gate guards exactly (in-memory only, nothing persisted).
+      if (recovery.merge?.requires_manual_review) {
+        for (const reason of (recovery.merge.review_reasons_he || [])) {
+          if (!gate.failures.includes(reason)) gate.failures.push(reason);
+        }
+        gate.passed = false;
+      }
+      const finalDocCheck = validateProfileDocNumber(finalProfile, extraction.doc_number);
+      if (finalDocCheck.applicable && !finalDocCheck.valid) {
+        const profileFailure = `${finalDocCheck.reason_code}: ${finalDocCheck.reason}`;
+        if (!gate.failures.includes(profileFailure)) gate.failures.push(profileFailure);
+        gate.passed = false;
+      }
+
       results.push({
         invoice_id: invoice.id,
         stored_doc_number: invoice.doc_number,
@@ -178,7 +192,7 @@ Deno.serve(async (req) => {
           initial: summarizeProfileMatch(initialProfile),
           final: summarizeProfileMatch(finalProfile),
           initial_doc_number_check: initialProfileDocCheck,
-          final_doc_number_check: validateProfileDocNumber(finalProfile, extraction.doc_number),
+          final_doc_number_check: finalDocCheck,
           contextual_reference: normalizeProfileReference(finalProfile, extraction.doc_number)
         },
         // The exact header candidate the deterministic gate evaluated below.

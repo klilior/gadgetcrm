@@ -13,7 +13,7 @@ import { NON_ATTEMPT_REASONS, planAttemptStart, planAttemptSuccess, planNonAttem
 import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
 import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
-import { matchSupplierProfile, summarizeProfileMatch } from '../../shared/invoiceSupplierProfiles.ts';
+import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber } from '../../shared/invoiceSupplierProfiles.ts';
 
 const MULTI_INVOICE_DETECT_PROMPT = `SYSTEM / INSTRUCTION
 
@@ -172,6 +172,15 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     for (const reason of (recoveryMerge.review_reasons_he || [])) {
       if (!gate.failures.includes(reason)) gate.failures.push(reason);
     }
+    gate.passed = false;
+  }
+
+  // P1-B QA fix: the profile may only become known AFTER recovery. Guard only — no third pass,
+  // no correction: a profile-implausible final document number forces manual review.
+  const finalDocCheck = validateProfileDocNumber(profileMatch, extraction.doc_number);
+  if (finalDocCheck.applicable && !finalDocCheck.valid) {
+    const failure = `${finalDocCheck.reason_code}: ${finalDocCheck.reason}`;
+    if (!gate.failures.includes(failure)) gate.failures.push(failure);
     gate.passed = false;
   }
 

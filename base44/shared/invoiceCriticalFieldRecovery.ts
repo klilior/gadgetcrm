@@ -110,6 +110,9 @@ export function planCriticalFieldRecovery(extraction: any = {}, options: any = {
   const skipped = extraction?.should_skip === true || String(extraction?.classification || '').toUpperCase() === 'OTHER';
 
   const missing: any[] = [];
+  // P1-B QA fix: compact profile validation context, carried on the plan so the merge can fail
+  // closed on a first value that is generically plausible but PROFILE-implausible.
+  let profile_doc_number: any = { applicable: false, first_valid: true, profile_key: null, reason_code: null, reason: null };
   const supplierName = isUsableSupplierName(extraction?.supplier_name);
   const supplierVat = isValidVatIdentifier(extraction?.supplier_vat_id);
   const supplierUnresolved = options.supplier_unresolved === true;
@@ -123,6 +126,13 @@ export function planCriticalFieldRecovery(extraction: any = {}, options: any = {
     // P1-B: a generically plausible number can still be implausible for a RELIABLY matched
     // supplier profile. That requests doc_number recovery ONLY — never a pattern-based repair.
     const profileCheck = validateProfileDocNumber(options.profile_match, extraction?.doc_number);
+    profile_doc_number = {
+      applicable: profileCheck.applicable === true,
+      first_valid: profileCheck.valid !== false,
+      profile_key: profileCheck.profile_key ?? null,
+      reason_code: profileCheck.reason_code ?? null,
+      reason: profileCheck.reason ?? null
+    };
     if (profileCheck.applicable && !profileCheck.valid) {
       missing.push({ field: 'doc_number', reason: profileCheck.reason, reason_code: profileCheck.reason_code });
     }
@@ -141,6 +151,10 @@ export function planCriticalFieldRecovery(extraction: any = {}, options: any = {
     needed: request_fields.length > 0,
     skipped_document: skipped,
     request_fields,
+    profile_doc_number,
+    // In-memory only (never persisted) — lets the pure merge re-validate a SECOND reading against
+    // the same reliably matched profile without re-deriving the profile.
+    profile_match: options.profile_match || null,
     missing_fields: skipped ? [] : missing,
     reasons_he: skipped ? ['המסמך סווג כלא רלוונטי ולכן לא בוצע ניסיון השלמה.'] : missing.map((m) => m.reason)
   };
@@ -415,6 +429,35 @@ export function mergeCriticalFieldRecovery({ extraction = {}, plan, second = nul
       reason_code: RECOVERY_REASON_CODES.UNRESOLVED,
       reason: null
     };
+
+    // P1-B QA fix — a first doc_number that is generically plausible but PROFILE-implausible can
+    // never be selected. Only a DIFFERENT, generically valid AND profile-valid second reading is
+    // treated as a two-pass conflict; anything else (no second pass, invalid second pass, or the
+    // same profile-invalid number read twice) stays unresolved. No digit is ever edited.
+    const profileDoc = plan?.profile_doc_number;
+    const profileInvalidFirst = field === 'doc_number' && profileDoc?.applicable === true && profileDoc.first_valid === false;
+    if (profileInvalidFirst) {
+      const secondProfile = secondValid ? validateProfileDocNumber(plan?.profile_match, secondValue) : null;
+      const secondProfileValid = !!secondProfile && secondProfile.valid !== false;
+      if (secondValid && secondProfileValid && !sameValue(field, first, secondValue)) {
+        decision.reason_code = RECOVERY_REASON_CODES.CONFLICT;
+        decision.reason = `סתירה בין המעברים: "${first}" מול "${secondValue}".`;
+        conflicts.push(field);
+        review_reasons_he.push(`${RECOVERY_REASON_CODES.CONFLICT} (${field}): ${decision.reason}`);
+      } else {
+        decision.reason_code = RECOVERY_REASON_CODES.UNRESOLVED;
+        decision.profile_reason_code = profileDoc.reason_code || null;
+        decision.reason = !secondValid
+          ? `מספר המסמך אינו תואם את תבניות האסמכתא של הפרופיל ${profileDoc.profile_key} ולא הוחזרה קריאה חוזרת תקינה מהמסמך; נדרש אימות ידני (אין תיקון אוטומטי).`
+          : (sameValue(field, first, secondValue)
+            ? `שני המעברים קראו את אותו מספר מסמך שאינו תואם את תבניות הפרופיל ${profileDoc.profile_key}; נדרש אימות ידני (אין תיקון אוטומטי).`
+            : `הקריאה החוזרת אף היא אינה תואמת את תבניות האסמכתא של הפרופיל ${profileDoc.profile_key}; נדרש אימות ידני (אין תיקון אוטומטי).`);
+        unresolved.push(field);
+        review_reasons_he.push(`${RECOVERY_REASON_CODES.UNRESOLVED} (${field}): ${decision.reason}`);
+      }
+      decisions.push(decision);
+      continue;
+    }
 
     if (firstValid && secondValid && sameValue(field, first, secondValue)) {
       decision.selected_value = first;

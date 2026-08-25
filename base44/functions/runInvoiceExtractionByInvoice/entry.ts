@@ -7,7 +7,7 @@ import { NON_ATTEMPT_REASONS, planAttemptFailure, planAttemptStart, planAttemptS
 import { planSupplierPricePurchase } from '../../shared/supplierPriceRetry.ts';
 import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
-import { matchSupplierProfile, summarizeProfileMatch } from '../../shared/invoiceSupplierProfiles.ts';
+import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber } from '../../shared/invoiceSupplierProfiles.ts';
 import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
 import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
@@ -539,6 +539,14 @@ Deno.serve(async (req) => {
       for (const reason of recovery.merge.review_reasons_he) {
         if (!gate.failures.includes(reason)) gate.failures.push(reason);
       }
+      gate.passed = false;
+    }
+    // P1-B QA fix: guard only (no third pass, no correction) — a profile-implausible final
+    // document number forces manual review once the profile is known post-recovery.
+    const finalDocCheck = validateProfileDocNumber(finalProfile, extraction.doc_number);
+    if (finalDocCheck.applicable && !finalDocCheck.valid) {
+      const profileFailure = `${finalDocCheck.reason_code}: ${finalDocCheck.reason}`;
+      if (!gate.failures.includes(profileFailure)) gate.failures.push(profileFailure);
       gate.passed = false;
     }
     console.log('Validation gate:', JSON.stringify(gate));
