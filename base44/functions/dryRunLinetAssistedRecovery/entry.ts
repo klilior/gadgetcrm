@@ -18,6 +18,8 @@ import {
   CRITICAL_SUMMARY_FIELDS,
   missingCriticalFields,
   planLinetRecoveryReconciliationCheck,
+  planLinetLineApplication,
+  planPostReconciliationTruth,
   snapshotCriticalValues
 } from '../../shared/linetAssistedRecovery.ts';
 import { evaluateLinetMatch, selectLinetCandidate } from '../../shared/linetInvoiceReconciliation.ts';
@@ -550,6 +552,44 @@ Deno.serve(async (req) => {
         different: { downgrade: otherCandidate.downgrade, code: otherCandidate.reason_code, status: otherCandidate.writes.extraction_status, passed: otherCandidate.writes.validation_passed, approved: otherCandidate.writes.auto_approved, event: otherCandidate.event.type },
         conflict: { downgrade: conflictRecon.downgrade }, possible: { downgrade: possibleRecon.downgrade }, owned: { downgrade: ownedRecon.downgrade }, missing: { downgrade: missingRecon.downgrade }, exception: { downgrade: exceptionRecon.downgrade },
         not_applied: { applicable: notAppliedRecon.applicable, downgrade: notAppliedRecon.downgrade, verified: notAppliedRecon.verified }
+      });
+
+    // ── QA #6: line-apply ORDERING gate — wrong Linet lines can never land before the downgrade ──
+    const matchedSame = { invoice_id: 'inv-under-test', status: 'matched' };
+    const applySame = planLinetLineApplication({ decision: appliedDecision, invoice_result: matchedSame, recon_check: sameCandidate });
+    const applyDifferent = planLinetLineApplication({ decision: appliedDecision, invoice_result: { status: 'matched' }, recon_check: otherCandidate });
+    const applyConflict = planLinetLineApplication({ decision: appliedDecision, invoice_result: { status: 'conflict' }, recon_check: conflictRecon });
+    const applyPossible = planLinetLineApplication({ decision: appliedDecision, invoice_result: { status: 'possible_match' }, recon_check: possibleRecon });
+    const applyMissing = planLinetLineApplication({ decision: appliedDecision, invoice_result: null, recon_check: missingRecon });
+    const applyException = planLinetLineApplication({ decision: appliedDecision, invoice_result: null, recon_check: exceptionRecon });
+    // Non-P1C matched flow keeps its existing behaviour untouched.
+    const applyNonP1c = planLinetLineApplication({ decision: unconfirmed.decision, invoice_result: matchedSame, recon_check: notAppliedRecon });
+    const applyNonP1cUnmatched = planLinetLineApplication({ decision: unconfirmed.decision, invoice_result: { status: 'conflict' }, recon_check: notAppliedRecon });
+    check('q6_line_apply_blocked_until_same_purchase_is_verified',
+      {
+        same: { allowed: true, p1c: true },
+        different: { allowed: false, p1c: true, code: LINET_ASSISTED_REASON_CODES.RECONCILIATION_MISMATCH },
+        conflict: false, possible: false, missing: false, exception: false,
+        non_p1c_matched: { allowed: true, p1c: false }, non_p1c_unmatched: { allowed: false, p1c: false }
+      },
+      {
+        same: { allowed: applySame.allowed, p1c: applySame.p1c_applied },
+        different: { allowed: applyDifferent.allowed, p1c: applyDifferent.p1c_applied, code: applyDifferent.reason_code },
+        conflict: applyConflict.allowed, possible: applyPossible.allowed, missing: applyMissing.allowed, exception: applyException.allowed,
+        non_p1c_matched: { allowed: applyNonP1c.allowed, p1c: applyNonP1c.p1c_applied }, non_p1c_unmatched: { allowed: applyNonP1cUnmatched.allowed, p1c: applyNonP1cUnmatched.p1c_applied }
+      });
+
+    // ── QA #7: response truth on downgrade is manual/false/false, untouched otherwise ─────────
+    const truthDowngraded = planPostReconciliationTruth({ recon_check: otherCandidate, extraction_status: 'אושר', validation_passed: true, auto_approved: true });
+    const truthVerified = planPostReconciliationTruth({ recon_check: sameCandidate, extraction_status: 'אושר', validation_passed: true, auto_approved: true });
+    check('q7_response_truth_is_manual_false_false_on_downgrade',
+      {
+        downgraded: { downgraded: true, status: 'ממתין לאימות', passed: false, approved: false, has_reason: true },
+        verified: { downgraded: false, status: 'אושר', passed: true, approved: true }
+      },
+      {
+        downgraded: { downgraded: truthDowngraded.downgraded, status: truthDowngraded.extraction_status, passed: truthDowngraded.validation_passed, approved: truthDowngraded.auto_approved, has_reason: !!truthDowngraded.review_reason_he },
+        verified: { downgraded: truthVerified.downgraded, status: truthVerified.extraction_status, passed: truthVerified.validation_passed, approved: truthVerified.auto_approved }
       });
 
     const failed = cases.filter((c) => !c.passed);

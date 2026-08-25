@@ -783,6 +783,43 @@ export function planLinetRecoveryReconciliationCheck(decision: any, { invoice_re
   };
 }
 
+/**
+ * PURE line-apply gate. Confirmed Linet lines may be written ONLY when reconciliation matched AND
+ * either P1-C never applied anything (existing non-P1C behaviour is preserved untouched) or P1-C
+ * applied and this exact same purchase was verified. Different candidate / conflict / possible /
+ * missing result / exception → blocked, so wrong Linet lines can never land before the downgrade.
+ */
+export function planLinetLineApplication({ decision = null, invoice_result = null, recon_check = null }: any = {}) {
+  const matched = invoice_result?.status === 'matched';
+  const p1c = decision?.applied === true;
+  if (!matched) return { allowed: false, p1c_applied: p1c, reason_code: 'LINET_LINES_NOT_MATCHED', reason: `סטטוס ההצלבה אינו matched (${invoice_result?.status ?? 'ללא תוצאה'})` };
+  if (!p1c) return { allowed: true, p1c_applied: false, reason_code: null, reason: 'הצלבה תואמת ללא שחזור P1-C — התנהגות קיימת נשמרת' };
+  if (recon_check?.verified === true) return { allowed: true, p1c_applied: true, reason_code: null, reason: 'ההצלבה אישרה את אותו מסמך רכש שעליו התבסס השחזור' };
+  return {
+    allowed: false,
+    p1c_applied: true,
+    reason_code: recon_check?.reason_code || LINET_ASSISTED_REASON_CODES.RECONCILIATION_MISMATCH,
+    reason: recon_check?.reason || 'השחזור מלינט לא אושר מול אותו מסמך רכש'
+  };
+}
+
+/**
+ * PURE response truth: a downgraded invoice must never be reported as passed/approved/final.
+ * Returns the effective post-reconciliation values the route echoes back.
+ */
+export function planPostReconciliationTruth({ recon_check = null, extraction_status = null, validation_passed = null, auto_approved = null, review_reason = null }: any = {}) {
+  if (!recon_check?.downgrade) {
+    return { downgraded: false, extraction_status, validation_passed, auto_approved, review_reason_he: review_reason ?? null };
+  }
+  return {
+    downgraded: true,
+    extraction_status: 'ממתין לאימות',
+    validation_passed: false,
+    auto_approved: false,
+    review_reason_he: recon_check.reason || null
+  };
+}
+
 /** Compact processing events, reusing the existing Linet event vocabulary (no schema change). */
 export function buildLinetAssistedEvents(decision: any, at = new Date().toISOString()) {
   if (!decision?.attempted) return [];

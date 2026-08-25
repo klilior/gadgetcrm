@@ -12,7 +12,7 @@ import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDupli
 import { NON_ATTEMPT_REASONS, planAttemptStart, planAttemptSuccess, planNonAttempt, planRouteFailureTarget } from '../../shared/invoiceRetryLifecycle.ts';
 import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
 import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyLinetProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
-import { applyRecoveryOutcomesToGate, buildLinetAssistedEvents, linetProvenanceValues, missingCriticalFields, planLinetRecoveryReconciliationCheck, runLinetAssistedRecovery, snapshotCriticalValues } from '../../shared/linetAssistedRecovery.ts';
+import { applyRecoveryOutcomesToGate, buildLinetAssistedEvents, linetProvenanceValues, missingCriticalFields, planLinetLineApplication, planLinetRecoveryReconciliationCheck, planPostReconciliationTruth, runLinetAssistedRecovery, snapshotCriticalValues } from '../../shared/linetAssistedRecovery.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber } from '../../shared/invoiceSupplierProfiles.ts';
 
@@ -279,15 +279,9 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     reconciliationResult = result?.stats || null;
     const invoiceResult = (result?.results || []).find((row) => row.invoice_id === invoice.id);
     reconInvoiceResult = invoiceResult || null;
+    // Refresh only — NO line fetch/apply before the P1-C same-purchase check below.
     if (invoiceResult?.status === 'matched') {
-      const refreshed = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0];
-      reconRefreshed = refreshed || null;
-      const purchase = refreshed?.linet_purchase_document_id
-        ? (await base44.asServiceRole.entities.LinetPurchaseDocument.filter({ id: refreshed.linet_purchase_document_id }, undefined, 1))?.[0]
-        : null;
-      if (purchase) {
-        await applyLinetLinesToInvoice(base44, invoice.id, parseLinetLines(purchase), { level: 'confirmed', values: { rule_version: LINET_MATCH_RULE_VERSION } });
-      }
+      reconRefreshed = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0] || null;
     }
   } catch (reconciliationError) {
     reconError = reconciliationError?.message || String(reconciliationError);
@@ -297,6 +291,18 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
   // A P1-C apply is only trustworthy when the existing reconciliation confirmed the SAME purchase.
   // Anything else fails closed to manual review; the match state itself is never touched here.
   const reconCheck = planLinetRecoveryReconciliationCheck(linetAssisted.decision, { invoice_result: reconInvoiceResult, refreshed_invoice: reconRefreshed, error: reconError });
+
+  // Confirmed Linet lines are applied ONLY after that verification passes.
+  const lineApply = planLinetLineApplication({ decision: linetAssisted.decision, invoice_result: reconInvoiceResult, recon_check: reconCheck });
+  if (lineApply.allowed && reconRefreshed?.linet_purchase_document_id) {
+    const purchase = (await base44.asServiceRole.entities.LinetPurchaseDocument.filter({ id: reconRefreshed.linet_purchase_document_id }, undefined, 1))?.[0];
+    if (purchase) {
+      await applyLinetLinesToInvoice(base44, invoice.id, parseLinetLines(purchase), { level: 'confirmed', values: { rule_version: LINET_MATCH_RULE_VERSION } });
+    }
+  } else if (!lineApply.allowed && lineApply.p1c_applied) {
+    console.log('Linet line application blocked (fail-closed):', JSON.stringify(lineApply));
+  }
+
   if (reconCheck.downgrade) {
     const current = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0] || {};
     const downgradedHistory = appendProcessingEvents(current.processing_events_json, [{ ...reconCheck.event, at: new Date().toISOString() }]);
@@ -308,7 +314,9 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     });
   }
 
-  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: reconCheck.downgrade ? 'ממתין לאימות' : finalStatus, linet_recovery_reconciliation: reconCheck, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, linet_assisted_recovery: extraction.linet_assisted_recovery || null, remaining_recovery_failures: recoveryOutcomes.remaining, profile_match: extraction.profile_match_final, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
+  const effective = planPostReconciliationTruth({ recon_check: reconCheck, extraction_status: finalStatus, validation_passed: gate.passed, auto_approved: canAutoApprove });
+
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: effective.extraction_status, validation_passed: effective.validation_passed, auto_approved: effective.auto_approved, linet_recovery_reconciliation: reconCheck, linet_line_application: lineApply, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, linet_assisted_recovery: extraction.linet_assisted_recovery || null, remaining_recovery_failures: recoveryOutcomes.remaining, profile_match: extraction.profile_match_final, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
 }
 
 Deno.serve(async (req) => {

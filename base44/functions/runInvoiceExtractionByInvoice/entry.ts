@@ -6,7 +6,7 @@ import { planExtractionRoutePreflight } from '../../shared/invoiceExtractionRout
 import { NON_ATTEMPT_REASONS, planAttemptFailure, planAttemptStart, planAttemptSuccess, planNonAttempt } from '../../shared/invoiceRetryLifecycle.ts';
 import { planSupplierPricePurchase } from '../../shared/supplierPriceRetry.ts';
 import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyLinetProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
-import { applyRecoveryOutcomesToGate, buildLinetAssistedEvents, linetProvenanceValues, missingCriticalFields, planLinetRecoveryReconciliationCheck, runLinetAssistedRecovery, snapshotCriticalValues } from '../../shared/linetAssistedRecovery.ts';
+import { applyRecoveryOutcomesToGate, buildLinetAssistedEvents, linetProvenanceValues, missingCriticalFields, planLinetLineApplication, planLinetRecoveryReconciliationCheck, planPostReconciliationTruth, runLinetAssistedRecovery, snapshotCriticalValues } from '../../shared/linetAssistedRecovery.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber } from '../../shared/invoiceSupplierProfiles.ts';
 import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
@@ -722,17 +722,9 @@ Deno.serve(async (req) => {
       reconciliationResult = result?.stats || null;
       const invoiceResult = (result?.results || []).find((row) => row.invoice_id === invoice.id);
       reconInvoiceResult = invoiceResult || null;
+      // Refresh only — NO line fetch/apply before the P1-C same-purchase check below.
       if (invoiceResult?.status === 'matched') {
-        const refreshed = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0];
-        reconRefreshed = refreshed || null;
-        const purchase = refreshed?.linet_purchase_document_id
-          ? (await base44.asServiceRole.entities.LinetPurchaseDocument.filter({ id: refreshed.linet_purchase_document_id }, undefined, 1))?.[0]
-          : null;
-        if (purchase) {
-          const linetLines = parseLinetLines(purchase);
-          const applyResult = await applyLinetLinesToInvoice(base44, invoice.id, linetLines, { level: 'confirmed', values: { rule_version: LINET_MATCH_RULE_VERSION } });
-          console.log('Linet line application:', JSON.stringify(applyResult));
-        }
+        reconRefreshed = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0] || null;
       }
     } catch (reconciliationError) {
       reconError = reconciliationError?.message || String(reconciliationError);
@@ -743,6 +735,19 @@ Deno.serve(async (req) => {
     // it was based on. Anything else (different purchase, conflict/possible, owned, missing result,
     // exception) fails closed to manual review. The match state itself is never touched here.
     const reconCheck = planLinetRecoveryReconciliationCheck(linetAssisted.decision, { invoice_result: reconInvoiceResult, refreshed_invoice: reconRefreshed, error: reconError });
+
+    // Confirmed Linet lines are applied ONLY after that verification passes.
+    const lineApply = planLinetLineApplication({ decision: linetAssisted.decision, invoice_result: reconInvoiceResult, recon_check: reconCheck });
+    if (lineApply.allowed && reconRefreshed?.linet_purchase_document_id) {
+      const purchase = (await base44.asServiceRole.entities.LinetPurchaseDocument.filter({ id: reconRefreshed.linet_purchase_document_id }, undefined, 1))?.[0];
+      if (purchase) {
+        const applyResult = await applyLinetLinesToInvoice(base44, invoice.id, parseLinetLines(purchase), { level: 'confirmed', values: { rule_version: LINET_MATCH_RULE_VERSION } });
+        console.log('Linet line application:', JSON.stringify(applyResult));
+      }
+    } else if (!lineApply.allowed && lineApply.p1c_applied) {
+      console.log('Linet line application blocked (fail-closed):', JSON.stringify(lineApply));
+    }
+
     if (reconCheck.downgrade) {
       const current = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0] || {};
       const downgradedHistory = appendProcessingEvents(current.processing_events_json, [{ ...reconCheck.event, at: new Date().toISOString() }]);
@@ -755,9 +760,19 @@ Deno.serve(async (req) => {
       console.log('P1-C reconciliation mismatch → downgraded to manual review:', JSON.stringify(reconCheck));
     }
 
+    // Effective post-reconciliation truth — a downgraded invoice is never reported as passed/approved.
+    const effective = planPostReconciliationTruth({
+      recon_check: reconCheck,
+      extraction_status: finalStatus,
+      validation_passed: gate.passed,
+      auto_approved: canAutoApprove
+    });
+
     // Step 7: Update intake status_reason
     let intakeReason = '';
-    if (validation.recommended_extraction_status_he === 'נקרא בהצלחה') {
+    if (effective.downgraded) {
+      intakeReason = `המסמך נותח אך נדרש אימות ידני: ${effective.review_reason_he}`;
+    } else if (validation.recommended_extraction_status_he === 'נקרא בהצלחה') {
       intakeReason = 'המסמך נותח ונקלט לחשבונית. ממתין לאישור סופי לפי הצורך.';
     } else {
       const topReason = (validation.review_reasons_he && validation.review_reasons_he[0]) || 'נדרש אימות ידני.';
@@ -785,6 +800,10 @@ Deno.serve(async (req) => {
       lines_persisted: linePersistence,
       reconciliation: reconciliationResult,
       linet_recovery_reconciliation: reconCheck,
+      linet_line_application: lineApply,
+      extraction_status: effective.extraction_status,
+      validation_passed: effective.validation_passed,
+      auto_approved: effective.auto_approved,
       extraction, 
       validation 
     });
