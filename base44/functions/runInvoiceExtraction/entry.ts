@@ -3,6 +3,7 @@ import { validateInvoiceForAutoApproval, normalizeInvoiceNumber } from '../../sh
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 import { applyDocumentClassificationGuard } from '../../shared/invoiceDocumentClassification.ts';
+import { applyClassificationRecovery } from '../../shared/invoiceClassificationRecovery.ts';
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
 import { buildInvoiceLineRecords, persistInvoiceLines, applyLinetLinesToInvoice } from '../../shared/invoiceLinePersistence.ts';
 import { parseLinetLines, LINET_MATCH_RULE_VERSION } from '../../shared/linetInvoiceReconciliation.ts';
@@ -316,7 +317,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
 
   const effective = planPostReconciliationTruth({ recon_check: reconCheck, extraction_status: finalStatus, validation_passed: gate.passed, auto_approved: canAutoApprove });
 
-  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: effective.extraction_status, validation_passed: effective.validation_passed, auto_approved: effective.auto_approved, linet_recovery_reconciliation: reconCheck, linet_line_application: lineApply, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, linet_assisted_recovery: extraction.linet_assisted_recovery || null, remaining_recovery_failures: recoveryOutcomes.remaining, profile_match: extraction.profile_match_final, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, classification_guard: extraction.classification_guard || null, classification_recovery: extraction.classification_recovery || null, line_applicability: validation.line_check?.line_applicability || null, extraction_status: effective.extraction_status, validation_passed: effective.validation_passed, auto_approved: effective.auto_approved, linet_recovery_reconciliation: reconCheck, linet_line_application: lineApply, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, linet_assisted_recovery: extraction.linet_assisted_recovery || null, remaining_recovery_failures: recoveryOutcomes.remaining, profile_match: extraction.profile_match_final, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
 }
 
 Deno.serve(async (req) => {
@@ -392,6 +393,10 @@ Deno.serve(async (req) => {
         sender_domain: senderEmail
       }, { suppliers: await loadSuppliers() });
       extraction.profile_match_initial = summarizeProfileMatch(initialProfile);
+      // P1-E: deterministic classification recovery — after the monetary audit + initial profile
+      // match, BEFORE P1-A and BEFORE the OTHER early return. The strict guard result stays in
+      // extraction.classification_guard for audit; recovery may only move OTHER → supported.
+      applyClassificationRecovery(extraction, { profile_match: initialProfile });
       await recoverCriticalFields(base44, extraction, intake.file, {
         ...(targetScope ? { target_scope: targetScope } : {}),
         profile_match: initialProfile.reliable_for_auto_approval ? initialProfile : null

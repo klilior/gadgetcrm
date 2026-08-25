@@ -3,6 +3,8 @@
  * Imported by every extraction route so all of them read documents identically.
  */
 
+import { decideLineApplicability, summarizeLineApplicability } from './invoiceLineApplicability.ts';
+
 export const EXTRACT_PROMPT = `SYSTEM / INSTRUCTION
 
 You are an EXTREMELY PRECISE Israeli invoice data extraction engine. Your job is to read the EXACT text from the document — never guess, never approximate, never hallucinate.
@@ -343,7 +345,7 @@ export function getLineItemsCheck(extraction) {
 
   if (!items.length) {
     warnings.push('אין שורות מוצר במסמך — בדיקת שורות אינה ישימה.');
-    return { applicable: false, hasMismatch: false, delta: 0, tolerance: getLineRoundingTolerance(0), hasBadQuantity: false, hasLineArithmeticMismatch: false, hasAnyFailure: false, failures, warnings, reason_codes };
+    return { applicable: false, hasMismatch: false, delta: 0, tolerance: getLineRoundingTolerance(0), hasBadQuantity: false, hasLineArithmeticMismatch: false, hasAnyFailure: false, failures, warnings, reason_codes, line_applicability: summarizeLineApplicability([]), non_comparable_lines: [], sum_applicable: false };
   }
 
   // D3b + P1-E: a blocking qty × unit-price check runs ONLY on semantically comparable operands,
@@ -398,7 +400,16 @@ export function getLineItemsCheck(extraction) {
 
   if (subtotal === null) {
     warnings.push('אין סה״כ לפני מע״מ להשוואה מול סכום השורות.');
-    return { applicable: lineArithmeticFailures.length > 0 || hasBadQuantity, hasMismatch: false, delta: 0, tolerance: getLineRoundingTolerance(items.length), hasBadQuantity, hasLineArithmeticMismatch: lineArithmeticFailures.length > 0, hasAnyFailure: failures.length > 0, failures, warnings, reason_codes, line_arithmetic_failures: lineArithmeticFailures };
+    return { applicable: lineArithmeticFailures.length > 0 || hasBadQuantity, hasMismatch: false, delta: 0, tolerance: getLineRoundingTolerance(items.length), hasBadQuantity, hasLineArithmeticMismatch: lineArithmeticFailures.length > 0, hasAnyFailure: failures.length > 0, failures, warnings, reason_codes, line_arithmetic_failures: lineArithmeticFailures, line_applicability: applicability, non_comparable_lines: nonComparableLines, sum_applicable: false };
+  }
+
+  // P1-E: the full line-sum comparison is blocking ONLY when the complete contributing set is
+  // comparable on a before-VAT basis. A semantically unknown/mixed row makes the SUM
+  // non-applicable (warning only) — it never becomes a LINE_SUM_MISMATCH, and it never touches
+  // the header subtotal/VAT/total logic, which stays authoritative.
+  if (!applicability.sum_applicable) {
+    warnings.push('סכום השורות אינו בר-השוואה לסה״כ לפני מע״מ (שורות סיכום/הנחה/כולל מע״מ או בסיס לא ידוע) — לא נקבעה אי-התאמה.');
+    return { applicable: lineArithmeticFailures.length > 0 || hasBadQuantity, hasMismatch: false, delta: 0, tolerance: getLineRoundingTolerance(items.length), hasBadQuantity, hasLineArithmeticMismatch: lineArithmeticFailures.length > 0, hasAnyFailure: failures.length > 0, failures, warnings, reason_codes, line_arithmetic_failures: lineArithmeticFailures, line_applicability: applicability, non_comparable_lines: nonComparableLines, sum_applicable: false };
   }
 
   const lineSum = items.reduce((sum, item) => {
@@ -418,7 +429,7 @@ export function getLineItemsCheck(extraction) {
     reason_codes.push('LINE_SUM_MISMATCH');
     failures.push(`סכום שורות המוצרים (${roundMoney(lineSum)}) אינו תואם לסה״כ לפני מע״מ (${subtotal}), הפרש ${delta} ש״ח.`);
   }
-  return { applicable: true, hasMismatch, delta, tolerance, lineSum: roundMoney(lineSum), hasBadQuantity, hasLineArithmeticMismatch: lineArithmeticFailures.length > 0, hasAnyFailure: failures.length > 0, failures, warnings, reason_codes, line_arithmetic_failures: lineArithmeticFailures };
+  return { applicable: true, hasMismatch, delta, tolerance, lineSum: roundMoney(lineSum), hasBadQuantity, hasLineArithmeticMismatch: lineArithmeticFailures.length > 0, hasAnyFailure: failures.length > 0, failures, warnings, reason_codes, line_arithmetic_failures: lineArithmeticFailures, line_applicability: applicability, non_comparable_lines: nonComparableLines, sum_applicable: true };
 }
 
 /** invoice_date and due_date are strictly separate; due_date must never become the invoice date. */

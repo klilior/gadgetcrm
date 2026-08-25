@@ -3,6 +3,7 @@ import { validateInvoiceForAutoApproval } from '../../shared/invoiceValidationGa
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 import { applyDocumentClassificationGuard } from '../../shared/invoiceDocumentClassification.ts';
+import { applyClassificationRecovery } from '../../shared/invoiceClassificationRecovery.ts';
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber, normalizeProfileReference } from '../../shared/invoiceSupplierProfiles.ts';
@@ -87,6 +88,9 @@ Deno.serve(async (req) => {
         sender_domain: intake.gmail_from || null
       }, { suppliers });
       const initialProfileDocCheck = validateProfileDocNumber(initialProfile, extraction.doc_number);
+      // P1-E: same deterministic classification recovery as production — after the monetary audit
+      // and the initial profile match, BEFORE P1-A. In-memory only, nothing persisted.
+      const classificationRecovery = applyClassificationRecovery(extraction, { profile_match: initialProfile });
       const recovery = await recoverCriticalFields(base44, extraction, intake.file, {
         profile_match: initialProfile.reliable_for_auto_approval ? initialProfile : null
       });
@@ -242,6 +246,9 @@ Deno.serve(async (req) => {
           total_with_vat: extraction.total_with_vat ?? null
         },
         line_check: lineCheck,
+        classification_guard: extraction.classification_guard || null,
+        classification_recovery: classificationRecovery,
+        line_applicability: lineCheck.line_applicability || null,
         supplier_resolution: {
           supplier_id: resolution.supplier_id,
           supplier_name: resolution.supplier?.name ?? null,

@@ -16,6 +16,7 @@ import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDAT
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
 import { auditAndApplyAmounts } from '../../shared/invoiceMonetaryAudit.ts';
 import { applyDocumentClassificationGuard } from '../../shared/invoiceDocumentClassification.ts';
+import { applyClassificationRecovery } from '../../shared/invoiceClassificationRecovery.ts';
 import { resolveSupplier } from '../../shared/supplierResolver.ts';
 import { buildInvoiceLineRecords, persistInvoiceLines, applyLinetLinesToInvoice } from '../../shared/invoiceLinePersistence.ts';
 import { parseLinetLines, LINET_MATCH_RULE_VERSION } from '../../shared/linetInvoiceReconciliation.ts';
@@ -393,6 +394,12 @@ Deno.serve(async (req) => {
       sender_email: intake.gmail_from || null,
       sender_domain: intake.gmail_from || null
     }, { suppliers: profileSuppliers });
+    // P1-E: deterministic classification recovery — after the monetary audit + initial profile
+    // match, BEFORE P1-A and BEFORE the OTHER early return below. The strict guard result stays in
+    // extraction.classification_guard for audit; recovery may only move OTHER → supported and it
+    // never approves anything by itself.
+    const classificationRecovery = applyClassificationRecovery(extraction, { profile_match: initialProfile });
+    if (classificationRecovery.attempted) console.log('Classification recovery:', JSON.stringify(classificationRecovery));
     const recovery = await recoverCriticalFields(base44, extraction, fileUrlToUse, {
       profile_match: initialProfile.reliable_for_auto_approval ? initialProfile : null
     });
@@ -796,6 +803,9 @@ Deno.serve(async (req) => {
       line_items_count: lineItems.length,
       business_duplicate: businessDuplicate || null,
       canonical_supplier_family: family.family || null,
+      classification_guard: extraction.classification_guard || null,
+      classification_recovery: classificationRecovery,
+      line_applicability: getLineItemsCheck(extraction).line_applicability,
       price_alerts: priceAlerts,
       lines_persisted: linePersistence,
       reconciliation: reconciliationResult,
