@@ -116,6 +116,52 @@ export const SUPPLIER_PROFILES: any[] = [
     contextual_reference_normalization: null,
     invoice_date_labels: ['תאריך חשבונית', 'תאריך מסמך', 'invoice date'],
     payable_total_labels: ['סה״כ לתשלום', 'סה״כ כולל מע״מ']
+  },
+  {
+    // P1 FINAL SAFETY HOTFIX — added because a plausible but WRONG nearby number auto-approved.
+    // Identity here is EXACT VAT / canonical supplier only: aliases stay empty on purpose, so a
+    // printed name can never select this profile. The verified format only VALIDATES.
+    profile_key: 'DYNAMICA',
+    display_name: 'דינמיקה',
+    canonical_supplier_id: '696f8da9b305e95413c05ce1',
+    vat_ids: ['514389246'],
+    linet_supplier_account_id: null,
+    aliases: [],
+    trusted_sender_emails: [],
+    trusted_domains: [],
+    title_patterns: ['חשבונית מס', 'חשבונית זיכוי'],
+    // Verified examples: 312368412, 312368384, 312257948.
+    document_number_patterns: [
+      { kind: 'tax_invoice', prefix: '312', regex: /^312\d{6}$/ },
+      { kind: 'credit_note', prefix: '312', regex: /^312\d{6}$/ }
+    ],
+    reference_prefixes: ['312'],
+    bare_numeric_reference_regex: null,
+    contextual_reference_normalization: null,
+    invoice_date_labels: ['תאריך חשבונית', 'תאריך מסמך', 'invoice date'],
+    payable_total_labels: ['סה״כ לתשלום', 'סה״כ כולל מע״מ']
+  },
+  {
+    // Same hotfix rationale; CSGIL = tax invoice, CRGIL = credit note.
+    // Verified examples: CSGIL392029, CSGIL391554, CSGIL391218, CRGIL12688.
+    profile_key: 'GETPACKAGE',
+    display_name: 'GetPackage',
+    canonical_supplier_id: '696e3d956caec03e0164a08f',
+    vat_ids: ['515385755'],
+    linet_supplier_account_id: null,
+    aliases: [],
+    trusted_sender_emails: [],
+    trusted_domains: [],
+    title_patterns: ['חשבונית מס', 'חשבונית זיכוי'],
+    document_number_patterns: [
+      { kind: 'tax_invoice', prefix: 'CSGIL', regex: /^CSGIL\d{5,8}$/ },
+      { kind: 'credit_note', prefix: 'CRGIL', regex: /^CRGIL\d{5,8}$/ }
+    ],
+    reference_prefixes: ['CSGIL', 'CRGIL'],
+    bare_numeric_reference_regex: null,
+    contextual_reference_normalization: null,
+    invoice_date_labels: ['תאריך חשבונית', 'תאריך מסמך', 'invoice date'],
+    payable_total_labels: ['סה״כ לתשלום', 'סה״כ כולל מע״מ']
   }
 ];
 

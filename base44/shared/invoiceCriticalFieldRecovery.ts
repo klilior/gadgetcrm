@@ -476,6 +476,18 @@ export function mergeCriticalFieldRecovery({ extraction = {}, plan, second = nul
       decision.reason_code = RECOVERY_REASON_CODES.FIRST_PASS_VALID;
       decision.reason = 'ערך המעבר הראשון תקין ונשמר.';
     } else if (secondValid) {
+      // P1 hotfix: a recovered document number must ALSO match the matched profile's verified
+      // format. A profile-invalid second reading is never applied — it fails closed to review.
+      const secondProfileCheck = field === 'doc_number' ? validateProfileDocNumber(plan?.profile_match, secondValue) : null;
+      if (secondProfileCheck?.applicable === true && secondProfileCheck.valid === false) {
+        decision.reason_code = RECOVERY_REASON_CODES.UNRESOLVED;
+        decision.profile_reason_code = secondProfileCheck.reason_code || null;
+        decision.reason = `הקריאה החוזרת "${secondValue}" אינה תואמת את תבניות האסמכתא של הפרופיל ${secondProfileCheck.profile_key}; נדרש אימות ידני (אין תיקון אוטומטי).`;
+        unresolved.push(field);
+        review_reasons_he.push(`${RECOVERY_REASON_CODES.UNRESOLVED} (${field}): ${decision.reason}`);
+        decisions.push(decision);
+        continue;
+      }
       const evidence = evaluateEvidence(field, candidate, context);
       if (evidence.ok) {
         decision.selected_value = secondValue;

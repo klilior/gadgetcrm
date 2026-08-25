@@ -25,11 +25,15 @@ const NOW = '2026-06-01T00:00:00Z';
 const STS_ID = '696f8b608af51a27cabb505e';
 const INTECH_ID = '69c944172ddebc3eff81c9c3';
 const ALPHONE_ID = '6a12f0860a0eb61e7a5c5e45';
+const DYNAMICA_ID = '696f8da9b305e95413c05ce1';
+const GETPACKAGE_ID = '696e3d956caec03e0164a08f';
 
 const suppliers = () => ([
   { id: STS_ID, name: 'אס.טי.אס מגה גרופ בע"מ', vat_id: '516542024', linet_supplier_account_id: '139', is_active: true },
   { id: INTECH_ID, name: 'פ.ט אינטק סחר בע"מ', vat_id: '516058989', linet_supplier_account_id: '151', is_active: true },
   { id: ALPHONE_ID, name: 'אולפון יבוא סחר בעמ', vat_id: '515893683', is_active: true },
+  { id: DYNAMICA_ID, name: 'דינמיקה בע"מ', vat_id: '514389246', is_active: true },
+  { id: GETPACKAGE_ID, name: 'GetPackage בע"מ', vat_id: '515385755', is_active: true },
   { id: 'other-1', name: 'ספק אחר בע"מ', vat_id: '511111118', is_active: true }
 ]);
 
@@ -202,6 +206,99 @@ Deno.serve(async (req) => {
       bare9: validateProfileDocNumber(alpByVat, '264002392').valid
     });
 
+  // ── P1 FINAL SAFETY HOTFIX: DYNAMICA + GETPACKAGE ───────────────────────
+  const dynByVat = match({ vat_id: '514389246' });
+  const gpByVat = match({ vat_id: '515385755' });
+  check('hx1_new_profiles_match_only_on_exact_vat_never_on_a_printed_name',
+    {
+      dyn: { key: 'DYNAMICA', id: DYNAMICA_ID, method: 'profile_vat_id', reliable: true },
+      gp: { key: 'GETPACKAGE', id: GETPACKAGE_ID, method: 'profile_vat_id', reliable: true },
+      dyn_by_name: PROFILE_REASON_CODES.NO_EVIDENCE,
+      gp_by_name: PROFILE_REASON_CODES.NO_EVIDENCE,
+      dyn_aliases: 0,
+      gp_aliases: 0
+    },
+    {
+      dyn: { key: dynByVat.profile_key, id: dynByVat.supplier_id, method: dynByVat.method, reliable: dynByVat.reliable_for_auto_approval },
+      gp: { key: gpByVat.profile_key, id: gpByVat.supplier_id, method: gpByVat.method, reliable: gpByVat.reliable_for_auto_approval },
+      dyn_by_name: match({ supplier_name: 'דינמיקה בע"מ' }).reason_code,
+      gp_by_name: match({ supplier_name: 'GetPackage' }).reason_code,
+      dyn_aliases: getProfile('DYNAMICA').aliases.length,
+      gp_aliases: getProfile('GETPACKAGE').aliases.length
+    });
+
+  check('hx2_verified_good_examples_pass_and_the_two_false_approvals_are_invalid',
+    {
+      dyn_good: [true, true, true],
+      gp_good: [true, true, true, true],
+      dyn_false_approval_230063730: { applicable: true, valid: false, code: PROFILE_REASON_CODES.DOC_NUMBER_IMPLAUSIBLE },
+      gp_false_approval_6793293: { applicable: true, valid: false, code: PROFILE_REASON_CODES.DOC_NUMBER_IMPLAUSIBLE },
+      cross_supplier_shapes_rejected: [false, false]
+    },
+    {
+      dyn_good: ['312368412', '312368384', '312257948'].map((n) => validateProfileDocNumber(dynByVat, n).valid),
+      gp_good: ['CSGIL392029', 'CSGIL391554', 'CSGIL391218', 'CRGIL12688'].map((n) => validateProfileDocNumber(gpByVat, n).valid),
+      dyn_false_approval_230063730: (({ applicable, valid, reason_code }) => ({ applicable, valid, code: reason_code }))(validateProfileDocNumber(dynByVat, '230063730')),
+      gp_false_approval_6793293: (({ applicable, valid, reason_code }) => ({ applicable, valid, code: reason_code }))(validateProfileDocNumber(gpByVat, '6793293')),
+      cross_supplier_shapes_rejected: [validateProfileDocNumber(dynByVat, 'CSGIL392029').valid, validateProfileDocNumber(gpByVat, '312368412').valid]
+    });
+
+  // The exact Dynamica false approval: wrong number → targeted doc-number recovery, and a repeated
+  // or profile-invalid second reading stays unresolved (Review); the extraction is never edited.
+  const dynBad = { classification: 'TAX_INVOICE', doc_type_he: 'חשבונית מס', supplier_name: 'דינמיקה', supplier_vat_id: '514389246', doc_number: '230063730', invoice_date: '2026-05-04', doc_date: '2026-05-04', subtotal_before_vat: 100, vat_amount: 18, total_with_vat: 118 };
+  const dynPlan = planCriticalFieldRecovery(dynBad, { now: NOW, profile_match: dynByVat });
+  const dynSameBad = mergeCriticalFieldRecovery({ extraction: dynBad, plan: dynPlan, now: NOW, second: { fields: [{ field: 'doc_number', found: true, normalized_value: '230063730', printed_label: 'מספר חשבונית', confidence: 99 }] } });
+  const dynNoSecond = mergeCriticalFieldRecovery({ extraction: dynBad, plan: dynPlan, now: NOW, second: null });
+  check('hx3_dynamica_wrong_number_cannot_pass_and_forces_review',
+    {
+      requested: ['doc_number'],
+      profile_first_valid: false,
+      same_bad: { code: RECOVERY_REASON_CODES.UNRESOLVED, selected: null, applied: [], review: true },
+      no_second: { code: RECOVERY_REASON_CODES.UNRESOLVED, review: true },
+      extraction_untouched: '230063730'
+    },
+    {
+      requested: dynPlan.request_fields,
+      profile_first_valid: dynPlan.profile_doc_number.first_valid,
+      same_bad: { code: dynSameBad.decisions[0].reason_code, selected: dynSameBad.decisions[0].selected_value, applied: dynSameBad.applied_fields, review: dynSameBad.requires_manual_review },
+      no_second: { code: dynNoSecond.decisions[0].reason_code, review: dynNoSecond.requires_manual_review },
+      extraction_untouched: dynBad.doc_number
+    });
+
+  // Same for the GetPackage credit false approval.
+  const gpBad = { classification: 'CREDIT_NOTE', doc_type_he: 'חשבונית זיכוי', supplier_name: 'GetPackage', supplier_vat_id: '515385755', doc_number: '6793293', invoice_date: '2026-04-30', doc_date: '2026-04-30', subtotal_before_vat: -100, vat_amount: -18, total_with_vat: -118 };
+  const gpPlan = planCriticalFieldRecovery(gpBad, { now: NOW, profile_match: gpByVat });
+  const gpSameBad = mergeCriticalFieldRecovery({ extraction: gpBad, plan: gpPlan, now: NOW, second: { fields: [{ field: 'doc_number', found: true, normalized_value: '6793293', printed_label: 'מספר מסמך' }] } });
+  const gpValidSecond = mergeCriticalFieldRecovery({ extraction: gpBad, plan: gpPlan, now: NOW, second: { fields: [{ field: 'doc_number', found: true, normalized_value: 'CRGIL12688', printed_label: 'מספר מסמך', confidence: 99 }] } });
+  check('hx4_getpackage_wrong_credit_number_never_passes_disagreement_stays_conflict',
+    {
+      requested: ['doc_number'],
+      same_bad: { code: RECOVERY_REASON_CODES.UNRESOLVED, applied: [], review: true },
+      valid_but_disagreeing_second: { code: RECOVERY_REASON_CODES.CONFLICT, applied: [], review: true, both_kept: ['6793293', 'CRGIL12688'] },
+      extraction_untouched: '6793293'
+    },
+    {
+      requested: gpPlan.request_fields,
+      same_bad: { code: gpSameBad.decisions[0].reason_code, applied: gpSameBad.applied_fields, review: gpSameBad.requires_manual_review },
+      valid_but_disagreeing_second: { code: gpValidSecond.decisions[0].reason_code, applied: gpValidSecond.applied_fields, review: gpValidSecond.requires_manual_review, both_kept: [gpValidSecond.decisions[0].first_pass.value, gpValidSecond.decisions[0].second_pass.value] },
+      extraction_untouched: gpBad.doc_number
+    });
+
+  // A MISSING number may be recovered — but only by a profile-VALID labelled second reading.
+  const dynMissing = { ...dynBad, doc_number: null };
+  const dynMissingPlan = planCriticalFieldRecovery(dynMissing, { now: NOW, profile_match: dynByVat });
+  const dynRecovered = mergeCriticalFieldRecovery({ extraction: dynMissing, plan: dynMissingPlan, now: NOW, second: { fields: [{ field: 'doc_number', found: true, normalized_value: '312368412', printed_label: 'מספר חשבונית', evidence_text: 'מספר חשבונית 312368412' }] } });
+  const dynRecoveredBadShape = mergeCriticalFieldRecovery({ extraction: dynMissing, plan: dynMissingPlan, now: NOW, second: { fields: [{ field: 'doc_number', found: true, normalized_value: '230063730', printed_label: 'מספר חשבונית' }] } });
+  check('hx5_profile_valid_second_pass_recovers_with_provenance_invalid_one_stays_review',
+    {
+      good: { code: RECOVERY_REASON_CODES.RECOVERED, selected: '312368412', source: 'SECOND_PASS', applied: ['doc_number'], review: false, label: 'מספר חשבונית' },
+      bad_shape: { code: RECOVERY_REASON_CODES.UNRESOLVED, selected: null, applied: [], review: true, profile_code: PROFILE_REASON_CODES.DOC_NUMBER_IMPLAUSIBLE }
+    },
+    {
+      good: { code: dynRecovered.decisions[0].reason_code, selected: dynRecovered.decisions[0].selected_value, source: dynRecovered.decisions[0].selected_source, applied: dynRecovered.applied_fields, review: dynRecovered.requires_manual_review, label: dynRecovered.decisions[0].second_pass.printed_label },
+      bad_shape: { code: dynRecoveredBadShape.decisions[0].reason_code, selected: dynRecoveredBadShape.decisions[0].selected_value, applied: dynRecoveredBadShape.applied_fields, review: dynRecoveredBadShape.requires_manual_review, profile_code: dynRecoveredBadShape.decisions[0].profile_reason_code }
+    });
+
   // ── Fail-closed behaviour ───────────────────────────────────────────────
   const conflict = match({ vat_id: '516542024', sender_email: 'allphonedocs@gmail.com' });
   check('fc1_conflicting_strong_signals_fail_closed',
@@ -283,7 +380,7 @@ Deno.serve(async (req) => {
     { ambiguous: ambiguousResolved.supplier_id, missing: missingResolved.supplier_id, inactive: inactiveResolved.supplier_id, no_evidence_uses_legacy: noEvidenceResolved.supplier_id });
 
   check('ri2_profile_never_creates_or_renames_a_supplier',
-    { returns_existing_row_only: true, name_unchanged: 'פ.ט אינטק סחר בע"מ', rows_count: 4 },
+    { returns_existing_row_only: true, name_unchanged: 'פ.ט אינטק סחר בע"מ', rows_count: 6 },
     { returns_existing_row_only: rows.some((s) => s.id === resolvedWithProfile.supplier_id), name_unchanged: resolvedWithProfile.supplier?.name, rows_count: rows.length });
 
   const passed = cases.filter((c) => c.passed).length;
