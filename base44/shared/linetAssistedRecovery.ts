@@ -59,8 +59,14 @@ export const LINET_ASSISTED_REASON_CODES = {
   CONFLICT: 'LINET_RECOVERY_CONFLICT',
   POST_FILL_UNCONFIRMED: 'LINET_RECOVERY_POST_FILL_UNCONFIRMED',
   ALREADY_OWNED: 'LINET_RECOVERY_PURCHASE_ALREADY_OWNED',
-  APPLIED: 'LINET_RECOVERY_APPLIED'
+  APPLIED: 'LINET_RECOVERY_APPLIED',
+  // Post-persist safety: the existing reconciliation did not confirm the SAME purchase this
+  // recovery was based on (mismatch / conflict / possible / owned / missing / exception).
+  RECONCILIATION_MISMATCH: 'LINET_RECOVERY_RECONCILIATION_MISMATCH'
 };
+
+/** Critical header fields the deterministic route summaries treat as mandatory. */
+export const CRITICAL_SUMMARY_FIELDS = ['supplier_name', 'doc_type_he', 'doc_number', 'invoice_date', 'total_with_vat'];
 
 /**
  * Transparent, versioned weights.
@@ -244,8 +250,27 @@ export function planLinetAssistedRecovery(extraction: any = {}, options: any = {
   const supplierAccount = resolutionReliable ? cleanEvidence(supplier?.linet_supplier_account_id) : '';
   const supplierVat = resolutionReliable ? digits(supplier?.vat_id) : '';
 
-  const account = profileAccount || supplierAccount;
-  const vat = supplierVat || (profileReliable ? digits(profileMatch?.supplier?.vat_id) : '');
+  // When a curated profile IS reliably matched, that profile's VERIFIED Linet account is the only
+  // admissible identity — a profile without one (ALPHONE) can never fall back to the supplier's VAT,
+  // even when the stored supplier row carries a real VAT (515893683) and resolves reliably.
+  let account = '';
+  let vat = '';
+  let source = 'none';
+  if (profileReliable) {
+    if (!profileAccount) {
+      return {
+        ...base,
+        reason_code: LINET_ASSISTED_REASON_CODES.NO_EXACT_IDENTITY,
+        reason: 'לפרופיל הספק המאומת אין חשבון לינט מאומת ולכן לא בוצע שחזור מול לינט (אין נפילה לח.פ של הספק).'
+      };
+    }
+    account = profileAccount;
+    source = 'profile_linet_account';
+  } else {
+    account = supplierAccount;
+    vat = account ? '' : supplierVat;
+    source = account ? 'supplier_linet_account' : 'supplier_vat_id';
+  }
   if (!account && !vat) {
     return {
       ...base,
@@ -261,7 +286,7 @@ export function planLinetAssistedRecovery(extraction: any = {}, options: any = {
       linet_supplier_account_id: account || null,
       vat_id: vat || null,
       supplier_id: supplier?.id ?? (profileReliable ? profileMatch.supplier_id : null),
-      source: profileAccount ? 'profile_linet_account' : (supplierAccount ? 'supplier_linet_account' : 'supplier_vat_id')
+      source
     },
     reason_code: null,
     reason: `נדרש שחזור מול לינט לשדות: ${target_fields.join(', ') || 'זהות ספק'}.`
@@ -670,6 +695,92 @@ export function applyRecoveryOutcomesToGate(gate: any, { merge = null, decision 
   }
 
   return { remaining, profile_guard_kept };
+}
+
+/**
+ * PRE-LINET SNAPSHOT for provenance. Must be taken BEFORE runLinetAssistedRecovery mutates the
+ * extraction, so ORIGINAL_DOCUMENT and the latest AI candidate stay exactly what extraction + P1-A
+ * produced and a Linet-filled value can never masquerade as a printed/AI value.
+ * Compact critical values only — no document text is ever captured here.
+ */
+export function snapshotCriticalValues(extraction: any = {}, { supplier_id = null, round = false }: any = {}) {
+  const num = (value: unknown) => (isFiniteNumber(value) ? (round ? roundMoney(value as number) : value) : null);
+  return {
+    supplier: supplier_id ?? null,
+    doc_number: extraction.doc_number ?? null,
+    doc_date: (extraction.invoice_date ?? extraction.doc_date) ?? null,
+    subtotal_before_vat: num(extraction.subtotal_before_vat),
+    vat_amount: num(extraction.vat_amount),
+    total_with_vat: num(extraction.total_with_vat)
+  };
+}
+
+/**
+ * Shared missing-critical-field reader so both routes can recompute their deterministic summary
+ * AFTER P1-C. Only genuine emptiness counts as missing; real line/amount/classification failures
+ * are computed elsewhere and are never touched by this.
+ */
+export function missingCriticalFields(extraction: any = {}, fields: string[] = CRITICAL_SUMMARY_FIELDS) {
+  return fields.filter((field) => {
+    const value = field === 'invoice_date' ? (extraction.invoice_date ?? extraction.doc_date) : extraction[field];
+    return value === null || value === undefined || value === '' || value === 'null';
+  });
+}
+
+/**
+ * PURE post-persist safety check: when P1-C actually applied something, the existing targeted
+ * reconciliation must confirm the SAME purchase document this recovery was based on. Anything else
+ * (different purchase, conflict/possible, owned by another invoice, missing result, exception)
+ * fails CLOSED — the invoice is downgraded to manual review. This never claims a purchase, never
+ * promotes a match and never overwrites an existing conflict state.
+ */
+export function planLinetRecoveryReconciliationCheck(decision: any, { invoice_result = null, refreshed_invoice = null, error = null }: any = {}) {
+  const base = {
+    version: LINET_ASSISTED_RECOVERY_VERSION,
+    applicable: decision?.applied === true,
+    verified: false,
+    downgrade: false,
+    expected_purchase_id: decision?.selected?.linet_purchase_document_id ?? null,
+    actual_purchase_id: null as string | null,
+    reconciliation_status: invoice_result?.status ?? null,
+    reason_code: null as string | null,
+    reason: null as string | null,
+    writes: {} as Record<string, any>,
+    note: null as string | null,
+    event: null as any
+  };
+  if (!base.applicable) return base;
+
+  const actual = refreshed_invoice?.linet_purchase_document_id ?? invoice_result?.linet_purchase_document_id ?? null;
+  const detail = error ? `שגיאת הצלבה: ${error}`
+    : (!invoice_result ? 'לא הוחזרה תוצאת הצלבה עבור חשבונית זו'
+      : (invoice_result.status !== 'matched' ? `סטטוס ההצלבה הוא ${invoice_result.status}`
+        : (String(actual ?? '') !== String(base.expected_purchase_id ?? '') ? `ההצלבה נבחרה למסמך רכש אחר (${actual ?? 'ללא'} במקום ${base.expected_purchase_id ?? 'ללא'})` : null)));
+
+  if (!detail) return { ...base, actual_purchase_id: actual, verified: true };
+
+  const reason = `${LINET_ASSISTED_REASON_CODES.RECONCILIATION_MISMATCH}: השחזור מלינט לא אושר בהצלבה מול אותו מסמך רכש — ${detail}. נדרש אימות ידני.`;
+  return {
+    ...base,
+    actual_purchase_id: actual,
+    downgrade: true,
+    reason_code: LINET_ASSISTED_REASON_CODES.RECONCILIATION_MISMATCH,
+    reason,
+    writes: { validation_passed: false, auto_approved: false, extraction_status: 'ממתין לאימות' },
+    note: reason,
+    event: {
+      type: 'LINET_POSSIBLE',
+      outcome: 'manual_review',
+      reason: LINET_ASSISTED_REASON_CODES.RECONCILIATION_MISMATCH,
+      meta: {
+        stage: 'P1C_POST_RECONCILIATION',
+        expected: base.expected_purchase_id,
+        actual,
+        status: invoice_result?.status ?? null,
+        error: error || null
+      }
+    }
+  };
 }
 
 /** Compact processing events, reusing the existing Linet event vocabulary (no schema change). */

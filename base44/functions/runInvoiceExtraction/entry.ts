@@ -12,7 +12,7 @@ import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDupli
 import { NON_ATTEMPT_REASONS, planAttemptStart, planAttemptSuccess, planNonAttempt, planRouteFailureTarget } from '../../shared/invoiceRetryLifecycle.ts';
 import { ROOT_DOCUMENT_INDEX, planMultiDocumentTargets } from '../../shared/invoiceMultiDocumentIndex.ts';
 import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyLinetProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
-import { applyRecoveryOutcomesToGate, buildLinetAssistedEvents, linetProvenanceValues, runLinetAssistedRecovery } from '../../shared/linetAssistedRecovery.ts';
+import { applyRecoveryOutcomesToGate, buildLinetAssistedEvents, linetProvenanceValues, missingCriticalFields, planLinetRecoveryReconciliationCheck, runLinetAssistedRecovery, snapshotCriticalValues } from '../../shared/linetAssistedRecovery.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber } from '../../shared/invoiceSupplierProfiles.ts';
 
@@ -75,10 +75,8 @@ const MULTI_INVOICE_DETECT_SCHEMA = {
  * shared validation gate — this only produces Hebrew review text and field checks.
  */
 function buildDeterministicValidation(extraction) {
-  const missing = ['supplier_name', 'doc_type_he', 'doc_number', 'invoice_date', 'total_with_vat'].filter((field) => {
-    const value = extraction[field];
-    return value === null || value === undefined || value === '' || value === 'null';
-  });
+  // Recomputed AFTER P1-C so a confirmed Linet fill is no longer reported as a missing field.
+  const missing = missingCriticalFields(extraction);
   const lineCheck = getLineItemsCheck(extraction);
   const reviewReasons = [];
   if (missing.length) reviewReasons.push(`שדות חסרים: ${missing.join(', ')}`);
@@ -112,9 +110,6 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     return { success: true, skipped: true, reason: 'OTHER', extraction };
   }
 
-  // Deterministic validation only — no LLM decides status here.
-  const validation = buildDeterministicValidation(extraction);
-
   // Supplier resolution ONLY — this route may never create, rename or update a supplier.
   const suppliers = await base44.asServiceRole.entities.Suppliers.list('-created_date', 1000);
   const supplierPatterns = await base44.asServiceRole.entities.SupplierPattern.filter({ is_active: true }, undefined, 1000);
@@ -136,9 +131,11 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
 
   let supplierId = resolution.supplier_id;
   const supplierMatchMethod = resolution.method;
-  if (!supplierId) {
-    validation.review_reasons_he.unshift(`${resolution.reason_code}: ${resolution.reason}`);
-  }
+
+  // Provenance snapshot taken BEFORE P1-C may mutate anything (including the pre-Linet resolved
+  // supplier id), so ORIGINAL_DOCUMENT / latest AI never record a Linet-filled value.
+  const preLinetValues = snapshotCriticalValues(extraction, { supplier_id: supplierId ?? null, round: true });
+  const recoveryMerge = extraction.critical_field_recovery || null;
 
   // P1-C: deterministic Linet-assisted recovery of fields still missing after P1-A. Read-only
   // candidates, exact identity only, post-fill confirmation mandatory, and always BEFORE the gate.
@@ -146,9 +143,19 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     profile_match: profileMatch,
     supplier: resolution.supplier,
     supplier_resolution: resolution,
+    // P1-A merge is REQUIRED here: it is what lets a repeated identical profile-invalid reading be
+    // treated as clear conflicting evidence and keeps it from being filled or cleared.
+    recovery_merge: recoveryMerge,
     invoice_id: invoice.id
   });
   if (linetAssisted.decision.applied_supplier_id && !supplierId) supplierId = linetAssisted.decision.applied_supplier_id;
+
+  // Deterministic validation summary — recomputed AFTER P1-C so notes, missing fields and duplicate
+  // readiness describe the real post-recovery state. No LLM decides status here.
+  const validation = buildDeterministicValidation(extraction);
+  if (!supplierId) {
+    validation.review_reasons_he.unshift(`${resolution.reason_code}: ${resolution.reason}`);
+  }
 
   // The deterministic gate is the ONLY thing that may approve an invoice here.
   // extraction.overall_confidence is telemetry and never part of this decision.
@@ -179,7 +186,6 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
 
   // P1-A + P1-C + the P1-B reference guard, folded in through the ONE shared helper so the three
   // routes stay identical. The gate is only ever made stricter here.
-  const recoveryMerge = extraction.critical_field_recovery || null;
   const finalDocCheck = validateProfileDocNumber(profileMatch, extraction.doc_number);
   const recoveryOutcomes = applyRecoveryOutcomesToGate(gate, {
     merge: recoveryMerge,
@@ -205,14 +211,8 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
   const auditAt = new Date().toISOString();
   const provenance = applyExtractionProvenance({
     existingJson: latest.field_provenance_json,
-    values: {
-      supplier: supplierId ?? null,
-      doc_number: extraction.doc_number ?? null,
-      doc_date: extraction.invoice_date ?? null,
-      subtotal_before_vat: roundMoney(extraction.subtotal_before_vat) ?? null,
-      vat_amount: roundMoney(extraction.vat_amount) ?? null,
-      total_with_vat: roundMoney(extraction.total_with_vat) ?? null
-    },
+    // PRE-Linet snapshot: original/AI must stay what extraction + P1-A produced.
+    values: preLinetValues,
     supplierName: extraction.supplier_name || null,
     reason: `gate ${gate.validation_version}`,
     at: auditAt
@@ -270,13 +270,18 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
   // Targeted reconciliation AFTER lines exist. matched/conflict/possible are informational —
   // a Linet match is the same transaction, never a duplicate, and never ends this flow.
   let reconciliationResult = null;
+  let reconInvoiceResult = null;
+  let reconRefreshed = null;
+  let reconError = null;
   try {
     const reconciliation = await base44.asServiceRole.functions.invoke('reconcileLinetInvoices', { invoice_ids: [invoice.id] });
     const result = reconciliation?.data || reconciliation;
     reconciliationResult = result?.stats || null;
     const invoiceResult = (result?.results || []).find((row) => row.invoice_id === invoice.id);
+    reconInvoiceResult = invoiceResult || null;
     if (invoiceResult?.status === 'matched') {
       const refreshed = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0];
+      reconRefreshed = refreshed || null;
       const purchase = refreshed?.linet_purchase_document_id
         ? (await base44.asServiceRole.entities.LinetPurchaseDocument.filter({ id: refreshed.linet_purchase_document_id }, undefined, 1))?.[0]
         : null;
@@ -285,10 +290,25 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
       }
     }
   } catch (reconciliationError) {
-    console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
+    reconError = reconciliationError?.message || String(reconciliationError);
+    console.log('Linet reconciliation skipped without blocking intake:', reconError);
   }
 
-  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: finalStatus, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, linet_assisted_recovery: extraction.linet_assisted_recovery || null, remaining_recovery_failures: recoveryOutcomes.remaining, profile_match: extraction.profile_match_final, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
+  // A P1-C apply is only trustworthy when the existing reconciliation confirmed the SAME purchase.
+  // Anything else fails closed to manual review; the match state itself is never touched here.
+  const reconCheck = planLinetRecoveryReconciliationCheck(linetAssisted.decision, { invoice_result: reconInvoiceResult, refreshed_invoice: reconRefreshed, error: reconError });
+  if (reconCheck.downgrade) {
+    const current = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0] || {};
+    const downgradedHistory = appendProcessingEvents(current.processing_events_json, [{ ...reconCheck.event, at: new Date().toISOString() }]);
+    await base44.asServiceRole.entities.Invoices.update(invoice.id, {
+      ...reconCheck.writes,
+      validation_failures: [current.validation_failures, reconCheck.reason].filter(Boolean).join(' | '),
+      notes: `${current.notes || ''}\n${reconCheck.note}`.trim(),
+      processing_events_json: downgradedHistory.json
+    });
+  }
+
+  return { success: true, invoice_id: invoice.id, supplier_id: supplierId, extraction_status: reconCheck.downgrade ? 'ממתין לאימות' : finalStatus, linet_recovery_reconciliation: reconCheck, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, linet_assisted_recovery: extraction.linet_assisted_recovery || null, remaining_recovery_failures: recoveryOutcomes.remaining, profile_match: extraction.profile_match_final, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
 }
 
 Deno.serve(async (req) => {

@@ -14,6 +14,12 @@ import {
   remainingCriticalRecoveryFailures,
   scoreLinetCandidate
 } from '../../shared/linetAssistedRecovery.ts';
+import {
+  CRITICAL_SUMMARY_FIELDS,
+  missingCriticalFields,
+  planLinetRecoveryReconciliationCheck,
+  snapshotCriticalValues
+} from '../../shared/linetAssistedRecovery.ts';
 import { evaluateLinetMatch, selectLinetCandidate } from '../../shared/linetInvoiceReconciliation.ts';
 import { matchSupplierProfile, validateProfileDocNumber } from '../../shared/invoiceSupplierProfiles.ts';
 import { applyExtractionProvenance, applyLinetProvenance, parseProvenance } from '../../shared/invoiceProvenance.ts';
@@ -33,9 +39,9 @@ const ALPHONE_ID = '6a12f0860a0eb61e7a5c5e45';
 const SUPPLIERS = [
   { id: STS_ID, name: 'אס.טי.אס מגה גרופ בע"מ', vat_id: '516542024', linet_supplier_account_id: '139', is_active: true },
   { id: INTECH_ID, name: 'פ.ט אינטק סחר בע"מ', vat_id: '516058989', linet_supplier_account_id: '151', is_active: true },
-  // Deliberately WITHOUT a Linet account and without a stored VAT — mirrors the verified fact that
-  // Alphone has no proven Linet account, so it can never get Linet-assisted recovery.
-  { id: ALPHONE_ID, name: 'אולפון יבוא סחר בעמ', vat_id: null, linet_supplier_account_id: null, is_active: true }
+  // REAL data: Alphone HAS a verified VAT (515893683) but NO proven Linet account. A reliable
+  // curated profile without a verified Linet account must never fall back to this VAT.
+  { id: ALPHONE_ID, name: 'אולפון יבוא סחר בעמ', vat_id: '515893683', linet_supplier_account_id: null, is_active: true }
 ];
 
 const STS_SUPPLIER = SUPPLIERS[0];
@@ -449,6 +455,101 @@ Deno.serve(async (req) => {
         applied: { type: appliedEvents[0].type, outcome: appliedEvents[0].outcome, stage: appliedEvents[0].meta.stage, applied_fields: appliedEvents[0].meta.applied_fields },
         conflict: { type: conflictEvents[0].type, outcome: conflictEvents[0].outcome },
         not_attempted: noEvents.length
+      });
+
+    // ── QA #3: reliable Alphone profile + reliable stored supplier VAT is STILL ineligible ───
+    const alphoneWithVatPlan = planLinetAssistedRecovery(extractionFixture({ doc_number: null, supplier_vat_id: '515893683', supplier_name: 'אולפון יבוא סחר' }), {
+      profile_match: alphoneProfile(), supplier: ALPHONE_SUPPLIER, supplier_resolution: reliableResolution(ALPHONE_SUPPLIER)
+    });
+    check('q3_reliable_profile_without_linet_account_never_falls_back_to_supplier_vat',
+      { supplier_vat_present: '515893683', profile_reliable: true, eligible: false, code: LINET_ASSISTED_REASON_CODES.NO_EXACT_IDENTITY, identity: { account: null, vat: null, source: 'none' } },
+      {
+        supplier_vat_present: ALPHONE_SUPPLIER.vat_id,
+        profile_reliable: alphoneProfile().reliable_for_auto_approval,
+        eligible: alphoneWithVatPlan.eligible,
+        code: alphoneWithVatPlan.reason_code,
+        identity: { account: alphoneWithVatPlan.identity.linet_supplier_account_id, vat: alphoneWithVatPlan.identity.vat_id, source: alphoneWithVatPlan.identity.source }
+      });
+
+    // ── QA #1: EXACT production options shape (recovery_merge passed) blocks the repeated reading ──
+    const routeOptions = (extraction: any, merge: any) => ({
+      profile_match: stsProfile(),
+      supplier: STS_SUPPLIER,
+      supplier_resolution: reliableResolution(STS_SUPPLIER),
+      recovery_merge: merge,
+      invoice_id: 'inv-under-test'
+    });
+    const routeExtraction = extractionFixture({ doc_number: 'IN2640002281' });
+    const routePlan = planLinetAssistedRecovery(routeExtraction, routeOptions(routeExtraction, repeatedMerge));
+    const routeDecision = decideLinetAssistedRecovery({ extraction: routeExtraction, plan: routePlan, purchases: [purchaseFixture()], ...routeOptions(routeExtraction, repeatedMerge) });
+    applyLinetAssistedRecovery(routeExtraction, routeDecision);
+    const routeGate = { passed: true, failures: [] as string[] };
+    const routeOutcome = applyRecoveryOutcomesToGate(routeGate, { merge: repeatedMerge, decision: routeDecision, profile_doc_check: validateProfileDocNumber(stsProfile(), routeExtraction.doc_number) });
+    // Without the merge the same call could not see the repeated reading — proven side by side.
+    const noMergePlan = planLinetAssistedRecovery(extractionFixture({ doc_number: 'IN2640002281' }), routeOptions(routeExtraction, null));
+    check('q1_route_parity_options_block_same_bad_reading_twice',
+      { blocked: ['doc_number'], targets: [], applied: false, doc_number: 'IN2640002281', resolved_by_linet: [], guard_kept: true, gate_passed: false, without_merge_targets: ['doc_number'] },
+      {
+        blocked: routePlan.blocked_fields, targets: routePlan.target_fields, applied: routeDecision.applied,
+        doc_number: routeExtraction.doc_number, resolved_by_linet: routeOutcome.remaining.resolved_by_linet,
+        guard_kept: routeOutcome.profile_guard_kept, gate_passed: routeGate.passed, without_merge_targets: noMergePlan.target_fields
+      });
+
+    // ── QA #2: route ORDER — snapshot before P1-C, then extraction/recovery/Linet provenance ──
+    const orderExtraction = extractionFixture({ doc_number: null });
+    const orderSnapshot = snapshotCriticalValues(orderExtraction, { supplier_id: STS_ID, round: true });
+    const orderRecovery = runRecovery(orderExtraction, [purchaseFixture(), noiseFixture()]);
+    applyLinetAssistedRecovery(orderExtraction, orderRecovery.decision);
+    const orderProvenance = applyExtractionProvenance({ existingJson: null, values: orderSnapshot, supplierName: 'אס.טי.אס מגה גרופ בע"מ', reason: 'gate', at: '2026-08-25T10:00:00Z' });
+    const orderLinetValues = linetProvenanceValues(orderRecovery.decision);
+    const orderState = parseProvenance(applyLinetProvenance({ existingJson: orderProvenance.json, level: 'confirmed', values: orderLinetValues, appliedAsSourceOfTruth: true, reason: LINET_ASSISTED_REASON_CODES.APPLIED, at: '2026-08-25T10:05:00Z' }).json);
+    check('q2_pre_linet_snapshot_keeps_original_and_ai_free_of_linet_values',
+      {
+        extraction_after: { doc_number: '264002392', doc_date: '2026-05-14' },
+        original: { doc_number: null, doc_date: '2026-05-14', total_with_vat: 1180 },
+        ai: { doc_number: null, doc_date: '2026-05-14' },
+        selected: { doc_number: 'LINET', doc_date: 'VALIDATED', total_with_vat: 'VALIDATED' }
+      },
+      {
+        extraction_after: { doc_number: orderExtraction.doc_number, doc_date: orderExtraction.doc_date },
+        original: { doc_number: orderState.original.fields.doc_number, doc_date: orderState.original.fields.doc_date, total_with_vat: orderState.original.fields.total_with_vat },
+        ai: { doc_number: orderState.ai.fields.doc_number, doc_date: orderState.ai.fields.doc_date },
+        selected: { doc_number: orderState.selected.doc_number.source, doc_date: orderState.selected.doc_date.source, total_with_vat: orderState.selected.total_with_vat.source }
+      });
+
+    // ── QA #4: post-recovery summary drops the filled field, keeps unrelated failures ────────
+    const summaryExtraction = extractionFixture({ doc_number: null, subtotal_before_vat: 900 });
+    const missingBefore = missingCriticalFields(summaryExtraction);
+    const summaryRecovery = runRecovery(summaryExtraction, [purchaseFixture(), noiseFixture()]);
+    applyLinetAssistedRecovery(summaryExtraction, summaryRecovery.decision);
+    const missingAfter = missingCriticalFields(summaryExtraction);
+    const mathStillBroken = Math.abs((summaryExtraction.subtotal_before_vat + summaryExtraction.vat_amount) - summaryExtraction.total_with_vat) > 0.05;
+    check('q4_post_recovery_summary_drops_filled_field_and_keeps_other_failures',
+      { fields: CRITICAL_SUMMARY_FIELDS, before: ['doc_number'], after: [], applied: true, math_failure_kept: true },
+      { fields: CRITICAL_SUMMARY_FIELDS, before: missingBefore, after: missingAfter, applied: summaryRecovery.decision.applied, math_failure_kept: mathStillBroken });
+
+    // ── QA #5: post-persist reconciliation must confirm the SAME purchase (pure plans) ───────
+    const appliedDecision = missingRef.decision;
+    const sameCandidate = planLinetRecoveryReconciliationCheck(appliedDecision, { invoice_result: { invoice_id: 'inv-under-test', status: 'matched' }, refreshed_invoice: { linet_purchase_document_id: 'p-264002392' } });
+    const otherCandidate = planLinetRecoveryReconciliationCheck(appliedDecision, { invoice_result: { status: 'matched' }, refreshed_invoice: { linet_purchase_document_id: 'p-other' } });
+    const conflictRecon = planLinetRecoveryReconciliationCheck(appliedDecision, { invoice_result: { status: 'conflict' } });
+    const possibleRecon = planLinetRecoveryReconciliationCheck(appliedDecision, { invoice_result: { status: 'possible_match' } });
+    const ownedRecon = planLinetRecoveryReconciliationCheck(appliedDecision, { invoice_result: { status: 'blocked', linet_purchase_document_id: 'p-264002392' } });
+    const missingRecon = planLinetRecoveryReconciliationCheck(appliedDecision, {});
+    const exceptionRecon = planLinetRecoveryReconciliationCheck(appliedDecision, { error: 'timeout' });
+    const notAppliedRecon = planLinetRecoveryReconciliationCheck(unconfirmed.decision, { invoice_result: { status: 'conflict' } });
+    check('q5_reconciliation_must_confirm_the_same_selected_purchase',
+      {
+        same: { verified: true, downgrade: false, writes: 0 },
+        different: { downgrade: true, code: LINET_ASSISTED_REASON_CODES.RECONCILIATION_MISMATCH, status: 'ממתין לאימות', passed: false, approved: false, event: 'LINET_POSSIBLE' },
+        conflict: { downgrade: true }, possible: { downgrade: true }, owned: { downgrade: true }, missing: { downgrade: true }, exception: { downgrade: true },
+        not_applied: { applicable: false, downgrade: false, verified: false }
+      },
+      {
+        same: { verified: sameCandidate.verified, downgrade: sameCandidate.downgrade, writes: Object.keys(sameCandidate.writes).length },
+        different: { downgrade: otherCandidate.downgrade, code: otherCandidate.reason_code, status: otherCandidate.writes.extraction_status, passed: otherCandidate.writes.validation_passed, approved: otherCandidate.writes.auto_approved, event: otherCandidate.event.type },
+        conflict: { downgrade: conflictRecon.downgrade }, possible: { downgrade: possibleRecon.downgrade }, owned: { downgrade: ownedRecon.downgrade }, missing: { downgrade: missingRecon.downgrade }, exception: { downgrade: exceptionRecon.downgrade },
+        not_applied: { applicable: notAppliedRecon.applicable, downgrade: notAppliedRecon.downgrade, verified: notAppliedRecon.verified }
       });
 
     const failed = cases.filter((c) => !c.passed);

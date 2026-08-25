@@ -117,6 +117,9 @@ Deno.serve(async (req) => {
         profile_match: finalProfile,
         supplier: resolution.supplier,
         supplier_resolution: resolution,
+        // Same options shape as production: without the P1-A merge, a repeated identical
+        // profile-invalid reading could not be recognised as clear conflicting evidence.
+        recovery_merge: recovery.merge,
         invoice_id: invoice.id
       });
 

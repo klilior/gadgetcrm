@@ -6,7 +6,7 @@ import { planExtractionRoutePreflight } from '../../shared/invoiceExtractionRout
 import { NON_ATTEMPT_REASONS, planAttemptFailure, planAttemptStart, planAttemptSuccess, planNonAttempt } from '../../shared/invoiceRetryLifecycle.ts';
 import { planSupplierPricePurchase } from '../../shared/supplierPriceRetry.ts';
 import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtractionProvenance, applyLinetProvenance, applyRecoveryProvenance, buildRecoveryEvents } from '../../shared/invoiceProvenance.ts';
-import { applyRecoveryOutcomesToGate, buildLinetAssistedEvents, linetProvenanceValues, runLinetAssistedRecovery } from '../../shared/linetAssistedRecovery.ts';
+import { applyRecoveryOutcomesToGate, buildLinetAssistedEvents, linetProvenanceValues, missingCriticalFields, planLinetRecoveryReconciliationCheck, runLinetAssistedRecovery, snapshotCriticalValues } from '../../shared/linetAssistedRecovery.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber } from '../../shared/invoiceSupplierProfiles.ts';
 import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
@@ -421,8 +421,10 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, skipped: true, reason: 'OTHER', extraction, lifecycle: skipLifecycle, attempt_count: attemptPlan.writes.attempt_count });
     }
 
-    // Step 3: Deterministic validation (no LLM - avoids math miscalculations)
-    const validation = (() => {
+    // Step 3: Deterministic validation (no LLM - avoids math miscalculations).
+    // Built as a function and EVALUATED AFTER P1-C, so a confirmed Linet fill is reflected in the
+    // missing-field list, the notes and the duplicate readiness argument.
+    const buildValidation = () => {
       const sub = extraction.subtotal_before_vat;
       const vat = extraction.vat_amount;
       const total = extraction.total_with_vat;
@@ -441,12 +443,8 @@ Deno.serve(async (req) => {
         mathDelta = 0;
       }
       
-      // Critical fields check
-      const criticalFields = ['supplier_name', 'doc_type_he', 'doc_number', 'doc_date', 'total_with_vat'];
-      const missing = criticalFields.filter(f => {
-        const val = extraction[f];
-        return val === null || val === undefined || val === '' || val === 'null';
-      });
+      // Critical fields check (shared reader, so both routes agree on what "missing" means)
+      const missing = missingCriticalFields(extraction, ['supplier_name', 'doc_type_he', 'doc_number', 'invoice_date', 'total_with_vat']);
       
       const lineCheck = getLineItemsCheck(extraction);
       
@@ -468,13 +466,7 @@ Deno.serve(async (req) => {
         review_reasons_he: reviewReasons,
         display_validation_he: displayValidation
       };
-    })();
-    
-    console.log('Deterministic validation result:', JSON.stringify(validation));
-
-    // DEBUG: Save raw validation JSON
-    const validationJson = JSON.stringify(validation);
-    await base44.asServiceRole.entities.Invoices.update(invoice.id, { ai_debug_last_validation_json: validationJson });
+    };
 
     // Step 4: Supplier resolution ONLY — deterministic, shared, and never creates/renames a supplier.
     const allSuppliers = profileSuppliers;
@@ -499,16 +491,28 @@ Deno.serve(async (req) => {
     const supplierMatchMethod = supplierResolution.method;
     console.log(`Supplier resolution: ${supplierMatchMethod} / ${supplierResolution.evidence_strength} → ${supplierId || 'UNRESOLVED'} (${supplierResolution.reason_code || 'ok'})`);
 
+    // Provenance snapshot taken BEFORE P1-C may mutate anything (including the pre-Linet resolved
+    // supplier id), so ORIGINAL_DOCUMENT / latest AI never record a Linet-filled value.
+    const preLinetValues = snapshotCriticalValues(extraction, { supplier_id: supplierId ?? null });
+
     // P1-C: deterministic Linet-assisted recovery for fields still missing after P1-A. Read-only
     // candidates, exact identity only, post-fill confirmation mandatory, always BEFORE the gate.
     const linetAssisted = await runLinetAssistedRecovery(base44, extraction, {
       profile_match: finalProfile,
       supplier: supplierResolution.supplier,
       supplier_resolution: supplierResolution,
+      // P1-A merge is REQUIRED here: it is what lets a repeated identical profile-invalid reading be
+      // treated as clear conflicting evidence and keeps it from being filled or cleared.
+      recovery_merge: recovery.merge,
       invoice_id: invoice.id
     });
     if (linetAssisted.decision.applied_supplier_id && !supplierId) supplierId = linetAssisted.decision.applied_supplier_id;
     if (linetAssisted.decision.attempted) console.log('Linet-assisted recovery:', JSON.stringify(extraction.linet_assisted_recovery));
+
+    // Deterministic summary evaluated on the POST-P1-C state; real line/amount failures survive.
+    const validation = buildValidation();
+    console.log('Deterministic validation result:', JSON.stringify(validation));
+    await base44.asServiceRole.entities.Invoices.update(invoice.id, { ai_debug_last_validation_json: JSON.stringify(validation) });
 
     // Step 5: Classify every extracted line, then summarize the invoice.
     const lineItems = extraction.line_items || [];
@@ -570,14 +574,8 @@ Deno.serve(async (req) => {
     const auditAt = new Date().toISOString();
     const provenance = applyExtractionProvenance({
       existingJson: latestInvoice.field_provenance_json,
-      values: {
-        supplier: supplierId ?? null,
-        doc_number: extraction.doc_number ?? null,
-        doc_date: extraction.doc_date ?? null,
-        subtotal_before_vat: extraction.subtotal_before_vat ?? null,
-        vat_amount: extraction.vat_amount ?? null,
-        total_with_vat: extraction.total_with_vat ?? null
-      },
+      // PRE-Linet snapshot: original/AI must stay what extraction + P1-A produced.
+      values: preLinetValues,
       supplierName: extraction.supplier_name || null,
       reason: `gate ${gate.validation_version}`,
       at: auditAt
@@ -715,13 +713,18 @@ Deno.serve(async (req) => {
     // Step 6b: targeted reconciliation AFTER lines are stored. matched/conflict/possible are
     // consumed as information only — a Linet match never terminates this flow.
     let reconciliationResult = null;
+    let reconInvoiceResult = null;
+    let reconRefreshed = null;
+    let reconError = null;
     try {
       const reconciliation = await base44.asServiceRole.functions.invoke('reconcileLinetInvoices', { invoice_ids: [invoice.id] });
       const result = reconciliation?.data || reconciliation;
       reconciliationResult = result?.stats || null;
       const invoiceResult = (result?.results || []).find((row) => row.invoice_id === invoice.id);
+      reconInvoiceResult = invoiceResult || null;
       if (invoiceResult?.status === 'matched') {
         const refreshed = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0];
+        reconRefreshed = refreshed || null;
         const purchase = refreshed?.linet_purchase_document_id
           ? (await base44.asServiceRole.entities.LinetPurchaseDocument.filter({ id: refreshed.linet_purchase_document_id }, undefined, 1))?.[0]
           : null;
@@ -732,7 +735,24 @@ Deno.serve(async (req) => {
         }
       }
     } catch (reconciliationError) {
-      console.log('Linet reconciliation skipped without blocking intake:', reconciliationError.message);
+      reconError = reconciliationError?.message || String(reconciliationError);
+      console.log('Linet reconciliation skipped without blocking intake:', reconError);
+    }
+
+    // A P1-C apply is only trustworthy when the existing reconciliation confirmed the SAME purchase
+    // it was based on. Anything else (different purchase, conflict/possible, owned, missing result,
+    // exception) fails closed to manual review. The match state itself is never touched here.
+    const reconCheck = planLinetRecoveryReconciliationCheck(linetAssisted.decision, { invoice_result: reconInvoiceResult, refreshed_invoice: reconRefreshed, error: reconError });
+    if (reconCheck.downgrade) {
+      const current = (await base44.asServiceRole.entities.Invoices.filter({ id: invoice.id }, undefined, 1))?.[0] || {};
+      const downgradedHistory = appendProcessingEvents(current.processing_events_json, [{ ...reconCheck.event, at: new Date().toISOString() }]);
+      await base44.asServiceRole.entities.Invoices.update(invoice.id, {
+        ...reconCheck.writes,
+        validation_failures: [current.validation_failures, reconCheck.reason].filter(Boolean).join(' | '),
+        notes: `${current.notes || ''}\n${reconCheck.note}`.trim(),
+        processing_events_json: downgradedHistory.json
+      });
+      console.log('P1-C reconciliation mismatch → downgraded to manual review:', JSON.stringify(reconCheck));
     }
 
     // Step 7: Update intake status_reason
@@ -764,6 +784,7 @@ Deno.serve(async (req) => {
       price_alerts: priceAlerts,
       lines_persisted: linePersistence,
       reconciliation: reconciliationResult,
+      linet_recovery_reconciliation: reconCheck,
       extraction, 
       validation 
     });
