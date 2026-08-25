@@ -114,6 +114,34 @@ Deno.serve(async (req) => {
     { with_profile: { needed: true, fields: ['doc_number'] }, without_profile: { needed: false, fields: [] } },
     { with_profile: { needed: intechPlan.needed, fields: intechPlan.request_fields }, without_profile: { needed: intechPlanNoProfile.needed, fields: intechPlanNoProfile.request_fields } });
 
+  check('int3b_plan_carries_compact_profile_validation_context',
+    { applicable: true, first_valid: false, profile_key: 'INTECH', code: PROFILE_REASON_CODES.DOC_NUMBER_IMPLAUSIBLE, no_profile_applicable: false },
+    { applicable: intechPlan.profile_doc_number.applicable, first_valid: intechPlan.profile_doc_number.first_valid, profile_key: intechPlan.profile_doc_number.profile_key, code: intechPlan.profile_doc_number.reason_code, no_profile_applicable: intechPlanNoProfile.profile_doc_number.applicable });
+
+  // No second reading at all → the profile-invalid first value may NOT be kept as FIRST_PASS_VALID.
+  const intechNoSecond = mergeCriticalFieldRecovery({ extraction: healthyIntech, plan: intechPlan, now: NOW, second: null });
+  check('int3c_missing_second_pass_leaves_profile_invalid_number_unresolved',
+    { code: RECOVERY_REASON_CODES.UNRESOLVED, selected: null, applied: [], unresolved: ['doc_number'], review: true, extraction_untouched: 'IN2640002281' },
+    { code: intechNoSecond.decisions[0].reason_code, selected: intechNoSecond.decisions[0].selected_value, applied: intechNoSecond.applied_fields, unresolved: intechNoSecond.unresolved_fields, review: intechNoSecond.requires_manual_review, extraction_untouched: healthyIntech.doc_number });
+
+  // Second pass reads the SAME profile-invalid number → agreement must NOT resolve it.
+  const intechSameBad = mergeCriticalFieldRecovery({
+    extraction: healthyIntech, plan: intechPlan, now: NOW,
+    second: { fields: [{ field: 'doc_number', found: true, normalized_value: 'IN2640002281', printed_label: 'מספר חשבונית', confidence: 99 }] }
+  });
+  check('int3d_same_profile_invalid_second_reading_is_not_agreement',
+    { code: RECOVERY_REASON_CODES.UNRESOLVED, selected: null, applied: [], review: true, both_candidates_kept: ['IN2640002281', 'IN2640002281'] },
+    { code: intechSameBad.decisions[0].reason_code, selected: intechSameBad.decisions[0].selected_value, applied: intechSameBad.applied_fields, review: intechSameBad.requires_manual_review, both_candidates_kept: [intechSameBad.decisions[0].first_pass.value, intechSameBad.decisions[0].second_pass.value] });
+
+  // A different but STILL profile-invalid second reading also fails closed.
+  const intechOtherBad = mergeCriticalFieldRecovery({
+    extraction: healthyIntech, plan: intechPlan, now: NOW,
+    second: { fields: [{ field: 'doc_number', found: true, normalized_value: 'IN26400022', printed_label: 'מספר חשבונית' }] }
+  });
+  check('int3e_different_profile_invalid_second_reading_also_unresolved',
+    { code: RECOVERY_REASON_CODES.UNRESOLVED, selected: null, review: true },
+    { code: intechOtherBad.decisions[0].reason_code, selected: intechOtherBad.decisions[0].selected_value, review: intechOtherBad.requires_manual_review });
+
   // A conflicting but VALID second reading must stay a conflict — never a digit-deletion repair.
   const intechConflict = mergeCriticalFieldRecovery({
     extraction: healthyIntech, plan: intechPlan, now: NOW,
@@ -232,6 +260,27 @@ Deno.serve(async (req) => {
       without_profile: { id: resolvedWithoutProfile.supplier_id, reliable: resolvedWithoutProfile.reliable_for_auto_approval },
       with_conflict: { id: resolvedWithConflict.supplier_id, reliable: resolvedWithConflict.reliable_for_auto_approval }
     });
+
+  // Item 1: a strong-profile FAILURE must stop the legacy chain, even with raw STS VAT present.
+  const conflictWithRawVat = resolveSupplier(
+    { vat_id: '516542024', supplier_name: 'אס.טי.אס מגה גרופ בע"מ' },
+    { suppliers: rows, patterns: [], profile_match: match({ vat_id: '516542024', sender_email: 'allphonedocs@gmail.com' }) }
+  );
+  const rawVatNoProfile = resolveSupplier({ vat_id: '516542024' }, { suppliers: rows, patterns: [] });
+  check('ri3_profile_conflict_blocks_raw_vat_fallthrough',
+    { with_conflict: { id: null, reliable: false, code: 'SUPPLIER_PROFILE_FAILED', candidates: ['STS', 'ALPHONE'] }, without_profile: { id: STS_ID, reliable: true } },
+    {
+      with_conflict: { id: conflictWithRawVat.supplier_id, reliable: conflictWithRawVat.reliable_for_auto_approval, code: conflictWithRawVat.reason_code, candidates: (conflictWithRawVat.profile_match?.conflict_candidates || []).map((c: any) => c.profile_key) },
+      without_profile: { id: rawVatNoProfile.supplier_id, reliable: rawVatNoProfile.reliable_for_auto_approval }
+    });
+
+  const ambiguousResolved = resolveSupplier({ vat_id: '516542024' }, { suppliers: rows, patterns: [], profile_match: ambiguous });
+  const missingResolved = resolveSupplier({ vat_id: '516542024' }, { suppliers: rows, patterns: [], profile_match: missingRow });
+  const inactiveResolved = resolveSupplier({ vat_id: '516542024' }, { suppliers: rows, patterns: [], profile_match: inactiveRow });
+  const noEvidenceResolved = resolveSupplier({ vat_id: '516542024' }, { suppliers: rows, patterns: [], profile_match: match({ vat_id: '511111118' }) });
+  check('ri4_ambiguous_missing_inactive_never_fall_through_but_no_evidence_does',
+    { ambiguous: null, missing: null, inactive: null, no_evidence_uses_legacy: STS_ID },
+    { ambiguous: ambiguousResolved.supplier_id, missing: missingResolved.supplier_id, inactive: inactiveResolved.supplier_id, no_evidence_uses_legacy: noEvidenceResolved.supplier_id });
 
   check('ri2_profile_never_creates_or_renames_a_supplier',
     { returns_existing_row_only: true, name_unchanged: 'פ.ט אינטק סחר בע"מ', rows_count: 4 },
