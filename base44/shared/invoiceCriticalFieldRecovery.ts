@@ -26,7 +26,7 @@
 import { cleanEvidence, isSentinelValue } from './invoiceSentinelValues.ts';
 import { isValidVatIdentifier } from './supplierResolver.ts';
 import { roundMoney } from './invoiceExtraction.ts';
-import { selectPayableAmounts } from './invoiceMonetaryAudit.ts';
+import { selectPayableAmounts, isFinalPayableLabel, formatTargetScope } from './invoiceMonetaryAudit.ts';
 
 export const CRITICAL_RECOVERY_VERSION = 'critical-recovery-1.0.0';
 
@@ -167,8 +167,12 @@ export const RECOVERY_SCHEMA = {
   additionalProperties: true
 };
 
-/** Narrow prompt: only the failed fields, only printed evidence, never line items. */
-export function buildRecoveryPrompt(requestFields: string[] = []): string {
+/**
+ * Narrow prompt: only the failed fields, only printed evidence, never line items.
+ * With a targetScope (multi-invoice file) every returned field and its evidence is restricted
+ * to that ONE invoice, and fields belonging to any other invoice in the file must be refused.
+ */
+export function buildRecoveryPrompt(requestFields: string[] = [], targetScope?: any): string {
   const fields = requestFields.filter((f) => RECOVERABLE_FIELDS.includes(f));
   const perField: Record<string, string> = {
     supplier_name: `- supplier_name: the ISSUING supplier/vendor legal or trade name as printed in the document header ("שם הספק", "מאת", "From", "Vendor"). NEVER the recipient/customer ("לכבוד", "Bill to").`,
@@ -178,9 +182,20 @@ export function buildRecoveryPrompt(requestFields: string[] = []): string {
     total_with_vat: `- total_with_vat: the final amount THIS document demands to be paid, with the EXACT printed label copied verbatim into printed_label ("סה״כ לתשלום", "סה״כ כולל מע״מ", "Amount Due", "Total"). CRITICAL: turnover / מחזור / סכום עסקאות / previous balance / יתרה / account summary / credit limit / settlement-deposit / a VAT-only line / a before-VAT subtotal are NEVER this value — if only those are printed, report found = false.`
   };
 
+  const scopeText = formatTargetScope(targetScope);
+  const scopeBlock = scopeText ? `
+
+TARGET SCOPE (MANDATORY)
+This file contains MORE THAN ONE invoice/document. Recover fields ONLY from the following target:
+${scopeText}
+- Every value, printed_label and evidence_text you return MUST come from that target invoice only.
+- Any field printed on a DIFFERENT invoice/page/document inside this file MUST be refused: set found = false. Cross-invoice evidence is forbidden, not even as context.
+- If you cannot confidently isolate the target invoice, set found = false for every requested field rather than mixing documents.
+- All other rules below still apply exactly as stated.` : '';
+
   return `SYSTEM / INSTRUCTION
 
-You are a NARROW FIELD RECOVERY engine for ONE business document. A first extraction pass failed to read a small number of CRITICAL header fields. You do ONE job: look at the attached document again and report ONLY those fields, each with the exact printed evidence that proves it.
+You are a NARROW FIELD RECOVERY engine for ONE business document.${scopeBlock} A first extraction pass failed to read a small number of CRITICAL header fields. You do ONE job: look at the attached document again and report ONLY those fields, each with the exact printed evidence that proves it.
 
 INPUT
 ONE document file (PDF/JPG/PNG) is attached. Read ONLY what is printed in it.
@@ -295,9 +310,15 @@ function evaluateEvidence(field: string, candidate: any, context: any) {
   }
 
   if (field === 'total_with_vat') {
-    // Reuse of the authoritative monetary selector: the recovered amount must survive it as a
-    // labelled document_payable candidate. Turnover / balance / summary / VAT-only labels are
-    // rejected there, not here.
+    // The synthetic document_payable role below is NOT trusted on its own: the printed label must
+    // first pass the authoritative final-payable predicate, so a before-VAT/subtotal, VAT-only,
+    // turnover, transactions, settlement, balance, summary or credit-limit label is rejected here
+    // even though the candidate is presented as payable.
+    if (!isFinalPayableLabel(label)) {
+      return { ok: false, reason_code: RECOVERY_REASON_CODES.EVIDENCE_REJECTED, reason: `התיוג "${label || 'ללא תיוג'}" אינו תיוג של סכום סופי לתשלום.` };
+    }
+    // Reuse of the authoritative monetary selector: the recovered amount must ALSO survive it as a
+    // labelled document_payable candidate.
     const selection = selectPayableAmounts({
       document_kind: 'standard_invoice',
       ambiguous: false,
@@ -469,9 +490,9 @@ export function applyCriticalFieldRecovery(extraction: any, merge: any) {
  * IMPURE helper — the ONLY LLM call in this module. Same original file, gpt_5_mini,
  * no internet context, narrow request. Callers must first check plan.needed === true.
  */
-export async function runCriticalFieldRecovery(base44: any, fileUrl: string, requestFields: string[], model = 'gpt_5_mini') {
+export async function runCriticalFieldRecovery(base44: any, fileUrl: string, requestFields: string[], model = 'gpt_5_mini', targetScope?: any) {
   let result = await base44.integrations.Core.InvokeLLM({
-    prompt: buildRecoveryPrompt(requestFields),
+    prompt: buildRecoveryPrompt(requestFields, targetScope),
     add_context_from_internet: false,
     response_json_schema: RECOVERY_SCHEMA,
     file_urls: [fileUrl],
@@ -495,7 +516,9 @@ export async function recoverCriticalFields(base44: any, extraction: any, fileUr
   let second: any = null;
   let error: string | null = null;
   try {
-    second = await runCriticalFieldRecovery(base44, fileUrl, plan.request_fields, options.model || 'gpt_5_mini');
+    // options.target_scope is passed ONLY for multi-invoice files, so the narrow second pass is
+    // restricted to the same invoice the extraction and monetary audit were scoped to.
+    second = await runCriticalFieldRecovery(base44, fileUrl, plan.request_fields, options.model || 'gpt_5_mini', options.target_scope);
   } catch (err: any) {
     error = err?.message || String(err);
   }

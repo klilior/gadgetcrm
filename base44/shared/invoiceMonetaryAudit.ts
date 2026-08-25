@@ -159,6 +159,29 @@ const VAT_ONLY_LABEL = /^(\s*)(מע[”"״']?מ|vat)(\s|:|\d|%|$)/i;
  */
 const EXPLICIT_PAYABLE_LABEL = /(לתשלום|כולל\s*מע[”"״']?מ|סה[”"״']?כ\s*חשבונית|סה[”"״']?כ|סכום\s*כולל|סך\s*הכל|amount\s*due|total\s*due|balance\s*due|grand\s*total|net\s*payable|total)/i;
 
+/**
+ * Labels that state, in print, that the amount is NOT the final payable figure because it is a
+ * pre-VAT / net-of-VAT subtotal. Evaluated BEFORE the positive payable test, so a label such as
+ * "סה״כ לפני מע״מ" / "Subtotal" can never be read as the document's final demand.
+ */
+const BEFORE_VAT_LABEL = /(לפני\s*מע[”"״']?מ|ללא\s*מע[”"״']?מ|בלי\s*מע[”"״']?מ|לא\s*כולל\s*מע[”"״']?מ|בטרם\s*מע[”"״']?מ|sub[\s-]*total|before\s*(vat|tax)|excl\.?\s*(vat|tax)|excluding\s*(vat|tax)|net\s*of\s*(vat|tax)|ex\.?\s*vat|pre[\s-]*vat)/i;
+
+/**
+ * PURE authoritative printed-label predicate for a FINAL PAYABLE amount.
+ * A label qualifies only when it positively states a final total AND is not one of the
+ * disqualified families (before-VAT/subtotal, VAT-only, turnover, transactions, settlement
+ * transfer/deposit, previous/opening balance, account summary, credit limit).
+ * The semantic role a model assigns is NOT trusted — only the printed label decides here.
+ */
+export function isFinalPayableLabel(label: unknown): boolean {
+  const text = cleanLabel(label);
+  if (!text) return false;
+  if (NEVER_PAYABLE_LABEL.test(text)) return false;
+  if (VAT_ONLY_LABEL.test(text)) return false;
+  if (BEFORE_VAT_LABEL.test(text)) return false;
+  return EXPLICIT_PAYABLE_LABEL.test(text);
+}
+
 /** Document kinds where an explicitly labelled payable total is the document's own demand. */
 const STANDARD_KINDS = new Set(['standard_invoice', 'credit_note']);
 
@@ -374,21 +397,21 @@ export function selectPayableAmounts(audit: any) {
  * { index, supplier_hint, doc_number_hint, page_hint }) the audit is restricted to that
  * one invoice inside a multi-invoice file. No scope => the base prompt, unchanged.
  */
-export function buildScopedAuditPrompt(targetScope?: any): string {
-  if (!targetScope) return MONETARY_AUDIT_PROMPT;
+export function formatTargetScope(targetScope?: any): string {
+  if (!targetScope) return '';
+  if (typeof targetScope === 'string') return targetScope.trim();
+  if (typeof targetScope !== 'object') return '';
+  const parts: string[] = [];
+  if (targetScope.index !== null && targetScope.index !== undefined) parts.push(`invoice #${targetScope.index}`);
+  if (targetScope.supplier_hint) parts.push(`supplier: ${targetScope.supplier_hint}`);
+  if (targetScope.doc_number_hint) parts.push(`document number: ${targetScope.doc_number_hint}`);
+  if (targetScope.page_hint) parts.push(`location: ${targetScope.page_hint}`);
+  if (targetScope.text) parts.push(String(targetScope.text));
+  return parts.join(' | ');
+}
 
-  let scopeText = '';
-  if (typeof targetScope === 'string') {
-    scopeText = targetScope.trim();
-  } else if (typeof targetScope === 'object') {
-    const parts: string[] = [];
-    if (targetScope.index !== null && targetScope.index !== undefined) parts.push(`invoice #${targetScope.index}`);
-    if (targetScope.supplier_hint) parts.push(`supplier: ${targetScope.supplier_hint}`);
-    if (targetScope.doc_number_hint) parts.push(`document number: ${targetScope.doc_number_hint}`);
-    if (targetScope.page_hint) parts.push(`location: ${targetScope.page_hint}`);
-    if (targetScope.text) parts.push(String(targetScope.text));
-    scopeText = parts.join(' | ');
-  }
+export function buildScopedAuditPrompt(targetScope?: any): string {
+  const scopeText = formatTargetScope(targetScope);
   if (!scopeText) return MONETARY_AUDIT_PROMPT;
 
   return `${MONETARY_AUDIT_PROMPT}

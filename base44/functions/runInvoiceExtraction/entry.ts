@@ -315,7 +315,9 @@ Deno.serve(async (req) => {
       await auditAndApplyAmounts(base44, extraction, intake.file, 'gpt_5_mini', targetScope);
       // P1-A: fail-closed narrow second pass, ONLY when a critical header field is
       // deterministically missing/implausible. Still before supplier resolution / lines / gate.
-      await recoverCriticalFields(base44, extraction, intake.file);
+      // The SAME targetScope used by the monetary audit is threaded through, so on a multi-invoice
+      // file the recovery can never read a number/date/total from a different invoice.
+      await recoverCriticalFields(base44, extraction, intake.file, targetScope ? { target_scope: targetScope } : {});
       return extraction;
     };
 

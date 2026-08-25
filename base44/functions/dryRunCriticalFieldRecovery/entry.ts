@@ -11,6 +11,7 @@ import { applyDocumentClassificationGuard } from '../../shared/invoiceDocumentCl
 import { applyRecoveryProvenance, buildRecoveryEvents, parseProvenance, applyExtractionProvenance } from '../../shared/invoiceProvenance.ts';
 import { getLineItemsCheck } from '../../shared/invoiceExtraction.ts';
 import { validateInvoiceForAutoApproval } from '../../shared/invoiceValidationGate.ts';
+import { isFinalPayableLabel } from '../../shared/invoiceMonetaryAudit.ts';
 
 /**
  * P1-A regression harness — PURE, DB-FREE, LLM-FREE (admins only).
@@ -264,6 +265,56 @@ Deno.serve(async (req) => {
     buildRecoveryEvents(conflict, NOW).map((e: any) => e.type));
 
   // ── Prompt narrowness ─────────────────────────────────────────────────
+  // ── Final-payable label predicate (gap 1) ──────────────────────────────
+  const totalPlan = { request_fields: ['total_with_vat'] };
+  const noTotalOnly = { ...healthy(), total_with_vat: null, subtotal_before_vat: null, vat_amount: null };
+  const labelCase = (label: string) => mergeCriticalFieldRecovery({
+    extraction: noTotalOnly, plan: totalPlan, now: NOW,
+    second: { fields: [field('total_with_vat', { normalized_value: 118, printed_label: label })] }
+  });
+  check('g1a_before_vat_labels_are_rejected_as_total',
+    { subtotal_he: false, subtotal_en: false, before_vat_en: false, vat_only: false, excl_vat: false },
+    {
+      subtotal_he: labelCase('סה״כ לפני מע״מ').applied_fields.includes('total_with_vat'),
+      subtotal_en: labelCase('Subtotal').applied_fields.includes('total_with_vat'),
+      before_vat_en: labelCase('Total before VAT').applied_fields.includes('total_with_vat'),
+      vat_only: labelCase('מע״מ 18%').applied_fields.includes('total_with_vat'),
+      excl_vat: labelCase('Total excluding tax').applied_fields.includes('total_with_vat')
+    });
+  check('g1b_before_vat_rejection_uses_final_payable_reason_code',
+    { code: RECOVERY_REASON_CODES.EVIDENCE_REJECTED, review: true },
+    { code: labelCase('סה״כ לפני מע״מ').decisions[0].reason_code, review: labelCase('Subtotal').requires_manual_review });
+  check('g1c_final_payable_labels_are_accepted',
+    { incl_vat_he: true, payable_he: true, amount_due: true, grand_total: true },
+    {
+      incl_vat_he: labelCase('סה״כ כולל מע״מ').applied_fields.includes('total_with_vat'),
+      payable_he: labelCase('סה״כ לתשלום').applied_fields.includes('total_with_vat'),
+      amount_due: labelCase('Amount Due').applied_fields.includes('total_with_vat'),
+      grand_total: labelCase('Grand Total').applied_fields.includes('total_with_vat')
+    });
+  check('g1d_predicate_is_pure_and_authoritative',
+    { rejected: [false, false, false, false, false, false, false], accepted: [true, true, true] },
+    {
+      rejected: ['סה״כ לפני מע״מ', 'Subtotal', 'VAT', 'מחזור עסקאות', 'יתרה קודמת', 'סיכום חשבון', 'מסגרת אשראי'].map((l) => isFinalPayableLabel(l)),
+      accepted: ['סה״כ כולל מע״מ', 'סה״כ לתשלום', 'Grand Total'].map((l) => isFinalPayableLabel(l))
+    });
+
+  // ── Multi-invoice isolation (gap 2) ───────────────────────────────────
+  const scopedPrompt = buildRecoveryPrompt(['doc_number', 'total_with_vat'], { index: 2, supplier_hint: 'עופר בע"מ', doc_number_hint: '2640023', page_hint: 'page 3', text: 'invoice #2 of 3 in this file' });
+  const unscopedPrompt = buildRecoveryPrompt(['doc_number']);
+  check('g2_scoped_prompt_forbids_cross_invoice_evidence',
+    { has_scope_block: true, has_index: true, has_supplier: true, has_doc_hint: true, has_page: true, forbids_cross: true, refuses_with_found_false: true, unscoped_has_no_scope_block: true },
+    {
+      has_scope_block: scopedPrompt.includes('TARGET SCOPE (MANDATORY)'),
+      has_index: scopedPrompt.includes('invoice #2'),
+      has_supplier: scopedPrompt.includes('supplier: עופר בע"מ'),
+      has_doc_hint: scopedPrompt.includes('document number: 2640023'),
+      has_page: scopedPrompt.includes('location: page 3'),
+      forbids_cross: scopedPrompt.includes('Cross-invoice evidence is forbidden'),
+      refuses_with_found_false: scopedPrompt.includes('MUST be refused: set found = false'),
+      unscoped_has_no_scope_block: !unscopedPrompt.includes('TARGET SCOPE (MANDATORY)')
+    });
+
   const prompt = buildRecoveryPrompt(['doc_number']);
   check('p4_prompt_is_narrow_and_never_asks_for_lines',
     { has_doc_number: true, has_total: false, mentions_no_lines: true },
