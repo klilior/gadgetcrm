@@ -7,17 +7,23 @@
  * Hard rules:
  *  - A blocking arithmetic claim requires finite operands on the SAME VAT basis and the SAME
  *    discount basis, on a comparable DETAIL line (product / service / shipping / unknown).
- *  - SUMMARY / DISCOUNT / ROUNDING rows and mismatched-or-unknown bases are NON-comparable:
- *    they yield a stable LINE_BASE_NOT_COMPARABLE reason, never an arithmetic contradiction.
- *  - Missing / zero quantity stays critical for real detail lines only.
+ *  - ABSENT metadata (legacy rows) keeps the historical inference path, so a normal finite product
+ *    row still compares and a real contradiction still blocks.
+ *  - PRESENT-but-unusable metadata is NOT the same as absent: an explicit UNKNOWN basis, an
+ *    explicit null/unknown VAT basis, or only ONE half of either pair makes the row
+ *    NON-comparable (stable LINE_BASE_NOT_COMPARABLE), never an arithmetic contradiction.
+ *  - SUMMARY / DISCOUNT / ROUNDING rows are non-comparable and carry no quantity requirement.
+ *  - A row may only join the before-VAT line sum when its own before-VAT total is finite (or is a
+ *    fully comparable finite qty × unit derivation) and its line-total VAT basis is not
+ *    unknown / partial / VAT-inclusive. Missing operands never become a false LINE_SUM_MISMATCH.
  *  - Header subtotal/VAT/total logic is untouched here; lines never rewrite header totals.
  *  - Nothing here approves anything — the validation gate remains the only approval authority.
  *  - Behaviour is never keyed by supplier name, invoice id, file name or an expected value.
  */
 
-import { hasAlternateLineBase } from './invoiceExtraction.ts';
+import { hasAlternateLineBase } from './invoiceLineBaseInference.ts';
 
-export const LINE_APPLICABILITY_VERSION = 'line-applicability-1.0.0';
+export const LINE_APPLICABILITY_VERSION = 'line-applicability-1.1.0';
 
 export const LINE_ROLES = ['PRODUCT', 'SERVICE', 'SHIPPING', 'DISCOUNT', 'ROUNDING', 'SUMMARY', 'UNKNOWN'];
 export const LINE_BASES = ['BEFORE_DISCOUNT', 'AFTER_DISCOUNT', 'UNKNOWN'];
@@ -44,6 +50,11 @@ function isFiniteNumber(value: unknown): boolean {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+/** A field counts as REPORTED only when the extraction actually carries the key. */
+function isPresent(item: any, key: string): boolean {
+  return !!item && Object.prototype.hasOwnProperty.call(item, key) && item[key] !== undefined;
+}
+
 function enumValue(raw: unknown, allowed: string[], fallback: string): string {
   const value = String(raw ?? '').trim().toUpperCase();
   return allowed.includes(value) ? value : fallback;
@@ -68,9 +79,16 @@ export function resolveLineRole(item: any): { role: string; source: 'explicit' |
 export function decideLineApplicability(item: any, context: any = {}) {
   const lineNumber = item?.line_number ?? null;
   const { role, source: role_source } = resolveLineRole(item);
-  const unit_price_basis = enumValue(item?.unit_price_basis, LINE_BASES, 'UNKNOWN');
-  const line_total_basis = enumValue(item?.line_total_basis, LINE_BASES, 'UNKNOWN');
-  const sign_convention = enumValue(item?.sign_convention, SIGN_CONVENTIONS, 'UNKNOWN');
+
+  // Presence is tracked separately from value, so ABSENT (legacy) and PRESENT-UNKNOWN differ.
+  const unitBasisPresent = isPresent(item, 'unit_price_basis');
+  const totalBasisPresent = isPresent(item, 'line_total_basis');
+  const unitVatPresent = isPresent(item, 'unit_price_includes_vat');
+  const totalVatPresent = isPresent(item, 'line_total_includes_vat');
+
+  const unit_price_basis = unitBasisPresent ? enumValue(item.unit_price_basis, LINE_BASES, 'UNKNOWN') : null;
+  const line_total_basis = totalBasisPresent ? enumValue(item.line_total_basis, LINE_BASES, 'UNKNOWN') : null;
+  const sign_convention = isPresent(item, 'sign_convention') ? enumValue(item.sign_convention, SIGN_CONVENTIONS, 'UNKNOWN') : null;
   const unit_vat = typeof item?.unit_price_includes_vat === 'boolean' ? item.unit_price_includes_vat : null;
   const total_vat = typeof item?.line_total_includes_vat === 'boolean' ? item.line_total_includes_vat : null;
 
@@ -81,23 +99,45 @@ export function decideLineApplicability(item: any, context: any = {}) {
 
   const blockers: string[] = [];
   if (NON_DETAIL_ROLES.has(role)) blockers.push(`role_not_detail:${role}`);
-  // Explicit disagreement on the VAT basis of the two operands.
-  if (unit_vat !== null && total_vat !== null && unit_vat !== total_vat) blockers.push('vat_basis_mismatch');
-  // Explicit disagreement on the discount basis of the two operands.
-  if (unit_price_basis !== 'UNKNOWN' && line_total_basis !== 'UNKNOWN' && unit_price_basis !== line_total_basis) blockers.push('discount_basis_mismatch');
-  // Legacy-safe inference (discount amount/percent, VAT-inclusive unit, service/rounding text).
-  if (hasAlternateLineBase(item)) blockers.push('alternate_base_inferred');
+
+  // ── Discount basis: explicit UNKNOWN, partial reporting or disagreement all block ──
+  if (unitBasisPresent !== totalBasisPresent) blockers.push('discount_basis_metadata_partial');
+  else if (unitBasisPresent && totalBasisPresent) {
+    if (unit_price_basis === 'UNKNOWN' || line_total_basis === 'UNKNOWN') blockers.push('discount_basis_unknown');
+    else if (unit_price_basis !== line_total_basis) blockers.push('discount_basis_mismatch');
+  }
+
+  // ── VAT basis: explicit null/unknown, partial reporting or disagreement all block ──
+  if (unitVatPresent !== totalVatPresent) blockers.push('vat_basis_metadata_partial');
+  else if (unitVatPresent && totalVatPresent) {
+    if (unit_vat === null || total_vat === null) blockers.push('vat_basis_unknown');
+    else if (unit_vat !== total_vat) blockers.push('vat_basis_mismatch');
+  }
+
+  // Legacy-safe inference applies to rows WITHOUT explicit basis metadata (and to an explicitly
+  // VAT-inclusive unit price, which is an alternate base by definition).
+  const metadataAbsent = !unitBasisPresent && !totalBasisPresent && !unitVatPresent && !totalVatPresent;
+  if ((metadataAbsent || unit_vat === true) && hasAlternateLineBase(item)) blockers.push('alternate_base_inferred');
 
   const comparable = hasOperands && blockers.length === 0;
   const quantity_required = !NON_DETAIL_ROLES.has(role);
-  // A row may only join the before-VAT sum when its own total is genuinely a before-VAT figure.
-  const before_vat_sum_comparable = !NON_DETAIL_ROLES.has(role) && total_vat !== true && unit_vat !== true && !(role === 'SUMMARY');
+
+  // A row may join the before-VAT sum only with a genuinely usable before-VAT figure and no
+  // unknown / partial / VAT-inclusive line-total basis.
+  const vatBasisUnusable = blockers.some((b) => b.startsWith('vat_basis'));
+  const usableBeforeVatTotal = isFiniteNumber(total) || (comparable && isFiniteNumber(qty) && isFiniteNumber(unit));
+  const before_vat_sum_comparable = !NON_DETAIL_ROLES.has(role)
+    && total_vat !== true
+    && unit_vat !== true
+    && !vatBasisUnusable
+    && usableBeforeVatTotal;
 
   return {
     version: LINE_APPLICABILITY_VERSION,
     line_number: lineNumber,
     role,
     role_source,
+    metadata_present: { unit_price_basis: unitBasisPresent, line_total_basis: totalBasisPresent, unit_price_includes_vat: unitVatPresent, line_total_includes_vat: totalVatPresent },
     unit_price_basis,
     line_total_basis,
     unit_price_includes_vat: unit_vat,

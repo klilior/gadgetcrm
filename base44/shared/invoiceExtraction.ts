@@ -101,7 +101,8 @@ ABSOLUTE PRECISION RULES — READ CAREFULLY
    - unit_price_basis / line_total_basis: BEFORE_DISCOUNT | AFTER_DISCOUNT | UNKNOWN
      (AFTER_DISCOUNT only when the printed column/row states the value is net of a discount)
    - unit_price_includes_vat / line_total_includes_vat: true only when the printed column header
-     says the value includes VAT, false when it says it excludes VAT, otherwise null
+     says the value includes VAT, false when it says it excludes VAT, otherwise null.
+     Report BOTH or NEITHER of the pair; null when not visible — never guess a basis.
    - sign_convention: DEBIT | CREDIT | ABSOLUTE | UNKNOWN (as the row presents its sign)
 
 *** SUPPLIER IDENTIFICATION ***
@@ -257,8 +258,9 @@ export const EXTRACT_SCHEMA = {
           line_role: { type: 'string', enum: ['PRODUCT', 'SERVICE', 'SHIPPING', 'DISCOUNT', 'ROUNDING', 'SUMMARY', 'UNKNOWN'] },
           unit_price_basis: { type: 'string', enum: ['BEFORE_DISCOUNT', 'AFTER_DISCOUNT', 'UNKNOWN'] },
           line_total_basis: { type: 'string', enum: ['BEFORE_DISCOUNT', 'AFTER_DISCOUNT', 'UNKNOWN'] },
-          unit_price_includes_vat: { type: 'boolean' },
-          line_total_includes_vat: { type: 'boolean' },
+          // boolean when the printed column states it, null when it is not visible.
+          unit_price_includes_vat: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
+          line_total_includes_vat: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
           sign_convention: { type: 'string', enum: ['DEBIT', 'CREDIT', 'ABSOLUTE', 'UNKNOWN'] }
         },
         required: ['line_number', 'sku', 'product_name', 'quantity']
@@ -308,22 +310,10 @@ export function isCreditNoteExtraction(extraction) {
 }
 
 /**
- * True when unit price and line total are printed on DIFFERENT bases, so qty × unit price is not
- * comparable to the line total: explicit discounts, VAT-inclusive unit prices, or service /
- * rounding / shipping-fee style lines.
+ * Alternate-base inference now lives in its own pure module (one-way import), so the
+ * applicability layer no longer depends back on this file. Re-exported for existing callers.
  */
-export function hasAlternateLineBase(item) {
-  if (!item) return false;
-  if (item.unit_price_includes_vat === true || item.price_includes_vat === true) return true;
-  if (isFiniteNumber(item.discount_amount) && item.discount_amount !== 0) return true;
-  if (isFiniteNumber(item.discount_percent) && item.discount_percent !== 0) return true;
-  if (isFiniteNumber(item.line_total_with_vat) && isFiniteNumber(item.line_total_before_vat)
-    && Math.abs(item.line_total_with_vat - item.line_total_before_vat) > 0.02
-    && isFiniteNumber(item.quantity) && isFiniteNumber(item.unit_price_before_vat)
-    && Math.abs(Math.abs(item.quantity * item.unit_price_before_vat) - Math.abs(item.line_total_with_vat)) <= 0.02) return true;
-  const name = `${item.product_name || ''} ${item.description || ''} ${item.sku || ''}`.toLowerCase();
-  return /(הנחה|discount|זיכוי|עיגול|rounding|מע"?מ|מע״מ|\bvat\b|דמי טיפול|שירות חודשי|subscription|מנוי|proration|יחסי)/.test(name);
-}
+export { hasAlternateLineBase } from './invoiceLineBaseInference.ts';
 
 export function getLineRoundingTolerance(lineCount) {
   const lines = Number.isFinite(lineCount) && lineCount > 0 ? Math.floor(lineCount) : 0;

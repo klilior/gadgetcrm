@@ -49,8 +49,11 @@ export const RECOVERY_REASON_CODES = {
 /** Monetary coherence tolerance — same rounding tolerance the header check already uses. */
 const MONETARY_TOLERANCE = 0.02;
 
-/** Identity methods that constitute EXACT identity evidence (name-only never does). */
-const EXACT_IDENTITY_METHODS = new Set(['profile_vat_id', 'profile_linet_account', 'profile_trusted_sender_email', 'profile_trusted_domain']);
+/**
+ * Trusted sender / domain / Linet-account evidence is recorded as a SUPPORTING audit anchor only.
+ * A title-absent recovery still requires an exact printed VAT equal to the profile's VAT.
+ */
+const SUPPORTING_IDENTITY_METHODS = new Set(['profile_linet_account', 'profile_trusted_sender_email', 'profile_trusted_domain']);
 
 /** Document-number pattern kinds that themselves identify the document type. */
 const TYPE_IDENTIFYING_KINDS: Record<string, string> = { tax_invoice: 'TAX_INVOICE', credit_note: 'CREDIT_NOTE' };
@@ -77,16 +80,28 @@ function result(fields: any) {
   };
 }
 
-/** Printed-title verdict: positive type, negative block, generic block, or absent. */
+/**
+ * The ONE recognized supported Israeli combined title that legitimately contains the word
+ * "קבלה": a tax-receipt. It is the sole exception to the negative-title precedence below.
+ */
+const TAX_RECEIPT_TITLE_PATTERN = /(חשבונית\s*מס\s*[\/\\|,\-–]?\s*קבלה|^\s*מס\s*[\/\\|\-–]?\s*קבלה|מס\s*\/\s*קבלה)/;
+
+/**
+ * Printed-title verdict: positive type, negative block, generic block, or absent.
+ * PRECEDENCE: an explicit NEGATIVE phrase is evaluated FIRST and ALWAYS blocks, so a collision
+ * such as "Tax Invoice / Delivery Note" or "חשבונית מס - תעודת משלוח" can never upgrade.
+ * Sole exception: the combined tax-receipt title, which stays TAX_INVOICE.
+ */
 export function evaluatePrintedTitle(documentTitle: unknown) {
   const title = cleanEvidence(documentTitle);
   if (!title) return { present: false, verdict: 'absent', type: null };
+  const isTaxReceipt = TAX_RECEIPT_TITLE_PATTERN.test(title);
+  if (!isTaxReceipt && NON_TAX_TITLE_PATTERN.test(title)) return { present: true, verdict: 'negative', type: null };
   const isTax = TAX_INVOICE_TITLE_PATTERN.test(title);
   const isCredit = CREDIT_NOTE_TITLE_PATTERN.test(title);
   if (isCredit && !isTax) return { present: true, verdict: 'positive', type: 'CREDIT_NOTE' };
   if (isTax && !isCredit) return { present: true, verdict: 'positive', type: 'TAX_INVOICE' };
   if (isTax && isCredit) return { present: true, verdict: 'ambiguous', type: null };
-  if (NON_TAX_TITLE_PATTERN.test(title)) return { present: true, verdict: 'negative', type: null };
   if (GENERIC_INVOICE_TITLE_PATTERN.test(title)) return { present: true, verdict: 'generic', type: null };
   return { present: true, verdict: 'not_positive', type: null };
 }
@@ -133,14 +148,18 @@ export function evaluateClassificationRecovery(input: any = {}) {
   if (profileOk) anchors.push('reliable_curated_profile');
   else blockers.push(`profile:${profileMatch?.reason_code || 'PROFILE_NO_STRONG_EVIDENCE'}`);
 
-  // Exact identity: a curated exact identity method, or an exact valid VAT equal to the profile's.
+  // Exact identity for a TITLE-ABSENT recovery means ONE thing only: a syntactically valid
+  // supplier VAT id printed on the document that equals the matched profile's VAT exactly.
+  // A trusted sender address / domain may be recorded as an EXTRA audit anchor, but it can never
+  // substitute for a missing or mismatched VAT.
   const vat = extraction.supplier_vat_id;
   const vatUsable = isValidVatIdentifier(vat) && !isOurBuyerVatId(vat);
   const profile = profileOk ? getProfile(profileMatch.profile_key) : null;
   const vatMatchesProfile = !!(vatUsable && profile && (profile.vat_ids || []).some((v: string) => normalizeVatId(v) === normalizeVatId(vat)));
-  const methodExact = EXACT_IDENTITY_METHODS.has(String(profileMatch?.method || ''));
-  if (profileOk && (vatMatchesProfile || methodExact)) anchors.push(vatMatchesProfile ? 'exact_vat_identity' : `exact_profile_identity:${profileMatch.method}`);
-  else blockers.push('no_exact_identity_evidence');
+  if (profileOk && vatMatchesProfile) anchors.push('exact_vat_identity');
+  else blockers.push(vatUsable ? 'vat_does_not_match_profile' : 'no_exact_vat_identity_evidence');
+  // Supporting audit anchor only — never an identity substitute.
+  if (SUPPORTING_IDENTITY_METHODS.has(String(profileMatch?.method || ''))) anchors.push(`supporting_identity:${profileMatch.method}`);
 
   // Type-identifying, profile-valid document number.
   const docCheck = validateProfileDocNumber(profileMatch, extraction.doc_number);
@@ -155,7 +174,11 @@ export function evaluateClassificationRecovery(input: any = {}) {
   const monetaryAnchors: string[] = [];
   if (isFiniteNumber(total)) {
     if (isFiniteNumber(subtotal) && isFiniteNumber(vatAmount) && Math.abs((subtotal + vatAmount) - total) <= MONETARY_TOLERANCE) monetaryAnchors.push('coherent_subtotal_vat_total');
-    if (extraction.amount_provenance && extraction.amount_provenance.ambiguous === false) monetaryAnchors.push('audited_document_payable');
+    // An audited payable anchor requires the EXACT audit result: not ambiguous, role
+    // document_payable, and a non-empty printed evidence label. ambiguous===false alone is not proof.
+    const prov = extraction.amount_provenance;
+    const label = typeof prov?.total_evidence_label === 'string' ? prov.total_evidence_label.trim() : '';
+    if (prov && prov.ambiguous === false && prov.total_evidence_role === 'document_payable' && label) monetaryAnchors.push('audited_document_payable');
   } else {
     blockers.push('total_not_finite');
   }

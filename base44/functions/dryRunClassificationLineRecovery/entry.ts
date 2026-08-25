@@ -52,7 +52,8 @@ function otherExtraction(overrides: any = {}) {
     subtotal_before_vat: 1000,
     vat_amount: 180,
     total_with_vat: 1180,
-    amount_provenance: { ambiguous: false, audit_version: 'monetary-audit', reasons: [] },
+    // Real monetary-audit provenance shape: role + printed label are what make the anchor exact.
+    amount_provenance: { ambiguous: false, audit_version: 'monetary-audit-1.0.0', total_evidence_role: 'document_payable', total_evidence_label: 'סה"כ לתשלום', reasons: [] },
     overall_confidence: 12,
     line_items: [],
     ...overrides
@@ -77,7 +78,7 @@ Deno.serve(async (req) => {
 
     // ══ A. Classification recovery ═════════════════════════════════════════════════════════
     check('a0_versions_are_reported',
-      { guard: 'classification-guard-1.0.0', recovery: 'classification-recovery-1.0.0', lines: 'line-applicability-1.0.0' },
+      { guard: 'classification-guard-1.0.0', recovery: 'classification-recovery-1.0.0', lines: 'line-applicability-1.1.0' },
       { guard: CLASSIFICATION_GUARD_VERSION, recovery: CLASSIFICATION_RECOVERY_VERSION, lines: LINE_APPLICABILITY_VERSION });
 
     // Explicit positive printed title beats a mistaken model claim — tax invoice and credit note.
@@ -139,6 +140,7 @@ Deno.serve(async (req) => {
       {
         applied: true, to: 'TAX_INVOICE', doc_type_he: 'חשבונית מס', skip: false,
         anchors: ['reliable_curated_profile', 'exact_vat_identity', 'type_identifying_doc_number:tax_invoice', 'coherent_subtotal_vat_total', 'audited_document_payable'],
+        // (a trusted sender would appear here only as an extra supporting anchor)
         blockers: [], code: RECOVERY_REASON_CODES.ANCHORS_SATISFIED
       },
       { applied: missingRecovery.applied, to: missingRecovery.to, doc_type_he: missingTitle.doc_type_he, skip: missingTitle.should_skip, anchors: missingRecovery.anchors, blockers: missingRecovery.blockers, code: missingRecovery.reason_code });
@@ -152,6 +154,7 @@ Deno.serve(async (req) => {
     const anchorRemovals: any = {
       no_profile: recover(strong({ document_title: null, supplier_vat_id: null, supplier_name: 'ספק לא מזוהה' }), matchSupplierProfile({}, { suppliers: SUPPLIERS })),
       name_only_identity: recover(strong({ document_title: null, supplier_vat_id: null, supplier_name: 'אס.טי.אס מגה גרופ' }), matchSupplierProfile({ supplier_name: 'אס.טי.אס מגה גרופ' }, { suppliers: SUPPLIERS })),
+      missing_vat_with_profile: recover(strong({ document_title: null, supplier_vat_id: null })),
       doc_number_not_profile_valid: recover(strong({ document_title: null, doc_number: 'IN26400' })),
       doc_number_not_type_identifying: recover(strong({ document_title: null, doc_number: '264002392' })),
       no_doc_number: recover(strong({ document_title: null, doc_number: null })),
@@ -373,6 +376,155 @@ Deno.serve(async (req) => {
     check('c2_guard_and_recovery_audit_coexist_on_the_extraction',
       { guard_version: CLASSIFICATION_GUARD_VERSION, guard_classification: 'OTHER', recovery_version: CLASSIFICATION_RECOVERY_VERSION, final_classification: 'TAX_INVOICE' },
       { guard_version: auditExtraction.classification_guard.guard_version, guard_classification: auditExtraction.classification_guard.classification, recovery_version: auditExtraction.classification_recovery.version, final_classification: auditExtraction.classification });
+
+    // ══ D. QA CORRECTION 1 — negative title ALWAYS wins a collision ═════════════════════════
+    const collisions = ['Tax Invoice / Delivery Note', 'חשבונית מס - תעודת משלוח', 'חשבונית מס והזמנת רכש', 'Tax Invoice / Statement', 'חשבונית זיכוי / תעודת משלוח', 'Credit Note - Remittance Report'];
+    check('d1_explicit_negative_beats_positive_in_a_collision_title',
+      collisions.map(() => ({ verdict: 'negative', applied: false, code: RECOVERY_REASON_CODES.NEGATIVE_TITLE })),
+      collisions.map((title) => {
+        const d = recover(strong({ document_title: title }));
+        return { verdict: evaluatePrintedTitle(title).verdict, applied: d.applied, code: d.reason_code };
+      }));
+
+    const taxReceipts = ['חשבונית מס/קבלה', 'חשבונית מס קבלה', 'מס/קבלה', 'חשבונית מס - קבלה'];
+    check('d2_combined_tax_receipt_is_the_only_exception_and_stays_tax_invoice',
+      taxReceipts.map(() => ({ verdict: 'positive', to: 'TAX_INVOICE', doc_type_he: 'חשבונית מס' })),
+      taxReceipts.map((title) => {
+        const e = otherExtraction({ document_title: title });
+        const d = applyClassificationRecovery(e, { profile_match: stsProfile() });
+        return { verdict: evaluatePrintedTitle(title).verdict, to: d.to, doc_type_he: e.doc_type_he };
+      }));
+
+    // ══ E. QA CORRECTION 2 — exact VAT is mandatory; sender never substitutes ════════════════
+    const alphoneSenderProfile = matchSupplierProfile({ sender_email: 'allphonedocs@gmail.com' }, { suppliers: SUPPLIERS });
+    const missingVatDecision = recover(strong({ document_title: null, supplier_vat_id: null, supplier_name: 'אולפון יבוא סחר', doc_number: 'IN123456789' }), alphoneSenderProfile);
+    const mismatchedVatDecision = recover(strong({ document_title: null, supplier_vat_id: '516058989', supplier_name: 'אולפון יבוא סחר', doc_number: 'IN123456789' }), alphoneSenderProfile);
+    check('e1_trusted_sender_or_domain_can_never_replace_a_missing_or_mismatched_vat',
+      {
+        sender_matched_profile: true,
+        missing_vat: { applied: false, blocker: 'no_exact_vat_identity_evidence', code: RECOVERY_REASON_CODES.INSUFFICIENT_ANCHORS },
+        mismatched_vat: { applied: false, blocker: 'vat_does_not_match_profile' }
+      },
+      {
+        sender_matched_profile: alphoneSenderProfile.matched === true,
+        missing_vat: {
+          applied: missingVatDecision.applied,
+          blocker: missingVatDecision.blockers.find((b: string) => b.startsWith('no_exact_vat')) || null,
+          code: missingVatDecision.reason_code
+        },
+        mismatched_vat: {
+          applied: mismatchedVatDecision.applied,
+          blocker: mismatchedVatDecision.blockers.find((b: string) => b.startsWith('vat_does_not_match')) || null
+        }
+      });
+
+    const exactVatDecision = recover(strong({ document_title: null }), stsProfile());
+    check('e2_exact_vat_plus_all_other_anchors_is_allowed',
+      { applied: true, has_exact_vat_anchor: true },
+      { applied: exactVatDecision.applied, has_exact_vat_anchor: exactVatDecision.anchors.includes('exact_vat_identity') });
+
+    // ══ F. QA CORRECTION 3 — audited-payable anchor requires role + printed label ════════════
+    const auditVariants: any = {
+      exact_role_and_label: { ambiguous: false, total_evidence_role: 'document_payable', total_evidence_label: 'סה"כ לתשלום' },
+      ambiguous_false_only: { ambiguous: false },
+      wrong_role: { ambiguous: false, total_evidence_role: 'fee_or_commission', total_evidence_label: 'עמלה' },
+      empty_label: { ambiguous: false, total_evidence_role: 'document_payable', total_evidence_label: '   ' },
+      ambiguous_true: { ambiguous: true, total_evidence_role: 'document_payable', total_evidence_label: 'סה"כ לתשלום' }
+    };
+    check('f1_audited_payable_anchor_requires_exact_role_and_non_empty_label',
+      { exact_role_and_label: true, ambiguous_false_only: false, wrong_role: false, empty_label: false, ambiguous_true: false },
+      Object.fromEntries(Object.entries(auditVariants).map(([key, prov]) => [
+        key,
+        // subtotal/VAT removed so ONLY the audited anchor can carry the monetary requirement.
+        recover(strong({ document_title: null, subtotal_before_vat: null, vat_amount: null, amount_provenance: prov })).anchors.includes('audited_document_payable')
+      ])));
+
+    check('f2_without_an_exact_audited_anchor_recovery_needs_coherent_money',
+      { audited_only_insufficient: false, coherent_rescues: true },
+      {
+        audited_only_insufficient: recover(strong({ document_title: null, subtotal_before_vat: null, vat_amount: null, amount_provenance: { ambiguous: false } })).applied,
+        coherent_rescues: recover(strong({ document_title: null, amount_provenance: { ambiguous: false } })).applied
+      });
+
+    // ══ G. QA CORRECTION 4 — ABSENT vs PRESENT-UNKNOWN line metadata ════════════════════════
+    const legacyContradiction = getLineItemsCheck({
+      doc_type_he: 'חשבונית מס', subtotal_before_vat: 300,
+      line_items: [{ line_number: 1, sku: 'A1', product_name: 'מטען מקורי', quantity: 3, unit_price_before_vat: 50, line_total_before_vat: 300 }]
+    });
+    const legacyDecision = decideLineApplicability({ line_number: 1, product_name: 'מטען', quantity: 3, unit_price_before_vat: 50, line_total_before_vat: 300 }, {});
+    check('g1_legacy_absent_metadata_contradiction_still_blocks',
+      { codes: ['LINE_TOTAL_MISMATCH'], comparable_lines: 1, metadata_present_any: false },
+      {
+        codes: legacyContradiction.reason_codes,
+        comparable_lines: legacyContradiction.line_applicability.comparable_lines,
+        metadata_present_any: Object.values(legacyDecision.metadata_present).some(Boolean)
+      });
+
+    const explicitUnknownBasis = getLineItemsCheck({
+      doc_type_he: 'חשבונית מס', subtotal_before_vat: 300,
+      line_items: [{ line_number: 1, product_name: 'מטען מקורי', quantity: 3, unit_price_before_vat: 50, line_total_before_vat: 300, unit_price_basis: 'UNKNOWN', line_total_basis: 'UNKNOWN' }]
+    });
+    check('g2_explicit_unknown_basis_with_the_same_numbers_is_non_comparable',
+      { failures: 0, codes: ['LINE_BASE_NOT_COMPARABLE'], blockers: ['discount_basis_unknown'] },
+      { failures: explicitUnknownBasis.failures.length, codes: explicitUnknownBasis.reason_codes, blockers: explicitUnknownBasis.non_comparable_lines[0].blockers });
+
+    const partialDiscountBasis = decideLineApplicability({ line_number: 1, product_name: 'מוצר', quantity: 3, unit_price_before_vat: 50, line_total_before_vat: 300, unit_price_basis: 'BEFORE_DISCOUNT' }, {});
+    const partialVatBasis = decideLineApplicability({ line_number: 2, product_name: 'מוצר', quantity: 3, unit_price_before_vat: 50, line_total_before_vat: 300, line_total_includes_vat: false }, {});
+    const explicitNullVat = decideLineApplicability({ line_number: 3, product_name: 'מוצר', quantity: 3, unit_price_before_vat: 50, line_total_before_vat: 300, unit_price_includes_vat: null, line_total_includes_vat: null }, {});
+    check('g3_partial_or_explicitly_null_metadata_is_non_comparable',
+      {
+        partial_discount: { comparable: false, blockers: ['discount_basis_metadata_partial'], sum_ok: true },
+        partial_vat: { comparable: false, blockers: ['vat_basis_metadata_partial'], sum_ok: false },
+        explicit_null_vat: { comparable: false, blockers: ['vat_basis_unknown'], sum_ok: false }
+      },
+      {
+        partial_discount: { comparable: partialDiscountBasis.comparable, blockers: partialDiscountBasis.blockers, sum_ok: partialDiscountBasis.before_vat_sum_comparable },
+        partial_vat: { comparable: partialVatBasis.comparable, blockers: partialVatBasis.blockers, sum_ok: partialVatBasis.before_vat_sum_comparable },
+        explicit_null_vat: { comparable: explicitNullVat.comparable, blockers: explicitNullVat.blockers, sum_ok: explicitNullVat.before_vat_sum_comparable }
+      });
+
+    const missingTotalRow = getLineItemsCheck({
+      doc_type_he: 'חשבונית מס', subtotal_before_vat: 1000,
+      line_items: [
+        { line_number: 1, product_name: 'פריט א', quantity: 1, unit_price_before_vat: 400, line_total_before_vat: 400 },
+        { line_number: 2, product_name: 'פריט ב', quantity: 2, unit_price_before_vat: null, line_total_before_vat: null }
+      ]
+    });
+    const missingUnitOnly = getLineItemsCheck({
+      doc_type_he: 'חשבונית מס', subtotal_before_vat: 1000,
+      line_items: [
+        { line_number: 1, product_name: 'פריט א', quantity: 1, unit_price_before_vat: 400, line_total_before_vat: 400 },
+        { line_number: 2, product_name: 'פריט ב', quantity: 2, unit_price_before_vat: null, line_total_before_vat: 600 }
+      ]
+    });
+    check('g4_missing_total_or_unit_never_creates_a_false_sum_mismatch',
+      { missing_total: { sum_mismatch: false, hasMismatch: false, sum_applicable: false }, missing_unit_only: { sum_mismatch: false, sum_applicable: true } },
+      {
+        missing_total: { sum_mismatch: missingTotalRow.reason_codes.includes('LINE_SUM_MISMATCH'), hasMismatch: missingTotalRow.hasMismatch, sum_applicable: missingTotalRow.sum_applicable },
+        missing_unit_only: { sum_mismatch: missingUnitOnly.reason_codes.includes('LINE_SUM_MISMATCH'), sum_applicable: missingUnitOnly.sum_applicable }
+      });
+
+    const unknownTotalVatSum = getLineItemsCheck({
+      doc_type_he: 'חשבונית מס', subtotal_before_vat: 1000,
+      line_items: [
+        { line_number: 1, product_name: 'פריט א', quantity: 1, unit_price_before_vat: 400, line_total_before_vat: 400, unit_price_includes_vat: null, line_total_includes_vat: null },
+        { line_number: 2, product_name: 'פריט ב', quantity: 1, unit_price_before_vat: 200, line_total_before_vat: 200 }
+      ]
+    });
+    check('g5_explicit_unknown_line_total_vat_basis_makes_the_sum_non_applicable',
+      { sum_applicable: false, sum_mismatch: false, failures: 0 },
+      { sum_applicable: unknownTotalVatSum.sum_applicable, sum_mismatch: unknownTotalVatSum.reason_codes.includes('LINE_SUM_MISMATCH'), failures: unknownTotalVatSum.failures.length });
+
+    const comparableGap = getLineItemsCheck({
+      doc_type_he: 'חשבונית מס', subtotal_before_vat: 1000,
+      line_items: [
+        { line_number: 1, product_name: 'פריט א', quantity: 1, unit_price_before_vat: 400, line_total_before_vat: 400, unit_price_basis: 'BEFORE_DISCOUNT', line_total_basis: 'BEFORE_DISCOUNT', unit_price_includes_vat: false, line_total_includes_vat: false },
+        { line_number: 2, product_name: 'פריט ב', quantity: 1, unit_price_before_vat: 200, line_total_before_vat: 200, unit_price_basis: 'BEFORE_DISCOUNT', line_total_basis: 'BEFORE_DISCOUNT', unit_price_includes_vat: false, line_total_includes_vat: false }
+      ]
+    });
+    check('g6_fully_comparable_real_sum_gap_still_blocks',
+      { sum_applicable: true, sum_mismatch: true, comparable_lines: 2 },
+      { sum_applicable: comparableGap.sum_applicable, sum_mismatch: comparableGap.reason_codes.includes('LINE_SUM_MISMATCH'), comparable_lines: comparableGap.line_applicability.comparable_lines });
 
     const failed = cases.filter((c) => !c.passed);
     return Response.json({
