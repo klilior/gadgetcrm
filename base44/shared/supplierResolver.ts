@@ -22,6 +22,18 @@ export const SUPPLIER_RESOLVER_VERSION = 'supplier-resolver-1.1.0';
 export const OUR_BUYER_VAT_ID = '040638660';
 
 export const REASON_UNRESOLVED = 'SUPPLIER_UNRESOLVED';
+/**
+ * P1-B QA fix: strong-profile FAILURES must fail closed here too. Declared locally (as literals,
+ * not imported from invoiceSupplierProfiles) so this module stays free of an import cycle —
+ * invoiceSupplierProfiles already imports from this file.
+ */
+export const PROFILE_FAILURE_REASON_CODES = [
+  'PROFILE_CONFLICT',
+  'PROFILE_AMBIGUOUS',
+  'PROFILE_SUPPLIER_ROW_MISSING',
+  'PROFILE_SUPPLIER_ROW_INACTIVE'
+];
+export const REASON_PROFILE_FAILED = 'SUPPLIER_PROFILE_FAILED';
 export const REASON_AMBIGUOUS = 'SUPPLIER_AMBIGUOUS';
 export const REASON_WEAK = 'SUPPLIER_WEAK_EVIDENCE';
 
@@ -159,6 +171,27 @@ export function resolveSupplier(evidence: any = {}, context: any = {}) {
         }
       });
     }
+  }
+
+  // A strong-profile FAILURE (conflict / ambiguous / missing or inactive canonical row) is a
+  // deterministic stop: the legacy evidence chain must NOT be able to resolve the very supplier
+  // the profile layer just refused (e.g. STS VAT + Alphone trusted sender → conflict, then raw
+  // STS VAT resolving STS anyway). PROFILE_NO_STRONG_EVIDENCE is not a failure and falls through.
+  if (profileMatch && profileMatch.matched !== true && PROFILE_FAILURE_REASON_CODES.includes(profileMatch.reason_code)) {
+    return result({
+      method: 'supplier_profile',
+      evidence_strength: 'ambiguous',
+      reason_code: REASON_PROFILE_FAILED,
+      reason: `${profileMatch.reason_code}: ${profileMatch.reason || 'עדות פרופיל הספק אינה חד-משמעית ולכן לא נבחר ספק.'}`,
+      candidate_ids: [],
+      profile_match: {
+        profile_key: profileMatch.profile_key ?? null,
+        method: profileMatch.method ?? 'none',
+        reason_code: profileMatch.reason_code,
+        reason: profileMatch.reason || null,
+        conflict_candidates: profileMatch.conflict_candidates || []
+      }
+    });
   }
 
   // ── a. exact normalized company / VAT id ────────────────────────────────
