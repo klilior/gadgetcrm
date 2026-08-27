@@ -576,16 +576,22 @@ Deno.serve(async (req) => {
         ...(isSelfPickup ? { order_locked: true } : {}),
       }).catch(() => {});
       if (isSelfPickup) log.push({ step: "self_pickup_order_closed", order_id: order.id });
-      try {
-        const wooRes = await base44.asServiceRole.functions.invoke("updateWooOrderStatus", {
-          order_id: order.id,
-          external_order_number: order.external_order_number,
-          new_status: "completed",
-        });
-        orderCompleted = true;
-        log.push({ step: "woo_order_completed", result: wooRes?.data ?? wooRes });
-      } catch (e) {
-        log.push({ step: "woo_order_complete_failed", error: e.message });
+      // ההזמנה מסומנת כהושלמה רק כשאין שלב משלוח (איסוף עצמי).
+      // בהזמנת משלוח/נקודת איסוף — ההשלמה נעשית רק לאחר יצירת שטר מטען ב-createShipment.
+      if (isSelfPickup) {
+        try {
+          const wooRes = await base44.asServiceRole.functions.invoke("updateWooOrderStatus", {
+            order_id: order.id,
+            external_order_number: order.external_order_number,
+            new_status: "completed",
+          });
+          orderCompleted = true;
+          log.push({ step: "woo_order_completed", result: wooRes?.data ?? wooRes });
+        } catch (e) {
+          log.push({ step: "woo_order_complete_failed", error: e.message });
+        }
+      } else {
+        log.push({ step: "woo_order_completion_deferred_until_shipment", order_id: order.id });
       }
     }
 

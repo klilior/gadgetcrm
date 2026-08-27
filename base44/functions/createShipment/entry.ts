@@ -85,7 +85,17 @@ Deno.serve(async (req) => {
       const gate = await base44.asServiceRole.functions.invoke('checkPickingGate', { order_id: safeGateOrderId });
       const gateData = gate?.data ?? gate;
       if (gateData?.blocked) {
-        return Response.json({ success: false, error: gateData.message_he || 'לא ניתן ליצור משלוח לפני השלמת ליקוט.' }, { status: 409 });
+        // HTTP 200 on purpose: a non-2xx makes the SDK throw and the UI shows a bare "409"
+        // instead of the Hebrew reason. The block itself is expressed in the body.
+        const total = gateData.total_items;
+        const picked = gateData.picked_items;
+        const detail = Number.isFinite(total) && Number.isFinite(picked) ? ` (נאספו ${picked} מתוך ${total} פריטים)` : '';
+        return Response.json({
+          success: false,
+          blocked: true,
+          blocked_by: 'picking_gate',
+          error: (gateData.message_he || 'לא ניתן ליצור משלוח לפני השלמת ליקוט.') + detail,
+        });
       }
     } catch (ge) {
       console.log(`⚠️ Picking gate check failed (allowing): ${ge.message}`);
@@ -104,7 +114,7 @@ Deno.serve(async (req) => {
           result: 'blocked',
           error_message: sMsg,
         }).catch(() => {});
-        return Response.json({ success: false, error: sMsg }, { status: 409 });
+        return Response.json({ success: false, blocked: true, blocked_by: 'serial_gate', error: sMsg });
       }
     } catch (se) {
       console.log(`⚠️ Serial gate check failed (allowing): ${se.message}`);
