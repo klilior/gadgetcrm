@@ -18,24 +18,47 @@ function stripPrice(str) {
 function clean(str) { return stripPrice(decodeHtmlEntities(str)).trim(); }
 function extractQtyFromText(text) {
   if (!text) return 1;
-  const m = String(text).match(/(\d+)/);
-  if (m) { const n = parseInt(m[1], 10); if (Number.isFinite(n) && n > 0 && n <= 999) return n; }
+  const t = stripPrice(decodeHtmlEntities(String(text)).replace(/<[^>]*>/g, " "));
+  const patterns = [
+    /(?:הוסף|הוספת|כמות|יחידות|qty|quantity)\s*:?\s*(\d{1,2})(?!\d)/i,
+    /(?:^|\s)[xX×]\s*(\d{1,2})(?!\d)/,
+    /(\d{1,2})\s*[xX×](?:\s|$)/,
+  ];
+  for (const re of patterns) {
+    const m = t.match(re);
+    if (m) { const n = parseInt(m[1], 10); if (Number.isFinite(n) && n > 0 && n <= 20) return n; }
+  }
   return 1;
+}
+function extractPrice(value) {
+  const decoded = decodeHtmlEntities(value).replace(/<[^>]*>/g, " ");
+  const match = decoded.match(/(?:₪\s*([\d,.]+)|([\d,.]+)\s*₪)/);
+  if (!match) return null;
+  const price = Number(String(match[1] || match[2]).replace(/,/g, ""));
+  return Number.isFinite(price) ? price : null;
+}
+const ATTRIBUTE_KEYWORDS = ["צבע", "color", "חריטה", "הקדשה", "engraving", "מידה", "size", "דגם"];
+function isAttributeChoice(label, value) {
+  if (isNegativeChoice(value)) return false;
+  if (looksPhysical(label, value) || extractPrice(value) !== null) return false;
+  const hay = `${label || ""} ${value || ""}`.toLowerCase();
+  return ATTRIBUTE_KEYWORDS.some((kw) => hay.includes(kw.toLowerCase()));
 }
 const NON_PHYSICAL_KEYWORDS = ["אחריות","שירות","התקנה","חריטה","הקדשה","הערה","הערת","צבע","שדרוג","ביטוח","warranty","service","installation","engraving","note","color","gift wrap","עטיפת מתנה"];
 const NEGATIVE_VALUES = ["ללא", "לא", "אין", "no", "none", "0"];
+const PLACEHOLDER_VALUES = ["בחר ראש טעינה", "בחר מטען", "בחר אפשרות", "יש לבחור"];
 function isNegativeChoice(value) {
-  const v = String(value || "").trim().toLowerCase();
+  const v = clean(value).trim().toLowerCase();
   if (!v) return true;
-  return NEGATIVE_VALUES.includes(v);
+  return NEGATIVE_VALUES.includes(v) || PLACEHOLDER_VALUES.some((t) => v.startsWith(t));
 }
 function isNonPhysical(label, value) {
   if (isNegativeChoice(value)) return true;
   const hay = `${label || ""} ${value || ""}`.toLowerCase();
   return NON_PHYSICAL_KEYWORDS.some((kw) => hay.includes(kw.toLowerCase()));
 }
-function looksPhysical(label) {
-  const hay = `${label || ""}`.toLowerCase();
+function looksPhysical(label, value) {
+  const hay = `${label || ""} ${value || ""}`.toLowerCase();
   const physical = ["מגן מסך","כיסוי","מטען","כבל","מתאם","אוזניות","כרטיס","מארז","case","cover","charger","cable","adapter","screen","protector","earphone","headphone"];
   return physical.some((kw) => hay.includes(kw.toLowerCase()));
 }
@@ -57,9 +80,9 @@ function buildPickingItemsFromOrder(order) {
       const label = clean(m.display_key || m.key);
       const value = clean(m.display_value || m.value);
       if (!value && !label) return;
+      if (isAttributeChoice(m.display_key || m.key, m.display_value || m.value)) return;
       if (isNonPhysical(m.display_key || m.key, m.display_value || m.value)) return;
-      let addonTitle = value || label;
-      if (looksPhysical(label)) addonTitle = label;
+      let addonTitle = looksPhysical("", value) ? value : (looksPhysical(label, "") ? label : (value || label));
       addonTitle = clean(addonTitle);
       if (!addonTitle) return;
       const addonQty = extractQtyFromText(m.display_value || m.value) * qty;

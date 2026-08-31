@@ -86,6 +86,9 @@ const ATTRIBUTE_KEYWORDS = ["צבע", "color", "חריטה", "הקדשה", "engr
 
 function isAttributeChoice(label, value) {
   if (isNegativeChoice(value)) return false; // "ללא" — nothing chosen
+  // תוספת פיזית שנבחרה (למשל "כיסוי קומבו במגוון צבעים ₪99") אינה מאפיין —
+  // היא פריט שצריך להיאסף, גם אם הטקסט מזכיר צבע/מידה.
+  if (looksPhysical(label, value) || extractPrice(value) !== null) return false;
   const hay = `${label || ""} ${value || ""}`.toLowerCase();
   return ATTRIBUTE_KEYWORDS.some((kw) => hay.includes(kw.toLowerCase()));
 }
