@@ -106,7 +106,6 @@ function deduplicateCalls(calls) {
 export default function CallLog() {
     const [activities, setActivities] = useState([]);
     const [clients, setClients] = useState({});
-    const [clientTips, setClientTips] = useState({});
     const [activeLeads, setActiveLeads] = useState({});
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -174,10 +173,25 @@ export default function CallLog() {
                     const pending = clientOrders.filter(o => o.status === 'pending');
                     const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
                     const recentCompleted = clientOrders.filter(o => ['processing', 'completed'].includes(o.status) && new Date(o.order_date) >= threeDaysAgo);
+
+                    // Last order + its products (deterministic — no AI)
+                    let lastOrderInfo = null;
+                    const lastOrder = pending[0] || clientOrders[0] || null;
+                    if (lastOrder) {
+                        const items = await base44.entities.OrderProduct.filter({ order_id: lastOrder.id }, null, 10).catch(() => []);
+                        lastOrderInfo = {
+                            order_number: lastOrder.external_order_number,
+                            order_date: lastOrder.order_date,
+                            status: lastOrder.status,
+                            total: lastOrder.total,
+                            products: items.map(it => ({ name: it.name, quantity: it.quantity })),
+                        };
+                    }
+
                     // Attach to all matching client entries
                     Object.keys(clientMap).forEach(key => {
                         if (clientMap[key].id === cid) {
-                            clientMap[key] = { ...clientMap[key], pendingOrders: pending, recentCompletedOrders: recentCompleted };
+                            clientMap[key] = { ...clientMap[key], pendingOrders: pending, recentCompletedOrders: recentCompleted, lastOrderInfo };
                         }
                     });
                 }));
@@ -205,117 +219,10 @@ export default function CallLog() {
             }
             setActiveLeads(leadsMap);
             setClients(clientMap);
-
-            // Generate AI tips for identified clients
-            generateTips(clientMap);
         } catch (e) {
             console.error('Error loading calls:', e);
         }
         setLoading(false);
-    };
-
-    const generateTips = async (clientMap) => {
-        const uniqueClients = {};
-        Object.values(clientMap).forEach(c => { uniqueClients[c.id] = c; });
-        
-        const clientIds = Object.keys(uniqueClients);
-        if (clientIds.length === 0) return;
-
-        // Fetch recent activities for all identified clients (limit work)
-        const tipsMap = {};
-        
-        // Process in batches of 5 clients
-        for (let i = 0; i < Math.min(clientIds.length, 20); i += 5) {
-            const batch = clientIds.slice(i, i + 5);
-            const batchPromises = batch.map(async (clientId) => {
-                const client = uniqueClients[clientId];
-                try {
-                    const [tickets, repairs, orders, allActivities] = await Promise.all([
-                        base44.entities.Ticket.filter({ customer_id: clientId }, '-created_date', 5).catch(() => []),
-                        base44.entities.Repair.filter({ client_id: clientId }, '-created_date', 5).catch(() => []),
-                        base44.entities.Order.filter({ client_id: clientId }, '-order_date', 5).catch(() => []),
-                        base44.entities.Activity.filter({ ticket_id: clientId }, '-created_date', 10).catch(() => []),
-                    ]);
-
-                    const openTickets = tickets.filter(t => !['סגור', 'נסגר', 'נסגר ללא מענה', 'בוטל'].includes(t.status));
-                    const openRepairs = repairs.filter(r => !['תיקון נסגר', 'לא ניתן לתיקון', 'נמסר', 'הושלם', 'בוטל'].includes(r.status));
-                    const closedRepairs = repairs.filter(r => ['תיקון נסגר', 'נמסר', 'הושלם'].includes(r.status));
-                    const pendingOrders = orders.filter(o => o.status === 'pending');
-                    const now = new Date();
-                    const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-                    const recentCompletedOrders = orders.filter(o => ['processing', 'completed'].includes(o.status) && new Date(o.order_date) >= threeDaysAgo);
-
-                    // Count recent contacts (calls/tickets in last 7 days) for "multiple contacts" detection
-                    const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-                    const recentTickets = tickets.filter(t => new Date(t.created_date) >= sevenDaysAgo);
-
-                    // Build structured context
-                    const facts = [];
-                    facts.push(`לקוח: ${client.full_name}, דרגה: ${client.customer_tier || 'חדש'}, סה"כ הזמנות: ${client.total_orders || 0}, סה"כ רכישות: ₪${client.total_spent || 0}`);
-                    
-                    if (pendingOrders.length > 0) {
-                        facts.push(`⚠️ חשוב! יש ${pendingOrders.length} הזמנות בסטטוס "ממתין לתשלום" - סכום: ₪${pendingOrders.reduce((s,o) => s + (parseFloat(o.total)||0), 0)} - תאריכים: ${pendingOrders.map(o => new Date(o.order_date).toLocaleDateString('he-IL')).join(', ')}`);
-                    }
-                    if (recentCompletedOrders.length > 0) {
-                        facts.push(`📦 הזמנה שהושלמה ב-3 ימים אחרונים: ₪${recentCompletedOrders[0].total} בתאריך ${new Date(recentCompletedOrders[0].order_date).toLocaleDateString('he-IL')}`);
-                    }
-                    if (openTickets.length > 0) {
-                        facts.push(`פניות שירות פתוחות: ${openTickets.map(t => `"${t.subject}" (${t.status}${t.priority === 'דחוף' ? ' - דחוף!' : ''})`).join(', ')}`);
-                    }
-                    if (recentTickets.length >= 3) {
-                        facts.push(`⚠️ ריבוי פניות! ${recentTickets.length} פניות ב-7 ימים אחרונים - ייתכן שהלקוח לא מטופל כראוי`);
-                    }
-                    if (openRepairs.length > 0) {
-                        facts.push(`תיקונים פעילים: ${openRepairs.map(r => `${r.issue_category || 'מכשיר'} - ${r.status} (${r.repair_type || ''})`).join(', ')}`);
-                    }
-                    if (closedRepairs.length > 0) {
-                        const lastClosed = closedRepairs[0];
-                        const closedDate = new Date(lastClosed.updated_date);
-                        const daysSinceClosed = Math.floor((now - closedDate) / (1000*60*60*24));
-                        if (daysSinceClosed <= 7) facts.push(`תיקון נסגר לפני ${daysSinceClosed} ימים - ייתכן בירור/תלונה`);
-                    }
-                    if (orders.length > 0 && !pendingOrders.length && !recentCompletedOrders.length) {
-                        const lastOrder = orders[0];
-                        facts.push(`הזמנה אחרונה: ${lastOrder.status} ₪${lastOrder.total} בתאריך ${new Date(lastOrder.order_date).toLocaleDateString('he-IL')}`);
-                    }
-
-                    if (facts.length <= 1) {
-                        tipsMap[clientId] = 'אין פעילות ידועה';
-                        return;
-                    }
-
-                    const res = await base44.integrations.Core.InvokeLLM({
-                        prompt: `אתה יועץ מכירות חכם במערכת CRM. לקוח מתקשר עכשיו. על סמך המידע הבא, כתוב התראה ממוקדת (עד 20 מילים) שתעזור לנציג לסגור עסקה או לטפל בבעיה.
-
-כללי חשיבה:
-- הזמנה בסטטוס "ממתין לתשלום" = הלקוח רוצה לשלם! זו הזדמנות מכירה חמה. ציין את הסכום.
-- הזמנה שהושלמה ב-3 ימים אחרונים = כנראה בירור על משלוח/מעקב
-- ריבוי פניות = לקוח מתוסכל, צריך טיפול מיוחד
-- תיקון פעיל = כנראה רוצה עדכון סטטוס
-- תיקון שנסגר לאחרונה = ייתכן תלונה או בירור
-- פניות שירות פתוחות = בדוק מה הסטטוס ועדכן
-- אם אין בעיות = הזדמנות למכירה, ציין רקע
-
-אל תכתוב "הלקוח". התחל ישר עם התוכן. השתמש באימוג'י אחד מתאים בתחילת המשפט.
-
-מידע:
-${facts.join('\n')}`,
-                        response_json_schema: {
-                            type: "object",
-                            properties: {
-                                tip: { type: "string", description: "התראה ממוקדת לנציג" }
-                            }
-                        }
-                    });
-                    tipsMap[clientId] = res?.tip || 'אין מידע';
-                } catch (_e) {
-                    tipsMap[clientId] = null;
-                }
-            });
-            await Promise.all(batchPromises);
-        }
-        
-        setClientTips(prev => ({ ...prev, ...tipsMap }));
     };
 
     useEffect(() => { loadData(); }, [pageSize]);
@@ -429,14 +336,12 @@ ${facts.join('\n')}`,
                         const phone = extractPhone(call.content);
                         const normalized = normalizePhone(phone);
                         const client = (phone && clients[phone]) || (normalized && clients[normalized]) || null;
-                        const tip = client ? clientTips[client.id] : null;
                         const leads = (phone && activeLeads[phone]) || (normalized && activeLeads[normalized]) || [];
                         return (
                             <CallLogItem
                                 key={call.id}
                                 call={call}
                                 client={client}
-                                aiTip={tip}
                                 dupCount={call._dupCount || 0}
                                 activeLeads={leads}
                                 onCustomerClick={(id) => setCustomerCardId(id)}

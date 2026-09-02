@@ -10,10 +10,10 @@ export default function CustomerAISummary({ customer, orders, repairs, tickets, 
     const [isGenerating, setIsGenerating] = useState(false);
 
     const generateSummary = async (force = false) => {
-        // Avoid re-running the LLM if a recent summary (last 2 days) already exists
+        // Avoid re-running the LLM if a summary from the last 30 days already exists
         if (!force && customer?.ai_summary && customer?.ai_summary_date) {
             const ageMs = Date.now() - new Date(customer.ai_summary_date).getTime();
-            if (ageMs < 2 * 24 * 60 * 60 * 1000) {
+            if (ageMs < 30 * 24 * 60 * 60 * 1000) {
                 setSummary(customer.ai_summary);
                 return;
             }

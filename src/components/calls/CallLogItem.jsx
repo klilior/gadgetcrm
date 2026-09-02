@@ -1,11 +1,11 @@
 import React from 'react';
-import { PhoneIncoming, PhoneOutgoing, PhoneMissed, User, ExternalLink, Clock, Lightbulb, Copy, CreditCard, ShoppingCart, Mic, Flame, Link2 } from 'lucide-react';
+import { PhoneIncoming, PhoneOutgoing, PhoneMissed, User, ExternalLink, Clock, Copy, CreditCard, ShoppingCart, Mic, Flame, Link2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import moment from 'moment';
 
-export default function CallLogItem({ call, client, aiTip, dupCount, activeLeads = [], onCustomerClick }) {
+export default function CallLogItem({ call, client, dupCount, activeLeads = [], onCustomerClick }) {
     const content = call.content || '';
     const summary = call.summary || '';
     const isIncoming = call.activity_type === 'שיחה נכנסת';
@@ -132,16 +132,24 @@ export default function CallLogItem({ call, client, aiTip, dupCount, activeLeads
                     <span className="text-xs text-blue-700">📦 הזמנה ב-3 ימים אחרונים - כנראה בירור משלוח</span>
                 </div>
             )}
-            {/* AI Tip */}
-            {client && aiTip && aiTip !== 'אין מידע' && aiTip !== 'אין פעילות ידועה' && (
-                <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mr-[52px]">
-                    <Lightbulb className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-xs text-amber-800 leading-relaxed">{aiTip}</span>
-                </div>
-            )}
-            {client && aiTip === 'אין פעילות ידועה' && (
-                <div className="mt-2 flex items-start gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 mr-[52px]">
-                    <span className="text-[11px] text-gray-400">אין פעילות ידועה ללקוח</span>
+            {/* Last order details (identified client with an order) */}
+            {client?.lastOrderInfo && (
+                <div className="mt-2 flex items-start gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mr-[52px]">
+                    <ShoppingCart className="w-3.5 h-3.5 text-slate-500 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs text-slate-700 leading-relaxed">
+                        <span className="font-semibold">הזמנה #{client.lastOrderInfo.order_number}</span>
+                        {client.lastOrderInfo.order_date && (
+                            <span className="text-slate-500"> · {moment.utc(client.lastOrderInfo.order_date).local().format('DD/MM/YYYY')}</span>
+                        )}
+                        {client.lastOrderInfo.total && <span className="text-slate-500"> · ₪{client.lastOrderInfo.total}</span>}
+                        {client.lastOrderInfo.products?.length > 0 && (
+                            <div className="text-slate-600 mt-0.5">
+                                {client.lastOrderInfo.products.map((p, i) => (
+                                    <span key={i}>{i > 0 ? ', ' : ''}{p.name}{p.quantity > 1 ? ` ×${p.quantity}` : ''}</span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
             {/* Recording */}
