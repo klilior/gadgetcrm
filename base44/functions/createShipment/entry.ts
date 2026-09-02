@@ -44,6 +44,33 @@ async function getToken() {
   return data.access_token;
 }
 
+// ── Picking gate (inlined — מקור האמת: רשומות PickingState שהנציג סימן במסך) ──
+async function evaluatePickingGate(base44, orderId) {
+  let order = null;
+  try { order = await base44.asServiceRole.entities.Order.get(String(orderId)); } catch (_) {}
+  if (!order) return { blocked: false };
+
+  let products = [];
+  try { products = await base44.asServiceRole.entities.OrderProduct.filter({ order_id: String(orderId) }); } catch (_) {}
+  const SHIPPING_UPSELL_SKU = '180948';
+  products = (products || []).filter((x) => String(x.sku || '') !== SHIPPING_UPSELL_SKU && String(x.product_id ?? '') !== SHIPPING_UPSELL_SKU);
+  if (products.length === 0) return { blocked: false };
+
+  let picks = [];
+  try { picks = await base44.asServiceRole.entities.PickingState.filter({ order_id: String(orderId) }); } catch (_) {}
+  const totalItems = picks.length;
+  const pickedItems = picks.filter((p) => p.picked).length;
+  const allPicked = totalItems > 0 && pickedItems === totalItems && totalItems >= products.length;
+
+  if (allPicked) return { blocked: false };
+  return {
+    blocked: true,
+    total_items: Math.max(totalItems, products.length),
+    picked_items: pickedItems,
+    message_he: 'לא ניתן ליצור משלוח לפני השלמת ליקוט.',
+  };
+}
+
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
 
@@ -82,8 +109,7 @@ Deno.serve(async (req) => {
   const safeGateOrderId = order_id && String(order_id) !== 'undefined' && String(order_id) !== 'null' ? String(order_id) : null;
   if (safeGateOrderId && !followup_id && shipment_type !== 'pickup_drop') {
     try {
-      const gate = await base44.asServiceRole.functions.invoke('checkPickingGate', { order_id: safeGateOrderId });
-      const gateData = gate?.data ?? gate;
+      const gateData = await evaluatePickingGate(base44, safeGateOrderId);
       if (gateData?.blocked) {
         // HTTP 200 on purpose: a non-2xx makes the SDK throw and the UI shows a bare "409"
         // instead of the Hebrew reason. The block itself is expressed in the body.
