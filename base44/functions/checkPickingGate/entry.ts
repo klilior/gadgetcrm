@@ -132,47 +132,32 @@ Deno.serve(async (req) => {
     const SHIPPING_UPSELL_SKU = '180948';
     products = (products || []).filter((x) => String(x.sku || '') !== SHIPPING_UPSELL_SKU && String(x.product_id ?? '') !== SHIPPING_UPSELL_SKU);
 
-    const orderForParser = {
-      raw_id: order.id,
-      products: products.map((x) => ({ name: x.name || '', sku: x.sku || (x.product_id != null ? String(x.product_id) : ''), quantity: x.quantity || 1, meta_data: x.meta_data || '' })),
-    };
-
-    const items = buildPickingItemsFromOrder(orderForParser);
-
-    if (items.length === 0) {
+    if (products.length === 0) {
       return Response.json({ blocked: false, picking_status: "completed", total_items: 0, picked_items: 0, message_he: "" });
     }
 
-    // Load saved picks
+    // מקור האמת: רשומות הליקוט שהנציג יצר במסך (PickingState).
+    // כך אין שני פרסרים שיכולים לא להסכים על מספר הפריטים.
     let picks = [];
     try { picks = await base44.asServiceRole.entities.PickingState.filter({ order_id: String(order_id) }); } catch (_) {}
-    const pickedSet = new Set(picks.filter((p) => p.picked).map((p) => p.picking_item_id));
 
-    let pickedItems = items.filter((it) => pickedSet.has(it.picking_item_id)).length;
-    let allPicked = pickedItems === items.length;
-
-    // Fallback: picking_item_id הוא מזהה מיקומי — סטייה קלה בין הפרסר בקליינט לפרסר כאן
-    // (למשל פריט שסונן רק בצד אחד) גורמת לאי-התאמה במזהים למרות שהליקוט הושלם בפועל.
-    // אם כל הרשומות השמורות מסומנות כנאספו ומספרן >= מספר הפריטים הנדרשים — הליקוט הושלם.
-    if (!allPicked && picks.length > 0) {
-      const allSavedPicked = picks.every((p) => p.picked);
-      if (allSavedPicked && pickedSet.size >= items.length) {
-        pickedItems = items.length;
-        allPicked = true;
-      }
-    }
+    const totalItems = picks.length;
+    const pickedItems = picks.filter((p) => p.picked).length;
+    // נדרש לפחות פריט אחד לכל שורת מוצר בהזמנה — כדי שהזמנה שלא נפתחה כלל לא תעבור
+    const enoughRows = totalItems >= products.length;
+    const allPicked = totalItems > 0 && pickedItems === totalItems && enoughRows;
 
     if (!allPicked) {
       return Response.json({
         blocked: true,
         picking_status: pickedItems === 0 ? "not_started" : "partial",
-        total_items: items.length,
+        total_items: Math.max(totalItems, products.length),
         picked_items: pickedItems,
         message_he: "לא ניתן ליצור משלוח לפני השלמת ליקוט.",
       });
     }
 
-    return Response.json({ blocked: false, picking_status: "completed", total_items: items.length, picked_items: pickedItems, message_he: "" });
+    return Response.json({ blocked: false, picking_status: "completed", total_items: totalItems, picked_items: pickedItems, message_he: "" });
   } catch (err) {
     return Response.json({ blocked: true, message_he: `שגיאה בבדיקת שער הליקוט: ${err.message}` }, { status: 500 });
   }
