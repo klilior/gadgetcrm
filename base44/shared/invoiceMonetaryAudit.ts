@@ -18,6 +18,7 @@
  */
 
 import { roundMoney } from './invoiceExtraction.ts';
+import { planMonetaryAudit, buildSkippedAuditProvenance } from './invoiceMonetaryAuditGate.ts';
 
 export const MONETARY_AUDIT_VERSION = 'monetary-audit-1.0.0';
 
@@ -456,8 +457,23 @@ export function applyMonetaryAudit(extraction: any, audit: any) {
   return selection;
 }
 
-/** Convenience wrapper: audit the file and apply it, degrading safely to "ambiguous". */
+/**
+ * Convenience wrapper: audit the file and apply it, degrading safely to "ambiguous".
+ * A deterministic gate runs first: when the first pass already produced label-backed amounts that
+ * close arithmetically, the extra model call is skipped. Any doubt → the audit still runs.
+ */
 export async function auditAndApplyAmounts(base44: any, extraction: any, fileUrl: string, model = 'gpt_5_mini', targetScope?: any) {
+  const plan = planMonetaryAudit(extraction, isFinalPayableLabel);
+  if (plan.needs_audit === false) {
+    extraction.amount_provenance = buildSkippedAuditProvenance(extraction, plan, MONETARY_AUDIT_VERSION);
+    return {
+      total: extraction.total_with_vat ?? null,
+      subtotal: extraction.subtotal_before_vat ?? null,
+      vat: extraction.vat_amount ?? null,
+      provenance: extraction.amount_provenance
+    };
+  }
+
   try {
     const audit = await runMonetaryAudit(base44, fileUrl, model, targetScope);
     return applyMonetaryAudit(extraction, audit);
