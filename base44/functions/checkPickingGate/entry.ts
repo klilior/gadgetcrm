@@ -44,7 +44,7 @@ function isAttributeChoice(label, value) {
   const hay = `${label || ""} ${value || ""}`.toLowerCase();
   return ATTRIBUTE_KEYWORDS.some((kw) => hay.includes(kw.toLowerCase()));
 }
-const NON_PHYSICAL_KEYWORDS = ["אחריות","שירות","התקנה","חריטה","הקדשה","הערה","הערת","צבע","שדרוג","ביטוח","warranty","service","installation","engraving","note","color","gift wrap","עטיפת מתנה"];
+const NON_PHYSICAL_KEYWORDS = ["אחריות","שירות","התקנה","חריטה","הקדשה","הערה","הערת","ביטוח","warranty","service","installation","engraving","note","gift wrap","עטיפת מתנה"];
 const NEGATIVE_VALUES = ["ללא", "לא", "אין", "no", "none", "0"];
 const PLACEHOLDER_VALUES = ["בחר ראש טעינה", "בחר מטען", "בחר אפשרות", "יש לבחור"];
 function isNegativeChoice(value) {
@@ -80,8 +80,8 @@ function buildPickingItemsFromOrder(order) {
       const label = clean(m.display_key || m.key);
       const value = clean(m.display_value || m.value);
       if (!value && !label) return;
-      if (isAttributeChoice(m.display_key || m.key, m.display_value || m.value)) return;
       if (isNonPhysical(m.display_key || m.key, m.display_value || m.value)) return;
+      if (isAttributeChoice(m.display_key || m.key, m.display_value || m.value)) return;
       let addonTitle = looksPhysical("", value) ? value : (looksPhysical(label, "") ? label : (value || label));
       addonTitle = clean(addonTitle);
       if (!addonTitle) return;

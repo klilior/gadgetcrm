@@ -280,9 +280,13 @@ export default function PickingList({ order, currentUser, onStatusChange }) {
                       className="mt-0.5 data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-medium break-words ${item.picked ? "text-emerald-900 line-through/50" : "text-gray-900"}`}>
+                      <div className={`text-base font-bold break-words ${item.picked ? "text-emerald-900" : "text-gray-900"}`}>
+                        {item.quantity > 1 && <span className="text-[#7D0F82]">{item.quantity}× </span>}
                         {item.title}
                       </div>
+                      {item.type === "epo_addon" && item.parent_product_name && (
+                        <div className="text-[11px] text-gray-500 mt-0.5">תוספת ל: {item.parent_product_name}</div>
+                      )}
                       {item.attributes?.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1.5 mt-1">
                           {item.attributes.map((attr, i) => (

@@ -49,11 +49,11 @@ function extractQtyFromText(text) {
   return 1;
 }
 
-// Non-physical add-ons that must NOT be picked
+// Services / notes — never packed, even when the customer paid for them
 const NON_PHYSICAL_KEYWORDS = [
   "אחריות", "שירות", "התקנה", "חריטה", "הקדשה", "הערה", "הערת",
-  "צבע", "שדרוג", "ביטוח", "warranty", "service", "installation",
-  "engraving", "note", "color", "gift wrap", "עטיפת מתנה",
+  "ביטוח", "warranty", "service", "installation",
+  "engraving", "note", "gift wrap", "עטיפת מתנה",
 ];
 
 // Values that mean "customer chose NOT to add this" → not a physical item
@@ -151,13 +151,14 @@ function rawItemsFromOrder(order) {
       const value = clean(m.display_value || m.value);
       if (!value && !label) return;
 
+      // לא נוסף ע"י הלקוח / שירות בלבד — לא מוצג כלל
+      if (isNonPhysical(m.display_key || m.key, m.display_value || m.value)) return;
+
       // Customer-chosen attribute (e.g. color) — not a pickable item, but show it on the product
       if (isAttributeChoice(m.display_key || m.key, m.display_value || m.value)) {
         mainItem.attributes.push({ label: label || "בחירה", value: value || label });
         return;
       }
-
-      if (isNonPhysical(m.display_key || m.key, m.display_value || m.value)) return;
 
       // Prefer the specific selected product (e.g. "כיסוי ארנק") over a generic field label.
       let addonTitle = looksPhysical("", value) ? value : (looksPhysical(label, "") ? label : (value || label));
