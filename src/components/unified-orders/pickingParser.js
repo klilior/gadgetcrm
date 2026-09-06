@@ -84,8 +84,17 @@ function isNonPhysical(label, value) {
 // picker MUST see them (e.g. a chosen color). Shown as tags on the parent product line.
 const ATTRIBUTE_KEYWORDS = ["צבע", "color", "חריטה", "הקדשה", "engraving", "מידה", "size", "דגם"];
 
+// שדה שהכותרת שלו היא בחירת מאפיין (צבע/מידה/דגם/חריטה) הוא תמיד מאפיין של המוצר האב,
+// גם כשהכותרת מזכירה את שם המוצר עצמו (למשל "בחר צבע כיסוי ארנק" → "כחול").
+function isAttributeLabel(label) {
+  const text = `${label || ""}`.toLowerCase();
+  return ATTRIBUTE_KEYWORDS.some((kw) => text.includes(kw.toLowerCase()));
+}
+
 function isAttributeChoice(label, value) {
   if (isNegativeChoice(value)) return false; // "ללא" — nothing chosen
+  // בחירת מאפיין ללא תוספת מחיר — מוצגת כתג על שורת המוצר, לא כפריט נפרד.
+  if (isAttributeLabel(label) && extractPrice(value) === null) return true;
   // תוספת פיזית שנבחרה (למשל "כיסוי קומבו במגוון צבעים ₪99") אינה מאפיין —
   // היא פריט שצריך להיאסף, גם אם הטקסט מזכיר צבע/מידה.
   if (looksPhysical(label, value) || extractPrice(value) !== null) return false;
