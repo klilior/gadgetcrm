@@ -453,7 +453,9 @@ export default function UnifiedOrders() {
     });
   }, [orders, searchTerm, sourceFilter, statusFilter, showClosed, showBlocked, readyOnly]);
 
-  // Pagination
+  // Pagination — כל שינוי בחיפוש/סינון מחזיר לעמוד הראשון, אחרת התוצאה נופלת מחוץ לעמוד הנוכחי
+  useEffect(() => { setPage(1); }, [searchTerm, sourceFilter, statusFilter, showBlocked, readyOnly]);
+
   const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
   const paginatedOrders = filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
