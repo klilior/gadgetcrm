@@ -199,7 +199,9 @@ export default function UnifiedOrders() {
         woo.push({
           id: 'woo_' + o.id, source: 'woocommerce',
           order_number: extNum, order_date: o.order_date || '',
-          customer_name: c?.full_name || '', customer_phone: c?.phone || '',
+          // נתוני החיוב של ההזמנה הם מקור אמין תמיד; רשומת הלקוח היא רק השלמה
+          customer_name: c?.full_name || [billing.first_name, billing.last_name].filter(Boolean).join(' ') || '',
+          customer_phone: c?.phone || billing.phone || '',
           customer_email: billing.email || c?.email || '',
           products: pr.map(x => ({name: x.name||'', sku: x.sku || (x.product_id != null ? String(x.product_id) : ''), product_id: x.product_id != null ? String(x.product_id) : '', quantity: x.quantity||1, total: parseFloat(x.total)||0, meta_data: x.meta_data || ''})),
           total: parseFloat(o.total) || 0, shipping_method: o.shipping_method || '',
