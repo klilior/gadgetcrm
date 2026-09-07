@@ -1,0 +1,46 @@
+{
+  "name": "\u05e8\u05d9\u05db\u05d5\u05d6 \u05e9\u05d1\u05d5\u05e2\u05d9 \u05dc\u05d9\u05d1\u05d5\u05d0\u05e0\u05d9\u05dd - \u05e9\u05dc\u05d9\u05e9\u05d9",
+  "description": "",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 9 * * 2",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "migrated_workflow",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "vendorRepairReminders",
+            "args": {
+              "action": "weekly_summary"
+            }
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "vendorRepairReminders"
+  }
+}

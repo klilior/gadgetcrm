@@ -1,0 +1,44 @@
+{
+  "name": "\u05e1\u05e0\u05db\u05e8\u05d5\u05df \u05d4\u05d6\u05de\u05e0\u05d5\u05ea WooCommerce \u05e9\u05e2\u05ea\u05d9",
+  "description": "\u05e1\u05e0\u05db\u05e8\u05d5\u05df \u05d4\u05d6\u05de\u05e0\u05d5\u05ea \u05de-WooCommerce \u05db\u05dc \u05e9\u05e2\u05d4 - \u05de\u05d5\u05d5\u05d3\u05d0 \u05e9\u05db\u05dc \u05d4\u05d4\u05d6\u05de\u05e0\u05d5\u05ea \u05de-7 \u05d9\u05de\u05d9\u05dd \u05d0\u05d7\u05e8\u05d5\u05e0\u05d9\u05dd \u05de\u05e1\u05d5\u05e0\u05db\u05e8\u05e0\u05d5\u05ea \u05d5\u05de\u05e9\u05d5\u05d9\u05db\u05d5\u05ea \u05dc\u05dc\u05e7\u05d5\u05d7\u05d5\u05ea",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 1,
+      "interval_unit": "hours",
+      "interval_anchor": "2026-03-04T21:13:30.239000",
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "woocommerce",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "syncWooCommerceOrders",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "syncWooCommerceOrders"
+  }
+}

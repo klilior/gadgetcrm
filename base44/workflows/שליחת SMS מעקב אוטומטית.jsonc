@@ -1,0 +1,37 @@
+{
+  "name": "\u05e9\u05dc\u05d9\u05d7\u05ea SMS \u05de\u05e2\u05e7\u05d1 \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05ea",
+  "description": "\u05e9\u05d5\u05dc\u05d7 SMS \u05de\u05e2\u05e7\u05d1 \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05ea \u05dc\u05dc\u05e7\u05d5\u05d7 \u05db\u05e9\u05de\u05e1\u05e4\u05e8 \u05de\u05e2\u05e7\u05d1 \u05e0\u05d5\u05e1\u05e3 \u05dc\u05d4\u05d6\u05de\u05e0\u05d4, \u05d1\u05e9\u05e2\u05d5\u05ea 9:00-21:00",
+  "trigger": {
+    "condition": "${ ((.trigger.changed_fields | index(\"tracking_number\") != null) and (.trigger.data.tracking_number != null and .trigger.data.tracking_number != \"\" and .trigger.data.tracking_number != [] and .trigger.data.tracking_number != {})) }",
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "update"
+      ],
+      "entity_name": "Order"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "sms",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "autoSendTrackingSms",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "autoSendTrackingSms"
+  }
+}

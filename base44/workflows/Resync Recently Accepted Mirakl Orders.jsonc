@@ -1,0 +1,44 @@
+{
+  "name": "Resync Recently Accepted Mirakl Orders",
+  "description": "\u05db\u05dc 5 \u05d3\u05e7\u05d5\u05ea - \u05d1\u05d5\u05d3\u05e7 \u05d4\u05d6\u05de\u05e0\u05d5\u05ea Mirakl \u05e9\u05d0\u05d5\u05e9\u05e8\u05d5 \u05dc\u05d0\u05d7\u05e8\u05d5\u05e0\u05d4 \u05d5\u05de\u05d5\u05e9\u05da \u05e0\u05ea\u05d5\u05e0\u05d9 \u05de\u05e9\u05dc\u05d5\u05d7 \u05de\u05e2\u05d5\u05d3\u05db\u05e0\u05d9\u05dd",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 5,
+      "interval_unit": "minutes",
+      "interval_anchor": "2026-03-29T08:54:14.979000",
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "resync_recently_accepted_mirakl_orders",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "resyncRecentlyAccepted",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "resyncRecentlyAccepted"
+  }
+}

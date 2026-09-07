@@ -1,0 +1,44 @@
+{
+  "name": "GetPackage - \u05e8\u05e2\u05e0\u05d5\u05df \u05e1\u05d8\u05d8\u05d5\u05e1 \u05de\u05e9\u05dc\u05d5\u05d7\u05d9\u05dd",
+  "description": "\u05de\u05e8\u05e2\u05e0\u05df \u05e1\u05d8\u05d8\u05d5\u05e1 \u05de\u05e9\u05dc\u05d5\u05d7\u05d9 GetPackage \u05e4\u05ea\u05d5\u05d7\u05d9\u05dd \u05db\u05dc 30 \u05d3\u05e7\u05d5\u05ea",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 30,
+      "interval_unit": "minutes",
+      "interval_anchor": "2026-05-04T07:21:56.847000",
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "getpackage",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "getPackageRefreshStatuses",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "getPackageRefreshStatuses"
+  }
+}

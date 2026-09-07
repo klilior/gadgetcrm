@@ -1,0 +1,46 @@
+{
+  "name": "\u05ea\u05d6\u05db\u05d5\u05e8\u05d5\u05ea \u05d9\u05d1\u05d5\u05d0\u05e0\u05d9\u05dd \u05d9\u05d5\u05de\u05d9\u05d5\u05ea (7/10/11+)",
+  "description": "",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "30 8 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "7_10_11",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "vendorRepairReminders",
+            "args": {
+              "action": "daily_reminders"
+            }
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "vendorRepairReminders"
+  }
+}
