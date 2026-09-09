@@ -1,0 +1,92 @@
+{
+  "name": "WhatsAppCloudMessage",
+  "type": "object",
+  "properties": {
+    "external_message_id": {
+      "type": "string",
+      "description": "Meta WhatsApp message ID",
+      "index": true,
+      "unique": true
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "incoming",
+        "outgoing"
+      ],
+      "description": "Message direction"
+    },
+    "processing_status": {
+      "type": "string",
+      "enum": [
+        "processing",
+        "processed",
+        "failed"
+      ],
+      "default": "processing",
+      "description": "CRM ingestion state"
+    },
+    "message_type": {
+      "type": "string",
+      "description": "WhatsApp message type"
+    },
+    "from_phone": {
+      "type": "string",
+      "description": "Sender in E.164 digits"
+    },
+    "to_phone": {
+      "type": "string",
+      "description": "Recipient in E.164 digits"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Message time"
+    },
+    "customer_id": {
+      "type": "string",
+      "description": "Linked Client ID",
+      "index": true
+    },
+    "conversation_id": {
+      "type": "string",
+      "description": "Linked Conversation ID"
+    },
+    "activity_id": {
+      "type": "string",
+      "description": "Linked Activity ID"
+    },
+    "provider": {
+      "type": "string",
+      "default": "meta_cloud_api",
+      "description": "Transport provider"
+    }
+  },
+  "required": [
+    "external_message_id",
+    "direction",
+    "processing_status"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
