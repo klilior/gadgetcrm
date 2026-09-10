@@ -211,7 +211,7 @@ export default function ChatView({ conversation, customer, messages, onMessageSe
                     messageObject,
                     requestId,
                     employeeId: currentUser?.id,
-                    sessionToken: whatsappSessionToken
+                    whatsappSessionToken
                 });
             } else if (channel === 'email') {
                 await base44.integrations.Core.SendEmail({
