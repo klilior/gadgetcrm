@@ -26,6 +26,28 @@ const retryApiCall = async (fn, retries = 3, delay = 1000) => {
 };
 
 const SESSION_TIMEOUT_MS = 90 * 60 * 1000; // 90 minutes in milliseconds
+const WHATSAPP_SESSION_STORAGE_KEY = "whatsappSessionTokens";
+
+const readWhatsappSessionTokens = () => {
+  try {
+    return JSON.parse(sessionStorage.getItem(WHATSAPP_SESSION_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+};
+
+const saveWhatsappSessionToken = (userId, token) => {
+  if (!userId || !token) return;
+  const tokens = readWhatsappSessionTokens();
+  tokens[userId] = token;
+  sessionStorage.setItem(WHATSAPP_SESSION_STORAGE_KEY, JSON.stringify(tokens));
+};
+
+const removeWhatsappSessionToken = (userId) => {
+  const tokens = readWhatsappSessionTokens();
+  delete tokens[userId];
+  sessionStorage.setItem(WHATSAPP_SESSION_STORAGE_KEY, JSON.stringify(tokens));
+};
 
 export function UserProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
@@ -50,6 +72,7 @@ export function UserProvider({ children }) {
     localStorage.removeItem("activeShiftUsers");
     localStorage.removeItem("managerId");
     localStorage.removeItem("lastActivityTime");
+    sessionStorage.removeItem(WHATSAPP_SESSION_STORAGE_KEY);
     setCurrentUser(null);
     setActiveUsers([]);
   };
@@ -186,30 +209,21 @@ export function UserProvider({ children }) {
   const login = async (identifier, password) => {
     try {
       const trimmedIdentifier = identifier.trim();
-      const isEmail = trimmedIdentifier.includes('@');
-      
-      const filter = isEmail 
-        ? { email: trimmedIdentifier.toLowerCase() } 
-        : { username: trimmedIdentifier.toUpperCase() };
 
-      console.log('🔐 Attempting login with filter:', filter);
-
-      const employees = await retryApiCall(() => 
-        Employee.filter(filter)
+      const response = await retryApiCall(() =>
+        base44.functions.invoke('issue-whatsapp-session', {
+          identifier: trimmedIdentifier,
+          password
+        })
       );
-      
-      if (employees.length === 0) {
-        return { success: false, error: "משתמש לא נמצא" };
-      }
-      
-      const user = employees[0];
-      if (user.password_hash !== password) {
-        return { success: false, error: "סיסמה שגויה" };
+      const authData = response?.data || response;
+      const user = authData?.employee;
+
+      if (!user?.id || !authData?.session_token) {
+        return { success: false, error: "שגיאת מערכת בהתחברות" };
       }
 
-      if (!user.is_active) {
-        return { success: false, error: "המשתמש אינו פעיל" };
-      }
+      saveWhatsappSessionToken(user.id, authData.session_token);
 
       if (user.role === 'מנהל') {
         setCurrentUser(user);
@@ -217,47 +231,46 @@ export function UserProvider({ children }) {
         localStorage.setItem("managerId", user.id);
         localStorage.removeItem("activeShiftUsers");
         localStorage.removeItem("currentUserId");
-        updateLastActivity(); // Start session timer
-        
-        await retryApiCall(() => 
-          Employee.update(user.id, { last_login: new Date().toISOString() })
-        );
+        updateLastActivity();
         return { success: true };
       }
 
       const existingUserIndex = activeUsers.findIndex(u => u.id === user.id);
       let updatedActiveUsers;
-      
+
       if (existingUserIndex >= 0) {
-        updatedActiveUsers = [...activeUsers];
+        updatedActiveUsers = activeUsers.map(u => u.id === user.id ? user : u);
       } else {
         if (activeUsers.length >= 5) {
+          removeWhatsappSessionToken(user.id);
           return { success: false, error: "הגעת למקסימום משתמשים במשמרת (5)" };
         }
         updatedActiveUsers = [...activeUsers, user];
       }
-      
+
       setActiveUsers(updatedActiveUsers);
       setCurrentUser(user);
       localStorage.setItem("activeShiftUsers", JSON.stringify(updatedActiveUsers));
       localStorage.setItem("currentUserId", user.id);
       localStorage.removeItem("managerId");
-      updateLastActivity(); // Start session timer
-      
-      await retryApiCall(() => 
-        Employee.update(user.id, { last_login: new Date().toISOString() })
-      );
-      
+      updateLastActivity();
+
       return { success: true };
     } catch (error) {
       console.error("Login error:", error);
-      return { 
-        success: false, 
-        error: error.message === "Network Error" 
+      const serverMessage = error?.response?.data?.error || error?.data?.error;
+      return {
+        success: false,
+        error: serverMessage || (error.message === "Network Error"
           ? "שגיאת רשת - בדוק את החיבור לאינטרנט"
-          : "שגיאת מערכת בהתחברות" 
+          : "שם המשתמש או הסיסמה שגויים")
       };
     }
+  };
+
+  const getWhatsappSessionToken = (userId = currentUser?.id) => {
+    if (!userId) return "";
+    return readWhatsappSessionTokens()[userId] || "";
   };
 
   const switchUser = (userId) => {
@@ -269,6 +282,7 @@ export function UserProvider({ children }) {
   };
 
   const removeUserFromShift = (userId) => {
+    removeWhatsappSessionToken(userId);
     const updatedUsers = activeUsers.filter(u => u.id !== userId);
     setActiveUsers(updatedUsers);
     
@@ -292,6 +306,7 @@ export function UserProvider({ children }) {
     localStorage.removeItem("activeShiftUsers");
     localStorage.removeItem("managerId");
     localStorage.removeItem("lastActivityTime");
+    sessionStorage.removeItem(WHATSAPP_SESSION_STORAGE_KEY);
   };
 
   const endShift = () => {
@@ -301,6 +316,7 @@ export function UserProvider({ children }) {
     localStorage.removeItem("activeShiftUsers");
     localStorage.removeItem("managerId");
     localStorage.removeItem("lastActivityTime");
+    sessionStorage.removeItem(WHATSAPP_SESSION_STORAGE_KEY);
   };
 
   return (
@@ -312,6 +328,7 @@ export function UserProvider({ children }) {
       switchUser,
       removeUserFromShift,
       endShift,
+      getWhatsappSessionToken,
       isLoading 
     }}>
       {children}
