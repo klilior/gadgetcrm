@@ -13,7 +13,7 @@ import ChatView from "../components/messages/ChatView";
 import NewConversationModal from "../components/messages/NewConversationModal";
 
 export default function MessageCenter() {
-    const { currentUser } = useUser();
+    const { currentUser, getWhatsappSessionToken } = useUser();
     const { employees: employeesData } = useEmployees();
     const [conversations, setConversations] = useState([]);
     const [customers, setCustomers] = useState([]);
@@ -295,6 +295,7 @@ export default function MessageCenter() {
                         messages={getConversationMessages()}
                         onMessageSent={() => loadData(true)}
                         currentUser={currentUser}
+                        whatsappSessionToken={getWhatsappSessionToken()}
                     />
                 </div>
             </div>
