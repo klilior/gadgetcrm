@@ -14,7 +14,7 @@ import {
     DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-export default function ChatView({ conversation, customer, messages, onMessageSent, currentUser }) {
+export default function ChatView({ conversation, customer, messages, onMessageSent, currentUser, whatsappSessionToken }) {
     const [showCustomerCard, setShowCustomerCard] = useState(false);
     const [newMessage, setNewMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
@@ -203,9 +203,15 @@ export default function ChatView({ conversation, customer, messages, onMessageSe
                     };
                 }
                 
-                await base44.functions.invoke('sendWhatsapp', { 
-                    to: customer.phone, 
-                    messageObject 
+                const requestId = globalThis.crypto?.randomUUID?.() ||
+                    `wa-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+                await base44.functions.invoke('sendWhatsapp', {
+                    to: customer.phone,
+                    messageObject,
+                    requestId,
+                    employeeId: currentUser?.id,
+                    sessionToken: whatsappSessionToken
                 });
             } else if (channel === 'email') {
                 await base44.integrations.Core.SendEmail({
