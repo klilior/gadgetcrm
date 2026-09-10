@@ -19,6 +19,25 @@ const CARGO_STATUS_MAP = {
   55: 'בנקודת חלוקה',
 };
 
+function buildPackingSms({ name, shipment_type, tracking_number }) {
+  const firstName = (name || '').split(' ')[0] || 'לקוח/ה יקר/ה';
+  const opening = shipment_type === 'exchange'
+    ? 'שליח קארגו יגיע אליך עם המוצר החלופי ויאסוף את המוצר הקיים.'
+    : 'שליח קארגו יגיע אליך לאיסוף המוצר.';
+  return `שלום ${firstName},
+${opening}
+
+לפני האיסוף חשוב להכין את המוצר:
+1. לארוז בקרטון או בעטיפה סגורה ומוגנת — לא למסור מוצר חשוף.
+2. להסיר את החשבון מהמכשיר (Apple ID / חשבון Google) ולבטל קוד נעילה.
+3. לצרף אביזרים רק אם התבקשת במפורש.
+
+מוצר שיימסר ללא אריזה או עם חשבון/קוד נעילה פעיל עלול לעכב את הטיפול.
+
+מספר מעקב: ${tracking_number}
+GADGET-TEAM`;
+}
+
 async function cargoRequest(token, endpoint, method = 'POST', body = null) {
   const url = CARGO_BASE_URL + endpoint;
   const opts = {
@@ -89,16 +108,26 @@ Deno.serve(async (req) => {
               notes, number_of_parcels, cash_on_delivery, order_id, order_number, client_id } = body;
 
       const customer_code = parseInt(config.customer_code) || 7625;
+      // Cargo API requires ALL address keys to be present (city,name,email,floor,phone,company,street1,street2,entrance,apartment)
       const from_address = {
         name: 'GADGET-TEAM',
+        company: 'GADGET-TEAM',
+        email: config.sender_email || '',
         phone: config.sender_phone || '',
         street1: config.sender_street || 'שדרות משה דיין 3',
+        street2: '',
         city: config.sender_city || 'יהוד',
+        floor: '',
+        apartment: '',
+        entrance: '',
       };
       const to_address = {
         name: to_name,
+        company: '',
+        email: body.to_email || '',
         phone: to_phone,
         street1: to_street,
+        street2: '',
         city: to_city,
         floor: to_floor || '',
         apartment: to_apartment || '',
@@ -109,38 +138,51 @@ Deno.serve(async (req) => {
       let final_from = from_address;
       let final_to = to_address;
 
+      // Cargo semantics (official docs):
+      //   shipping_type:   1 = delivery, 2 = pickup (collection from the customer), 3 = transfer
+      //   double_delivery: 1 = regular,  2 = deliver something AND pick something up (exchange)
       if (shipment_type === 'delivery') {
         shipping_type = 1;
         double_delivery = 1;
       } else if (shipment_type === 'return') {
+        // Pure collection from the customer back to us
         shipping_type = 2;
         double_delivery = 1;
-        // Reverse addresses for return
         final_from = to_address;
         final_to = from_address;
       } else if (shipment_type === 'exchange') {
+        // Courier delivers the replacement to the customer AND collects the old unit
         shipping_type = 1;
         double_delivery = 2;
       } else {
         return Response.json({ success: false, error: 'סוג משלוח לא תקין' });
       }
 
+      const typeNoteHe = shipment_type === 'return'
+        ? 'איסוף החזרה מהלקוח'
+        : shipment_type === 'exchange'
+          ? 'משלוח החלפה — למסור חדש ולאסוף את הישן'
+          : '';
+      const finalNotes = [typeNoteHe, notes || ''].filter(Boolean).join(' | ');
+
+      // All fields below are marked REQUIRED by the Cargo API — omitting any of them
+      // makes Cargo fall back to its defaults (which silently turned exchanges into regular deliveries).
       const payload = {
         shipping_type,
         double_delivery,
         carrier_id: 1,
         customer_code,
-        transaction_id: order_number || order_id || '',
-        order_id: order_number || order_id || '',
-        notes: notes || '',
+        transaction_id: String(order_number || order_id || ''),
+        order_id: String(order_number || order_id || ''),
+        notes: finalNotes,
+        barcode: '',
+        cod_type: 0,
+        cash_on_delivery: cash_on_delivery && cash_on_delivery > 0 ? cash_on_delivery : 0,
+        total_value: body.total_value != null ? body.total_value : 0,
         number_of_parcels: number_of_parcels || 1,
         to_address: final_to,
         from_address: final_from,
       };
-
-      if (cash_on_delivery && cash_on_delivery > 0) {
-        payload.cash_on_delivery = cash_on_delivery;
-      }
 
       const apiResult = await cargoRequest(config.api_token, 'shipments/create', 'POST', payload);
 
@@ -167,7 +209,7 @@ Deno.serve(async (req) => {
         num_packages: number_of_parcels || 1,
         notes: notes || '',
         reference: order_number || order_id || '',
-        api_response: apiResult,
+        api_response: { request: payload, response: apiResult },
         cargo_shipment_id: String(shipment_id),
         cargo_status: '1',
         cargo_status_text: 'פתוח',
@@ -187,10 +229,41 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Packing instructions SMS — only for collections (return / exchange)
+      let packing_sms_status = null;
+      let packing_sms_detail = '';
+      if (shipment_type === 'return' || shipment_type === 'exchange') {
+        try {
+          const message = buildPackingSms({
+            name: to_name,
+            shipment_type,
+            tracking_number: String(shipment_id),
+          });
+          await base44.asServiceRole.functions.invoke('sendTextMeSMS', {
+            action: 'send',
+            to_phone,
+            message,
+            event_type: 'return_packing_sms',
+            fingerprint: `packing|${shipment_id}`,
+          });
+          packing_sms_status = 'success';
+          packing_sms_detail = 'הודעת הנחיות אריזה נשלחה ללקוח';
+        } catch (e) {
+          packing_sms_status = 'failed';
+          packing_sms_detail = e.message || 'שליחת הודעת ההנחיות נכשלה';
+          console.log('📦 Packing SMS failed:', e.message);
+        }
+      }
+
       return Response.json({
         success: true,
         shipment_id: String(shipment_id),
         shipment_record_id: shipmentRecord.id,
+        cargo_shipment_type: shipment_type,
+        sent_shipping_type: shipping_type,
+        sent_double_delivery: double_delivery,
+        packing_sms_status,
+        packing_sms_detail,
         raw: apiResult,
       });
     }

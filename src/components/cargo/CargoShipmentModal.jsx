@@ -88,7 +88,9 @@ export default function CargoShipmentModal({ open, onClose, order, client, initi
     setError(null);
     setExistingShipmentId(null);
     setConfirmedDuplicate(false);
-  }, [open, order, client, initialShipmentType]);
+    // Deliberately keyed on open/initialShipmentType only — order/client are rebuilt on every
+    // parent render, which used to reset the user's shipment-type choice back to the default.
+  }, [open, initialShipmentType]);
 
   // Check for existing cargo shipment on this order
   useEffect(() => {
@@ -220,23 +222,31 @@ export default function CargoShipmentModal({ open, onClose, order, client, initi
             }
           }
 
-          try {
-            const smsRes = await sendTrackingSms({
-              order_id: order?.raw_id || order?.id || order?.mirakl_order_id || order?.order_number || '',
-              customer_phone: toPhone,
-              customer_name: toName,
-              tracking_number: String(data.shipment_id),
-              tracking_carrier: 'cargo',
-              order_number: order?.order_number || order?.external_order_number || order?.mirakl_order_id || '',
-            });
-            completion.smsStatus = 'success';
-            completion.smsDetail = smsRes?.data?.message || 'SMS מעקב נשלח ללקוח';
-            toast.success('SMS מעקב נשלח לפי משלוח קארגו');
-          } catch (smsErr) {
-            completion.smsStatus = 'failed';
-            completion.smsDetail = smsErr?.response?.data?.error || smsErr.message || 'שליחת SMS נכשלה';
-            console.error('[Cargo] Failed to send tracking SMS:', smsErr.message);
-            toast.error('משלוח נוצר, אבל שליחת SMS נכשלה');
+          completion.packingSmsStatus = data.packing_sms_status || null;
+          completion.packingSmsDetail = data.packing_sms_detail || '';
+          if (data.packing_sms_status === 'success') toast.success('הודעת הנחיות אריזה נשלחה ללקוח');
+          if (data.packing_sms_status === 'failed') toast.error('משלוח נוצר, אבל הודעת ההנחיות לא נשלחה');
+
+          // Tracking SMS is relevant only for an outgoing delivery
+          if (shipmentType === 'delivery') {
+            try {
+              const smsRes = await sendTrackingSms({
+                order_id: order?.raw_id || order?.id || order?.mirakl_order_id || order?.order_number || '',
+                customer_phone: toPhone,
+                customer_name: toName,
+                tracking_number: String(data.shipment_id),
+                tracking_carrier: 'cargo',
+                order_number: order?.order_number || order?.external_order_number || order?.mirakl_order_id || '',
+              });
+              completion.smsStatus = 'success';
+              completion.smsDetail = smsRes?.data?.message || 'SMS מעקב נשלח ללקוח';
+              toast.success('SMS מעקב נשלח לפי משלוח קארגו');
+            } catch (smsErr) {
+              completion.smsStatus = 'failed';
+              completion.smsDetail = smsErr?.response?.data?.error || smsErr.message || 'שליחת SMS נכשלה';
+              console.error('[Cargo] Failed to send tracking SMS:', smsErr.message);
+              toast.error('משלוח נוצר, אבל שליחת SMS נכשלה');
+            }
           }
         }
         setResult(completion);
@@ -333,7 +343,11 @@ export default function CargoShipmentModal({ open, onClose, order, client, initi
           
           <div className="space-y-4">
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-              <p className="text-sm text-green-700 mb-1">מספר מעקב קארגו</p>
+              <p className="text-sm text-green-700 mb-1">
+                {result.cargo_shipment_type === 'exchange' ? '🔄 משלוח החלפה (מסירה + איסוף)'
+                  : result.cargo_shipment_type === 'return' ? '📦 איסוף החזרה מהלקוח'
+                  : '🚚 משלוח רגיל'} — מספר מעקב קארגו
+              </p>
               <div className="flex items-center justify-center gap-2">
                 <span className="text-2xl font-bold font-mono text-green-900">{result.shipment_id}</span>
                 <button onClick={() => { navigator.clipboard.writeText(String(result.shipment_id)); toast.success('הועתק!'); }}>
@@ -345,6 +359,7 @@ export default function CargoShipmentModal({ open, onClose, order, client, initi
             <div className="space-y-2">
               <CompletionRow label="סטטוס הזמנה" status={result.orderStatus} detail={result.orderStatusDetail} />
               <CompletionRow label="שליחת SMS מעקב" status={result.smsStatus} detail={result.smsDetail} />
+              <CompletionRow label="הנחיות אריזה ללקוח" status={result.packingSmsStatus} detail={result.packingSmsDetail} />
               <CompletionRow label="חשבונית לינט" status={result.invoiceStatus} detail={result.invoiceDetail} />
             </div>
 
