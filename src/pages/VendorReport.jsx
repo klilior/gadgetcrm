@@ -199,6 +199,9 @@ export default function VendorReport() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">דוח התחשבנות מעבדת Gadget-Team</h1>
         <div className="flex gap-2 flex-wrap">
+          <Button asChild variant="outline" className="gap-2">
+            <a href="/LabReportPrint">דוח להדפסה</a>
+          </Button>
           {canAddCredit && (
             <>
               <Button onClick={() => setShowAddPayment(true)} className="bg-green-600 hover:bg-green-700 gap-2">
