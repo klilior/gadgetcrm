@@ -21,6 +21,7 @@ import OrderFollowupCard from "./OrderFollowupCard";
 import OrderProgressBar from "./OrderProgressBar";
 import { buildOrderSteps } from "./buildOrderSteps";
 import { base44 } from "@/api/base44Client";
+import { getPackageApi } from "@/functions/getPackageApi";
 
 function copyText(text) {
   navigator.clipboard.writeText(text);
@@ -69,7 +70,6 @@ function GetPackageCardLazy({ order, isManager, isShiftManager }) {
     const check = async () => {
       if (!orderId) { if (!cancelled) setChecked(true); return; }
       try {
-        const { getPackageApi } = await import("@/functions/getPackageApi");
         const { data } = await getPackageApi({ action: "getShipmentsForOrder", order_id: orderId });
         if (!cancelled) {
           const shipments = data?.shipments || [];
