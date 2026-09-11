@@ -18,6 +18,8 @@ import OrderTreatmentTimeline from "./OrderTreatmentTimeline";
 import SerialHandlingZone from "../serials/SerialHandlingZone";
 import OrderFollowupModal from "./OrderFollowupModal";
 import OrderFollowupCard from "./OrderFollowupCard";
+import OrderProgressBar from "./OrderProgressBar";
+import { buildOrderSteps } from "./buildOrderSteps";
 import { base44 } from "@/api/base44Client";
 
 function copyText(text) {
@@ -215,6 +217,20 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
         )}
         <Badge className="bg-white text-gray-700 border border-gray-200 text-[10px] shadow-none">הפעולה הבאה: {nextActionLabel}</Badge>
       </div>
+
+      {/* שלבי הטיפול — הנציג רואה מיד באיזה שלב הוא ומה חוסם */}
+      <OrderProgressBar
+        steps={buildOrderSteps({
+          isMiraklNew,
+          pickingApplies,
+          pickingStatus,
+          isSelfPickupOrder,
+          hasInvoice: Boolean(order.invoice_issued_at || order.linet_invoice_doc_id || order.linet_invoice_doc_number),
+          hasShipment,
+          isLocked,
+          blockReason: shipmentBlockReason || (blockingItems.length ? blockingItems.join(" / ") : null),
+        })}
+      />
 
       {/* Main info grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
