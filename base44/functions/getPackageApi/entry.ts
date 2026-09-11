@@ -265,6 +265,30 @@ Deno.serve(async (req) => {
         result = await gpFetch(settings, 'POST', '/v1/deliveries/express/quote', expressBody);
       }
       
+      // Fallback: GetPackage sometimes can't resolve a specific house number on a known street.
+      // Retry without the house number and keep it in the courier notes.
+      let effectiveDropoffAddress = dropoffAddress;
+      let effectiveDropoffNotes = body.dropoff_notes || '';
+      const isUnknownLocation = !result.ok && JSON.stringify(result.data || '').includes('unknown location');
+      const houseMatch = String(dropoffAddress).match(/^(.*?)[\s,]+(\d+\s*[א-ת]?)$/);
+      if (isUnknownLocation && houseMatch) {
+        const streetOnly = houseMatch[1].trim();
+        const houseNo = houseMatch[2].trim();
+        console.log(`[GetPackage] Retrying without house number: "${streetOnly}" (בית ${houseNo})`);
+        const retryPoint = { address: buildAddress(dropoffCity, streetOnly, 'IL') };
+        const retryResult = await gpFetch(settings, 'POST', '/v1/deliveries/sharedRoute/quote', {
+          pickUpPoint: cleanPickUpPoint,
+          dropOffPoint: retryPoint,
+          package: { size: packageSize },
+        });
+        if (retryResult.ok) {
+          result = retryResult;
+          usedEndpoint = 'sharedRoute';
+          effectiveDropoffAddress = streetOnly;
+          effectiveDropoffNotes = [`בית ${houseNo}`, effectiveDropoffNotes].filter(Boolean).join(' | ');
+        }
+      }
+
       console.log(`[GetPackage] Used endpoint: ${usedEndpoint}, result status: ${result.status}`);
 
       // Build shipment record
@@ -281,9 +305,9 @@ Deno.serve(async (req) => {
         pickup_notes: pickupNotes,
         dropoff_name: dropoffName || '',
         dropoff_phone: dropoffPhone,
-        dropoff_address: dropoffAddress,
+        dropoff_address: effectiveDropoffAddress,
         dropoff_city: dropoffCity,
-        dropoff_notes: body.dropoff_notes || '',
+        dropoff_notes: effectiveDropoffNotes,
         package_description: body.package_description || '',
         package_quantity: body.package_quantity || 1,
         package_size: body.package_size || 'SMALL',
