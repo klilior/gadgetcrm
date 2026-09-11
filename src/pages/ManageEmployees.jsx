@@ -147,7 +147,7 @@ export default function ManageEmployees() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">ניהול עובדים ומשתמשים</h1>
         <div className="flex gap-3">
-          <Button onClick={handleAddNew} className="glass-button" style={{backgroundColor: '#7D0F82', color: 'white'}}>
+          <Button onClick={handleAddNew} style={{backgroundColor: '#7D0F82', color: 'white'}}>
             <PlusCircle className="w-4 h-4 ml-2" />
             הוסף עובד חדש
           </Button>
@@ -155,7 +155,7 @@ export default function ManageEmployees() {
       </div>
 
       {showForm && (
-        <Card className="glass-card">
+        <Card className="bg-white shadow-sm">
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>{isEditing ? "עריכת עובד" : "הוספת עובד חדש"}</CardTitle>
@@ -174,7 +174,6 @@ export default function ManageEmployees() {
                     value={formState.employee_name} 
                     onChange={handleInputChange} 
                     required 
-                    className="glass-button"
                   />
                 </div>
                 <div>
@@ -184,7 +183,6 @@ export default function ManageEmployees() {
                     value={formState.username} 
                     onChange={handleInputChange} 
                     required 
-                    className="glass-button"
                   />
                 </div>
                 <div>
@@ -195,7 +193,6 @@ export default function ManageEmployees() {
                     value={formState.email} 
                     onChange={handleInputChange} 
                     required 
-                    className="glass-button"
                   />
                 </div>
                 <div>
@@ -204,7 +201,6 @@ export default function ManageEmployees() {
                     name="phone" 
                     value={formState.phone} 
                     onChange={handleInputChange} 
-                    className="glass-button"
                   />
                 </div>
                 <div>
@@ -213,7 +209,6 @@ export default function ManageEmployees() {
                     name="id_number" 
                     value={formState.id_number || ""} 
                     onChange={handleInputChange} 
-                    className="glass-button"
                   />
                 </div>
                 <div>
@@ -223,7 +218,6 @@ export default function ManageEmployees() {
                     name="birth_date" 
                     value={formState.birth_date || ""} 
                     onChange={handleInputChange} 
-                    className="glass-button"
                   />
                 </div>
                 <div>
@@ -232,14 +226,13 @@ export default function ManageEmployees() {
                     name="linet_employee_code" 
                     value={formState.linet_employee_code || ""} 
                     onChange={handleInputChange} 
-                    className="glass-button"
                     placeholder="לדוגמה: 8743"
                   />
                 </div>
                 <div>
                   <Label>תפקיד</Label>
                   <Select value={formState.role} onValueChange={(v) => handleSelectChange('role', v)}>
-                    <SelectTrigger className="glass-button">
+                    <SelectTrigger className="bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -259,13 +252,12 @@ export default function ManageEmployees() {
                     value={formState.password_hash} 
                     onChange={handleInputChange} 
                     required={!isEditing} 
-                    className="glass-button"
                   />
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={handleCancel}>ביטול</Button>
-                <Button type="submit" className="glass-button" style={{backgroundColor: '#7D0F82', color: 'white'}}>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={handleCancel} className="w-full sm:w-auto">ביטול</Button>
+                <Button type="submit" className="w-full sm:w-auto" style={{backgroundColor: '#7D0F82', color: 'white'}}>
                   {isEditing ? "שמור שינויים" : "צור עובד"}
                 </Button>
               </div>
@@ -274,7 +266,7 @@ export default function ManageEmployees() {
         </Card>
       )}
 
-      <Card className="glass-card">
+      <Card className="bg-white shadow-sm">
         <CardHeader><CardTitle>רשימת עובדים</CardTitle></CardHeader>
         <CardContent>
             {/* Mobile View */}
@@ -282,7 +274,7 @@ export default function ManageEmployees() {
               {employees.map(emp => {
                 const isInlineEditing = editingEmployeeId === emp.id;
                 return (
-                  <div key={emp.id} className="glass-card p-4 rounded-2xl space-y-3">
+                  <div key={emp.id} className="bg-white border border-gray-200 p-4 rounded-2xl space-y-3">
                       <div className="flex justify-between items-start">
                           <div className="font-bold text-lg">
                             <button 
@@ -295,7 +287,7 @@ export default function ManageEmployees() {
                           <div className="flex gap-2">
                             {isInlineEditing ? (
                               <>
-                                <Button size="icon" onClick={() => handleInlineSave(emp)} className="w-8 h-8 glass-button">
+                                <Button size="icon" onClick={() => handleInlineSave(emp)} className="w-8 h-8 text-white" style={{backgroundColor: '#7D0F82'}}>
                                   <Save className="w-4 h-4" />
                                 </Button>
                                 <Button size="icon" variant="ghost" className="w-8 h-8" onClick={() => setEditingEmployeeId(null)}>
@@ -322,7 +314,7 @@ export default function ManageEmployees() {
                                 value={emp.role} 
                                 onValueChange={(v) => setEmployees(prevEmployees => prevEmployees.map(mappedEmp => mappedEmp.id === emp.id ? {...mappedEmp, role: v} : mappedEmp))}
                               >
-                                <SelectTrigger className="glass-button w-32">
+                                <SelectTrigger className="bg-white w-32">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -337,7 +329,7 @@ export default function ManageEmployees() {
                           </div>
                           <div className="flex items-center gap-2"><Mail className="w-4 h-4"/> {emp.email}</div>
                       </div>
-                      <div className="flex items-center justify-between pt-2 border-t border-white/20">
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                           <div className="flex items-center gap-2">
                               {emp.is_active ? 
                                   <span className="text-green-600 font-medium">פעיל</span> : 
@@ -376,7 +368,7 @@ export default function ManageEmployees() {
                               value={emp.role} 
                               onValueChange={(v) => setEmployees(prevEmployees => prevEmployees.map(mappedEmp => mappedEmp.id === emp.id ? {...mappedEmp, role: v} : mappedEmp))}
                             >
-                              <SelectTrigger className="glass-button w-40">
+                              <SelectTrigger className="bg-white w-40">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -395,7 +387,7 @@ export default function ManageEmployees() {
                         <TableCell className="flex gap-2">
                           {isInlineEditing ? (
                             <>
-                              <Button size="icon" onClick={() => handleInlineSave(emp)} className="glass-button">
+                              <Button size="icon" onClick={() => handleInlineSave(emp)} className="text-white" style={{backgroundColor: '#7D0F82'}}>
                                 <Save className="w-4 h-4" />
                               </Button>
                               <Button size="icon" variant="ghost" onClick={() => setEditingEmployeeId(null)}>

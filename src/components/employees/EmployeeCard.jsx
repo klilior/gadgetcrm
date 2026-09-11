@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { X, Save, User, Mail, Phone, UserCheck } from 'lucide-react';
 
+const ROLES = ["נציג", "מנהל", "מנהל משמרת", "טכנאי", "מלקט"];
+
 export default function EmployeeCard({ employee, isOpen, onClose, onUpdate }) {
     const [formData, setFormData] = useState({
         employee_name: '',
@@ -62,7 +64,7 @@ export default function EmployeeCard({ employee, isOpen, onClose, onUpdate }) {
             if (!dataToUpdate.password_hash) {
                 delete dataToUpdate.password_hash;
             }
-            
+
             await Employee.update(employee.id, dataToUpdate);
             onUpdate();
         } catch (error) {
@@ -76,190 +78,114 @@ export default function EmployeeCard({ employee, isOpen, onClose, onUpdate }) {
     if (!isOpen || !employee) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" dir="rtl">
-            <div className="glass-card w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl">
+        <div
+            className="fixed inset-0 z-50 bg-black/50 flex items-stretch sm:items-center justify-center sm:p-4"
+            dir="rtl"
+            onClick={onClose}
+        >
+            <div
+                className="bg-white w-full sm:max-w-2xl h-full sm:h-auto sm:max-h-[90vh] sm:rounded-2xl shadow-xl flex flex-col overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* Header */}
-                <div className="sticky top-0 bg-gradient-to-l from-blue-500/20 to-purple-500/20 p-6 border-b border-white/20">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-                            <User className="w-6 h-6" />
-                            עריכת פרטי עובד - {employee.employee_name}
-                        </h2>
-                        <Button variant="ghost" size="icon" onClick={onClose} className="hover:bg-white/20">
-                            <X className="w-5 h-5" />
-                        </Button>
-                    </div>
+                <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-gray-200 bg-white">
+                    <h2 className="text-base sm:text-xl font-semibold text-gray-900 flex items-center gap-2 min-w-0">
+                        <User className="w-5 h-5 text-gray-400 shrink-0" />
+                        <span className="truncate">עריכת עובד — {employee.employee_name}</span>
+                    </h2>
+                    <Button variant="ghost" size="icon" onClick={onClose}>
+                        <X className="w-5 h-5" />
+                    </Button>
                 </div>
-                
+
                 {/* Content */}
-                <div className="p-6 space-y-6">
-                    {/* Basic Info Section */}
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                            <UserCheck className="w-5 h-5" />
+                <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-6">
+                    <section className="space-y-4">
+                        <h3 className="text-sm font-semibold text-gray-500 flex items-center gap-2">
+                            <UserCheck className="w-4 h-4" />
                             פרטים אישיים
                         </h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="employee_name" className="text-sm font-medium flex items-center gap-2">
-                                    <User className="w-4 h-4" />
-                                    שם מלא
+                            <div className="space-y-1.5">
+                                <Label htmlFor="employee_name" className="flex items-center gap-1.5 text-gray-700">
+                                    <User className="w-4 h-4 text-gray-400" /> שם מלא
                                 </Label>
-                                <Input
-                                    id="employee_name"
-                                    name="employee_name"
-                                    value={formData.employee_name}
-                                    onChange={handleChange}
-                                    className="glass-button"
-                                    placeholder="הכנס שם מלא..."
-                                />
+                                <Input id="employee_name" name="employee_name" value={formData.employee_name} onChange={handleChange} placeholder="הכנס שם מלא..." />
                             </div>
-                            
-                            <div className="space-y-2">
-                                <Label htmlFor="username" className="text-sm font-medium">שם משתמש</Label>
-                                <Input
-                                    id="username"
-                                    name="username"
-                                    value={formData.username}
-                                    onChange={handleChange}
-                                    className="glass-button"
-                                    placeholder="שם משתמש באנגלית"
-                                />
+                            <div className="space-y-1.5">
+                                <Label htmlFor="username" className="text-gray-700">שם משתמש (באנגלית)</Label>
+                                <Input id="username" name="username" value={formData.username} onChange={handleChange} placeholder="USERNAME" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="email" className="flex items-center gap-1.5 text-gray-700">
+                                    <Mail className="w-4 h-4 text-gray-400" /> דוא"ל
+                                </Label>
+                                <Input id="email" type="email" name="email" value={formData.email} onChange={handleChange} placeholder="example@email.com" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="phone" className="flex items-center gap-1.5 text-gray-700">
+                                    <Phone className="w-4 h-4 text-gray-400" /> טלפון
+                                </Label>
+                                <Input id="phone" name="phone" value={formData.phone} onChange={handleChange} placeholder="05X-XXXXXXX" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="id_number" className="text-gray-700">תעודת זהות</Label>
+                                <Input id="id_number" name="id_number" value={formData.id_number} onChange={handleChange} placeholder="מספר תעודת זהות" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="birth_date" className="text-gray-700">תאריך לידה</Label>
+                                <Input id="birth_date" type="date" name="birth_date" value={formData.birth_date} onChange={handleChange} />
                             </div>
                         </div>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="email" className="text-sm font-medium flex items-center gap-2">
-                                    <Mail className="w-4 h-4" />
-                                    דוא"ל
-                                </Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    name="email"
-                                    value={formData.email}
-                                    onChange={handleChange}
-                                    className="glass-button"
-                                    placeholder="example@email.com"
-                                />
-                            </div>
+                    </section>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="phone" className="text-sm font-medium flex items-center gap-2">
-                                    <Phone className="w-4 h-4" />
-                                    טלפון
-                                </Label>
-                                <Input
-                                    id="phone"
-                                    name="phone"
-                                    value={formData.phone}
-                                    onChange={handleChange}
-                                    className="glass-button"
-                                    placeholder="05X-XXXXXXX"
-                                />
-                            </div>
-                        </div>
-                        
+                    <section className="space-y-4">
+                        <h3 className="text-sm font-semibold text-gray-500">פרטי עבודה</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="id_number" className="text-sm font-medium">תעודת זהות</Label>
-                                <Input
-                                    id="id_number"
-                                    name="id_number"
-                                    value={formData.id_number}
-                                    onChange={handleChange}
-                                    className="glass-button"
-                                    placeholder="מספר תעודת זהות"
-                                />
+                            <div className="space-y-1.5">
+                                <Label htmlFor="linet_employee_code" className="text-gray-700">קוד עובד (Linet)</Label>
+                                <Input id="linet_employee_code" name="linet_employee_code" value={formData.linet_employee_code} onChange={handleChange} placeholder="לדוגמה: 8743" />
                             </div>
-                            
-                            <div className="space-y-2">
-                                <Label htmlFor="birth_date" className="text-sm font-medium">תאריך לידה</Label>
-                                <Input
-                                    id="birth_date"
-                                    type="date"
-                                    name="birth_date"
-                                    value={formData.birth_date}
-                                    onChange={handleChange}
-                                    className="glass-button"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Work Details Section */}
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-800">פרטי עבודה</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="linet_employee_code" className="text-sm font-medium">קוד עובד (Linet)</Label>
-                                <Input
-                                    id="linet_employee_code"
-                                    name="linet_employee_code"
-                                    value={formData.linet_employee_code}
-                                    onChange={handleChange}
-                                    className="glass-button"
-                                    placeholder="לדוגמה: 8743"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="role" className="text-sm font-medium">תפקיד</Label>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="role" className="text-gray-700">תפקיד</Label>
                                 <Select value={formData.role} onValueChange={(v) => handleSelectChange('role', v)}>
-                                    <SelectTrigger className="glass-button">
+                                    <SelectTrigger id="role" className="bg-white">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="נציג">נציג</SelectItem>
-                                        <SelectItem value="מנהל">מנהל</SelectItem>
-                                        <SelectItem value="מנהל משמרת">מנהל משמרת</SelectItem>
-                                        <SelectItem value="טכנאי">טכנאי</SelectItem>
-                                        <SelectItem value="מלקט">מלקט</SelectItem>
+                                        {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="password_hash" className="text-sm font-medium">סיסמה חדשה</Label>
-                                <Input
-                                    id="password_hash"
-                                    type="password"
-                                    name="password_hash"
-                                    value={formData.password_hash}
-                                    onChange={handleChange}
-                                    className="glass-button"
-                                    placeholder="השאר ריק כדי לא לשנות"
-                                />
+                            <div className="space-y-1.5 sm:col-span-2">
+                                <Label htmlFor="password_hash" className="text-gray-700">סיסמה חדשה</Label>
+                                <Input id="password_hash" type="password" name="password_hash" value={formData.password_hash} onChange={handleChange} placeholder="השאר ריק כדי לא לשנות" />
                             </div>
                         </div>
 
-                        <div className="flex items-center space-x-2 space-x-reverse">
+                        <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+                            <Label htmlFor="is_active" className="text-gray-700">עובד פעיל</Label>
                             <Switch
                                 id="is_active"
                                 checked={formData.is_active}
                                 onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
                             />
-                            <Label htmlFor="is_active" className="text-sm font-medium">עובד פעיל</Label>
                         </div>
-                    </div>
+                    </section>
                 </div>
 
                 {/* Footer */}
-                <div className="sticky bottom-0 bg-white/80 backdrop-blur-sm p-6 border-t border-white/20">
-                    <div className="flex justify-end gap-3">
-                        <Button variant="ghost" onClick={onClose} className="hover:bg-white/20">
-                            ביטול
-                        </Button>
-                        <Button 
-                            onClick={handleSave} 
-                            disabled={isSaving}
-                            className="bg-gradient-to-l from-blue-500 to-purple-500 text-white hover:opacity-90"
-                        >
-                            <Save className="w-4 h-4 ml-2" />
-                            {isSaving ? 'שומר...' : 'שמור שינויים'}
-                        </Button>
-                    </div>
+                <div className="px-4 sm:px-6 py-4 border-t border-gray-200 bg-white flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                    <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">ביטול</Button>
+                    <Button
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="w-full sm:w-auto text-white"
+                        style={{ backgroundColor: '#7D0F82' }}
+                    >
+                        <Save className="w-4 h-4 ml-2" />
+                        {isSaving ? 'שומר...' : 'שמור שינויים'}
+                    </Button>
                 </div>
             </div>
         </div>
