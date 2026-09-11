@@ -5,7 +5,7 @@ import {
   Phone, Ticket, Users, Package, BarChart3, Wrench,
   Settings, MessageCircle, LogOut, UserPlus,
   ChevronDown, Clock, FileText, Briefcase,
-  CreditCard, Trophy, Home, CalendarDays, Receipt, X, Menu, Truck
+  CreditCard, Trophy, Home, CalendarDays, Receipt, X, Menu, Truck, ClipboardCheck
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -184,6 +184,7 @@ function AppContent({ children, currentPageName }) {
     ...(isManager ? [{ title: "הוצאות וחשבוניות", url: "/ExpensesInvoicesHub", icon: Receipt }] : []),
     { title: "תיקונים", url: createPageUrl("RepairDashboard"), icon: Wrench },
     { title: "הזמנות מרוכזות", url: "/UnifiedOrders", icon: Package },
+    { title: "טיפול בהזמנה", url: "/OrderWorkflow", icon: ClipboardCheck },
     ...(isManager ? [{ title: "דוח התחשבנות מעבדה", url: createPageUrl("VendorReport"), icon: FileText }] : []),
     ...(isManager ? [{ title: "השלמת תיקונים ריקים", url: createPageUrl("BackfillEmptyRepairs"), icon: Wrench }] : []),
     { title: "קווים לטיפול", url: createPageUrl("LinesToWorkOn"), icon: Phone },

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { getAvailableSerials } from "@/functions/getAvailableSerials";
+import { refreshSerialsForItem } from "@/functions/refreshSerialsForItem";
 import { verifySerial } from "@/functions/verifySerial";
 import { updateOrderSerialLine } from "@/functions/updateOrderSerialLine";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle2, AlertCircle, PackageSearch, ScanLine } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, PackageSearch, ScanLine, RefreshCw } from "lucide-react";
 
 /**
  * SerialPicker — מסך נציג לבחירת/סריקת סריאליים
@@ -17,6 +18,8 @@ export default function SerialPicker({ line, onUpdated }) {
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(line?.assigned_serials ?? []);
   const [saving, setSaving] = useState(false);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveAt, setLiveAt] = useState(null);
 
   // שדה סריקה/הקלדה ידנית
   const [scanInput, setScanInput] = useState("");
@@ -66,9 +69,37 @@ export default function SerialPicker({ line, onUpdated }) {
     }
   }, [line?.mapped_linet_item_id, skip]);
 
+  // שליפה חיה מלינט — לסחורה שנקלטה ממש עכשיו
+  const liveRefresh = useCallback(async () => {
+    if (skip || !line?.mapped_linet_item_id) return;
+    setLiveLoading(true);
+    setError(null);
+    try {
+      const res = await refreshSerialsForItem({ linet_item_id: line.mapped_linet_item_id, exclude_line_id: line.id });
+      const data = res?.data ?? res;
+      if (data?.error) setError(data.error);
+      else {
+        setSerials(data?.serials ?? []);
+        setLiveAt(data?.synced_at ?? new Date().toISOString());
+      }
+    } catch (e) {
+      setError("שליפה חיה מלינט נכשלה. נסה שוב.");
+    } finally {
+      setLiveLoading(false);
+    }
+  }, [line?.mapped_linet_item_id, line?.id, skip]);
+
   useEffect(() => {
     loadSerials();
   }, [loadSerials]);
+
+  // אין מלאי מקומי מספיק → שליפה חיה אוטומטית פעם אחת
+  useEffect(() => {
+    if (loading || liveLoading || liveAt || skip) return;
+    if (selected.length >= required) return;
+    if (serials.length >= required - selected.length) return;
+    liveRefresh();
+  }, [loading, liveLoading, liveAt, serials.length, selected.length, required, skip, liveRefresh]);
 
   if (skip) return null;
 
@@ -195,8 +226,23 @@ export default function SerialPicker({ line, onUpdated }) {
             )}
           </span>
         )}
-        {saving && <Loader2 className="w-3 h-3 animate-spin text-purple-500 mr-auto" />}
+        {saving && <Loader2 className="w-3 h-3 animate-spin text-purple-500" />}
+        <button
+          onClick={liveRefresh}
+          disabled={liveLoading || !line.mapped_linet_item_id}
+          className="mr-auto flex items-center gap-1 text-xs font-medium text-purple-700 hover:text-purple-900 disabled:opacity-40"
+          title="שליפה חיה של המלאי מלינט (לסחורה שנקלטה עכשיו)"
+        >
+          {liveLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {liveLoading ? "שולף מלינט..." : "שליפה חיה מלינט"}
+        </button>
       </div>
+
+      {liveAt && !liveLoading && (
+        <div className="text-[11px] text-gray-400">
+          מלאי חי מלינט · {new Date(liveAt).toLocaleTimeString("he-IL")}
+        </div>
+      )}
 
       {/* רשימת סריאליים */}
       {!loading && !error && serials.length > 0 && (
