@@ -216,15 +216,22 @@ Deno.serve(async (req) => {
     let accountFound = !!accountId;
     let accountToCreate = null;
 
-    if (!accountId) {
-      let rawPhone = null;
-      if (order?.raw_data_billing) {
-        try { const b = JSON.parse(order.raw_data_billing); rawPhone = b.phone ?? b.billing?.phone ?? null; } catch (_) {}
-      }
-      if (!rawPhone) rawPhone = client?.phone ?? client?.phone_original ?? null;
-      const localPhone = normalizePhoneLocal(rawPhone);
+    // פרטי הלקוח מהחיוב — נדרשים גם לחשבונית עצמה (טלפון/מייל לשליחה)
+    let billing = {};
+    if (order?.raw_data_billing) {
+      try { billing = JSON.parse(order.raw_data_billing) || {}; } catch (_) {}
+    }
+    const contactName = [billing.first_name, billing.last_name].filter(Boolean).join(" ") || billing.company || client?.full_name || "";
+    const contactEmail = billing.email || client?.email || "";
+    const contactPhone = normalizePhoneLocal(billing.phone ?? client?.phone ?? client?.phone_original ?? null) || "";
+    const contactCity = billing.city || client?.city || "";
+    const contactAddress = [billing.address_1, billing.address_2].filter(Boolean).join(", ") || client?.full_address || "";
+    log.push({ step: "contact_resolved", name: contactName, email: contactEmail, phone: contactPhone });
 
-      log.push({ step: "phone_resolve", raw: rawPhone, normalized: localPhone });
+    if (!accountId) {
+      const localPhone = contactPhone || null;
+
+      log.push({ step: "phone_resolve", normalized: localPhone });
 
       if (localPhone) {
         const r1 = await linetPost("newsearch/account", { ...creds, limit: 3, offset: 0, query: { phone: localPhone } });
@@ -245,23 +252,14 @@ Deno.serve(async (req) => {
       }
 
       if (!accountId) {
-        let billingName = null, billingEmail = null, billingAddress = null, billingCity = null;
-        if (order?.raw_data_billing) {
-          try {
-            const b = JSON.parse(order.raw_data_billing);
-            billingName = [b.first_name, b.last_name].filter(Boolean).join(" ") || b.company || null;
-            billingEmail = b.email ?? null;
-            billingAddress = [b.address_1, b.address_2].filter(Boolean).join(", ") || null;
-            billingCity = b.city ?? null;
-          } catch (_) {}
-        }
         accountToCreate = {
-          name: billingName ?? client?.full_name ?? "לקוח לא ידוע",
+          name: contactName || "לקוח לא ידוע",
           type: 0, cat_id: 0,
-          phone: normalizePhoneLocal(client?.phone ?? null) ?? "",
-          email: billingEmail ?? client?.email ?? "",
-          address: billingAddress ?? client?.full_address ?? "",
-          city: billingCity ?? client?.city ?? "",
+          phone: contactPhone,
+          cellular: contactPhone,
+          email: contactEmail,
+          address: contactAddress,
+          city: contactCity,
           currency_id: "ILS", country_id: "IL", language: "he_il",
         };
         log.push({ step: "account_to_create", data: accountToCreate });
@@ -279,6 +277,20 @@ Deno.serve(async (req) => {
     }
 
     log.push({ step: "account_resolved", account_id: accountId, account_found: accountFound });
+
+    // לקוח קיים בלינט — נשלים/נרענן טלפון ומייל כדי שהחשבונית תישלח ותהיה עם פרטי קשר
+    if (apply && accountId && accountFound && (contactEmail || contactPhone)) {
+      const upd = await linetPost("update/accounts", {
+        ...creds,
+        id: accountId,
+        ...(contactName ? { name: contactName } : {}),
+        ...(contactEmail ? { email: contactEmail } : {}),
+        ...(contactPhone ? { phone: contactPhone, cellular: contactPhone } : {}),
+        ...(contactCity ? { city: contactCity } : {}),
+        ...(contactAddress ? { address: contactAddress } : {}),
+      }).catch(() => null);
+      log.push({ step: "account_contact_updated", http_status: upd?.http_status ?? null });
+    }
 
     // ─── שלב 5: בנה docDetailes ─────────────────────────────────────────────
 
@@ -447,7 +459,14 @@ Deno.serve(async (req) => {
       language: "he_il",
 
       account_id: String(accountId ?? ""),
-      company: client?.full_name ?? "",
+      company: contactName || client?.full_name || "",
+
+      // פרטי קשר על גוף החשבונית + שליחה במייל ללקוח
+      phone: contactPhone,
+      email: contactEmail,
+      city: contactCity,
+      address: contactAddress,
+      ...(contactEmail ? { sendmail: 1 } : {}),
 
       currency_id: "ILS",
       currency_rate: "1.0000",
@@ -602,6 +621,8 @@ Deno.serve(async (req) => {
       invoiced_at: invoicedAt,
       lines_updated: serialLines.length,
       order_completed: orderCompleted,
+      email_sent: !!contactEmail,
+      email: contactEmail,
       log,
     });
 
