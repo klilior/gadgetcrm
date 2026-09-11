@@ -5,7 +5,6 @@ import { Toaster as SonnerToaster } from "sonner"
 import { QueryClientProvider } from '@tanstack/react-query'
 import SuperPharmOrdersPage from './pages/SuperPharmOrdersPage';
 import UnifiedOrders from './pages/UnifiedOrders';
-import OrderWorkflow from './pages/OrderWorkflow';
 import Shipments from './pages/Shipments';
 import MiraklInvoiceBatch from './pages/MiraklInvoiceBatch';
 import QuickInvoiceUpload from './pages/QuickInvoiceUpload';
@@ -102,11 +101,6 @@ const AuthenticatedApp = () => {
       <Route path="/UnifiedOrders" element={
         <LayoutWrapper currentPageName="UnifiedOrders">
           <Suspense fallback={<LazyFallback />}><UnifiedOrders /></Suspense>
-        </LayoutWrapper>
-      } />
-      <Route path="/OrderWorkflow" element={
-        <LayoutWrapper currentPageName="OrderWorkflow">
-          <Suspense fallback={<LazyFallback />}><OrderWorkflow /></Suspense>
         </LayoutWrapper>
       } />
       <Route path="/Shipments" element={
