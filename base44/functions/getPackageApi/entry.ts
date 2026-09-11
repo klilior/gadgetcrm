@@ -203,6 +203,9 @@ Deno.serve(async (req) => {
       // Build Express quote request body per GetPackage API spec:
       // POST /v1/deliveries/express/quote
       const packageSize = String(body.package_size || 'SMALL');
+      // Express endpoint expects the numeric enum (0-3); sharedRoute expects the name
+      const PACKAGE_SIZE_CODES = { ENVELOPE: 0, SMALL: 1, MEDIUM: 2, LARGE: 3 };
+      const packageSizeCode = PACKAGE_SIZE_CODES[packageSize] ?? 1;
       const pickUpPointData = buildPoint(
         buildAddress(pickupCity, pickupStreet, 'IL'),
         pickupName,
@@ -244,16 +247,18 @@ Deno.serve(async (req) => {
       let usedEndpoint = 'sharedRoute';
       
       // If Shared Route fails, try Express
+      let sharedRouteError = '';
       if (!result.ok) {
         console.log(`[GetPackage] Shared Route failed (${result.status}):`, JSON.stringify(result.data).substring(0, 300));
-        // Express body: deliveries array with stopPointsOrder
+        sharedRouteError = errorToString(result.data?.message || result.data?.error || result.data);
+        // Express body: deliveries array with stopPointsOrder (indexes of the delivery, numeric package size)
         const expressBody = {
           deliveries: [{
             pickUpPoint: pickUpPointData,
             dropOffPoint: dropOffPointData,
-            package: { size: packageSize },
+            package: { size: packageSizeCode },
           }],
-          stopPointsOrder: [0, 1],
+          stopPointsOrder: [0, 0],
         };
         console.log(`[GetPackage] Trying express body:`, JSON.stringify(expressBody));
         usedEndpoint = 'express';
@@ -326,7 +331,10 @@ Deno.serve(async (req) => {
         return Response.json({ success: true, shipment: created, quote: result.data });
       } else {
         shipmentData.status = 'quote_failed';
-        shipmentData.last_error = errorToString(result.data?.message || result.data?.error || result.data?.errors || result.data);
+        shipmentData.last_error = [
+          errorToString(result.data?.message || result.data?.error || result.data?.errors || result.data),
+          sharedRouteError ? `(מסלול משותף: ${sharedRouteError})` : '',
+        ].filter(Boolean).join(' ');
         
         const created = await sr.entities.GetPackageShipment.create(shipmentData);
         console.error(`[GetPackage] Quote failed:`, JSON.stringify(result.data).substring(0, 1000));
