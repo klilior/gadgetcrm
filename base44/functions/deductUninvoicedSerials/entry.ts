@@ -9,7 +9,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.44';
  * מתבסס על תוצאת הבדיקה האחרונה (auditSerialStockDeduction) ומאמת מחדש מול המלאי החי בלינט לפני יצירה.
  */
 
-import { linetCreds as creds, linetPost as linet, linetRows as rows, scanSerialHoldings, isWarehouseHolding, WAREHOUSE_ACCOUNT_ID, WAREHOUSE_ID } from "../../shared/linetSerialLedger.ts";
+import { linetCreds as creds, linetPost as linet, findLinetInvoiceByRef, scanSerialHoldings, isWarehouseHolding, WAREHOUSE_ACCOUNT_ID, WAREHOUSE_ID } from "../../shared/linetSerialLedger.ts";
 
 export default async function(req) {
   try {
@@ -47,27 +47,28 @@ export default async function(req) {
       const l = cnd.line;
       const key = `${l.source}|${l.order_ref}`;
       if (!byOrder.has(key)) {
-        let accountId = null, docNumber = null, docId = null, company = null;
+        // מועד הנפקת החשבונית — נדרש כי לינט מאפשר חיפוש מסמכים רק לפי טווח תאריכים
+        let invoicedAt = null;
         if (l.source === "superpharm") {
           const sp = (await sr.SuperPharmOrder.filter({ mirakl_order_id: l.order_id }))[0];
-          docId = sp?.linet_invoice_doc_id && sp.linet_invoice_doc_id !== "pending" ? sp.linet_invoice_doc_id : null;
-          docNumber = sp?.linet_invoice_doc_number ?? null;
+          invoicedAt = sp?.linet_invoice_created_at ?? null;
         } else {
-          const stub = rows(await linet("newsearch/docs", { ...c, limit: 5, offset: 0, query: { refnum_ext: String(l.order_ref), doctype: ["9"] } }))[0];
-          docId = stub?.id ?? null;
+          const lineRec = await sr[l.entity]?.get(l.line_id).catch(() => null);
+          invoicedAt = lineRec?.invoiced_at ?? lineRec?.serial_verified_at ?? null;
+          if (!invoicedAt) {
+            const ord = await sr.Order.get(l.order_id).catch(() => null);
+            invoicedAt = ord?.invoice_issued_at ?? ord?.shipment_created_at ?? null;
+          }
         }
-        if (docId) {
-          const doc = rows(await linet("newsearch/docs", { ...c, limit: 1, offset: 0, query: { id: Number(docId) } }))[0];
-          if (doc && Number(doc.doctype) === 9) { accountId = doc.account_id ?? null; docNumber = doc.docnum ?? docNumber; company = doc.company ?? null; }
-        }
-        byOrder.set(key, { source: l.source, order_ref: l.order_ref, order_id: l.order_id, customer: l.customer, account_id: accountId, invoice_doc_id: docId, invoice_doc_number: docNumber, company, lines: [] });
+        const doc = await findLinetInvoiceByRef(c, l.order_ref, invoicedAt);
+        byOrder.set(key, { source: l.source, order_ref: l.order_ref, order_id: l.order_id, customer: l.customer, invoiced_at: invoicedAt, account_id: doc?.account_id ?? null, invoice_doc_id: doc?.id ?? null, invoice_doc_number: doc?.docnum ?? null, company: doc?.company ?? null, lines: [] });
       }
       byOrder.get(key).lines.push({ line_id: l.line_id, entity: l.entity, item_id: Number(l.mapped_linet_item_id), sku: l.mapped_linet_sku && !String(l.mapped_linet_sku).startsWith("sp_") ? l.mapped_linet_sku : "", name: l.mapped_linet_item_name || l.product || "", serials: cnd.serials });
     }
 
     const plans = [];
     for (const o of byOrder.values()) {
-      if (!o.account_id) { manualReview.push({ order_ref: o.order_ref, source: o.source, customer: o.customer?.name, serials: o.lines.flatMap((x) => x.serials), reason: "לא נמצאה חשבונית מס-קבלה בלינט להזמנה — לא ניתן לקבוע את חשבון הלקוח" }); continue; }
+      if (!o.account_id) { manualReview.push({ order_ref: o.order_ref, source: o.source, customer: o.customer?.name, invoiced_at: o.invoiced_at, serials: o.lines.flatMap((x) => x.serials), reason: o.invoiced_at ? "לא נמצאה חשבונית מס-קבלה בלינט בחלון ±3 ימים סביב מועד ההנפקה" : "אין מועד הנפקה ידוע להזמנה — לא ניתן לחפש את החשבונית בלינט" }); continue; }
       const payload = {
         ...c,
         doctype: "2",

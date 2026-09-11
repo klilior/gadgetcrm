@@ -75,6 +75,27 @@ export async function scanSerialHoldings(c, wanted = null) {
   return { bySerial, scanned };
 }
 
+/**
+ * מציאת חשבונית מס-קבלה (doctype 9) לפי refnum_ext. לינט לא מאפשר חיפוש לפי id/refnum — רק לפי טווח issue_date,
+ * לכן מחפשים בחלון של ±daysAround ימים סביב מועד ההנפקה הידוע.
+ */
+export async function findLinetInvoiceByRef(c, refnumExt, aroundIso, daysAround = 3) {
+  if (!aroundIso) return null;
+  const center = new Date(aroundIso);
+  if (Number.isNaN(center.getTime())) return null;
+  const fmt = (d) => d.toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+  const from = fmt(new Date(center.getTime() - daysAround * 86400000));
+  const to = fmt(new Date(center.getTime() + daysAround * 86400000));
+  const want = String(refnumExt);
+  for (let offset = 0; offset < LIMIT * 10; offset += LIMIT) {
+    const rs = linetRows(await linetPost("newsearch/docs", { ...c, limit: LIMIT, offset, query: { issue_date: `${from} to ${to}`, doctype: ["9"], refstatus: null } }));
+    const hit = rs.find((d) => String(d.refnum_ext ?? "") === want && Number(d.doctype) === 9);
+    if (hit) return hit;
+    if (rs.length < LIMIT) break;
+  }
+  return null;
+}
+
 /** האם השורה מייצגת סריאל שנמצא פיזית במלאי המחסן */
 export function isWarehouseHolding(row, itemId = null) {
   return row.qty > 0 && row.account_id === WAREHOUSE_ACCOUNT_ID && (itemId == null || row.item_id === Number(itemId));
