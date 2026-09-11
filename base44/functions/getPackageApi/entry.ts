@@ -480,7 +480,9 @@ Deno.serve(async (req) => {
         try {
           let order = null;
           if (shipment.order_id) {
-            order = await sr.entities.Order.get(shipment.order_id).catch(() => null);
+            // order_id may be stored with a source prefix (e.g. "woo_<internalId>")
+            const localId = String(shipment.order_id).replace(/^woo_/, '');
+            order = await sr.entities.Order.get(localId).catch(() => null);
           }
           if (!order && shipment.woo_order_id) {
             const found = await sr.entities.Order.filter({ external_order_number: String(shipment.woo_order_id) });
@@ -495,10 +497,12 @@ Deno.serve(async (req) => {
               shipment_created_at: order.shipment_created_at || new Date().toISOString(),
               order_locked: true,
             });
-            await sr.functions.invoke('updateWooOrderStatus', {
+            const wooRes = await sr.functions.invoke('updateWooOrderStatus', {
+              order_id: order.id,
               external_order_number: order.external_order_number,
-              status: 'completed',
+              new_status: 'completed',
             });
+            console.log('[GetPackage] Woo status update:', JSON.stringify(wooRes?.data || wooRes));
           }
         } catch (e) {
           console.error('[GetPackage] Order sync failed:', e.message);
