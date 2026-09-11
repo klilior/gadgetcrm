@@ -420,13 +420,15 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
               שלח SMS
             </Button>
             {order.customer_phone && (
-              <Button variant="outline" className="rounded-xl border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors" asChild>
+              <Button variant="outline" className="rounded-xl border-gray-200 bg-white text-gray-700 hover:bg-slate-50 transition-colors" asChild>
                 <a href={`tel:${order.customer_phone}`}><Phone className="w-4 h-4 ml-1" />התקשר</a>
               </Button>
             )}
             {order.customer_phone && (
-              <Button variant="outline" className="rounded-xl text-emerald-700 border-gray-200 bg-white hover:bg-emerald-50 hover:border-emerald-200 transition-colors" asChild>
-                <a href={`https://wa.me/972${order.customer_phone.replace(/^0/, '')}`} target="_blank" rel="noopener noreferrer">💬 וואטסאפ</a>
+              <Button variant="outline" className="rounded-xl border-gray-200 bg-white text-gray-700 hover:bg-slate-50 transition-colors" asChild>
+                <a href={`https://wa.me/972${order.customer_phone.replace(/^0/, '')}`} target="_blank" rel="noopener noreferrer">
+                  <MessageCircle className="w-4 h-4 ml-1" />וואטסאפ
+                </a>
               </Button>
             )}
             {onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id) && (
@@ -508,7 +510,7 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
             </Button>
 
             {order.customer_phone && (
-              <Button variant="outline" className="rounded-xl border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors" asChild>
+              <Button variant="outline" className="rounded-xl border-gray-200 bg-white text-gray-700 hover:bg-slate-50 transition-colors" asChild>
                 <a href={`tel:${order.customer_phone}`}>
                   <Phone className="w-4 h-4 ml-1" />
                   התקשר
@@ -517,9 +519,9 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
             )}
 
             {order.customer_phone && (
-              <Button variant="outline" className="rounded-xl text-emerald-700 border-gray-200 bg-white hover:bg-emerald-50 hover:border-emerald-200 transition-colors" asChild>
+              <Button variant="outline" className="rounded-xl border-gray-200 bg-white text-gray-700 hover:bg-slate-50 transition-colors" asChild>
                 <a href={`https://wa.me/972${order.customer_phone.replace(/^0/, '')}`} target="_blank" rel="noopener noreferrer">
-                  💬 וואטסאפ
+                  <MessageCircle className="w-4 h-4 ml-1" />וואטסאפ
                 </a>
               </Button>
             )}
@@ -531,40 +533,31 @@ export default function OrderDetailPanel({ order, onSms, onStatusChange, onShipm
                 {shipmentBlockReason}
               </div>
             ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="outline"
-                  className={`rounded-xl bg-white transition-colors ${shippingType === 'cargo' ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50' : 'border-gray-200 text-gray-700 hover:bg-slate-50'}`}
-                  onClick={() => { const le = order.source === 'linet' ? { _linet_order_status_id: order.raw_id || order.id } : {}; onCargoShipment ? onCargoShipment({ ...order, ...le }) : onShipment({ ...order, _shipCarrier: 'velo', ...le }); }}
-                >
-                  <Truck className="w-4 h-4 ml-1" />
-                  🚚 קארגו
-                  {shippingType === 'cargo' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  className={`rounded-xl bg-white transition-colors ${shippingType === 'ups' ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50' : 'border-gray-200 text-gray-700 hover:bg-slate-50'}`}
-                  onClick={() => { const le = order.source === 'linet' ? { _linet_order_status_id: order.raw_id || order.id } : {}; onShipment({ ...order, _shipCarrier: 'ups', ...le }); }}
-                >
-                  <Package className="w-4 h-4 ml-1" />
-                  📦 UPS
-                  {shippingType === 'ups' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  className={`rounded-xl bg-white transition-colors ${shippingType === 'getpackage' ? 'border-[#7D0F82] text-[#7D0F82] bg-purple-50' : 'border-gray-200 text-gray-700 hover:bg-slate-50'}`}
-                  onClick={() => {
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="rounded-xl border-gray-200 bg-white text-gray-700 hover:bg-slate-50">
+                    <Truck className="w-4 h-4 ml-1" />
+                    חברת שילוח
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onSelect={() => { const le = order.source === 'linet' ? { _linet_order_status_id: order.raw_id || order.id } : {}; onCargoShipment ? onCargoShipment({ ...order, ...le }) : onShipment({ ...order, _shipCarrier: 'velo', ...le }); }}>
+                    <Truck className="w-4 h-4 ml-2" /> קארגו
+                    {shippingType === 'cargo' && <span className="text-[10px] mr-auto text-[#7D0F82]">בחירת הלקוח</span>}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => { const le = order.source === 'linet' ? { _linet_order_status_id: order.raw_id || order.id } : {}; onShipment({ ...order, _shipCarrier: 'ups', ...le }); }}>
+                    <Package className="w-4 h-4 ml-2" /> UPS
+                    {shippingType === 'ups' && <span className="text-[10px] mr-auto text-[#7D0F82]">בחירת הלקוח</span>}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => {
                     if (onGetPackageShipment) onGetPackageShipment(order);
                     window.dispatchEvent(new CustomEvent('openGetPackageQuoteForm'));
-                  }}
-                >
-                  <Truck className="w-4 h-4 ml-1" />
-                  ⚡ GetPackage
-                  {shippingType === 'getpackage' && <span className="text-[10px] mr-1 opacity-80">• הלקוח בחר</span>}
-                </Button>
-              </div>
+                  }}>
+                    <Truck className="w-4 h-4 ml-2" /> GetPackage
+                    {shippingType === 'getpackage' && <span className="text-[10px] mr-auto text-[#7D0F82]">בחירת הלקוח</span>}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
             {((hasShipment && !shipmentBlockReason) || (onCreateInvoice && (order.source === 'mirakl' || order.linet_invoice_doc_id))) && (
