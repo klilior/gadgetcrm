@@ -35,6 +35,13 @@ export default function UnifiedOrderRow({ order, isExpanded, onToggle, onSelect,
 
   return (
     <>
+    {isUrgent && !order.tracking_number && (
+      <tr className="animate-pulse">
+        <td colSpan={10} className="px-3 py-1 bg-red-600 text-white text-xs font-bold text-center">
+          🚨 משלוח מהיום להיום! — יש לטפל בהזמנה #{order.order_number} בדחיפות לפני שתוקף השליח יפוג 🚨
+        </td>
+      </tr>
+    )}
     <TableRow
       onClick={onToggle}
       className={`cursor-pointer select-none border-r-4 ${isUrgent && !order.tracking_number ? 'border-r-red-500' : visual.border} hover:bg-slate-50 transition-colors
