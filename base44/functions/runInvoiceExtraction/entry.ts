@@ -1,3 +1,4 @@
+import { hasHumanReview } from '../../shared/invoiceReviewPolicy.ts';
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber } from '../../shared/invoiceValidationGate.ts';
 import { EXTRACT_PROMPT, EXTRACT_SCHEMA, roundMoney, getLineItemsCheck, normalizeExtractionDates } from '../../shared/invoiceExtraction.ts';
@@ -96,6 +97,7 @@ function buildDeterministicValidation(extraction) {
 
 // Helper function to process a single invoice extraction
 async function processSingleInvoice(base44, intake, invoice, extraction, invoiceIndex = null, context = {}) {
+  if (hasHumanReview(invoice)) return {success:true,skipped:true,reason:'תיקונים ידניים נשמרו ללא שינוי'};
   if (extraction.classification === 'OTHER' || extraction.should_skip === true) {
     // Update intake as skipped
     await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intake.id, {
@@ -261,7 +263,7 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
     ai_debug_last_validation_json: JSON.stringify({ ...validation, gate, supplier_resolution: resolution })
   };
 
-  await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
+  await base44.asServiceRole.entities.Invoices.update(invoice.id, {...updatePayload,extraction_status:'ממתין לאימות',auto_approved:false});
 
   // Persist EVERY usable extracted line (service/subscription lines without SKU included) BEFORE
   // reconciliation. Upsert by invoice_id + line_number, so a retry updates instead of duplicating.
@@ -317,6 +319,9 @@ async function processSingleInvoice(base44, intake, invoice, extraction, invoice
 
   const effective = planPostReconciliationTruth({ recon_check: reconCheck, extraction_status: finalStatus, validation_passed: gate.passed, auto_approved: canAutoApprove });
 
+  await base44.asServiceRole.entities.Invoices.update(invoice.id, {
+    extraction_status:effective.extraction_status,auto_approved:effective.auto_approved,validation_passed:effective.validation_passed
+  });
   return { success: true, invoice_id: invoice.id, supplier_id: supplierId, classification_guard: extraction.classification_guard || null, classification_recovery: extraction.classification_recovery || null, line_applicability: validation.line_check?.line_applicability || null, extraction_status: effective.extraction_status, validation_passed: effective.validation_passed, auto_approved: effective.auto_approved, linet_recovery_reconciliation: reconCheck, linet_line_application: lineApply, provenance_original_captured: provenance.original_captured, critical_field_recovery: recoveryMerge, linet_assisted_recovery: extraction.linet_assisted_recovery || null, remaining_recovery_failures: recoveryOutcomes.remaining, profile_match: extraction.profile_match_final, processing_events_count: history.events.length, business_duplicate: businessDuplicate || null, canonical_supplier_family: family.family || null, lines_persisted: linePersistence, reconciliation: reconciliationResult, extraction, validation, gate };
 }
 

@@ -1,3 +1,4 @@
+import { stableLinePattern, reviewArithmetic } from '../../shared/invoiceReviewPolicy.ts';
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 
 Deno.serve(async (req) => {
@@ -48,6 +49,8 @@ Deno.serve(async (req) => {
 
     const now = new Date().toISOString();
     if (action === 'approve') {
+      const arithmetic = reviewArithmetic(invoice);
+      if (!arithmetic.ok) return Response.json({error:arithmetic.reason},{status:400});
       await base44.asServiceRole.entities.Invoices.update(invoice.id, {
         extraction_status: 'אושר',
         reviewed_by: userEmail,
@@ -77,8 +80,8 @@ Deno.serve(async (req) => {
           const category = line.line_category;
           if (category !== 'goods' && category !== 'fixed') continue;
           const candidates = [
-            line.sku ? { pattern_type: 'line_sku_classification', pattern_value: String(line.sku).trim().toLowerCase() } : null,
-            line.product_name ? { pattern_type: 'line_name_classification', pattern_value: String(line.product_name).trim().toLowerCase() } : null
+            line.sku ? { pattern_type: 'line_sku_classification', pattern_value: stableLinePattern(line.sku) } : null,
+            line.product_name ? { pattern_type: 'line_name_classification', pattern_value: stableLinePattern(line.product_name) } : null
           ].filter((item) => item?.pattern_value);
           for (const candidate of candidates) {
             const found = await base44.asServiceRole.entities.SupplierPattern.filter({ supplier_id: invoice.supplier, pattern_type: candidate.pattern_type, pattern_value: candidate.pattern_value }, undefined, 1);

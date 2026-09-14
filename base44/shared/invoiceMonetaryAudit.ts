@@ -1,3 +1,4 @@
+import { loadAmountReviewHints, amountReviewPrompt } from './invoiceAmountLearning.ts';
 /**
  * Second-pass MONETARY AUDIT — file-grounded, supplier-agnostic.
  *
@@ -283,7 +284,7 @@ export function selectPayableAmounts(audit: any) {
   // ordinary document that the model merely FELT unsure about — turnover/balance/summary
   // candidates can never enter this pool, so the Phoenix exclusions still hold.
   const explicitPool = pickPool(candidates, PAYABLE_ROLES_PRIMARY, false)
-    .filter((c) => EXPLICIT_PAYABLE_LABEL.test(cleanLabel(c.printed_label)));
+    .filter((c) => isFinalPayableLabel(c.printed_label));
   const explicitDistinct = distinctAmounts(explicitPool);
 
   if (audit?.ambiguous === true) {
@@ -429,9 +430,9 @@ ${scopeText}
 /**
  * Runs the audit against the ORIGINAL file. Never receives stored invoice values.
  */
-export async function runMonetaryAudit(base44: any, fileUrl: string, model = 'gpt_5_mini', targetScope?: any) {
+export async function runMonetaryAudit(base44: any, fileUrl: string, model = 'gpt_5_mini', targetScope?: any, reviewHints: any[] = []) {
   let audit = await base44.integrations.Core.InvokeLLM({
-    prompt: buildScopedAuditPrompt(targetScope),
+    prompt: buildScopedAuditPrompt(targetScope) + amountReviewPrompt(reviewHints),
     add_context_from_internet: false,
     response_json_schema: MONETARY_AUDIT_SCHEMA,
     file_urls: [fileUrl],
@@ -463,8 +464,9 @@ export function applyMonetaryAudit(extraction: any, audit: any) {
  * close arithmetically, the extra model call is skipped. Any doubt → the audit still runs.
  */
 export async function auditAndApplyAmounts(base44: any, extraction: any, fileUrl: string, model = 'gpt_5_mini', targetScope?: any) {
+  const reviewHints = await loadAmountReviewHints(base44, extraction);
   const plan = planMonetaryAudit(extraction, isFinalPayableLabel);
-  if (plan.needs_audit === false) {
+  if (plan.needs_audit === false && !reviewHints.length) {
     extraction.amount_provenance = buildSkippedAuditProvenance(extraction, plan, MONETARY_AUDIT_VERSION);
     return {
       total: extraction.total_with_vat ?? null,
@@ -475,7 +477,8 @@ export async function auditAndApplyAmounts(base44: any, extraction: any, fileUrl
   }
 
   try {
-    const audit = await runMonetaryAudit(base44, fileUrl, model, targetScope);
+    const audit = await runMonetaryAudit(base44, fileUrl, model, targetScope, reviewHints);
+    extraction.amount_review_learning = {example_ids:reviewHints.map(hint=>hint.id),applied:reviewHints.length > 0};
     return applyMonetaryAudit(extraction, audit);
   } catch (err: any) {
     extraction.total_with_vat = null;

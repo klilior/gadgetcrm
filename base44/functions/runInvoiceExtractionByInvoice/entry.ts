@@ -1,3 +1,4 @@
+import { hasHumanReview } from '../../shared/invoiceReviewPolicy.ts';
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { classifyInvoiceLines } from '../../shared/invoiceClassification.ts';
 import { calculateFileHash, getEarlyNonInvoiceReason } from '../../shared/invoiceIntakeGuards.ts';
@@ -9,7 +10,7 @@ import { EVENT_TYPES, appendFailedAttemptPair, appendProcessingEvents, applyExtr
 import { applyRecoveryOutcomesToGate, buildLinetAssistedEvents, linetProvenanceValues, missingCriticalFields, planLinetLineApplication, planLinetRecoveryReconciliationCheck, planPostReconciliationTruth, runLinetAssistedRecovery, snapshotCriticalValues } from '../../shared/linetAssistedRecovery.ts';
 import { recoverCriticalFields } from '../../shared/invoiceCriticalFieldRecovery.ts';
 import { matchSupplierProfile, summarizeProfileMatch, validateProfileDocNumber } from '../../shared/invoiceSupplierProfiles.ts';
-import { findBusinessDuplicate } from '../../shared/invoiceBusinessDuplicate.ts';
+import { findBusinessDuplicate, BUSINESS_DUPLICATE_CODE } from '../../shared/invoiceBusinessDuplicate.ts';
 import { applyBusinessDuplicateToGate } from '../../shared/invoiceBusinessDuplicateOutcome.ts';
 import { loadFamilyDuplicateCandidates } from '../../shared/invoiceBusinessDuplicateCandidates.ts';
 import { validateInvoiceForAutoApproval, normalizeInvoiceNumber, INVOICE_VALIDATION_VERSION, ARITHMETIC_TOLERANCE } from '../../shared/invoiceValidationGate.ts';
@@ -45,6 +46,10 @@ Deno.serve(async (req) => {
     const invoice = invList?.[0];
     if (!invoice) return Response.json({ error: 'Invoice not found' }, { status: 404 });
 
+    if (hasHumanReview(invoice)) {
+      return Response.json({success:true,skipped:true,reason:'החשבונית כוללת בדיקה או תיקון ידני. הנתונים נשמרו ללא שינוי.'});
+    }
+
     // D2b1: lifecycle writes are applied only where the shared plan says so. The same intake and
     // the same invoice are preserved across retries; the original file is never overwritten.
     const applyLifecycle = async (targetIntakeId, plan) => {
@@ -67,6 +72,10 @@ Deno.serve(async (req) => {
     const intakeList = await base44.asServiceRole.entities.InvoiceIntakeRaw.filter({ id: invoice.source_intake });
     const intake = intakeList?.[0];
     if (!intake) return Response.json({ success: false, error: 'Source intake not found' }, { status: 404 });
+
+    if (intake.processing_status === 'PROCESSING' && Date.now()-Date.parse(intake.last_attempt_at || '') < 15*60*1000) {
+      return Response.json({success:true,skipped:true,reason:'המסמך נמצא כעת בעיבוד. יש להמתין לסיומו.'});
+    }
 
     // File presence is evaluated IN MEMORY; the debug write is deferred past the preflight.
     const filePresent = !!(intake.file && typeof intake.file === 'string' && intake.file.trim().length > 0);
@@ -130,7 +139,7 @@ Deno.serve(async (req) => {
     // If older records already have extracted data but kept an outdated review status, normalize them here.
     const hasDocNumber = !!(invoice.doc_number && String(invoice.doc_number).trim());
     const hasTotal = typeof invoice.total_with_vat === 'number' && !Number.isNaN(invoice.total_with_vat);
-    if (hasDocNumber && hasTotal && !body.force) {
+    if (hasDocNumber && hasTotal && intake.processing_status === 'SUCCEEDED' && !body.force) {
       let parsedValidation = null;
       let parsedExtraction = null;
       try { parsedValidation = invoice.ai_debug_last_validation_json ? JSON.parse(invoice.ai_debug_last_validation_json) : null; } catch (_) {}
@@ -631,7 +640,9 @@ Deno.serve(async (req) => {
       classification_reason: classificationResult.classification_reason
     };
 
-    await base44.asServiceRole.entities.Invoices.update(invoice.id, updatePayload);
+    await base44.asServiceRole.entities.Invoices.update(invoice.id, {
+      ...updatePayload, extraction_status:'ממתין לאימות',auto_approved:false
+    });
 
     // Step 6: persist EVERY usable line (service/subscription lines without SKU included) BEFORE
     // reconciliation can influence the flow. Upsert by invoice_id + line_number, so a retry never duplicates.
@@ -773,6 +784,14 @@ Deno.serve(async (req) => {
       extraction_status: finalStatus,
       validation_passed: gate.passed,
       auto_approved: canAutoApprove
+    });
+
+    // Publish the final status only after lines, prices and reconciliation completed.
+    const beforeFinalize = (await base44.asServiceRole.entities.Invoices.filter({id:invoice.id},undefined,1))[0];
+    if (hasHumanReview(beforeFinalize)) throw new Error('החשבונית עודכנה ידנית במהלך העיבוד. נדרשת בדיקה.');
+    await base44.asServiceRole.entities.Invoices.update(invoice.id, {
+      extraction_status:effective.extraction_status,auto_approved:effective.auto_approved,
+      validation_passed:effective.validation_passed
     });
 
     // Step 7: Update intake status_reason

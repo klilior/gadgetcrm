@@ -1,3 +1,4 @@
+import { stableLinePattern } from './invoiceReviewPolicy.ts';
 const GOODS_KEYWORDS = [
   'טלפון', 'סלולרי', 'מכשיר', 'סמארטפון', 'iphone', 'galaxy', 'samsung', 'apple',
   'xiaomi', 'אביזר', 'מטען', 'כבל', 'מגן', 'כיסוי', 'אוזניות', 'מסך', 'טאבלט',
@@ -22,7 +23,7 @@ function categoryFromValue(value) {
   const v = normalize(value);
   if (!v) return null;
   if (v === 'goods' || v.includes('סחורה')) return 'goods';
-  if (v === 'fixed' || v === 'recurring' || v === 'communication' || v === 'payment_processing' ||
+  if (['fixed','recurring','communication','payment_processing','payment_fee','rent','software','shipping','advertising','service'].includes(v) ||
       v.includes('קבוע') || v.includes('תקשורת') || v.includes('סליקה') || v.includes('מנוי') || v.includes('שירות')) return 'fixed';
   return null;
 }
@@ -53,18 +54,22 @@ export function classifyInvoiceLines({ invoice = {}, supplier = null, lineItems 
     const text = normalize(`${line?.product_name || ''} ${line?.description || ''} ${line?.sku || ''}`);
     const goodsSignal = includesAny(text, GOODS_KEYWORDS);
     const fixedSignal = includesAny(text, FIXED_KEYWORDS);
-    const sku = normalize(line?.sku);
-    const name = normalize(line?.product_name || line?.description);
+    const sku = stableLinePattern(line?.sku);
+    const name = stableLinePattern(line?.product_name || line?.description);
     const learnedLine = learnedLinePatterns.find((pattern) =>
-      (pattern.pattern_type === 'line_sku_classification' && sku && normalize(pattern.pattern_value) === sku) ||
-      (pattern.pattern_type === 'line_name_classification' && name && normalize(pattern.pattern_value) === name)
+      (pattern.pattern_type === 'line_sku_classification' && sku && stableLinePattern(pattern.pattern_value) === sku) ||
+      (pattern.pattern_type === 'line_name_classification' && name && stableLinePattern(pattern.pattern_value) === name)
     );
     const learnedLineCategory = categoryFromValue(learnedLine?.classification);
     let category = null;
     let source = defaultSource;
     let reason = '';
 
-    if (manualCategory) {
+    if (line?.classification_source === 'manual' && ['goods','fixed'].includes(line.line_category)) {
+      category = line.line_category;
+      source = 'manual';
+      reason = 'סיווג ידני של השורה';
+    } else if (manualCategory) {
       category = manualCategory;
       reason = 'סיווג ידני מפורש בחשבונית';
     } else if (learnedLineCategory) {

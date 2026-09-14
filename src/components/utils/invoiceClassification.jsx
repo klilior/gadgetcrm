@@ -46,7 +46,7 @@ function normalized(value) {
 function storedCategory(value) {
   const category = normalized(value);
   if (category === 'goods' || category.includes('סחורה')) return 'goods';
-  if (category === 'fixed' || category === 'recurring' || category === 'communication' || category === 'payment_processing' ||
+  if (['fixed','recurring','communication','payment_processing','payment_fee','rent','software','shipping','advertising','service'].includes(category) ||
       category.includes('קבוע') || category.includes('תקשורת') || category.includes('סליקה') || category.includes('מנוי') || category.includes('שירות')) return 'fixed';
   return null;
 }
@@ -70,7 +70,8 @@ export function getLineClassification(line, supplier = {}, invoice = {}) {
 
 export function getInvoiceClassification(invoice, suppliersMap = {}) {
   const supplier = suppliersMap[invoice?.supplier] || suppliersMap[invoice?.detected_supplier_id] || {};
-  let summary = invoice?.invoice_classification || null;
+  const manual = invoice?.classification_status === 'manually_corrected';
+  let summary = manual ? (invoice.is_goods_invoice ? 'goods' : storedCategory(invoice.expense_category) || invoice.invoice_classification || null) : invoice?.invoice_classification || null;
 
   if (!summary) {
     let extraction = {};

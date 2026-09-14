@@ -137,13 +137,8 @@ Deno.serve(async (req) => {
         console.log(`Triggering AI extraction for invoice: ${invoiceId} (attempt ${attempt}/${MAX_RETRIES})`);
         extractionResult = await base44.asServiceRole.functions.invoke('runInvoiceExtractionByInvoice', { invoice_id: invoiceId }); 
         
-        if (extractionResult?.data?.success) {
-          await base44.asServiceRole.entities.InvoiceIntakeRaw.update(intakeId, { 
-            status: 'עובד', 
-            status_reason: 'ניתוח AI הושלם בהצלחה' 
-          });
-          console.log(`AI extraction successful for invoice: ${invoiceId}`);
-        }
+        if (extractionResult?.data?.success !== true) throw new Error(extractionResult?.data?.error || extractionResult?.data?.reason || 'הניתוח לא הושלם');
+        // Extraction owns the detailed result reason; keep its skip/review explanation.
         extractionError = null;
         break; // Success - exit retry loop
       } catch (extractErr) {

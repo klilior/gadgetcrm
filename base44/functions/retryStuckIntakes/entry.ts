@@ -14,11 +14,11 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const limit = body.limit || 20;
+    const limit = Math.max(1,Math.min(50,Number(body.limit)||20));
     const sinceDate = body.since_date || null; // e.g. "2026-04-01"
 
     // Find intakes stuck in "מוכן לניתוח" or "חדש"
-    const filter = { status: { $in: ['מוכן לניתוח', 'חדש'] } };
+    const filter = { status: { $in: ['מוכן לניתוח', 'חדש'] },processing_status:{$nin:['PROCESSING','FAILED','SUCCEEDED']} };
     if (sinceDate) {
       filter.created_date = { $gte: sinceDate + 'T00:00:00.000Z' };
     }

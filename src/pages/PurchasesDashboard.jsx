@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import useSuppliers from "../components/hooks/useSuppliers";
 import RecurringExpenseTable from "../components/recurring-expenses/RecurringExpenseTable";
+import { saveInvoiceReview } from "../components/invoices/invoiceReviewService";
+import { toast } from "sonner";
 import { getInvoiceClassification } from "../components/utils/invoiceClassification";
 
 
@@ -144,17 +146,17 @@ export default function PurchasesDashboard() {
 
   const saveManualClassification = async () => {
     if (!editingInvoice) return;
-    const data = {
-      classification_status: 'manually_corrected',
-      classification_confidence: 100,
-      expense_category: editForm.expense_category,
-      is_goods_invoice: editForm.classification === 'goods',
-      is_recurring_expense: editForm.classification === 'recurring',
-      notes: `${editingInvoice.notes || ''}\n[manual_classification_override] סיווג ידני: ${editForm.classification}`.trim(),
-    };
-    await base44.entities.Invoices.update(editingInvoice.id, data);
-    setRows(prev => prev.map(row => row.id === editingInvoice.id ? { ...row, ...data } : row));
-    setEditingInvoice(null);
+    try {
+      await saveInvoiceReview({selected:{
+        ...editingInvoice,expense_category:editForm.expense_category,
+        is_goods_invoice:editForm.classification==='goods',
+        is_recurring_expense:editForm.classification==='recurring',
+        invoice_classification:editForm.classification==='recurring'?'fixed':editForm.classification
+      },user:currentUser,classificationOnly:true,approve:editingInvoice.extraction_status==='אושר'});
+      await load();
+      setEditingInvoice(null);
+      toast.success('הסיווג נשמר ונלמד לשימוש עתידי');
+    } catch(error) { toast.error(error?.message || 'שמירת הסיווג לא הושלמה'); }
   };
 
 
@@ -226,14 +228,15 @@ export default function PurchasesDashboard() {
   const approvedRows = rows.filter(r => r.extraction_status === 'אושר' && inDateRange(r));
   const purchases = approvedRows.filter(r => r.doc_type === 'חשבונית מס');
   const credits = approvedRows.filter(r => r.doc_type === 'חשבונית זיכוי');
-  const sum = (arr) => arr.reduce((acc, r) => acc + (Number(r.total_with_vat) || 0), 0);
+  const sum = (arr) => arr.reduce((acc, r) => acc + Math.abs(Number(r.total_with_vat) || 0), 0);
   const purchasesSum = sum(purchases);
+  const netExpenses = purchasesSum - sum(credits);
   const creditsSum = sum(credits);
   const isGoodsPurchase = (invoice) => getInvoiceClassification(invoice, suppliersMap).type === 'goods';
   const isRecurringPurchase = (invoice) => getInvoiceClassification(invoice, suppliersMap).type === 'recurring';
-  const goodsPurchasesSum = sum(purchases.filter(isGoodsPurchase));
-  const recurringExpensesSum = sum(purchases.filter(isRecurringPurchase));
-  const otherExpensesSum = purchasesSum - goodsPurchasesSum - recurringExpensesSum;
+  const goodsPurchasesSum = sum(purchases.filter(isGoodsPurchase)) - sum(credits.filter(isGoodsPurchase));
+  const recurringExpensesSum = sum(purchases.filter(isRecurringPurchase)) - sum(credits.filter(isRecurringPurchase));
+  const otherExpensesSum = netExpenses - goodsPurchasesSum - recurringExpensesSum;
   const recurringSuppliers = useMemo(() => suppliersList.filter(s =>
     s.is_recurring_expense === true ||
     s.is_recurring === true ||
@@ -266,9 +269,9 @@ export default function PurchasesDashboard() {
   // All suppliers sorted by total (from approved invoices)
   const allSuppliersSorted = useMemo(() => {
     const agg = {};
-    for (const r of purchases) {
+    for (const r of approvedRows.filter(row=>['חשבונית מס','חשבונית זיכוי'].includes(row.doc_type))) {
       const key = r.supplier || 'unknown';
-      agg[key] = (agg[key] || 0) + (Number(r.total_with_vat) || 0);
+      agg[key] = (agg[key] || 0) + (r.doc_type === 'חשבונית זיכוי' ? -1 : 1) * Math.abs(Number(r.total_with_vat) || 0);
     }
     const items = Object.entries(agg).map(([id, total]) => ({ id, name: suppliersMap[id]?.name || id, total }));
     items.sort((a,b) => b.total - a.total);
@@ -288,8 +291,8 @@ export default function PurchasesDashboard() {
   }).reverse();
 
   const weeklyData = weeks.map((w) => {
-    const sumW = rows.filter(r => r.doc_type === 'חשבונית מס' && r.doc_date && !isBefore(new Date(r.doc_date), w.start) && !isAfter(new Date(r.doc_date), w.end))
-      .reduce((acc, r) => acc + (Number(r.total_with_vat) || 0), 0);
+    const sumW = rows.filter(r => r.extraction_status === 'אושר' && ['חשבונית מס','חשבונית זיכוי'].includes(r.doc_type) && r.doc_date && !isBefore(new Date(r.doc_date), w.start) && !isAfter(new Date(r.doc_date), w.end))
+      .reduce((acc, r) => acc + (r.doc_type === 'חשבונית זיכוי' ? -1 : 1) * Math.abs(Number(r.total_with_vat) || 0), 0);
     const label = `${w.start.getDate()}/${w.start.getMonth()+1}`;
     return { name: label, total: sumW };
   });
@@ -339,7 +342,7 @@ export default function PurchasesDashboard() {
   return (
     <div className="p-4 space-y-4" dir="rtl">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-2xl font-bold flex items-center gap-2"><BarChart3 className="w-6 h-6"/> דשבורד רכישות</h1>
+        <h1 className="text-2xl font-bold flex items-center gap-2"><BarChart3 className="w-6 h-6"/> שליטה בהוצאות</h1>
         <Button variant="outline" onClick={load} className="gap-2"><RefreshCcw className="w-4 h-4"/>רענן</Button>
       </div>
 
@@ -438,8 +441,8 @@ export default function PurchasesDashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="glass-card border-0">
-          <CardHeader><CardTitle>סה״כ הוצאות - {dateRangeLabel}</CardTitle></CardHeader>
-          <CardContent className="text-3xl font-bold text-emerald-700">₪ {purchasesSum.toLocaleString()}</CardContent>
+          <CardHeader><CardTitle>הוצאות נטו לאחר זיכויים - {dateRangeLabel}</CardTitle></CardHeader>
+          <CardContent className="text-3xl font-bold text-emerald-700">₪ {netExpenses.toLocaleString()}</CardContent>
         </Card>
         <Card className="glass-card border-0 cursor-pointer hover:ring-2 hover:ring-blue-200" onClick={() => { setFilterClassification('goods'); document.getElementById('invoices-table')?.scrollIntoView({ behavior: 'smooth' }); }}>
           <CardHeader><CardTitle>קניית סחורה</CardTitle></CardHeader>
@@ -488,7 +491,7 @@ export default function PurchasesDashboard() {
       </Card>
 
       <Card className="glass-card border-0">
-        <CardHeader><CardTitle>מגמת רכישות שבועית (8 שבועות אחרונים)</CardTitle></CardHeader>
+        <CardHeader><CardTitle>הוצאות מאושרות נטו — 8 שבועות אחרונים</CardTitle></CardHeader>
         <CardContent style={{ height: 280 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={weeklyData}>

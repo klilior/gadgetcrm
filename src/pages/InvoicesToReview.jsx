@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import useSuppliers from "../components/hooks/useSuppliers";
+import { saveInvoiceReview } from "../components/invoices/invoiceReviewService";
+import InvoiceReviewSummary from "../components/invoices/InvoiceReviewSummary";
 import InvoiceSourceInfo from "../components/invoices/InvoiceSourceInfo";
 import { RefreshCcw, AlertTriangle, FileText, ExternalLink, ZoomIn, ZoomOut, Download, ChevronUp, ChevronDown, Eye, AlertCircle, Plus, Trash2 } from "lucide-react";
 
@@ -35,9 +37,7 @@ export default function InvoicesToReview() {
     setLoading(true);
     try {
       const invoices = await base44.entities.Invoices.filter({ extraction_status: { "$in": ["ממתין לאימות", "נקרא בהצלחה"] } }, "-doc_date", 200);
-      const filtered = (invoices || []).filter(inv => 
-        !inv.reviewed_at && (inv.supplier || inv.doc_number || inv.total_with_vat || inv.doc_date)
-      );
+      const filtered = invoices || [];
       setRows(filtered);
     } finally {
       setLoading(false);
@@ -131,216 +131,25 @@ export default function InvoicesToReview() {
     setPreviewFailed(false);
   };
 
-  const learnSupplierPattern = async (pattern_type, pattern_value) => {
-    if (!selected?.supplier || !pattern_value?.trim()) return;
-    const existing = await base44.entities.SupplierPattern.filter({ pattern_type, pattern_value: pattern_value.trim() });
-    if (!existing || existing.length === 0) {
-      await base44.entities.SupplierPattern.create({
-        supplier_id: selected.supplier,
-        pattern_type,
-        pattern_value: pattern_value.trim(),
-        confidence: 100,
-        learned_from_invoice: selected.id,
-        is_active: true
-      });
-    } else if (existing[0].supplier_id !== selected.supplier) {
-      await base44.entities.SupplierPattern.update(existing[0].id, {
-        supplier_id: selected.supplier,
-        confidence: 100,
-        learned_from_invoice: selected.id,
-        is_active: true
-      });
-    }
-  };
-
-  const saveSupplierEdits = async () => {
-    if (!selected?.supplier) return;
-    const currentSupplier = suppliersMap[selected.supplier] || {};
-    const supplierName = (selected._supplierName || '').trim();
-    const vatId = (selected._editedVatId || '').trim();
-    const updates = {};
-    if (supplierName && supplierName !== currentSupplier.name) updates.name = supplierName;
-    if (vatId && vatId !== currentSupplier.vat_id) updates.vat_id = vatId;
-    if (Object.keys(updates).length > 0) {
-      await base44.entities.Suppliers.update(selected.supplier, updates);
-      await reloadSuppliers();
-    }
-    await learnSupplierPattern('name_pattern', supplierName || currentSupplier.name);
-    await learnSupplierPattern('vat_id', vatId || currentSupplier.vat_id);
-  };
-
-  const selectedManualCategory = () => {
-    if (selected?.is_goods_invoice || selected?.expense_category === 'goods') return 'goods';
-    if (selected?.is_recurring_expense || ['communication', 'payment_fee', 'rent', 'software', 'service'].includes(selected?.expense_category)) return 'fixed';
-    return null;
-  };
-
-  const withManualOverrideNote = (notes) => {
-    const category = selectedManualCategory();
-    const cleanNotes = String(notes || '').replace(/\n?\[manual_classification_override\][^\n]*/g, '').trim();
-    if (!category) return cleanNotes;
-    return `${cleanNotes}\n[manual_classification_override] סווג ידנית כ${category === 'goods' ? 'סחורה' : 'הוצאה קבועה'}`.trim();
-  };
-
-  const cleanLineItems = () => (selected?._lineItems || []).map((item, idx) => ({
-    line_number: Number(item.line_number || idx + 1),
-    sku: String(item.sku || '').trim(),
-    product_name: String(item.product_name || '').trim(),
-    quantity: Number(item.quantity || 0),
-    unit_price_before_vat: item.unit_price_before_vat === '' ? null : Number(item.unit_price_before_vat),
-    line_total_before_vat: item.line_total_before_vat === '' ? null : Number(item.line_total_before_vat),
-    line_total_with_vat: item.line_total_with_vat === '' ? null : Number(item.line_total_with_vat),
-    line_category: selectedManualCategory() || item.line_category || null
-  })).filter(item => item.sku || item.product_name);
-
-  const saveLineItemEdits = async () => {
-    const lineItems = cleanLineItems();
-    let extraction = {};
-    try { extraction = selected.ai_debug_last_extraction_json ? JSON.parse(selected.ai_debug_last_extraction_json) : {}; } catch (_) {}
-    extraction.line_items = lineItems;
-    const existingLines = await base44.entities.InvoiceLine.filter({ invoice_id: selected.id }, undefined, 200);
-    await Promise.all((existingLines || []).map(line => base44.entities.InvoiceLine.delete(line.id)));
-    for (const item of lineItems) {
-      await base44.entities.InvoiceLine.create({
-        invoice_id: selected.id,
-        line_number: item.line_number,
-        sku: item.sku || item.product_name,
-        product_name: item.product_name || item.sku,
-        quantity: item.quantity || 1,
-        unit_price_before_vat: item.unit_price_before_vat,
-        line_total_before_vat: item.line_total_before_vat,
-        line_total_with_vat: item.line_total_with_vat,
-        supplier_id: selected.supplier,
-        line_category: item.line_category || undefined,
-        classification_source: selectedManualCategory() ? 'manual' : 'keywords',
-        classification_reason: selectedManualCategory() ? 'סיווג ידני מפורש בחשבונית' : 'נשמר מעריכת שורה ידנית'
-      });
-    }
-    return JSON.stringify(extraction);
-  };
-
-  const saveRecord = async () => {
-    if (!selected) return;
-    setSaving(true);
-    try {
-      const updatePayload = {
-        supplier: selected.supplier || undefined,
-        doc_type: selected.doc_type || undefined,
-        doc_number: selected.doc_number || undefined,
-        doc_date: selected.doc_date || undefined,
-        currency: selected.currency || undefined,
-        subtotal_before_vat: selected.subtotal_before_vat != null ? Number(selected.subtotal_before_vat) : undefined,
-        vat_amount: selected.vat_amount != null ? Number(selected.vat_amount) : undefined,
-        total_with_vat: selected.total_with_vat != null ? Number(selected.total_with_vat) : undefined,
-        notes: selected.notes || undefined,
-        source_intake: selected.source_intake || undefined,
-        expense_category: selected.expense_category || undefined,
-        is_goods_invoice: !!selected.is_goods_invoice,
-        is_recurring_expense: !!selected.is_recurring_expense,
-        classification_status: 'manually_corrected',
-        invoice_classification: selectedManualCategory() || selected.invoice_classification || undefined,
-        classification_reason: selectedManualCategory() ? 'סיווג ידני מפורש בחשבונית' : selected.classification_reason || undefined,
-      };
-      await saveSupplierEdits();
-      updatePayload.ai_debug_last_extraction_json = await saveLineItemEdits();
-      updatePayload.notes = withManualOverrideNote(selected.notes);
-      await base44.entities.Invoices.update(selected.id, updatePayload);
-      
-      // Learn from corrections: save supplier name pattern and original extracted name
-      if (selected.supplier && selected.ai_debug_last_extraction_json) {
-        try {
-          const extraction = JSON.parse(selected.ai_debug_last_extraction_json);
-          const extractedName = extraction.supplier_name?.trim();
-          const normalizedName = extraction.supplier_name_normalized?.trim();
-          
-          // Save both the original extracted name and normalized name as patterns
-          const namesToLearn = [extractedName, normalizedName].filter(Boolean);
-          for (const nameToLearn of namesToLearn) {
-            const existingPatterns = await base44.entities.SupplierPattern.filter({
-              pattern_type: 'name_pattern',
-              pattern_value: nameToLearn
-            });
-            if (!existingPatterns || existingPatterns.length === 0) {
-              await base44.entities.SupplierPattern.create({
-                supplier_id: selected.supplier,
-                pattern_type: 'name_pattern',
-                pattern_value: nameToLearn,
-                confidence: 100,
-                learned_from_invoice: selected.id,
-                is_active: true
-              });
-            } else if (existingPatterns[0].supplier_id !== selected.supplier) {
-              // User corrected to different supplier - update the pattern
-              await base44.entities.SupplierPattern.update(existingPatterns[0].id, {
-                supplier_id: selected.supplier,
-                confidence: 100,
-                learned_from_invoice: selected.id
-              });
-            }
-          }
-          toast.info("המערכת למדה את הספק לזיהוי עתידי");
-        } catch (_) {}
-      }
-      
-      toast.success("נשמר בהצלחה");
-      closeDialog();
-      load();
-    } catch (e) {
-      toast.error("שגיאה בשמירה: " + (e?.message || "שגיאה"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const [approving, setApproving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
-
-  const handleApprove = async () => {
-    if (approving) return;
-    setApproving(true);
+  const persistReview = async (approve = false) => {
+    if (!selected || saving || approving) return;
+    setSaving(true);
+    setApproving(approve);
     try {
-      // First save any edits the user made
-      const updatePayload = {
-        supplier: selected.supplier || undefined,
-        doc_type: selected.doc_type || undefined,
-        doc_number: selected.doc_number || undefined,
-        doc_date: selected.doc_date || undefined,
-        currency: selected.currency || undefined,
-        subtotal_before_vat: selected.subtotal_before_vat != null ? Number(selected.subtotal_before_vat) : undefined,
-        vat_amount: selected.vat_amount != null ? Number(selected.vat_amount) : undefined,
-        total_with_vat: selected.total_with_vat != null ? Number(selected.total_with_vat) : undefined,
-        notes: selected.notes || undefined,
-        expense_category: selected.expense_category || undefined,
-        is_goods_invoice: !!selected.is_goods_invoice,
-        is_recurring_expense: !!selected.is_recurring_expense,
-        classification_status: 'manually_corrected',
-        invoice_classification: selectedManualCategory() || selected.invoice_classification || undefined,
-        classification_reason: selectedManualCategory() ? 'סיווג ידני מפורש בחשבונית' : selected.classification_reason || undefined,
-      };
-      await saveSupplierEdits();
-      updatePayload.ai_debug_last_extraction_json = await saveLineItemEdits();
-      updatePayload.notes = withManualOverrideNote(selected.notes);
-      await base44.entities.Invoices.update(selected.id, updatePayload);
-
-      const result = await updateInvoiceStatus({ 
-        invoice_id: selected.id, 
-        action: 'approve',
-        employee_role: currentUser?.role,
-        employee_email: currentUser?.email || currentUser?.employee_name
-      });
-      if (result?.data?.error) {
-        throw new Error(result.data.error);
-      }
-      toast.success("החשבונית אושרה");
+      const result = await saveInvoiceReview({selected,user:currentUser,approve});
+      toast.success(approve ? "התיקונים נשמרו והחשבונית אושרה" : "התיקונים נשמרו");
+      if (result.learned_amount) toast.info("תיקון הסכום נשמר ללמידה מקריאת מסמכים הבאים של הספק");
       closeDialog();
-      load();
-    } catch (e) {
-      console.error("Approve error:", e);
-      toast.error("שגיאה באישור: " + (e?.response?.data?.error || e?.message || "שגיאה"));
-    } finally {
-      setApproving(false);
-    }
+      await load();
+    } catch (error) {
+      toast.error(error?.message || "השמירה לא הושלמה");
+      await load();
+    } finally { setSaving(false); setApproving(false); }
   };
+  const saveRecord = () => persistReview(false);
+  const handleApprove = () => persistReview(true);
 
   const handleReject = async () => {
     if (rejecting) return;
@@ -373,6 +182,7 @@ export default function InvoicesToReview() {
     try {
       toast.info("מריץ חילוץ AI מחדש...");
       const result = await runInvoiceExtractionByInvoice({ invoice_id: selected.id, force: true });
+      if (result?.data?.success === false) throw new Error(result.data.error || "הניתוח לא הושלם");
       if (result?.data?.skipped) {
         toast.info("חילוץ לא התבצע: " + (result.data.reason || "לא ידוע"));
       } else {
@@ -381,7 +191,7 @@ export default function InvoicesToReview() {
       // Reload the record to show updated data
       const updated = await base44.entities.Invoices.filter({ id: selected.id });
       if (updated && updated.length > 0) {
-        setSelected({ ...updated[0] });
+        await openRecord(updated[0]);
       }
     } catch (e) {
       console.error("RunAI error:", e);
@@ -394,7 +204,7 @@ export default function InvoicesToReview() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">חשבוניות לאימות</h1>
+        <h1 className="text-2xl font-bold">דורש בדיקה</h1>
         <div className="flex gap-2">
           {canApprove && (
             <Button 
@@ -418,7 +228,8 @@ export default function InvoicesToReview() {
         </div>
       </div>
 
-      <Card className="glass-card border-0">
+      <p className="text-sm text-slate-500">בדקו את הסכום והסיווג מול המסמך. התיקונים נשמרים ומשמשים לקריאה הבאה של הספק.</p>
+      <Card className="border shadow-sm">
         <CardHeader>
           <CardTitle>חשבוניות לאישור / אימות ({sorted.length})</CardTitle>
         </CardHeader>
@@ -433,7 +244,7 @@ export default function InvoicesToReview() {
                   <TableHead>תאריך מסמך</TableHead>
                   <TableHead>סה״כ כולל מע״מ</TableHead>
                   <TableHead>מטבע</TableHead>
-                  <TableHead>ציון ודאות</TableHead>
+                  <TableHead>ציון חילוץ</TableHead>
                   <TableHead>סטטוס ניתוח</TableHead>
                 </TableRow>
               </TableHeader>
@@ -499,9 +310,7 @@ export default function InvoicesToReview() {
             <DialogTitle className="flex items-center gap-2">
               פרטי חשבונית
               {selected?.confidence_score != null && (
-                <Badge variant={selected.confidence_score >= 80 ? "default" : selected.confidence_score >= 50 ? "secondary" : "destructive"}>
-                  ודאות: {selected.confidence_score}%
-                </Badge>
+                <Badge variant="outline">לבדיקה מול המקור</Badge>
               )}
             </DialogTitle>
           </DialogHeader>
@@ -622,6 +431,7 @@ export default function InvoicesToReview() {
                   </button>
                 )}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                <InvoiceReviewSummary invoice={selected} onChange={setSelected} />
                 <InvoiceSourceInfo intake={intakeRecord} />
 
                 {/* Supplier Info Section */}
@@ -848,9 +658,7 @@ export default function InvoicesToReview() {
                     if (!selected.supplier) {
                       problems.push({ type: 'supplier', label: 'ספק לא זוהה', critical: true });
                     }
-                    if (selected.confidence_score != null && selected.confidence_score < 90) {
-                      problems.push({ type: 'confidence', label: `ציון ודאות מתחת לסף אישור אוטומטי של 90% (${selected.confidence_score}%)`, critical: selected.confidence_score < 50 });
-                    }
+
                     if (validation?.is_math_consistent === false) {
                       problems.push({ type: 'math', label: 'חישוב מתמטי לא תקין', critical: true });
                     }
@@ -921,19 +729,19 @@ export default function InvoicesToReview() {
                   </div>
                   {canApprove && (
                     <div className="flex gap-2">
-                      <Button className="flex-1 h-10" onClick={handleApprove} variant="default" disabled={approving}>
+                      <Button className="flex-1 h-10" onClick={handleApprove} variant="default" disabled={saving || approving || rejecting || runningAI}>
                         {approving ? "מאשר..." : "✓ אשר חשבונית"}
                       </Button>
-                      <Button className="flex-1 h-10" onClick={handleReject} variant="destructive" disabled={rejecting}>
+                      <Button className="flex-1 h-10" onClick={handleReject} variant="destructive" disabled={saving || approving || rejecting || runningAI}>
                         {rejecting ? "דוחה..." : "✗ דחה"}
                       </Button>
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <Button className="flex-1 h-9" variant="secondary" onClick={handleRunAI} disabled={runningAI}>
+                    <Button className="flex-1 h-9" variant="secondary" onClick={handleRunAI} disabled={saving || approving || rejecting || runningAI}>
                       {runningAI ? "מריץ AI..." : "🤖 הרץ AI מחדש"}
                     </Button>
-                    <Button className="flex-1 h-9" variant="outline" onClick={saveRecord} disabled={saving}>
+                    <Button className="flex-1 h-9" variant="outline" onClick={saveRecord} disabled={saving || approving || rejecting || runningAI}>
                       {saving ? "שומר..." : "💾 שמור"}
                     </Button>
                   </div>
