@@ -81,7 +81,7 @@ export default async function(req) {
 
     const body = await req.json().catch(() => ({}));
     const batch = String(body.batch || '').toUpperCase();
-    const valid = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'DQ', 'VERIFY'];
+    const valid = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'DQ', 'VERIFY'];
     if (!valid.includes(batch)) {
       return Response.json({ error: `batch must be one of ${valid.join(', ')}` }, { status: 400 });
     }
@@ -414,6 +414,31 @@ export default async function(req) {
             changed.push({ role_key: key, supplier: supplierById.get(role.supplier_id)?.name, role: role.role });
           } catch (error) {
             failures.push({ role_key: key, error: error.message });
+          }
+        }
+      }
+
+      // Batch I — repair dangling InvoiceLine.supplier_id using the parent invoice's own supplier.
+      // Document evidence only: the line is repointed to the supplier already recorded on its invoice.
+      if (batch === 'I') {
+        const lines = await sr.InvoiceLine.list('-created_date', 3000);
+        for (const line of lines.filter((l) => l.supplier_id && !supplierById.has(l.supplier_id))) {
+          scanned += 1;
+          if (!line.invoice_id) { skipped.push({ id: line.id, reason: 'NO_PARENT_INVOICE' }); continue; }
+          const invoice = await sr.Invoices.get(line.invoice_id).catch(() => null);
+          const target = invoice?.supplier;
+          if (!target || !supplierById.has(target)) { skipped.push({ id: line.id, reason: 'PARENT_SUPPLIER_UNRESOLVED' }); continue; }
+          const before = { supplier_id: line.supplier_id };
+          try {
+            await sr.InvoiceLine.update(line.id, { supplier_id: target });
+            await audit('InvoiceLine', line.id, 'SUPPLIER_REPOINT', before, { supplier_id: target }, {
+              invoice_id: line.invoice_id,
+              resolution: 'parent_invoice_supplier_exact',
+              amounts_and_sku_unchanged: true
+            });
+            changed.push({ id: line.id, invoice_id: line.invoice_id, old_supplier_id: before.supplier_id, supplier_id: target, supplier: supplierById.get(target)?.name });
+          } catch (error) {
+            failures.push({ id: line.id, error: error.message });
           }
         }
       }
