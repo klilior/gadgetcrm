@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BarChart3, RefreshCcw, FileText, CheckCircle, Clock, AlertTriangle, Calendar, Search, Eye, Download, X } from "lucide-react";
+import { BarChart3, RefreshCcw, FileText, CheckCircle, Clock, AlertTriangle, Calendar, Search, Eye, X } from "lucide-react";
 import { useUser } from "../components/UserAuth";
-import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, isBefore, startOfDay, endOfDay, subDays, startOfYear, endOfYear, subMonths, subYears, format } from "date-fns";
+import { startOfMonth, endOfMonth, subWeeks, startOfWeek, endOfWeek, isAfter, isBefore, startOfDay, endOfDay, subDays, startOfYear, endOfYear, subMonths, subYears } from "date-fns";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -276,7 +276,7 @@ export default function PurchasesDashboard() {
     const items = Object.entries(agg).map(([id, total]) => ({ id, name: suppliersMap[id]?.name || id, total }));
     items.sort((a,b) => b.total - a.total);
     return items;
-  }, [purchases, suppliersMap]);
+  }, [approvedRows, suppliersMap]);
 
   // Recent invoices table (filtered)
   const recentInvoices = useMemo(() => {

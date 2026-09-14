@@ -1,4 +1,3 @@
-import React from 'react';
 import { reviewArithmetic, parseReviewJson } from '../../../base44/shared/invoiceReviewPolicy.ts';
 
 export default function InvoiceReviewSummary({invoice,onChange}) {

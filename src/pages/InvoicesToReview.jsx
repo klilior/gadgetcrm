@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { updateInvoiceStatus } from "@/functions/updateInvoiceStatus";
 import { runInvoiceExtractionByInvoice } from "@/functions/runInvoiceExtractionByInvoice";
@@ -87,7 +87,7 @@ export default function InvoicesToReview() {
     try {
       const extraction = row.ai_debug_last_extraction_json ? JSON.parse(row.ai_debug_last_extraction_json) : null;
       lineItems = extraction?.line_items || [];
-      const savedLines = await base44.entities.InvoiceLine.filter({ invoice_id: row.id }, 'line_number', 100);
+      const savedLines = await base44.entities.InvoiceLine.filter({ invoice_id: row.id }, 'line_number', 500);
       if (savedLines?.length > 0) lineItems = savedLines;
     } catch (_) {}
     setSelected({

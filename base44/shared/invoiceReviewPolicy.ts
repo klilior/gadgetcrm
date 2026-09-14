@@ -21,7 +21,7 @@ export function reviewCategory(invoice) {
 }
 export function hasHumanReview(invoice) {
   const provenance = parseReviewJson(invoice?.field_provenance_json);
-  return !!invoice?.reviewed_at || Object.values(provenance.selected || {}).some((field) => field?.source === 'HUMAN');
+  return invoice?.classification_status === 'manually_corrected' || !!invoice?.reviewed_at || Object.values(provenance.selected || {}).some((field) => field?.source === 'HUMAN');
 }
 export function reviewArithmetic(invoice) {
   const values = ['subtotal_before_vat','vat_amount','total_with_vat'].map(key => invoice[key]);
