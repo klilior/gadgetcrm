@@ -28,6 +28,22 @@
       "default": "none",
       "description": "\u05db\u05d9\u05e6\u05d3 \u05e0\u05e7\u05d1\u05e2\u05d4 \u05d4\u05ea\u05d0\u05de\u05ea \u05d4\u05de\u05d5\u05e6\u05e8. \u05d0\u05d9\u05df \u05e0\u05d9\u05d7\u05d5\u05e9 \u05de\u05d5\u05e6\u05e8"
     },
+    "pricing_record_type": {
+      "type": "string",
+      "enum": [
+        "PRODUCT",
+        "SERVICE",
+        "SHIPPING",
+        "OTHER"
+      ],
+      "default": "PRODUCT",
+      "description": "\u05e1\u05d5\u05d2 \u05e8\u05e9\u05d5\u05de\u05ea \u05d4\u05de\u05d7\u05d9\u05e8. \u05e8\u05e7 PRODUCT (\u05d0\u05d5 \u05e9\u05d3\u05d4 \u05d7\u05e1\u05e8) \u05e0\u05db\u05dc\u05dc \u05d1\u05e0\u05d9\u05ea\u05d5\u05d7\u05d9 \u05de\u05d7\u05d9\u05e8\u05d9 \u05de\u05d5\u05e6\u05e8, Price Alerts \u05d5\u05d4\u05e9\u05d5\u05d5\u05d0\u05d5\u05ea \u05e1\u05e4\u05e7\u05d9\u05dd. SERVICE/SHIPPING/OTHER \u05e0\u05e9\u05de\u05e8\u05d9\u05dd \u05dc\u05d4\u05d9\u05e1\u05d8\u05d5\u05e8\u05d9\u05d9\u05ea \u05d4\u05d5\u05e6\u05d0\u05d4 \u05d1\u05dc\u05d1\u05d3",
+      "index": true
+    },
+    "pricing_classification_reason": {
+      "type": "string",
+      "description": "\u05d4\u05e1\u05d1\u05e8 \u05dc\u05e1\u05d9\u05d5\u05d5\u05d2 pricing_record_type \u05db\u05d0\u05e9\u05e8 \u05d0\u05d9\u05e0\u05d5 PRODUCT"
+    },
     "product_name": {
       "type": "string",
       "description": "\u05e9\u05dd \u05de\u05d5\u05e6\u05e8"

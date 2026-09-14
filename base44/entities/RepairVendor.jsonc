@@ -35,9 +35,10 @@
         "vat_id",
         "exact_normalized_name",
         "verified_alias",
-        "unresolved"
+        "unresolved",
+        "MANUAL_VERIFIED"
       ],
-      "description": "\u05db\u05d9\u05e6\u05d3 \u05e0\u05e7\u05d1\u05e2 \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05e1\u05e4\u05e7 \u05d4\u05e7\u05e0\u05d5\u05e0\u05d9"
+      "description": "\u05db\u05d9\u05e6\u05d3 \u05e0\u05e7\u05d1\u05e2 \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05e1\u05e4\u05e7 \u05d4\u05e7\u05e0\u05d5\u05e0\u05d9. MANUAL_VERIFIED = \u05d0\u05d9\u05e9\u05d5\u05e8 \u05d0\u05e0\u05d5\u05e9\u05d9 \u05de\u05e4\u05d5\u05e8\u05e9 \u05e2\u05dc \u05d1\u05e1\u05d9\u05e1 \u05e8\u05d0\u05d9\u05d5\u05ea \u05de\u05ea\u05d5\u05e2\u05d3\u05d5\u05ea"
     },
     "canonical_link_confidence": {
       "type": "string",
@@ -45,9 +46,29 @@
         "certain",
         "strong",
         "weak",
-        "ambiguous"
+        "ambiguous",
+        "HIGH"
       ],
-      "description": "\u05e8\u05de\u05ea \u05d5\u05d3\u05d0\u05d5\u05ea \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8. merge \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9 \u05e8\u05e7 \u05d1-certain"
+      "description": "\u05e8\u05de\u05ea \u05d5\u05d3\u05d0\u05d5\u05ea \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8. merge \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9 \u05e8\u05e7 \u05d1-certain; HIGH = \u05d0\u05d5\u05e9\u05e8 \u05d9\u05d3\u05e0\u05d9\u05ea"
+    },
+    "canonical_link_evidence_summary": {
+      "type": "string",
+      "description": "\u05e1\u05d9\u05db\u05d5\u05dd \u05d4\u05e8\u05d0\u05d9\u05d5\u05ea \u05e9\u05e2\u05dc \u05d1\u05e1\u05d9\u05e1\u05df \u05d0\u05d5\u05e9\u05e8 \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8"
+    },
+    "canonical_link_approved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05de\u05d5\u05e2\u05d3 \u05d4\u05d0\u05d9\u05e9\u05d5\u05e8 \u05d4\u05d0\u05e0\u05d5\u05e9\u05d9 \u05dc\u05e7\u05d9\u05e9\u05d5\u05e8"
+    },
+    "canonical_link_migration_run_id": {
+      "type": "string",
+      "description": "MigrationRun \u05e9\u05d1\u05de\u05e1\u05d2\u05e8\u05ea\u05d5 \u05e0\u05db\u05ea\u05d1 \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8",
+      "index": true
+    },
+    "canonical_link_correlation_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e2\u05e7\u05d1 \u05dc\u05d6\u05e8\u05d9\u05de\u05ea \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8",
+      "index": true
     },
     "canonical_linked_at": {
       "type": "string",
