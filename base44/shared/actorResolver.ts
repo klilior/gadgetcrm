@@ -33,9 +33,15 @@ export async function resolveActor(base44, explicit = {}) {
     }
   }
 
+  const source = explicit.source || "USER";
+  const actorType = explicit.actor_type || (employeeId ? "EMPLOYEE" : (userId ? "USER" : source));
+
   return {
+    authenticated_user_id: userId,
     user_id: userId,
     employee_id: employeeId,
+    actor_type: actorType,
+    source,
     resolution_method: method,
   };
 }

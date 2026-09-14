@@ -1,5 +1,8 @@
 import { stableLinePattern, reviewArithmetic } from '../../shared/invoiceReviewPolicy.ts';
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { resolveActor } from '../../shared/actorResolver.ts';
+import { resolveCorrelationId } from '../../shared/correlation.ts';
+import { logAudit } from '../../shared/audit.ts';
 
 Deno.serve(async (req) => {
   try {
@@ -37,6 +40,9 @@ Deno.serve(async (req) => {
     // Only higher-privilege roles
     const allowed = (userRole === 'מנהל') || (userRole === 'admin');
     if (!allowed) return Response.json({ error: 'Forbidden' }, { status: 403 });
+
+    const actor = await resolveActor(base44);
+    const correlationId = resolveCorrelationId(req, body.correlation_id, 'invoice_review');
 
     let invoice;
     try {
@@ -177,6 +183,25 @@ Deno.serve(async (req) => {
     } else {
       return Response.json({ error: 'Unknown action' }, { status: 400 });
     }
+
+    await logAudit(base44, {
+      actor_user_id: actor.authenticated_user_id,
+      actor_employee_id: actor.employee_id,
+      entity_type: 'Invoices',
+      entity_id: invoice.id,
+      action: action === 'approve' ? 'APPROVE' : 'REJECT',
+      before_data: { extraction_status: invoice.extraction_status, reviewed_by: invoice.reviewed_by || null },
+      after_data: { extraction_status: action === 'approve' ? 'אושר' : 'נדחה', reviewed_by: userEmail },
+      field_changes: {
+        extraction_status: {
+          before: invoice.extraction_status,
+          after: action === 'approve' ? 'אושר' : 'נדחה'
+        }
+      },
+      source: actor.authenticated_user_id ? 'USER' : 'SYSTEM',
+      correlation_id: correlationId,
+      request_context: { actor_type: actor.actor_type }
+    });
 
     // C5: mark related intake as processed
     if (invoice.source_intake) {
