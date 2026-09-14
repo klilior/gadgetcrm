@@ -1,0 +1,109 @@
+{
+  "name": "MigrationRun",
+  "type": "object",
+  "properties": {
+    "migration_type": {
+      "type": "string",
+      "description": "Stable migration type/name",
+      "index": true
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Migration start time",
+      "index": true
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Migration completion time"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "RUNNING",
+        "COMPLETED",
+        "PARTIAL",
+        "FAILED",
+        "ROLLED_BACK"
+      ],
+      "default": "PENDING",
+      "description": "Migration lifecycle status",
+      "index": true
+    },
+    "executed_by_user_id": {
+      "type": "string",
+      "description": "Base44 User ID that initiated the run",
+      "index": true
+    },
+    "dry_run": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the run was report-only"
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "Correlation ID for the full migration flow",
+      "index": true
+    },
+    "records_scanned": {
+      "type": "number",
+      "default": 0
+    },
+    "records_changed": {
+      "type": "number",
+      "default": 0
+    },
+    "records_skipped": {
+      "type": "number",
+      "default": 0
+    },
+    "records_failed": {
+      "type": "number",
+      "default": 0
+    },
+    "summary": {
+      "type": "string",
+      "description": "Human-readable run summary"
+    },
+    "rollback_available": {
+      "type": "boolean",
+      "default": false
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Small structured migration metadata"
+    }
+  },
+  "required": [
+    "migration_type",
+    "started_at",
+    "status",
+    "dry_run",
+    "correlation_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

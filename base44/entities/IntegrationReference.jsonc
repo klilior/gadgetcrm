@@ -1,0 +1,90 @@
+{
+  "name": "IntegrationReference",
+  "type": "object",
+  "properties": {
+    "entity_type": {
+      "type": "string",
+      "description": "Canonical business entity type, for example Customer, Product, Order or Shipment",
+      "index": true
+    },
+    "entity_id": {
+      "type": "string",
+      "description": "Canonical Base44 entity record ID",
+      "index": true
+    },
+    "integration": {
+      "type": "string",
+      "description": "External system identifier, for example WOOCOMMERCE, LINET or MIRAKL",
+      "index": true
+    },
+    "external_entity_type": {
+      "type": "string",
+      "description": "Entity type in the external system",
+      "index": true
+    },
+    "external_id": {
+      "type": "string",
+      "description": "Primary external identifier",
+      "index": true
+    },
+    "external_secondary_id": {
+      "type": "string",
+      "description": "Optional secondary external identifier",
+      "index": true
+    },
+    "external_key": {
+      "type": "string",
+      "description": "Unique normalized integration identity: integration:external_entity_type:external_id",
+      "index": true,
+      "unique": true
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Small integration-specific metadata; never secrets or full payloads"
+    },
+    "first_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "First time the external identity was observed"
+    },
+    "last_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Most recent time the external identity was observed",
+      "index": true
+    }
+  },
+  "required": [
+    "entity_type",
+    "entity_id",
+    "integration",
+    "external_entity_type",
+    "external_id",
+    "external_key",
+    "first_seen_at",
+    "last_seen_at"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

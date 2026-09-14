@@ -1,0 +1,103 @@
+{
+  "name": "AuditLog",
+  "type": "object",
+  "properties": {
+    "actor_user_id": {
+      "type": "string",
+      "description": "Base44 User ID that initiated the action",
+      "index": true
+    },
+    "actor_employee_id": {
+      "type": "string",
+      "description": "Canonical Employee ID when the actor maps to an employee",
+      "index": true
+    },
+    "entity_type": {
+      "type": "string",
+      "description": "Affected business entity type",
+      "index": true
+    },
+    "entity_id": {
+      "type": "string",
+      "description": "Affected canonical Base44 record ID",
+      "index": true
+    },
+    "action": {
+      "type": "string",
+      "description": "Business-sensitive action such as CREATE, UPDATE, STATUS_CHANGE or APPROVE",
+      "index": true
+    },
+    "field_changes": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Compact field-level changes"
+    },
+    "before_data": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Sanitized compact state before the action"
+    },
+    "after_data": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Sanitized compact state after the action"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "USER",
+        "AUTOMATION",
+        "API",
+        "INTEGRATION",
+        "MIGRATION",
+        "SYSTEM"
+      ],
+      "description": "Origin of the action",
+      "index": true
+    },
+    "integration": {
+      "type": "string",
+      "description": "Integration name when source is INTEGRATION or API",
+      "index": true
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "Identifier shared by all steps of one business flow",
+      "index": true
+    },
+    "request_context": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Sanitized request/device context when relevant"
+    }
+  },
+  "required": [
+    "entity_type",
+    "entity_id",
+    "action",
+    "source",
+    "correlation_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

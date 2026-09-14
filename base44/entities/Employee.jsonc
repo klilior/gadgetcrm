@@ -47,7 +47,7 @@
     "email": {
       "type": "string",
       "format": "email",
-      "description": "\u05d3\u05d5\u05d0\"\u05dc"
+      "description": "\u05d3\u05d5\u05d0\u05f4\u05dc"
     },
     "password_hash": {
       "type": "string",
@@ -66,6 +66,12 @@
     "linet_employee_code": {
       "type": "string",
       "description": "\u05e7\u05d5\u05d3 \u05e2\u05d5\u05d1\u05d3 \u05d1\u05dc\u05d9\u05e0\u05d8"
+    },
+    "user_id": {
+      "type": "string",
+      "description": "Optional explicit relationship to the Base44 authentication User",
+      "index": true,
+      "unique": true
     }
   },
   "required": [
