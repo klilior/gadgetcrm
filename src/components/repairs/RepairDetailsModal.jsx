@@ -71,7 +71,7 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                 safeGet(Client, repair.client_id),
                 safeGet(RepairDevice, repair.device_id),
                 safeGet(RepairVendor, repair.vendor_id),
-                repair.created_by ? safeFilter(Employee, { email: repair.created_by }) : null
+                repair.created_by ? Employee.filter({ email: repair.created_by }).then(r => r?.[0] || null).catch(() => null) : null
             ]);
             
             setClient(clientData);

@@ -1,4 +1,4 @@
-import { reviewArithmetic, parseReviewJson } from '../../../base44/shared/invoiceReviewPolicy.ts';
+import { reviewArithmetic, parseReviewJson } from '@/lib/invoiceReviewPolicy';
 
 export default function InvoiceReviewSummary({invoice,onChange}) {
   const check=reviewArithmetic(invoice);

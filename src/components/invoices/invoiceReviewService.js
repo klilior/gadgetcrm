@@ -1,6 +1,6 @@
 import { base44 } from '@/api/base44Client';
-import { applyHumanSelection, appendProcessingEvent } from '../../../base44/shared/invoiceProvenance.ts';
-import { parseReviewJson, reviewCategory, reviewArithmetic, stableLinePattern, monetaryCorrectionExample } from '../../../base44/shared/invoiceReviewPolicy.ts';
+import { applyHumanSelection, appendProcessingEvent } from '@/lib/invoiceProvenance';
+import { parseReviewJson, reviewCategory, reviewArithmetic, stableLinePattern, monetaryCorrectionExample } from '@/lib/invoiceReviewPolicy';
 
 export async function learnReviewedInvoice(invoice, lines, example = null) {
   if (!invoice.supplier) return;

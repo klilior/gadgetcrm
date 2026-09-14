@@ -164,7 +164,7 @@ export default function ShippingProvidersPage() {
                                             )}
                                         </div>
                                         <p className="text-sm text-gray-600">
-                                            {provider.provider_type === 'velo' ? 'Velo' : 'אחר'}
+                                            {provider.name?.toLowerCase() === 'ups' ? 'UPS — פרטי הגישה מוגדרים בסודות המערכת (SHIP_USERNAME / SHIP_PASSWORD)' : 'אחר'}
                                         </p>
                                         {provider.supported_carriers && provider.supported_carriers.length > 0 && (
                                             <p className="text-xs text-gray-500 mt-1">

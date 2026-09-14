@@ -22,7 +22,6 @@ import { checkShipmentGate } from "@/functions/checkShipmentGate";
 import { issueInvoiceWithSerials } from "@/functions/issueInvoiceWithSerials";
 import { isBlockedOrder, isReadyForAction, isVisuallyClosed } from "../components/unified-orders/orderUiHelpers";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
-import SPShipDialog from "../components/superpharm/SPShipDialog";
 import SPShipmentSuccessScreen from "../components/superpharm/SPShipmentSuccessScreen";
 import SPLinetInvoiceModal from "../components/superpharm/SPLinetInvoiceModal";
 import MobileOrderCard from "../components/unified-orders/MobileOrderCard";
@@ -587,6 +586,7 @@ export default function UnifiedOrders() {
     if (reason) { alert(reason); return; }
     const blocked = await checkSerialGate(order);
     if (blocked) return;
+    if (order._shipCarrier === 'velo') { setCargoOrder(order); return; }
     setShipmentOrder(order);
   };
 
@@ -811,33 +811,6 @@ export default function UnifiedOrders() {
           customerPhone={smsOrder.customer_phone}
           orderNumber={smsOrder.order_number}
           orderSource={smsOrder.source}
-        />
-      )}
-
-      {/* Mirakl Velo (home delivery) */}
-      {shipmentOrder && shipmentOrder._shipCarrier === 'velo' && (
-        <SPShipDialog
-          order={{
-            mirakl_order_id: shipmentOrder.mirakl_order_id || shipmentOrder.order_number,
-            customer_first_name: shipmentOrder.customer_first_name || shipmentOrder.customer_name?.split(' ')[0] || '',
-            customer_last_name: shipmentOrder.customer_last_name || shipmentOrder.customer_name?.split(' ').slice(1).join(' ') || '',
-            customer_phone: shipmentOrder.customer_phone || '',
-            shipping_city: shipmentOrder.shipping_city || '',
-            shipping_street: shipmentOrder.shipping_street || '',
-            shipping_zip: shipmentOrder.shipping_zip || '',
-            order_lines_json: JSON.stringify(shipmentOrder.products?.map(p => ({ product_title: p.name, offer_sku: '', quantity: p.quantity, total_price: p.total, price: p.total })) || []),
-            total_price: shipmentOrder.total || 0,
-          }}
-          open={true}
-          onClose={() => { setShipmentOrder(null); }}
-          onSuccess={async () => {
-            setShipmentOrder(null);
-            await loadData(true);
-          }}
-          onCreateInvoice={(o) => {
-            setShipmentOrder(null);
-            setInvoiceOrder(o);
-          }}
         />
       )}
 

@@ -152,7 +152,7 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
             </span>
           ) : (
             <span className="flex items-center gap-1.5 text-blue-800 bg-blue-100 border border-blue-300 px-3 py-1.5 rounded-lg font-medium">
-              <Truck className="w-4 h-4" /> 🚚 Velo — שליח עד הבית
+              <Truck className="w-4 h-4" /> 🚚 קארגו — שליח עד הבית
             </span>
           )}
         </div>
@@ -228,11 +228,11 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
                 </Button>
               ) : (
                 <Button
-                  onClick={() => onShip(order, "velo")}
+                  onClick={() => onShip(order, "cargo")}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                   size="sm"
                 >
-                  🚚 שלח Velo — עד הבית
+                  🚚 שלח קארגו — עד הבית
                 </Button>
               )}
             </>
@@ -251,15 +251,9 @@ export default function SPOrderCard({ order, onAccept, onShip, onCreateInvoice }
                 📄 הדפס שטר מטען ({order.tracking_number})
               </Button>
             ) : (
-              <Button
-                variant="outline"
-                className="flex-1 border-green-300 text-green-700 hover:bg-green-50"
-                size="sm"
-                onClick={() => window.open('https://app.veloapp.io/dashboard/orders', '_blank')}
-              >
-                <Printer className="w-4 h-4 ml-1" />
-                📎 צפה בשטר מטען ({order.tracking_number})
-              </Button>
+              <div className="flex-1 text-center text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg py-2 px-3">
+                🚚 משלוח קארגו #{order.tracking_number}
+              </div>
             )
           )}
 

@@ -10,7 +10,7 @@ import {
 import { syncSuperPharmOrders } from "@/functions/syncSuperPharmOrders";
 import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
 import SPOrderCard from "../components/superpharm/SPOrderCard";
-import SPShipDialog from "../components/superpharm/SPShipDialog";
+import CargoShipmentModal from "../components/cargo/CargoShipmentModal";
 import SPLinetInvoiceModal from "../components/superpharm/SPLinetInvoiceModal";
 import CreateShipmentModal from "../components/shipping/CreateShipmentModal";
 import SPShipmentSuccessScreen from "../components/superpharm/SPShipmentSuccessScreen";
@@ -293,22 +293,26 @@ export default function SuperPharmOrdersPage() {
         </div>
       )}
 
-      {/* Ship Dialog (Velo - for non-pickup orders) */}
+      {/* Cargo home delivery (non-pickup orders) */}
       {shipOrder && shipCarrier !== "ups" && (
-        <SPShipDialog
-          order={shipOrder}
-          open={!!shipOrder}
-          onClose={() => { setShipOrder(null); setShipCarrier(null); }}
-          onSuccess={async () => {
-            setShipOrder(null);
-            setShipCarrier(null);
-            await loadOrders();
+        <CargoShipmentModal
+          open={true}
+          onClose={() => { setShipOrder(null); setShipCarrier(null); loadOrders(true); }}
+          order={{
+            source: "mirakl",
+            raw_id: shipOrder.id,
+            mirakl_order_id: shipOrder.mirakl_order_id,
+            order_number: shipOrder.mirakl_order_id,
+            customer_name: `${shipOrder.customer_first_name || ""} ${shipOrder.customer_last_name || ""}`.trim(),
+            customer_phone: shipOrder.customer_phone || "",
+            shipping_street: shipOrder.shipping_street || "",
+            shipping_city: shipOrder.shipping_city || "",
+            shipping_address_full: shipOrder.shipping_address_full || "",
+            notes: shipOrder.notes || "",
+            total: shipOrder.total_price || 0,
+            products: (() => { try { return JSON.parse(shipOrder.order_lines_json || "[]").map(l => ({ name: l.product_title || l.offer_sku || "", quantity: l.quantity || 1, total: l.total_price || l.price || 0 })); } catch { return []; } })(),
           }}
-          onCreateInvoice={(o) => {
-            setShipOrder(null);
-            setShipCarrier(null);
-            setInvoiceOrder(o);
-          }}
+          client={{ full_name: `${shipOrder.customer_first_name || ""} ${shipOrder.customer_last_name || ""}`.trim(), phone: shipOrder.customer_phone || "", city: shipOrder.shipping_city || "" }}
         />
       )}
 

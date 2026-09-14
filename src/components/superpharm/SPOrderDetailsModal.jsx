@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, CheckCircle, XCircle, Truck, Package, User, MapPin, Copy, Receipt } from "lucide-react";
 import { updateSuperPharmOrder } from "@/functions/updateSuperPharmOrder";
 import { toast } from "sonner";
-import SPShipDialog from "./SPShipDialog";
+import CargoShipmentModal from "../cargo/CargoShipmentModal";
 
 const STATE_LABELS = {
   WAITING_ACCEPTANCE: { label: "ממתין לאישור", color: "bg-orange-100 text-orange-800" },
@@ -194,15 +194,23 @@ export default function SPOrderDetailsModal({ order, open, onClose, onRefresh })
       </Dialog>
 
       {showShipDialog && (
-        <SPShipDialog
-          order={order}
+        <CargoShipmentModal
           open={showShipDialog}
-          onClose={() => setShowShipDialog(false)}
-          onSuccess={() => {
-            setShowShipDialog(false);
-            onRefresh?.();
-            onClose();
+          onClose={() => { setShowShipDialog(false); onRefresh?.(); }}
+          order={{
+            source: "mirakl",
+            raw_id: order.id,
+            mirakl_order_id: order.mirakl_order_id,
+            order_number: order.mirakl_order_id,
+            customer_name: `${order.customer_first_name || ""} ${order.customer_last_name || ""}`.trim(),
+            customer_phone: order.customer_phone || "",
+            shipping_street: order.shipping_street || "",
+            shipping_city: order.shipping_city || "",
+            shipping_address_full: order.shipping_address_full || "",
+            total: order.total_price || 0,
+            products: lines.map(l => ({ name: l.product_title || l.offer_sku || "", quantity: l.quantity || 1, total: l.total_price || l.price || 0 })),
           }}
+          client={{ full_name: `${order.customer_first_name || ""} ${order.customer_last_name || ""}`.trim(), phone: order.customer_phone || "", city: order.shipping_city || "" }}
         />
       )}
     </>
