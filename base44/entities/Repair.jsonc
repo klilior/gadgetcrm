@@ -32,7 +32,33 @@
     },
     "vendor_id": {
       "type": "string",
-      "description": "\u05d9\u05d1\u05d5\u05d0\u05df/\u05de\u05e2\u05d1\u05d3\u05d4 \u05d7\u05d9\u05e6\u05d5\u05e0\u05d9\u05ea"
+      "description": "LEGACY: \u05de\u05d6\u05d4\u05d4 RepairVendor. \u05e0\u05e9\u05de\u05e8 \u05dc\u05ea\u05e7\u05d5\u05e4\u05ea \u05d4\u05de\u05e2\u05d1\u05e8, \u05d0\u05d9\u05df \u05dc\u05e9\u05e0\u05d5\u05ea \u05d9\u05e9\u05d9\u05e8\u05d5\u05ea"
+    },
+    "repair_supplier_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 Supplier \u05e7\u05e0\u05d5\u05e0\u05d9 (Suppliers.id) \u05e2\u05d1\u05d5\u05e8 \u05de\u05e2\u05d1\u05d3\u05d4/\u05d9\u05d1\u05d5\u05d0\u05df. \u05d0\u05d3\u05d9\u05d8\u05d9\u05d1\u05d9, dual-read \u05e2\u05dd vendor_id",
+      "index": true
+    },
+    "repair_supplier_role": {
+      "type": "string",
+      "enum": [
+        "REPAIR_LAB",
+        "IMPORTER",
+        "WARRANTY_PROVIDER",
+        "RMA_DESTINATION"
+      ],
+      "description": "\u05d4\u05ea\u05e4\u05e7\u05d9\u05d3 \u05e9\u05d1\u05d5 \u05d4\u05e1\u05e4\u05e7 \u05de\u05e9\u05de\u05e9 \u05d1\u05ea\u05d9\u05e7\u05d5\u05df \u05d6\u05d4"
+    },
+    "repair_supplier_link_method": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "vat_id",
+        "exact_normalized_name",
+        "verified_alias",
+        "unresolved"
+      ],
+      "description": "\u05db\u05d9\u05e6\u05d3 \u05e0\u05e7\u05d1\u05e2 \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05e1\u05e4\u05e7 \u05d4\u05e7\u05e0\u05d5\u05e0\u05d9"
     },
     "lock_code": {
       "type": "string",

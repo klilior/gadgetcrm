@@ -22,6 +22,37 @@
       "type": "boolean",
       "default": true,
       "description": "\u05e4\u05e2\u05d9\u05dc"
+    },
+    "canonical_supplier_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 Supplier \u05e7\u05e0\u05d5\u05e0\u05d9 \u05e9\u05d0\u05dc\u05d9\u05d5 \u05e8\u05e9\u05d5\u05de\u05d4 \u05d6\u05d5 \u05de\u05de\u05d5\u05e4\u05d4. \u05d0\u05d3\u05d9\u05d8\u05d9\u05d1\u05d9 \u05d1\u05dc\u05d1\u05d3, \u05d0\u05d9\u05df \u05de\u05d7\u05d9\u05e7\u05d4",
+      "index": true
+    },
+    "canonical_link_method": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "vat_id",
+        "exact_normalized_name",
+        "verified_alias",
+        "unresolved"
+      ],
+      "description": "\u05db\u05d9\u05e6\u05d3 \u05e0\u05e7\u05d1\u05e2 \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05e1\u05e4\u05e7 \u05d4\u05e7\u05e0\u05d5\u05e0\u05d9"
+    },
+    "canonical_link_confidence": {
+      "type": "string",
+      "enum": [
+        "certain",
+        "strong",
+        "weak",
+        "ambiguous"
+      ],
+      "description": "\u05e8\u05de\u05ea \u05d5\u05d3\u05d0\u05d5\u05ea \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8. merge \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9 \u05e8\u05e7 \u05d1-certain"
+    },
+    "canonical_linked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u05de\u05d5\u05e2\u05d3 \u05d4\u05e7\u05d9\u05e9\u05d5\u05e8 \u05dc\u05e1\u05e4\u05e7 \u05d4\u05e7\u05e0\u05d5\u05e0\u05d9"
     }
   },
   "required": [

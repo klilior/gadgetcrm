@@ -1,0 +1,65 @@
+{
+  "name": "SupplierAlias",
+  "type": "object",
+  "properties": {
+    "supplier_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 Supplier \u05e7\u05e0\u05d5\u05e0\u05d9 (Suppliers.id)",
+      "index": true
+    },
+    "alias_value": {
+      "type": "string",
+      "description": "\u05d5\u05e8\u05d9\u05d0\u05e6\u05d9\u05d9\u05ea \u05d4\u05e9\u05dd \u05d0\u05d5 \u05d4\u05de\u05d6\u05d4\u05d4 \u05db\u05e4\u05d9 \u05e9\u05d4\u05d5\u05e4\u05d9\u05e2\u05d4 \u05d1\u05de\u05e7\u05d5\u05e8",
+      "index": true
+    },
+    "alias_normalized": {
+      "type": "string",
+      "description": "\u05d4\u05e6\u05d5\u05e8\u05d4 \u05d4\u05de\u05e0\u05d5\u05e8\u05de\u05dc\u05ea \u05dc\u05d4\u05e9\u05d5\u05d5\u05d0\u05d4 \u05de\u05d3\u05d5\u05d9\u05e7\u05ea \u05d1\u05dc\u05d1\u05d3",
+      "index": true
+    },
+    "alias_key": {
+      "type": "string",
+      "description": "\u05de\u05e4\u05ea\u05d7 \u05d9\u05d9\u05d7\u05d5\u05d3\u05d9 \u05dc\u05d0\u05d9\u05d3\u05de\u05e4\u05d5\u05d8\u05e0\u05d8\u05d9\u05d5\u05ea: supplier_id:alias_normalized",
+      "index": true,
+      "unique": true
+    },
+    "alias_type": {
+      "type": "string",
+      "enum": [
+        "NAME_VARIANT",
+        "LEGAL_NAME",
+        "TRADE_NAME",
+        "SOURCE_NAME",
+        "EXTERNAL_IDENTIFIER"
+      ],
+      "default": "NAME_VARIANT",
+      "description": "\u05e1\u05d5\u05d2 \u05d4\u05db\u05d9\u05e0\u05d5\u05d9"
+    },
+    "source_system": {
+      "type": "string",
+      "description": "\u05de\u05d0\u05d9\u05e4\u05d4 \u05e0\u05e6\u05e4\u05d4 \u05d4\u05db\u05d9\u05e0\u05d5\u05d9 (LEGACY_ALIAS_FIELD / INVOICE / LINET / REPAIR_VENDOR)",
+      "index": true
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u05d4\u05d0\u05dd \u05d4\u05db\u05d9\u05e0\u05d5\u05d9 \u05e4\u05e2\u05d9\u05dc \u05dc\u05d4\u05e9\u05d5\u05d5\u05d0\u05d4"
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e2\u05e7\u05d1 \u05dc\u05d6\u05e8\u05d9\u05de\u05d4 \u05e9\u05d9\u05e6\u05e8\u05d4 \u05d0\u05ea \u05d4\u05db\u05d9\u05e0\u05d5\u05d9",
+      "index": true
+    },
+    "migration_run_id": {
+      "type": "string",
+      "description": "MigrationRun \u05e9\u05d1\u05de\u05e1\u05d2\u05e8\u05ea\u05d5 \u05e0\u05d5\u05e6\u05e8 \u05d4\u05db\u05d9\u05e0\u05d5\u05d9",
+      "index": true
+    }
+  },
+  "required": [
+    "supplier_id",
+    "alias_value",
+    "alias_normalized",
+    "alias_key"
+  ]
+}

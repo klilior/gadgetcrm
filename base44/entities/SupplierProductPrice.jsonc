@@ -4,13 +4,29 @@
   "properties": {
     "supplier_id": {
       "type": "string",
-      "description": "\u05e1\u05e4\u05e7",
+      "description": "\u05e1\u05e4\u05e7 (Suppliers.id \u05e7\u05e0\u05d5\u05e0\u05d9)",
       "index": true
     },
     "sku": {
       "type": "string",
       "description": "\u05de\u05e7\"\u05d8",
       "index": true
+    },
+    "product_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 Product \u05e7\u05e0\u05d5\u05e0\u05d9. \u05e0\u05e9\u05d0\u05e8 \u05e8\u05d9\u05e7 \u05db\u05dc \u05e2\u05d5\u05d3 \u05d4\u05d4\u05ea\u05d0\u05de\u05d4 \u05d0\u05d9\u05e0\u05d4 \u05d5\u05d3\u05d0\u05d9\u05ea",
+      "index": true
+    },
+    "product_match_method": {
+      "type": "string",
+      "enum": [
+        "none",
+        "sku_only",
+        "exact_sku_to_product",
+        "manual"
+      ],
+      "default": "none",
+      "description": "\u05db\u05d9\u05e6\u05d3 \u05e0\u05e7\u05d1\u05e2\u05d4 \u05d4\u05ea\u05d0\u05de\u05ea \u05d4\u05de\u05d5\u05e6\u05e8. \u05d0\u05d9\u05df \u05e0\u05d9\u05d7\u05d5\u05e9 \u05de\u05d5\u05e6\u05e8"
     },
     "product_name": {
       "type": "string",
