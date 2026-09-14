@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Repair, RepairLog, Client, RepairDevice, RepairVendor } from "@/entities/all";
+import { Repair, RepairLog, Client, RepairDevice, RepairVendor, Employee } from "@/entities/all";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,6 @@ import RepairReceipt from './RepairReceipt';
 import CustomerCard from '../customers/CustomerCard';
 import SendSmsModal from '../sms/SendSmsModal';
 import RepairSmsHistory from './RepairSmsHistory';
-import { getEmployeeDirectory } from '@/components/utils/employeeDirectoryService';
 
 export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }) {
     const { currentUser } = useUser();
@@ -72,7 +71,7 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
                 safeGet(Client, repair.client_id),
                 safeGet(RepairDevice, repair.device_id),
                 safeGet(RepairVendor, repair.vendor_id),
-                repair.created_by ? getEmployeeDirectory({ email: repair.created_by }).then((rows) => rows[0] || null) : null
+                repair.created_by ? safeFilter(Employee, { email: repair.created_by }) : null
             ]);
             
             setClient(clientData);

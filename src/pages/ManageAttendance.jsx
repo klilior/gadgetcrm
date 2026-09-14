@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AttendanceEdit, AttendanceDay, AttendanceEvent } from '@/entities/all';
-import { getEmployeeDirectory } from '@/components/utils/employeeDirectoryService';
+import { AttendanceEdit, AttendanceDay, Employee, AttendanceEvent } from '@/entities/all';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +25,7 @@ export default function ManageAttendance() {
         try {
             const [edits, emps] = await Promise.all([
                 AttendanceEdit.filter({ status: 'pending' }, '-created_date'),
-                getEmployeeDirectory()
+                Employee.list()
             ]);
 
             setPendingEdits(edits);

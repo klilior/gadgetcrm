@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { Employee } from "@/entities/all";
 import { base44 } from "@/api/base44Client";
-import { getEmployeeDirectory } from "@/components/utils/employeeDirectoryService";
 
 const UserContext = createContext();
 
@@ -94,7 +94,7 @@ export function UserProvider({ children }) {
       if (savedManagerId) {
         try {
           const managers = await retryApiCall(() => 
-            getEmployeeDirectory({ id: savedManagerId })
+            Employee.filter({ id: savedManagerId })
           );
           if (managers.length > 0 && managers[0].role === 'מנהל') {
             setCurrentUser(managers[0]);
@@ -131,7 +131,7 @@ export function UserProvider({ children }) {
             let emp = null;
             try {
               console.log('[UserAuth] Looking for Employee with email:', me.email);
-              const emps = await retryApiCall(() => getEmployeeDirectory({ email: me.email }));
+              const emps = await retryApiCall(() => Employee.filter({ email: me.email }));
               console.log('[UserAuth] Employee.filter result:', emps?.length, 'records');
               emp = (emps || [])[0] || null;
               if (emp) {

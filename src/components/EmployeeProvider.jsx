@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { Employee } from '@/entities/all';
 import { base44 } from '@/api/base44Client';
-import { getEmployeeDirectory } from '@/components/utils/employeeDirectoryService';
 
 const EmployeeContext = createContext();
 
@@ -31,7 +31,7 @@ export function EmployeeProvider({ children }) {
     const start = Date.now();
     try {
       const [data, linetData] = await Promise.all([
-        getEmployeeDirectory({ active_only: true }).catch(() => []),
+        Employee.filter({ is_active: true }).catch(() => []),
         base44.entities.LinetUsersMap.list(null, 200).catch(() => [])
       ]);
       setEmployees(data || []);
