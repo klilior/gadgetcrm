@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Repair, RepairLog, Client, RepairDevice, RepairVendor, Employee } from "@/entities/all";
+import { Repair, RepairLog, Client, RepairDevice, RepairVendor } from "@/entities/all";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ import RepairReceipt from './RepairReceipt';
 import CustomerCard from '../customers/CustomerCard';
 import SendSmsModal from '../sms/SendSmsModal';
 import RepairSmsHistory from './RepairSmsHistory';
+import { getEmployeeDirectory } from '@/components/utils/employeeDirectoryService';
 
 export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }) {
     const { currentUser } = useUser();
@@ -66,23 +67,12 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
             }
         };
 
-        const safeFilter = async (entity, filter) => {
-            if (!entity || !filter) return null;
-            try {
-                const results = await entity.filter(filter);
-                return results.length > 0 ? results[0] : null;
-            } catch (error) {
-                console.error(`Error filtering records from ${entity.name || 'unknown entity'}:`, error);
-                return null;
-            }
-        };
-
         try {
             const [clientData, deviceData, vendorData, creatingAgentData] = await Promise.all([
                 safeGet(Client, repair.client_id),
                 safeGet(RepairDevice, repair.device_id),
                 safeGet(RepairVendor, repair.vendor_id),
-                repair.created_by ? safeFilter(Employee, { email: repair.created_by }) : null
+                repair.created_by ? getEmployeeDirectory({ email: repair.created_by }).then((rows) => rows[0] || null) : null
             ]);
             
             setClient(clientData);
@@ -152,7 +142,8 @@ export default function RepairDetailsModal({ repair, isOpen, onClose, onUpdate }
 
             await RepairLog.create({
                 repair_id: repair.id,
-                actor_user_id: currentUser.id,
+                actor_user_id: currentUser.authenticated_user_id || currentUser.user_id || null,
+                actor_employee_id: currentUser.id,
                 action: `עדכון סטטוס ל-${formData.status}`,
                 details: formData.notes || `סטטוס עודכן ל-${formData.status} על ידי ${currentUser.employee_name}`
             });

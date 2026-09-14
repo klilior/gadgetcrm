@@ -49,10 +49,10 @@ Deno.serve(async (req) => {
         const VELO_API_BASE = config.baseUrl || 'https://api.veloapp.io/api/enterprise';
         
         console.log('🔍 [TestVeloAuth] Config check:');
-        console.log('  API Key:', VELO_API_KEY ? `${VELO_API_KEY.substring(0, 8)}...` : 'MISSING');
-        console.log('  API Secret:', VELO_API_SECRET ? `${VELO_API_SECRET.substring(0, 8)}...` : 'MISSING');
-        console.log('  Email:', VELO_EMAIL || 'MISSING');
-        console.log('  Password:', VELO_PASSWORD ? '***' : 'MISSING');
+        console.log('  API Key present:', !!VELO_API_KEY);
+        console.log('  API Secret present:', !!VELO_API_SECRET);
+        console.log('  Email present:', !!VELO_EMAIL);
+        console.log('  Password present:', !!VELO_PASSWORD);
         console.log('  Base URL:', VELO_API_BASE);
         
         if (!VELO_API_KEY || !VELO_API_SECRET || !VELO_EMAIL || !VELO_PASSWORD) {
@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
         console.log('📡 Response headers:', Object.fromEntries(loginResponse.headers.entries()));
         
         const responseText = await loginResponse.text();
-        console.log('📡 [TestVeloAuth] Login response body:', responseText);
+        console.log('📡 [TestVeloAuth] Login response received:', { ok: loginResponse.ok, length: responseText.length });
         
         if (!loginResponse.ok) {
             let errorDetails = responseText;

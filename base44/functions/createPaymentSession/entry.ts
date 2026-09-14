@@ -129,7 +129,14 @@ Deno.serve(async (req) => {
         // שמירת הבקשה
         try {
             await base44.asServiceRole.entities.Payment.update(payment.id, {
-                raw_request: zcreditRequest
+                raw_request: {
+                    transaction_unique_id: transactionUniqueId,
+                    amount,
+                    installments: installments || 1,
+                    credential_present: true,
+                    return_url_present: Boolean(returnUrl),
+                    fail_url_present: Boolean(failUrl)
+                }
             });
         } catch (updateError) {
             console.error("⚠️ [Payment] Failed to update payment with request:", updateError.message);
@@ -186,7 +193,11 @@ Deno.serve(async (req) => {
         let result;
         try {
             result = await response.json();
-            console.log("📊 [Payment] Z-Credit response:", JSON.stringify(result, null, 2));
+            console.log("📊 [Payment] Z-Credit response received:", {
+                payment_url_present: Boolean(result.url || result.URL),
+                reference_present: Boolean(result.ReferenceNumber),
+                return_code: result.ReturnCode
+            });
         } catch (jsonError) {
             console.error("❌ [Payment] Failed to parse Z-Credit response:", jsonError.message);
             return Response.json({
@@ -198,7 +209,11 @@ Deno.serve(async (req) => {
         // שמירת התשובה
         try {
             await base44.asServiceRole.entities.Payment.update(payment.id, {
-                raw_response: result,
+                raw_response: {
+                    payment_url_present: Boolean(result.url || result.URL),
+                    reference_present: Boolean(result.ReferenceNumber),
+                    return_code: result.ReturnCode
+                },
                 payment_url: result.url || result.URL,
                 zcredit_reference_number: result.ReferenceNumber
             });

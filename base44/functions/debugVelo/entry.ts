@@ -15,7 +15,12 @@ Deno.serve(async (req) => {
             console.log('  - Name:', p.name);
             console.log('    Type:', p.provider_type);
             console.log('    Active:', p.is_active);
-            console.log('    Config:', JSON.stringify(p.config, null, 2));
+            console.log('    Config keys:', Object.keys(p.config || {}));
+            console.log('    Credentials present:', {
+                apiKey: !!p.config?.apiKey,
+                apiSecret: !!p.config?.apiSecret,
+                password: !!p.config?.password
+            });
         });
         
         // Check active Velo

@@ -17,7 +17,12 @@ Deno.serve(async (req) => {
         const correlationId = resolveCorrelationId(req, correlation_id, 'attendance_approve');
 
         // Get the edit request
-        const edit = await base44.asServiceRole.entities.AttendanceEdit.get(edit_id);
+        let edit;
+        try {
+            edit = await base44.asServiceRole.entities.AttendanceEdit.get(edit_id);
+        } catch {
+            return Response.json({ success: false, error: 'בקשה לא נמצאה' }, { status: 404 });
+        }
         
         if (!edit) {
             return Response.json({ success: false, error: 'בקשה לא נמצאה' }, { status: 404 });

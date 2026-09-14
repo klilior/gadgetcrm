@@ -65,7 +65,13 @@ Deno.serve(async (req) => {
         };
 
         await base44.asServiceRole.entities.Payment.update(payment.id, {
-            raw_request: zcreditRequest
+            raw_request: {
+                transaction_unique_id: transactionUniqueId,
+                amount,
+                installments: installments || 1,
+                credential_present: true,
+                card_last4: String(cardNumber || '').replace(/\D/g, '').slice(-4)
+            }
         });
 
         const baseUrl = mode === 'live' 
@@ -81,7 +87,12 @@ Deno.serve(async (req) => {
         const result = await response.json();
 
         await base44.asServiceRole.entities.Payment.update(payment.id, {
-            raw_response: result,
+            raw_response: {
+                success: Boolean(result.IsSucceed || result.ReturnCode === 0),
+                return_code: result.ReturnCode,
+                approval_required: Boolean(result.IsTelApprovalNeeded),
+                reference_present: Boolean(result.ReferenceNumber)
+            },
             zcredit_reference_number: result.ReferenceNumber
         });
 

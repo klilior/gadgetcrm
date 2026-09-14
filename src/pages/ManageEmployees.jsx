@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PlusCircle, Edit, Trash2, Save, X, Briefcase, Mail, ToggleRight, ToggleLeft } from "lucide-react";
 import EmployeeCard from "../components/employees/EmployeeCard";
+import { getEmployeeDirectory } from "@/components/utils/employeeDirectoryService";
 
 export default function ManageEmployees() {
   const [employees, setEmployees] = useState([]);
@@ -39,7 +40,7 @@ export default function ManageEmployees() {
 
   const loadEmployees = async () => {
     setIsLoading(true);
-    const data = await Employee.list();
+    const data = await getEmployeeDirectory({ mode: 'admin_detail' });
     setEmployees(data);
     setIsLoading(false);
   };

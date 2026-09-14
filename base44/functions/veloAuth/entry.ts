@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
                 console.log('✅ [VeloAuth] Using existing JWT');
                 return Response.json({
                     success: true,
-                    jwt: session.jwt,
+                    jwt_present: true,
                     expiry: session.expiry,
                     source: 'cached'
                 });
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
                     
                     return Response.json({
                         success: true,
-                        jwt: refreshData.jwt,
+                        jwt_present: true,
                         expiry: refreshData.expiry,
                         source: 'refreshed'
                     });
@@ -171,7 +171,7 @@ Deno.serve(async (req) => {
         
         return Response.json({
             success: true,
-            jwt: loginData.jwt,
+            jwt_present: true,
             expiry: loginData.expiry,
             source: 'fresh_login'
         });

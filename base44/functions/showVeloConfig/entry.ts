@@ -21,19 +21,11 @@ Deno.serve(async (req) => {
         return Response.json({
             success: true,
             config: {
-                email: config.email,
-                apiKey: config.apiKey ? `${config.apiKey.substring(0, 8)}...` : 'לא הוגדר',
-                apiSecret: config.apiSecret ? `${config.apiSecret.substring(0, 8)}...` : 'לא הוגדר',
-                password: config.password ? '****** (הוגדר)' : 'לא הוגדר',
-                baseUrl: config.baseUrl || 'לא הוגדר',
-                
-                // Full lengths for debugging
-                lengths: {
-                    email: config.email?.length || 0,
-                    apiKey: config.apiKey?.length || 0,
-                    apiSecret: config.apiSecret?.length || 0,
-                    password: config.password?.length || 0
-                }
+                email_present: !!config.email,
+                api_key_present: !!config.apiKey,
+                api_secret_present: !!config.apiSecret,
+                password_present: !!config.password,
+                base_url_present: !!config.baseUrl
             }
         });
         

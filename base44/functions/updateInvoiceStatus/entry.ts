@@ -10,38 +10,24 @@ Deno.serve(async (req) => {
     
     let body = {};
     try { body = await req.json(); } catch (_) { body = {}; }
-    const { invoice_id, action, employee_role, employee_email } = body;
+    const { invoice_id, action } = body;
     if (!invoice_id || !action) return Response.json({ error: 'Missing params' }, { status: 400 });
 
-    // Try Base44 auth first
-    let userRole = null;
-    let userEmail = null;
+    let user;
     try {
-      const user = await base44.auth.me();
-      if (user) {
-        userRole = user.role;
-        userEmail = user.email;
-      }
-    } catch (authErr) {
-      console.log('[updateInvoiceStatus] Base44 auth not available');
-    }
-    
-    // If no Base44 user, use employee_role passed from frontend (Employee-based login system)
-    if (!userRole && employee_role) {
-      userRole = employee_role;
-      userEmail = employee_email || 'employee';
-      console.log('[updateInvoiceStatus] Using employee role from frontend:', userRole);
-    }
-    
-    if (!userRole) {
+      user = await base44.auth.me();
+    } catch {
       return Response.json({ error: 'Unauthorized - login required' }, { status: 401 });
     }
 
-    // Only higher-privilege roles
-    const allowed = (userRole === 'מנהל') || (userRole === 'admin');
+    const actor = await resolveActor(base44, { user });
+    const employee = actor.employee_id
+      ? await base44.asServiceRole.entities.Employee.get(actor.employee_id).catch(() => null)
+      : null;
+    const allowed = user.role === 'admin' || employee?.role === 'מנהל';
     if (!allowed) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
-    const actor = await resolveActor(base44);
+    const userEmail = user.email;
     const correlationId = resolveCorrelationId(req, body.correlation_id, 'invoice_review');
 
     let invoice;
