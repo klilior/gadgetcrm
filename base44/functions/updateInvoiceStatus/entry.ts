@@ -4,7 +4,7 @@ import { resolveActor } from '../../shared/actorResolver.ts';
 import { resolveCorrelationId } from '../../shared/correlation.ts';
 import { logAudit } from '../../shared/audit.ts';
 
-Deno.serve(async (req) => {
+export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
     
@@ -21,14 +21,29 @@ Deno.serve(async (req) => {
     }
 
     const actor = await resolveActor(base44, { user });
+    const correlationId = resolveCorrelationId(req, body.correlation_id, 'invoice_review');
     const employee = actor.employee_id
       ? await base44.asServiceRole.entities.Employee.get(actor.employee_id).catch(() => null)
       : null;
     const allowed = user.role === 'admin' || employee?.role === 'מנהל';
-    if (!allowed) return Response.json({ error: 'Forbidden' }, { status: 403 });
+    if (!allowed) {
+      await logAudit(base44, {
+        actor_user_id: actor.authenticated_user_id,
+        actor_employee_id: actor.employee_id,
+        entity_type: 'Invoices',
+        entity_id: invoice_id,
+        action: 'AUTHORIZATION_DENIED',
+        before_data: {},
+        after_data: {},
+        field_changes: {},
+        source: 'USER',
+        correlation_id: correlationId,
+        request_context: { requested_action: action, reason: 'insufficient_role', actor_type: actor.actor_type }
+      });
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const userEmail = user.email;
-    const correlationId = resolveCorrelationId(req, body.correlation_id, 'invoice_review');
 
     let invoice;
     try {
@@ -201,4 +216,4 @@ Deno.serve(async (req) => {
   } catch (error) {
     return Response.json({ success: false, error: error?.message || String(error) }, { status: 500 });
   }
-});
+}

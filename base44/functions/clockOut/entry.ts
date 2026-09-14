@@ -4,10 +4,13 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     
     try {
-        const user = await base44.auth.me();
-        if (!user) {
+        let user;
+        try {
+            user = await base44.auth.me();
+        } catch {
             return Response.json({ success: false, error: 'לא מחובר' }, { status: 401 });
         }
+        if (!user) return Response.json({ success: false, error: 'לא מחובר' }, { status: 401 });
 
         const { geo_lat, geo_lng, device_token } = await req.json();
         
