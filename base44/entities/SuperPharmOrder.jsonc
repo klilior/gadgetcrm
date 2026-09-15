@@ -27,15 +27,53 @@
     },
     "customer_first_name": {
       "type": "string",
-      "description": "\u05e9\u05dd \u05e4\u05e8\u05d8\u05d9 \u05dc\u05e7\u05d5\u05d7"
+      "description": "\u05e9\u05dd \u05e4\u05e8\u05d8\u05d9 \u05dc\u05e7\u05d5\u05d7 (snapshot \u05d4\u05d9\u05e1\u05d8\u05d5\u05e8\u05d9 \u05de\u05d4\u05d4\u05d6\u05de\u05e0\u05d4)"
     },
     "customer_last_name": {
       "type": "string",
-      "description": "\u05e9\u05dd \u05de\u05e9\u05e4\u05d7\u05d4 \u05dc\u05e7\u05d5\u05d7"
+      "description": "\u05e9\u05dd \u05de\u05e9\u05e4\u05d7\u05d4 \u05dc\u05e7\u05d5\u05d7 (snapshot \u05d4\u05d9\u05e1\u05d8\u05d5\u05e8\u05d9 \u05de\u05d4\u05d4\u05d6\u05de\u05e0\u05d4)"
     },
     "customer_phone": {
       "type": "string",
-      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05dc\u05e7\u05d5\u05d7"
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05dc\u05e7\u05d5\u05d7 (snapshot \u05d4\u05d9\u05e1\u05d8\u05d5\u05e8\u05d9 \u05de\u05d4\u05d4\u05d6\u05de\u05e0\u05d4)"
+    },
+    "customer_email": {
+      "type": "string",
+      "description": "\u05d0\u05d9\u05de\u05d9\u05d9\u05dc \u05dc\u05e7\u05d5\u05d7 \u05db\u05e4\u05d9 \u05e9\u05d4\u05ea\u05e7\u05d1\u05dc \u05de\u05de\u05d9\u05e8\u05e7\u05dc (snapshot \u05d4\u05d9\u05e1\u05d8\u05d5\u05e8\u05d9)"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 Client \u05e7\u05e0\u05d5\u05e0\u05d9. \u05e0\u05e7\u05d1\u05e2 \u05e8\u05e7 \u05d3\u05e8\u05da Customer Identity Protection Layer, \u05d0\u05d9\u05e0\u05d5 \u05d3\u05d5\u05e8\u05e1 \u05d0\u05ea \u05d4-snapshot",
+      "index": true
+    },
+    "identity_status": {
+      "type": "string",
+      "enum": [
+        "MATCHED_EXISTING",
+        "CLIENT_CREATED",
+        "AMBIGUOUS",
+        "INVALID_IDENTITY",
+        "NO_USABLE_IDENTITY",
+        "BLOCKED",
+        "PRODUCER_NOT_APPROVED_FOR_CREATION",
+        "CREATION_NOT_REQUESTED"
+      ],
+      "description": "\u05ea\u05d5\u05e6\u05d0\u05ea \u05d4-identity resolution \u05e2\u05d1\u05d5\u05e8 \u05d4\u05d4\u05d6\u05de\u05e0\u05d4",
+      "index": true
+    },
+    "identity_match_method": {
+      "type": "string",
+      "description": "\u05db\u05d9\u05e6\u05d3 \u05e0\u05e7\u05d1\u05e2\u05d4 \u05d4\u05d6\u05d4\u05d5\u05ea (normalized_phone / phone_plus_name / source_identity_key \u05d5\u05db\u05d5')"
+    },
+    "identity_correlation_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e2\u05e7\u05d1 \u05dc\u05d6\u05e8\u05d9\u05de\u05ea \u05d4-identity resolution",
+      "index": true
+    },
+    "identity_source_key": {
+      "type": "string",
+      "description": "\u05de\u05e4\u05ea\u05d7 \u05d0\u05d9\u05d3\u05de\u05e4\u05d5\u05d8\u05e0\u05d8\u05d9\u05d5\u05ea \u05e9\u05dc \u05e7\u05dc\u05d9\u05d8\u05ea \u05d4\u05dc\u05e7\u05d5\u05d7: SUPERPHARM:ORDER_CUSTOMER:<mirakl_order_id>",
+      "index": true
     },
     "shipping_city": {
       "type": "string",

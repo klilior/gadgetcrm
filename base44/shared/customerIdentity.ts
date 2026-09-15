@@ -27,6 +27,7 @@ export const CREATION_ALLOWED_PRODUCERS = new Set([
   PRODUCERS.FIND_OR_CREATE_CLIENT,
   PRODUCERS.LINET_SYNC,
   PRODUCERS.WOOCOMMERCE_WEBHOOK,
+  PRODUCERS.SUPERPHARM_SYNC,
 ]);
 
 type ExternalRef = { integration: string; external_entity_type: string; external_id: string | number };
@@ -39,6 +40,13 @@ export type IdentityInput = {
   linet_account_id?: number | string | null;
   woo_customer_id?: number | string | null;
   external?: ExternalRef | null;
+  /** Address used ONLY as secondary corroboration between phone duplicates. Never a match on its own. */
+  address?: { city?: unknown; street?: unknown; zip?: unknown } | null;
+  /**
+   * Idempotency key of the source intake event (e.g. SUPERPHARM:ORDER_CUSTOMER:<order_id>).
+   * Used when the source has no stable customer external ID, so no IntegrationReference is fabricated.
+   */
+  source_identity_key?: string | null;
   source_record_id?: string | null;
   correlation_id?: string;
   dry_run?: boolean;
@@ -92,6 +100,17 @@ export async function resolveCustomerIdentity(base44: any, input: IdentityInput)
     email_identity_class: email.email_identity_class,
     idempotency_keys: keys,
   };
+
+  // Priority 0 — source intake idempotency key (no IntegrationReference involved)
+  if (input.source_identity_key) {
+    const bySourceKey = (await sr.Client.filter({ source_identity_key: input.source_identity_key }, null, 5)).filter(usable);
+    if (bySourceKey.length === 1) {
+      return { status: "MATCHED", client_id: bySourceKey[0].id, match_method: "source_identity_key", confidence: "certain", evidence: input.source_identity_key, ...base };
+    }
+    if (bySourceKey.length > 1) {
+      return { status: "AMBIGUOUS", client_id: null, match_method: "source_key_conflict", confidence: "ambiguous", evidence: `${input.source_identity_key} → ${bySourceKey.length} clients`, data_conflict: true, ...base };
+    }
+  }
 
   // Priority 1 — IntegrationReference exact unique match
   for (const key of keys) {
@@ -154,6 +173,17 @@ export async function resolveCustomerIdentity(base44: any, input: IdentityInput)
       : [];
     if (byEmail.length === 1) {
       return { status: "MATCHED", client_id: byEmail[0].id, match_method: "phone_plus_email", confidence: "strong", evidence: `${phone.normalized_phone} + email`, ...base };
+    }
+    // Address as secondary corroboration only — never a match on its own.
+    const addrKey = nameKey([input.address?.city, input.address?.street].filter(Boolean).join(""));
+    const byAddress = addrKey
+      ? phoneCandidates.filter((c) => {
+          const own = nameKey(`${c.city || ""}${c.full_address || ""}`);
+          return own && addrKey.length >= 6 && own.includes(addrKey);
+        })
+      : [];
+    if (byAddress.length === 1) {
+      return { status: "MATCHED", client_id: byAddress[0].id, match_method: "phone_plus_address", confidence: "strong", evidence: `${phone.normalized_phone} + address`, ...base };
     }
     return {
       status: "AMBIGUOUS",
