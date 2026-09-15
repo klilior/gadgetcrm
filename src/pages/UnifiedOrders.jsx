@@ -30,7 +30,8 @@ import CargoShipmentModal from "../components/cargo/CargoShipmentModal";
 import PostShipmentConfirmDialog from "../components/unified-orders/PostShipmentConfirmDialog";
 
 const PAGE_SIZE = 15;
-const THIRTY_DAYS_AGO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+// חיתוך תאריכים לתצוגה: 90 יום. הזמנות שעדיין פתוחות מוצגות תמיד, גם אם ישנות יותר.
+const DATE_CUTOFF = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
 export default function UnifiedOrders() {
   const { currentUser } = useUser();
@@ -159,7 +160,7 @@ export default function UnifiedOrders() {
       for (const p of rawProducts) { if (!pM[p.order_id]) pM[p.order_id] = []; pM[p.order_id].push(p); }
       for (const o of rawOrders) {
         if (!showClosed && closedWoo.has(o.status)) continue;
-        if (o.order_date && new Date(o.order_date) < THIRTY_DAYS_AGO) continue;
+        if (o.order_date && new Date(o.order_date) < DATE_CUTOFF && !openWoo.has(o.status)) continue;
         const c = cM[o.client_id];
         // SKU 180948 = "תוספת דמי משלוח" (שדרוג משלוח) — לא מוצר פיזי, מסונן מרשימת המוצרים/ליקוט (כמו בשרת)
         const SHIPPING_UPSELL_SKU = '180948';
@@ -230,7 +231,7 @@ export default function UnifiedOrders() {
       const spOrders = await base44.entities.SuperPharmOrder.list('-created_at_mirakl', 200).catch(() => []);
       for (const o of spOrders) {
         if (!showClosed && closedMirakl.has(o.order_state)) continue;
-        if (o.created_at_mirakl && new Date(o.created_at_mirakl) < THIRTY_DAYS_AGO) continue;
+        if (o.created_at_mirakl && new Date(o.created_at_mirakl) < DATE_CUTOFF && !openMirakl.has(o.order_state)) continue;
         let lines = []; try { lines = JSON.parse(o.order_lines_json || '[]'); } catch(e) {}
         const smsLog = findOrderSms(o.mirakl_order_id || '', o.customer_phone || '');
         mk.push({
