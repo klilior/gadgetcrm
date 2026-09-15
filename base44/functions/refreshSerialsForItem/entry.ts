@@ -29,7 +29,7 @@ async function getLinetCreds(base44) {
 
 const LIMIT = 500;
 const MAX_PAGES = 40;
-const BATCH = 4;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 Deno.serve(async (req) => {
   try {
@@ -43,31 +43,35 @@ Deno.serve(async (req) => {
     const creds = await getLinetCreds(base44);
     const now = new Date().toISOString();
 
+    // עמוד בודד עם ניסיונות חוזרים על 429 — לינט חוסם בקשות מקבילות
     const fetchPage = async (offset) => {
-      const res = await fetch("https://app.linet.org.il/api/newsearch/inventory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...creds, limit: LIMIT, offset }),
-      });
-      if (!res.ok) throw new Error(`Linet HTTP ${res.status}`);
-      const parsed = await res.json();
-      const rows = parsed?.data?.body ?? parsed?.body ?? null;
-      return Array.isArray(rows) ? rows : [];
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const res = await fetch("https://app.linet.org.il/api/newsearch/inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...creds, limit: LIMIT, offset }),
+        });
+        if (res.status === 429) {
+          await sleep(1500 * (attempt + 1));
+          continue;
+        }
+        if (!res.ok) throw new Error(`Linet HTTP ${res.status}`);
+        const parsed = await res.json();
+        const rows = parsed?.data?.body ?? parsed?.body ?? null;
+        return Array.isArray(rows) ? rows : [];
+      }
+      throw new Error("Linet HTTP 429 (rate limit after retries)");
     };
 
-    // סריקה חיה בקבוצות מקבילות עד שעמוד חוזר חלקי/ריק
+    // סריקה חיה סדרתית עד שעמוד חוזר חלקי/ריק
     const liveRows = [];
     let scanned = 0;
-    let done = false;
-    for (let page = 0; page < MAX_PAGES && !done; page += BATCH) {
-      const offsets = [];
-      for (let i = 0; i < BATCH && page + i < MAX_PAGES; i++) offsets.push((page + i) * LIMIT);
-      const results = await Promise.all(offsets.map(fetchPage));
-      for (const rows of results) {
-        scanned += rows.length;
-        if (rows.length < LIMIT) done = true;
-        for (const r of rows) if (Number(r.item_id) === targetId) liveRows.push(r);
-      }
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const rows = await fetchPage(page * LIMIT);
+      scanned += rows.length;
+      for (const r of rows) if (Number(r.item_id) === targetId) liveRows.push(r);
+      if (rows.length < LIMIT) break;
+      await sleep(250);
     }
 
     if (scanned === 0) {
