@@ -8,17 +8,89 @@
     },
     "phone": {
       "type": "string",
-      "description": "\u05d8\u05dc\u05e4\u05d5\u05df (\u05de\u05e0\u05d5\u05e8\u05de\u05dc)",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df (\u05db\u05e4\u05d9 \u05e9\u05e0\u05e7\u05dc\u05d8 \u05de\u05d4\u05de\u05e7\u05d5\u05e8)",
       "index": true
     },
     "phone_original": {
       "type": "string",
       "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05de\u05e7\u05d5\u05e8\u05d9 (\u05de\u05dc\u05d9\u05e0\u05d8)"
     },
+    "normalized_phone": {
+      "type": "string",
+      "description": "\u05d8\u05dc\u05e4\u05d5\u05df \u05d1\u05e4\u05d5\u05e8\u05de\u05d8 \u05e7\u05e0\u05d5\u05e0\u05d9 \u05d9\u05d7\u05d9\u05d3 0XXXXXXXXX. \u05d0\u05d3\u05d9\u05d8\u05d9\u05d1\u05d9 \u05d1\u05dc\u05d1\u05d3, \u05d0\u05d9\u05e0\u05d5 \u05d3\u05d5\u05e8\u05e1 \u05d0\u05ea phone",
+      "index": true
+    },
+    "phone_validity": {
+      "type": "string",
+      "enum": [
+        "VALID_MOBILE",
+        "VALID_LANDLINE",
+        "INVALID",
+        "EMPTY"
+      ],
+      "description": "\u05e1\u05d9\u05d5\u05d5\u05d2 \u05ea\u05e7\u05d9\u05e0\u05d5\u05ea \u05d4\u05d8\u05dc\u05e4\u05d5\u05df \u05dc\u05e6\u05d5\u05e8\u05db\u05d9 identity matching"
+    },
     "email": {
       "type": "string",
       "format": "email",
       "description": "\u05d3\u05d5\u05d0\"\u05dc",
+      "index": true
+    },
+    "normalized_email": {
+      "type": "string",
+      "description": "\u05d0\u05d9\u05de\u05d9\u05d9\u05dc \u05d1\u05e4\u05d5\u05e8\u05de\u05d8 \u05e7\u05e0\u05d5\u05e0\u05d9 (trim + lowercase). \u05d0\u05d3\u05d9\u05d8\u05d9\u05d1\u05d9 \u05d1\u05dc\u05d1\u05d3",
+      "index": true
+    },
+    "email_identity_class": {
+      "type": "string",
+      "enum": [
+        "USABLE",
+        "TEST_EMAIL",
+        "SHARED_EMAIL",
+        "PLACEHOLDER_EMAIL",
+        "RELAY_EMAIL",
+        "INVALID_EMAIL",
+        "EMPTY"
+      ],
+      "description": "\u05e1\u05d9\u05d5\u05d5\u05d2 \u05d4\u05d0\u05d9\u05de\u05d9\u05d9\u05dc \u05dc\u05e6\u05d5\u05e8\u05db\u05d9 identity. \u05db\u05dc \u05e2\u05e8\u05da \u05e9\u05d0\u05d9\u05e0\u05d5 USABLE \u05d0\u05d9\u05e0\u05d5 \u05de\u05e9\u05de\u05e9 \u05dc\u05de\u05d0\u05e5'"
+    },
+    "customer_quality_status": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "TEST_DATA",
+        "PLACEHOLDER_IDENTITY",
+        "DUPLICATE_CANDIDATE",
+        "ARCHIVED",
+        "UNKNOWN"
+      ],
+      "default": "ACTIVE",
+      "description": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d0\u05d9\u05db\u05d5\u05ea \u05d4\u05e8\u05e9\u05d5\u05de\u05d4. flagging \u05d1\u05dc\u05d1\u05d3, \u05d0\u05d9\u05e0\u05d5 \u05de\u05d5\u05d7\u05e7 \u05d5\u05d0\u05d9\u05e0\u05d5 \u05de\u05de\u05d6\u05d2",
+      "index": true
+    },
+    "excluded_from_identity_matching": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u05db\u05d0\u05e9\u05e8 true \u2014 \u05d4\u05e8\u05e9\u05d5\u05de\u05d4 \u05dc\u05d0 \u05ea\u05e9\u05de\u05e9 \u05dc-match, merge evidence \u05d0\u05d5 canonical resolution",
+      "index": true
+    },
+    "quality_reason": {
+      "type": "string",
+      "description": "\u05d4\u05e1\u05d9\u05d1\u05d4 \u05dc\u05e1\u05d9\u05d5\u05d5\u05d2 \u05d4\u05d0\u05d9\u05db\u05d5\u05ea, \u05dc\u05de\u05e9\u05dc RESEND_WEBHOOK_IMPORT_ARTIFACT"
+    },
+    "canonical_client_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 Client \u05e7\u05e0\u05d5\u05e0\u05d9 \u05e2\u05ea\u05d9\u05d3\u05d9. \u05dc\u05d0 \u05d1\u05e9\u05d9\u05de\u05d5\u05e9 \u05dc-merge \u05d1\u05e4\u05d5\u05e2\u05dc \u05d1\u05e9\u05dc\u05d1 \u05d6\u05d4",
+      "index": true
+    },
+    "identity_correlation_id": {
+      "type": "string",
+      "description": "\u05de\u05d6\u05d4\u05d4 \u05de\u05e2\u05e7\u05d1 \u05dc\u05d6\u05e8\u05d9\u05de\u05ea \u05d4-identity resolution \u05e9\u05d9\u05e6\u05e8\u05d4 \u05d0\u05d5 \u05e7\u05d9\u05e9\u05e8\u05d4 \u05d0\u05ea \u05d4\u05e8\u05e9\u05d5\u05de\u05d4",
+      "index": true
+    },
+    "created_by_producer": {
+      "type": "string",
+      "description": "\u05d4\u05de\u05e4\u05d9\u05e7 \u05e9\u05d9\u05e6\u05e8 \u05d0\u05ea \u05d4\u05e8\u05e9\u05d5\u05de\u05d4 (MANUAL_UI / LINET_SYNC / WOOCOMMERCE_WEBHOOK \u05d5\u05db\u05d5')",
       "index": true
     },
     "city": {
