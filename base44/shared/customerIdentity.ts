@@ -342,9 +342,17 @@ export async function resolveOrCreateCustomer(base44: any, input: IdentityInput,
   // idempotency key). Phone-only, email-only and phone+name similarity NEVER auto-archive —
   // those paths return AMBIGUOUS / DUPLICATE_CANDIDATE earlier in the flow.
   const keys = idempotencyKeysFor(input);
+  const raceIds: string[] = [];
   for (const key of keys) {
     const refs = await sr.IntegrationReference.filter({ external_key: key, entity_type: "Customer" }, null, 5);
-    const otherId = refs.map((r: any) => r.entity_id).find((id: string) => id !== created.id);
+    raceIds.push(...refs.map((r: any) => r.entity_id));
+  }
+  if (input.source_identity_key) {
+    const sameKey = await sr.Client.filter({ source_identity_key: input.source_identity_key }, "created_date", 5);
+    raceIds.push(...sameKey.map((c: any) => c.id));
+  }
+  {
+    const otherId = raceIds.find((id: string) => id !== created.id);
     if (otherId) {
       await sr.Client.update(created.id, {
         customer_quality_status: "ARCHIVED",

@@ -1,4 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { resolveSpOrderCustomer } from '../../shared/superpharmIdentity.ts';
+import { createCorrelationId } from '../../shared/correlation.ts';
 
 const RAW_MIRAKL_API_URL = Deno.env.get('MIRAKL_API_URL');
 const MIRAKL_API_KEY = Deno.env.get('MIRAKL_API_KEY');
@@ -39,6 +41,8 @@ async function fetchMiraklOrders(params = {}) {
 function extractOrderData(miraklOrder) {
   const shipping = miraklOrder.customer?.shipping_address || {};
   const lines = miraklOrder.order_lines || [];
+  const custId = miraklOrder.customer?.customer_id || '';
+  const customerEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(custId)) ? String(custId).trim() : '';
 
   const orderLinesSimple = lines.map(line => ({
     id: line.order_line_id,
@@ -57,6 +61,7 @@ function extractOrderData(miraklOrder) {
     customer_first_name: miraklOrder.customer?.firstname || shipping.firstname || '',
     customer_last_name: miraklOrder.customer?.lastname || shipping.lastname || '',
     customer_phone: shipping.phone || miraklOrder.customer?.billing_address?.phone || '',
+    customer_email: customerEmail,
     shipping_city: shipping.city || '',
     shipping_street: [shipping.street_1, shipping.street_2].filter(Boolean).join(', '),
     shipping_zip: shipping.zip_code || '',
