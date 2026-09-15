@@ -17,11 +17,24 @@ const CATEGORY_BY_BATCH: Record<string, string> = {
   D: "UNUSABLE",
 };
 
+async function withRetry<T>(fn: () => Promise<T>, label = ""): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      if (attempt >= 5 || !String(e?.message || "").toLowerCase().includes("rate limit")) throw e;
+      const wait = 2000 * (attempt + 1);
+      console.log(`[SP migration] rate limit on ${label}, retry ${attempt + 1} in ${wait}ms`);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+}
+
 async function loadUnlinkedOrders(sr: any) {
   const out: any[] = [];
   let skip = 0;
   while (true) {
-    const page = await sr.SuperPharmOrder.filter({}, "-created_date", 200, skip);
+    const page = await withRetry(() => sr.SuperPharmOrder.filter({}, "-created_date", 200, skip), "load orders");
     out.push(...page);
     if (page.length < 200 || out.length > 3000) break;
     skip += page.length;
@@ -50,16 +63,21 @@ Deno.serve(async (req) => {
     };
     const byCategory: Record<string, any[]> = { MATCHED_EXISTING: [], SAFE_NEW_CUSTOMER: [], AMBIGUOUS: [], INVALID_IDENTITY: [], NO_USABLE_IDENTITY: [] };
 
-    const scanLimit = mode === "classify" ? (body.limit || orders.length) : orders.length;
-    for (const order of orders.slice(0, scanLimit)) {
-      const c = await classifySpOrder(base44, order);
+    const scanOffset = Number(body.offset || 0);
+    const scanLimit = Number(body.limit || orders.length);
+    const scanSlice = orders.slice(scanOffset, scanOffset + scanLimit);
+    let scanned = 0;
+    for (const order of scanSlice) {
+      const c = await withRetry(() => classifySpOrder(base44, order), `classify ${order.mirakl_order_id}`);
+      scanned++;
+      if (scanned % 25 === 0) await new Promise((r) => setTimeout(r, 1200));
       counts[c.category] = (counts[c.category] || 0) + 1;
       byCategory[c.category].push({ order_id: order.mirakl_order_id, id: order.id, name: c.snapshot.name, phone: c.snapshot.phone, match_method: c.match_method, client_id: c.client_id, evidence: c.evidence });
     }
 
     if (mode === "classify") {
       return Response.json({
-        success: true, mode, correlation_id, scanned: Math.min(scanLimit, orders.length),
+        success: true, mode, correlation_id, scanned, offset: scanOffset,
         total_unlinked: orders.length, counts,
         samples: Object.fromEntries(Object.entries(byCategory).map(([k, v]) => [k, v.slice(0, 5)])),
         ambiguous: byCategory.AMBIGUOUS.slice(0, 20),
@@ -96,8 +114,9 @@ Deno.serve(async (req) => {
     const results: any[] = [];
 
     for (const order of targets) {
-      const r = await resolveSpOrderCustomer(base44, order, { dry_run, allow_create: allowCreate, correlation_id });
+      const r = await withRetry(() => resolveSpOrderCustomer(base44, order, { dry_run, allow_create: allowCreate, correlation_id }), `resolve ${order.mirakl_order_id}`);
       stats.processed++;
+      if (stats.processed % 10 === 0) await new Promise((res) => setTimeout(res, 1500));
       if (r.category === "MATCHED_EXISTING") stats.matched_existing++;
       else if (r.category === "CLIENT_CREATED") stats.clients_created++;
       else if (r.category === "AMBIGUOUS") stats.ambiguous++;

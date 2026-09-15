@@ -186,6 +186,38 @@ Deno.serve(async (req) => {
 
     let created = 0, updated = 0, skipped = 0;
 
+    // ── Customer identity (Customer Identity Protection Layer) ──
+    // No local phone normalization, no local email matching, no find-first, no direct Client.create.
+    const resolveCustomers = body.resolve_customers !== false;
+    const allowCustomerCreation = body.allow_customer_creation !== false;
+    const identityCorrelationId = createCorrelationId('superpharm_sync_identity');
+    const identityStats = {
+      processed: 0, matched_existing: 0, clients_created: 0, ambiguous: 0,
+      blocked: 0, invalid: 0, no_identity: 0, duplicate_creation_attempts_prevented: 0, orders_linked: 0,
+    };
+
+    async function resolveCustomerForOrder(orderRecord) {
+      if (!resolveCustomers || !orderRecord || orderRecord.client_id) return;
+      try {
+        const r = await resolveSpOrderCustomer(base44, orderRecord, {
+          dry_run: false,
+          allow_create: allowCustomerCreation,
+          correlation_id: identityCorrelationId,
+        });
+        identityStats.processed++;
+        if (r.category === 'MATCHED_EXISTING') identityStats.matched_existing++;
+        else if (r.category === 'CLIENT_CREATED') identityStats.clients_created++;
+        else if (r.category === 'AMBIGUOUS') identityStats.ambiguous++;
+        else if (r.category === 'INVALID_IDENTITY') identityStats.invalid++;
+        else if (r.category === 'NO_USABLE_IDENTITY') identityStats.no_identity++;
+        else identityStats.blocked++;
+        if (r.idempotency_prevented) identityStats.duplicate_creation_attempts_prevented++;
+        if (r.linked) identityStats.orders_linked++;
+      } catch (idErr) {
+        console.warn(`[SP identity] ${orderRecord.mirakl_order_id} failed (non-critical): ${idErr.message}`);
+      }
+    }
+
     // Helper: retry on rate limit
     async function withRetry(fn, label = '') {
       for (let attempt = 0; attempt < 4; attempt++) {
@@ -232,9 +264,11 @@ Deno.serve(async (req) => {
         } else {
           skipped++;
         }
+        if (!ex.client_id) await resolveCustomerForOrder({ ...ex, ...orderData, id: ex.id, client_id: null });
       } else {
-        await withRetry(() => sr.SuperPharmOrder.create(orderData), `create ${orderData.mirakl_order_id}`);
+        const createdOrder = await withRetry(() => sr.SuperPharmOrder.create(orderData), `create ${orderData.mirakl_order_id}`);
         created++;
+        await resolveCustomerForOrder(createdOrder);
 
         // ── זיהוי סריאלי לאחר יצירה (cache-only, non-blocking) ──
         try {
@@ -306,6 +340,8 @@ Deno.serve(async (req) => {
       updated,
       skipped,
       stale_fixed: staleFixed,
+      identity: identityStats,
+      identity_correlation_id: identityCorrelationId,
       message: `סנכרון הושלם: ${created} חדשות, ${updated} עודכנו${staleFixed > 0 ? `, ${staleFixed} תוקנו` : ''} (סה"כ נמשכו ${allMiraklOrders.length})`,
     });
   } catch (error) {
