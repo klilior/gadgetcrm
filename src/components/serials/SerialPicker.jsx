@@ -93,6 +93,14 @@ export default function SerialPicker({ line, onUpdated }) {
     loadSerials();
   }, [loadSerials]);
 
+  // סנכרון עם הרשומה בשרת (למשל אחרי רענון של ההזמנה)
+  useEffect(() => {
+    const fromLine = line?.assigned_serials ?? [];
+    setSelected((prev) =>
+      prev.length === fromLine.length && prev.every((s, i) => s === fromLine[i]) ? prev : fromLine
+    );
+  }, [line?.assigned_serials]);
+
   // אין מלאי מקומי מספיק → שליפה חיה אוטומטית פעם אחת
   useEffect(() => {
     if (loading || liveLoading || liveAt || skip) return;
@@ -106,13 +114,20 @@ export default function SerialPicker({ line, onUpdated }) {
   // בחירה/ביטול בחירה מהרשימה
   const toggleSerial = async (serial) => {
     let next;
-    if (selected.includes(serial)) {
+    const isRemoving = selected.includes(serial);
+    if (isRemoving) {
       next = selected.filter((s) => s !== serial);
     } else {
       if (selected.length >= required) return;
       next = [...selected, serial];
     }
     setSelected(next);
+    // אחרי הסרת בחירה — מחזירים את המיקוד לשדה הסריקה כדי שאפשר יהיה לסרוק סריאלי אחר מיד
+    if (isRemoving) {
+      setScanInput("");
+      setVerifyResult(null);
+      setTimeout(() => scanRef.current?.focus(), 0);
+    }
     await persistSelection(next);
   };
 
