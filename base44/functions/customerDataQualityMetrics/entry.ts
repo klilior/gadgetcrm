@@ -50,6 +50,39 @@ Deno.serve(async (req) => {
     const auditCount = (action: string, days: number) =>
       audits.filter((a: any) => a.action === action && now - new Date(a.created_date).getTime() < days * 86400000).length;
 
+    // Per-producer identity metrics (LINET_SYNC / WOOCOMMERCE_WEBHOOK / ...)
+    const producerActions = ['CUSTOMER_RESOLUTION_MATCH', 'CUSTOMER_CREATION', 'CUSTOMER_RESOLUTION_AMBIGUOUS', 'CUSTOMER_CREATION_BLOCKED', 'CUSTOMER_EXTERNAL_ID_CONFLICT', 'CUSTOMER_EXTERNAL_ID_LINKED'];
+    const producerMetrics: Record<string, Record<string, number>> = {};
+    audits
+      .filter((a: any) => producerActions.includes(a.action) && now - new Date(a.created_date).getTime() < 30 * 86400000)
+      .forEach((a: any) => {
+        const key = a.integration || 'UNKNOWN';
+        const m = producerMetrics[key] || (producerMetrics[key] = { processed: 0, matched: 0, created: 0, ambiguous: 0, blocked: 0, external_id_conflicts: 0, external_ids_linked: 0 });
+        m.processed++;
+        if (a.action === 'CUSTOMER_RESOLUTION_MATCH') m.matched++;
+        if (a.action === 'CUSTOMER_CREATION') m.created++;
+        if (a.action === 'CUSTOMER_RESOLUTION_AMBIGUOUS') m.ambiguous++;
+        if (a.action === 'CUSTOMER_CREATION_BLOCKED') m.blocked++;
+        if (a.action === 'CUSTOMER_EXTERNAL_ID_CONFLICT') m.external_id_conflicts++;
+        if (a.action === 'CUSTOMER_EXTERNAL_ID_LINKED') m.external_ids_linked++;
+      });
+
+    // New duplicate external IDs created inside a window
+    const dupExternalValues = (field: string) => {
+      const m = new Map<string, number>();
+      active.forEach((c) => { const v = c[field]; if (v) m.set(String(v), (m.get(String(v)) || 0) + 1); });
+      return new Set([...m.entries()].filter(([, n]) => n > 1).map(([k]) => k));
+    };
+    const dupLinet = dupExternalValues('linet_account_id');
+    const dupWoo = dupExternalValues('woo_customer_id');
+    const newDupExternal = (set: Set<string>, field: string) => {
+      const res: Record<string, number> = {};
+      for (const [label, days] of Object.entries({ '24h': 1, '7d': 7 })) {
+        res[label] = clients.filter((c) => c[field] && set.has(String(c[field])) && now - new Date(c.created_date).getTime() < days * 86400000).length;
+      }
+      return res;
+    };
+
     const producers: Record<string, number> = {};
     clients.filter((c) => now - new Date(c.created_date).getTime() < 30 * 86400000)
       .forEach((c) => { const k = c.created_by_producer || c.source || 'UNKNOWN'; producers[k] = (producers[k] || 0) + 1; });
@@ -75,6 +108,9 @@ Deno.serve(async (req) => {
         return acc;
       }, {}),
       duplicate_phone_groups: dupPhones.size,
+      producer_identity_metrics_30d: producerMetrics,
+      new_duplicate_linet_ids: newDupExternal(dupLinet, 'linet_account_id'),
+      new_duplicate_woo_ids: newDupExternal(dupWoo, 'woo_customer_id'),
       producer_distribution_30d: producers,
     });
   } catch (error) {

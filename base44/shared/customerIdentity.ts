@@ -192,7 +192,7 @@ export async function resolveCustomerIdentity(base44: any, input: IdentityInput)
   return { status: "NO_MATCH", client_id: null, match_method: "none", confidence: "none", evidence: null, ...base };
 }
 
-async function upsertReferences(base44: any, input: IdentityInput, clientId: string) {
+async function upsertReferences(base44: any, input: IdentityInput, clientId: string, onLinked?: (key: string) => Promise<void>) {
   const sr = base44.asServiceRole.entities;
   const now = new Date().toISOString();
   for (const ref of externalRefs(input)) {
@@ -203,6 +203,7 @@ async function upsertReferences(base44: any, input: IdentityInput, clientId: str
       await sr.IntegrationReference.update(existing[0].id, { last_seen_at: now });
       continue;
     }
+    if (onLinked) await onLinked(key);
     await sr.IntegrationReference.create({
       entity_type: "Customer",
       entity_id: clientId,
@@ -238,7 +239,9 @@ export async function resolveOrCreateCustomer(base44: any, input: IdentityInput,
   const resolution = await resolveCustomerIdentity(base44, input);
 
   if (resolution.status === "MATCHED") {
-    await upsertReferences(base44, input, resolution.client_id as string);
+    await upsertReferences(base44, input, resolution.client_id as string, async (key) => {
+      await audit("CUSTOMER_EXTERNAL_ID_LINKED", resolution.client_id as string, { external_key: key, producer: input.producer, match_method: resolution.match_method });
+    });
     await audit("CUSTOMER_RESOLUTION_MATCH", resolution.client_id as string, {
       match_method: resolution.match_method,
       confidence: resolution.confidence,
@@ -248,7 +251,7 @@ export async function resolveOrCreateCustomer(base44: any, input: IdentityInput,
   }
 
   if (resolution.status === "AMBIGUOUS") {
-    await audit(resolution.data_conflict ? "CUSTOMER_EXTERNAL_ID_CONFLICT" : "CUSTOMER_AMBIGUOUS", "unresolved", {
+    await audit(resolution.data_conflict ? "CUSTOMER_EXTERNAL_ID_CONFLICT" : "CUSTOMER_RESOLUTION_AMBIGUOUS", "unresolved", {
       producer: input.producer,
       evidence: resolution.evidence,
       source_record_id: input.source_record_id || null,
@@ -303,8 +306,11 @@ export async function resolveOrCreateCustomer(base44: any, input: IdentityInput,
   const created = await sr.Client.create(payload);
   await upsertReferences(base44, input, created.id);
 
-  // Idempotency safety net: if a concurrent run created the same external identity, keep the
-  // earliest record and archive ours (flag only — never delete, never merge data).
+  // Idempotency safety net — DETERMINISTIC EVIDENCE ONLY.
+  // Auto-archive of the race loser is permitted exclusively when the duplicate is proven by an
+  // identical external identity (IntegrationReference / Linet account ID / Woo customer ID /
+  // idempotency key). Phone-only, email-only and phone+name similarity NEVER auto-archive —
+  // those paths return AMBIGUOUS / DUPLICATE_CANDIDATE earlier in the flow.
   const keys = idempotencyKeysFor(input);
   for (const key of keys) {
     const refs = await sr.IntegrationReference.filter({ external_key: key, entity_type: "Customer" }, null, 5);

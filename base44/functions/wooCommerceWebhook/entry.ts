@@ -1,92 +1,60 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { resolveOrCreateCustomer, PRODUCERS } from '../../shared/customerIdentity.ts';
 
-function normalizePhone(phone) {
-    if (!phone) return null;
-    let digits = phone.replace(/[^\d]/g, '');
-    if (digits.length === 13 && digits.startsWith('9720')) {
-        digits = digits.slice(3);
-    } else if (digits.length === 12 && digits.startsWith('972')) {
-        digits = '0' + digits.slice(3);
-    } else if (digits.startsWith('0972') && digits.length > 12) {
-        digits = '0' + digits.slice(4);
-    }
-    if (digits.length === 10 && digits.startsWith('0')) return digits;
-    if (digits.length === 9 && !digits.startsWith('0')) return '0' + digits;
-    if (digits.length >= 9 && digits.length <= 11) {
-        if (!digits.startsWith('0')) digits = '0' + digits;
-        return digits.slice(0, 10);
-    }
-    return null;
-}
-
-async function findOrCreateClient(sr, billing, shipping, customerId) {
-    const phone = normalizePhone(billing?.phone) || normalizePhone(shipping?.phone);
+/**
+ * BATCH 3 — WooCommerce is now a thin producer.
+ * No local normalization, no find-first behaviour, no direct Client.create.
+ * Registered customers: Woo customer ID is the primary external identity and beats phone.
+ * Guest orders: billing/shipping phone + valid email + corroborating name, never name-only.
+ */
+async function resolveClientForWooOrder(base44, billing, shipping, customerId, orderId) {
+    const rawPhone = billing?.phone || shipping?.phone || null;
     const email = billing?.email || '';
     const fullName = `${billing?.first_name || ''} ${billing?.last_name || ''}`.trim() || 'לקוח מהאתר';
     const city = billing?.city || shipping?.city || '';
     const address = billing?.address_1 ? `${billing.address_1}${billing.address_2 ? ' ' + billing.address_2 : ''}, ${city}` : '';
+    const registeredId = Number(customerId) > 0 ? Number(customerId) : null;
 
-    // 1. By WooCommerce ID
-    if (customerId && customerId > 0) {
-        const byWoo = await sr.Client.filter({ woo_customer_id: customerId }, null, 1);
-        if (byWoo.length > 0) {
-            const updates = {};
-            if (phone && !byWoo[0].phone) updates.phone = phone;
-            if (email && !byWoo[0].email) updates.email = email;
-            if (city && !byWoo[0].city) updates.city = city;
-            if (address && !byWoo[0].full_address) updates.full_address = address;
-            if (Object.keys(updates).length > 0) await sr.Client.update(byWoo[0].id, updates);
-            return byWoo[0].id;
-        }
+    const result = await resolveOrCreateCustomer(
+        base44,
+        {
+            producer: PRODUCERS.WOOCOMMERCE_WEBHOOK,
+            phone: rawPhone,
+            email,
+            name: fullName,
+            woo_customer_id: registeredId,
+            source_record_id: `WOO_ORDER_${orderId}`,
+        },
+        {
+            full_name: fullName,
+            phone: rawPhone,
+            email: email || null,
+            city: city || null,
+            full_address: address || null,
+            source: 'WooCommerce',
+            preferred_channel: 'website',
+        },
+    );
+
+    if (result.status !== 'MATCHED' || !result.client_id) {
+        console.warn(`⛔ Customer not resolved for Woo order #${orderId}: ${result.status} (${result.evidence || ''})`);
+        return { clientId: null, result };
     }
 
-    // 2. By phone (try all variants: 05X, 972, +972, etc.)
-    if (phone) {
-        const phoneVariants = [phone];
-        if (phone.startsWith('0') && phone.length === 10) {
-            phoneVariants.push('972' + phone.slice(1));
-            phoneVariants.push('+972' + phone.slice(1));
-            phoneVariants.push('9720' + phone.slice(1));
-            phoneVariants.push('+9720' + phone.slice(1));
-        }
-        for (const variant of phoneVariants) {
-            const byPhone = await sr.Client.filter({ phone: variant }, null, 1);
-            if (byPhone.length > 0) {
-                const updates = {};
-                if (customerId > 0 && !byPhone[0].woo_customer_id) updates.woo_customer_id = customerId;
-                if (email && !byPhone[0].email) updates.email = email;
-                // Normalize the phone on the client record
-                if (byPhone[0].phone !== phone) updates.phone = phone;
-                if (Object.keys(updates).length > 0) await sr.Client.update(byPhone[0].id, updates);
-                return byPhone[0].id;
-            }
-        }
+    // Enrich empty fields only. A changed phone on a known Woo customer never creates a new Client.
+    const sr = base44.asServiceRole.entities;
+    const client = await sr.Client.get(result.client_id).catch(() => null);
+    if (client && !result.created) {
+        const updates = {};
+        if (rawPhone && !client.phone) updates.phone = rawPhone;
+        if (email && !client.email) updates.email = email;
+        if (city && !client.city) updates.city = city;
+        if (address && !client.full_address) updates.full_address = address;
+        if (registeredId && !client.woo_customer_id) updates.woo_customer_id = registeredId;
+        if (Object.keys(updates).length > 0) await sr.Client.update(client.id, updates);
     }
 
-    // 3. By email
-    if (email) {
-        const byEmail = await sr.Client.filter({ email }, null, 1);
-        if (byEmail.length > 0) {
-            const updates = {};
-            if (customerId > 0 && !byEmail[0].woo_customer_id) updates.woo_customer_id = customerId;
-            if (phone && !byEmail[0].phone) updates.phone = phone;
-            if (Object.keys(updates).length > 0) await sr.Client.update(byEmail[0].id, updates);
-            return byEmail[0].id;
-        }
-    }
-
-    // 4. Create new
-    const newClient = await sr.Client.create({
-        full_name: fullName,
-        phone: phone || null,
-        email: email || null,
-        city: city || null,
-        full_address: address || null,
-        woo_customer_id: customerId > 0 ? customerId : null,
-        source: 'WooCommerce',
-        preferred_channel: 'website',
-    });
-    return newClient.id;
+    return { clientId: result.client_id, result };
 }
 
 Deno.serve(async (req) => {
@@ -110,9 +78,12 @@ Deno.serve(async (req) => {
 
         // Find or create client only for paid orders
         let clientId = null;
+        let identityStatus = null;
         if (isPaid && wooOrder.billing) {
-            clientId = await findOrCreateClient(sr, wooOrder.billing, wooOrder.shipping, wooOrder.customer_id);
-            console.log(`👤 Client: ${clientId}`);
+            const resolved = await resolveClientForWooOrder(base44, wooOrder.billing, wooOrder.shipping, wooOrder.customer_id, wooOrder.id);
+            clientId = resolved.clientId;
+            identityStatus = resolved.result?.status || null;
+            console.log(`👤 Client: ${clientId || 'unresolved'} (${identityStatus})`);
         }
 
         // Check existing
@@ -188,7 +159,7 @@ Deno.serve(async (req) => {
             } catch (_e) {}
         }
 
-        return Response.json({ success: true });
+        return Response.json({ success: true, client_id: clientId, identity_status: identityStatus });
     } catch (error) {
         console.error('❌ Webhook Error:', error);
         return Response.json({ success: false, error: error.message }, { status: 500 });
