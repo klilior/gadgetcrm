@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
     for (const order of scanSlice) {
       const c = await withRetry(() => classifySpOrder(base44, order), `classify ${order.mirakl_order_id}`);
       scanned++;
-      if (scanned % 25 === 0) await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, Number(body.delay_ms ?? 600)));
       counts[c.category] = (counts[c.category] || 0) + 1;
       byCategory[c.category].push({ order_id: order.mirakl_order_id, id: order.id, name: c.snapshot.name, phone: c.snapshot.phone, match_method: c.match_method, client_id: c.client_id, evidence: c.evidence });
     }
