@@ -230,8 +230,21 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Update local entity with the verified state
-      const finalState = (verifiedState === 'SHIPPED' || verifiedState === 'TO_COLLECT') ? verifiedState : 'SHIPPED';
+      // אין לכתוב SHIPPED מקומית אם מיראקל לא אישר — הסנכרון הבא יחזיר את הסטטוס האמיתי
+      if (verifiedState !== 'SHIPPED' && verifiedState !== 'TO_COLLECT') {
+        await sr.SuperPharmOrder.update(localOrder.id, {
+          tracking_number,
+          carrier_code: finalCarrierCode,
+          carrier_name: finalCarrierName,
+        });
+        return Response.json({
+          success: false,
+          error: `מספר המעקב נשמר, אך מיראקל עדיין מדווח סטטוס ${verifiedState || 'לא ידוע'}. יש לנסות שוב או לבדוק במיראקל.`,
+          new_state: verifiedState,
+        }, { status: 409 });
+      }
+
+      const finalState = verifiedState;
       await sr.SuperPharmOrder.update(localOrder.id, {
         order_state: finalState,
         tracking_number,

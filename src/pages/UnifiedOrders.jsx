@@ -473,8 +473,28 @@ export default function UnifiedOrders() {
         if (newStatus === 'accept_mirakl') {
           await updateSuperPharmOrder({ action: 'accept', order_id: order.mirakl_order_id });
           setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'SHIPPING' } : o));
+        } else if (newStatus === 'SHIPPED' || newStatus === 'TO_COLLECT') {
+          // סימון כנשלחה חייב לעבור דרך Mirakl, אחרת הסנכרון הבא יחזיר את הסטטוס
+          if (!order.tracking_number) {
+            alert('אין מספר מעקב להזמנה — יש ליצור משלוח לפני סימון כנשלחה.');
+            return;
+          }
+          const res = await updateSuperPharmOrder({
+            action: 'ship',
+            order_id: order.mirakl_order_id || order.order_number,
+            tracking_number: order.tracking_number,
+            carrier_code: order.carrier_code || '',
+            carrier_name: order.tracking_carrier || order.carrier_name || '',
+          });
+          const data = res?.data ?? res;
+          if (!data?.success) {
+            alert('עדכון הסטטוס במיראקל נכשל: ' + (data?.error || 'שגיאה לא ידועה'));
+            return;
+          }
+          setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: data.new_state || newStatus } : o));
         } else {
-          // For other Mirakl status changes
+          // סטטוסים אחרים — נשמרים ברשומה המקומית כדי שלא יאבדו ברענון
+          await base44.entities.SuperPharmOrder.update(order.raw_id, { order_state: newStatus });
           setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
         }
       } else if (order.source === 'linet') {
