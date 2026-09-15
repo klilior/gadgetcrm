@@ -259,6 +259,26 @@ export default function SerialPicker({ line, onUpdated }) {
         </div>
       )}
 
+      {/* סריאליים שנבחרו — תמיד ניתן להסיר ולבחור אחר */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map((s) => (
+            <span key={s} className="inline-flex items-center gap-1.5 bg-purple-50 border border-purple-300 text-purple-800 rounded-lg px-2 py-1 text-xs">
+              <span className="font-mono">{s}</span>
+              <button
+                type="button"
+                onClick={() => toggleSerial(s)}
+                disabled={saving}
+                className="text-purple-500 hover:text-red-600 font-bold disabled:opacity-40"
+                title="הסר סריאלי ובחר אחר"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* רשימת סריאליים */}
       {!loading && !error && serials.length > 0 && (
         <div className="space-y-1 max-h-52 overflow-y-auto">
@@ -268,7 +288,8 @@ export default function SerialPicker({ line, onUpdated }) {
             return (
               <button
                 key={s.serial}
-                onClick={() => toggleSerial(s.serial)}
+                type="button"
+                onClick={(e) => { e.currentTarget.blur(); toggleSerial(s.serial); }}
                 disabled={isDisabled}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm text-right transition-all border
                   ${isSelected
