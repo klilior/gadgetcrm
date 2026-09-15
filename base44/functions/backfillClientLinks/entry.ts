@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
         const fromDate = body.from_date || '2026-03-01';
         const maxLimit = body.limit || 500;
 
-        const stats = { linked: 0, created: 0, skipped: 0, errors: 0, clients_updated: 0 };
+        const stats = { linked: 0, created: 0, skipped: 0, unresolved: 0, errors: 0, clients_updated: 0 };
 
         // ---- STEP 1: Link orphan SalesTransactions to clients ----
         if (mode === 'link' || mode === 'both') {
@@ -110,17 +110,13 @@ Deno.serve(async (req) => {
                             }
                         }
 
-                        // If still not found, create client
+                        // PHASE 13: name-only creation is DISABLED. Never create a Client here.
                         if (!clientId) {
-                            const newClient = await retryOnRateLimit(() =>
-                                base44.asServiceRole.entities.Client.create({
-                                    full_name: txs[0].customer_name || 'לקוח לינט',
-                                    linet_account_id: Number(accountId),
-                                    source: 'Linet_Backfill'
-                                })
-                            );
-                            clientId = newClient.id;
-                            stats.created++;
+                            stats.unresolved += txs.length;
+                            stats.skipped += txs.length;
+                            processed += txs.length;
+                            console.warn(`⛔ UNRESOLVED_CUSTOMER for Linet account ${accountId} — no Client created (name-only creation disabled)`);
+                            continue;
                         }
 
                         // Update all transactions for this account

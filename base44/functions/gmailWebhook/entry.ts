@@ -1,4 +1,14 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { classifyCustomerEmail } from '../../shared/customerIdentityPolicy.ts';
+
+/** Stable dedupe id even when the relay omits Message-ID (root cause of the Oct-2025 loop). */
+function buildDedupeId(messageId, threadId, subject, content) {
+    if (messageId) return messageId;
+    let hash = 5381;
+    const raw = `${threadId || ''}|${subject || ''}|${content || ''}`;
+    for (let i = 0; i < raw.length; i++) hash = ((hash * 33) ^ raw.charCodeAt(i)) >>> 0;
+    return `synthetic:${threadId || 'nothread'}:${hash}`;
+}
 
 function stripHtml(html) {
     if (!html) return '';
@@ -135,15 +145,27 @@ Deno.serve(async (req) => {
             });
         }
         
-        // 🛡️ בדיקה 2: האם ה-messageId כבר עובד?
-        if (messageId) {
+        // 🛡️ בדיקה 1.5: שולח מערכת / שיווקי / relay — לא לקוח, לא ליצור Client ולא טיקט
+        const senderClass = classifyCustomerEmail(emailAddress);
+        if (!senderClass.usable_for_identity) {
+            console.log(`⚠️ Ignoring non-customer sender (${senderClass.email_identity_class}): ${emailAddress}`);
+            return new Response(JSON.stringify({
+                success: true,
+                message: `Ignored - non-customer sender (${senderClass.email_identity_class})`
+            }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+
+        const dedupeId = buildDedupeId(messageId, threadId, subject, plain || html || '');
+
+        // 🛡️ בדיקה 2: האם ההודעה כבר עובדה? (עובד גם ללא Message-ID)
+        {
             const existingWebhookLog = await base44.asServiceRole.entities.WebhookLog.filter({
                 source: 'gmail',
-                'payload.messageId': messageId
+                'payload.messageId': dedupeId
             });
             
             if (existingWebhookLog.length > 0) {
-                console.log(`⚠️ Message already processed: ${messageId}`);
+                console.log(`⚠️ Message already processed: ${dedupeId}`);
                 return new Response(JSON.stringify({ 
                     success: true, 
                     message: 'Already processed',
@@ -157,10 +179,10 @@ Deno.serve(async (req) => {
             // ✅ שמור log שההודעה התקבלה
             await base44.asServiceRole.entities.WebhookLog.create({
                 source: 'gmail',
-                payload: { messageId, from: emailAddress, subject, threadId },
+                payload: { messageId: dedupeId, original_message_id: messageId || null, from: emailAddress, subject, threadId },
                 headers: {}
             });
-            console.log(`✅ Saved webhook log for messageId: ${messageId}`);
+            console.log(`✅ Saved webhook log for dedupeId: ${dedupeId}`);
         }
         
         let senderName = from.split('<')[0].trim();
@@ -215,15 +237,31 @@ Deno.serve(async (req) => {
         }
         
         if (!customer) {
-            const existingByEmail = await base44.asServiceRole.entities.Client.filter({ email: emailAddress });
-            if (existingByEmail.length > 0) {
-                customer = existingByEmail[0];
+            const existingByEmail = await base44.asServiceRole.entities.Client.filter({
+                normalized_email: senderClass.normalized_email
+            });
+            const byRawEmail = existingByEmail.length > 0
+                ? existingByEmail
+                : await base44.asServiceRole.entities.Client.filter({ email: senderClass.normalized_email });
+            const usable = byRawEmail.filter((c) => !c.excluded_from_identity_matching);
+            if (usable.length === 1) {
+                customer = usable[0];
                 console.log(`Found existing client: ${customer.id}`);
+            } else if (usable.length > 1) {
+                console.warn(`⛔ AMBIGUOUS email identity for ${senderClass.normalized_email} — no client created`);
+                return new Response(JSON.stringify({
+                    success: true,
+                    message: 'Ignored - ambiguous customer identity'
+                }), { status: 200, headers: { 'Content-Type': 'application/json' } });
             } else {
                 customer = await base44.asServiceRole.entities.Client.create({
                     full_name: senderName,
-                    email: emailAddress,
+                    email: senderClass.normalized_email,
+                    normalized_email: senderClass.normalized_email,
+                    email_identity_class: 'USABLE',
                     preferred_channel: 'email',
+                    customer_quality_status: 'ACTIVE',
+                    created_by_producer: 'GMAIL_WEBHOOK',
                 });
                 console.log(`Created new client: ${customer.id}`);
             }

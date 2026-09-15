@@ -98,9 +98,44 @@ export const customersService = {
     this.invalidateCache();
     return await base44.entities.Client.update(id, data);
   },
-  async create(data) {
+  /**
+   * Manual customer creation MUST go through the backend Creation Guard.
+   * Returns { client, isNew } on success.
+   * Throws an error carrying `.candidates` / `.status` when a match or ambiguity is detected,
+   * unless { confirmCreate: true } is passed by an authorized user.
+   */
+  async create(data, { confirmCreate = false } = {}) {
+    const { data: res } = await base44.functions.invoke('customerIdentity', {
+      action: 'resolve_or_create',
+      confirm_create: confirmCreate,
+      ...data,
+    });
+    if (!res?.success) {
+      const err = new Error(res?.error || 'יצירת לקוח נכשלה');
+      err.status = res?.status;
+      throw err;
+    }
+    if (res.warning || (!res.client && res.status !== 'MATCHED')) {
+      const err = new Error(
+        res.warning === 'CANDIDATE_MATCH_FOUND'
+          ? 'קיים לקוח עם אותם פרטי זיהוי'
+          : res.status === 'AMBIGUOUS'
+            ? 'נמצאו כמה לקוחות אפשריים — נדרשת בחירה ידנית'
+            : 'לא ניתן ליצור לקוח מהנתונים שהוזנו'
+      );
+      err.status = res.status;
+      err.warning = res.warning;
+      err.candidates = res.candidates || (res.client_id ? [{ id: res.client_id }] : []);
+      err.matchedClientId = res.client_id || null;
+      throw err;
+    }
     this.invalidateCache();
-    return await base44.entities.Client.create(data);
+    return { client: res.client, isNew: Boolean(res.created) };
+  },
+
+  async resolveIdentity({ phone, email, full_name }) {
+    const { data } = await base44.functions.invoke('customerIdentity', { action: 'resolve', phone, email, full_name });
+    return data;
   },
   async findByPhone(phone) {
     if (!phone) return null;
