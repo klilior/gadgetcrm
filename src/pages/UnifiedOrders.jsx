@@ -424,15 +424,30 @@ export default function UnifiedOrders() {
     return false;
   };
 
+  // ממתינה לתשלום — נציג צריך להתקשר להשלמת תשלום
+  const isAwaitingPayment = (o) =>
+    ['on-hold', 'pending', 'WAITING_DEBIT', 'WAITING_DEBIT_PAYMENT'].includes(o.status);
+
+  // שולמה וממתינה למשלוח (טרם נוצר משלוח)
+  const isPaidAwaitingShipment = (o) => {
+    if (isAwaitingPayment(o) || isBlockedOrder(o)) return false;
+    if (o.tracking_number) return false;
+    if (o.source === 'woocommerce') return ['processing', 'ordered', 'wc-awaiting-serial'].includes(o.status);
+    if (o.source === 'mirakl') return ['WAITING_ACCEPTANCE', 'SHIPPING'].includes(o.status);
+    if (o.source === 'linet') return o.status !== 'נוצר משלוח';
+    return false;
+  };
+
   const summaryStats = useMemo(() => {
     const openOrders = orders.filter(o => !isVisuallyClosed(o));
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     return {
       open: openOrders.length,
-      pending: openOrders.filter(o => isPendingOrder(o) && !isReadyForAction(o)).length,
-      serial: serialCount,
-      ready: openOrders.filter(isReadyForAction).length,
+      awaitingShipment: openOrders.filter(isPaidAwaitingShipment).length,
+      awaitingPayment: openOrders.filter(isAwaitingPayment).length,
+      stale: openOrders.filter(o => o.order_date && new Date(o.order_date).getTime() < weekAgo).length,
     };
-  }, [orders, serialCount]); // eslint-disable-line
+  }, [orders]); // eslint-disable-line
 
   // Filtered + searched orders
   const filteredOrders = useMemo(() => {
