@@ -206,6 +206,7 @@ export default function UnifiedOrders() {
           products: pr.map(x => ({name: x.name||'', sku: x.sku || (x.product_id != null ? String(x.product_id) : ''), product_id: x.product_id != null ? String(x.product_id) : '', quantity: x.quantity||1, total: parseFloat(x.total)||0, meta_data: x.meta_data || ''})),
           total: parseFloat(o.total) || 0, shipping_method: o.shipping_method || '',
           status: o.status || '', notes: o.customer_note || '',
+          payment_method_title: o.payment_method_title || '',
           raw_id: o.id, client_id: o.client_id || '', pickup_point_data: o.pickup_point_data, currency: 'ILS',
           shipping_city: billing.city || c?.city || '',
           shipping_street: billing.address_1 || c?.address || '',
@@ -427,13 +428,17 @@ export default function UnifiedOrders() {
   // סינון לפי כרטיס דשבורד לחיץ
   const [metricFilter, setMetricFilter] = useState(null);
 
-  // ממתינה לתשלום — נציג צריך להתקשר להשלמת תשלום
-  const isAwaitingPayment = (o) =>
+  // טרם שולמה (כל סוג)
+  const isUnpaid = (o) =>
     ['on-hold', 'pending', 'WAITING_DEBIT', 'WAITING_DEBIT_PAYMENT'].includes(o.status);
+
+  // בהשהיה — רק הזמנות שבהן הלקוח בחר תשלום טלפוני עם נציג
+  const isAwaitingPayment = (o) =>
+    isUnpaid(o) && /תשלום\s*טלפוני/.test(o.payment_method_title || '');
 
   // שולמה וממתינה למשלוח (טרם נוצר משלוח)
   const isPaidAwaitingShipment = (o) => {
-    if (isAwaitingPayment(o) || isBlockedOrder(o)) return false;
+    if (isUnpaid(o) || isBlockedOrder(o)) return false;
     if (o.tracking_number) return false;
     if (o.source === 'woocommerce') return ['processing', 'ordered', 'wc-awaiting-serial'].includes(o.status);
     if (o.source === 'mirakl') return ['WAITING_ACCEPTANCE', 'SHIPPING'].includes(o.status);
@@ -447,7 +452,7 @@ export default function UnifiedOrders() {
     return {
       awaitingShipment: openOrders.filter(isPaidAwaitingShipment).length,
       awaitingPayment: openOrders.filter(isAwaitingPayment).length,
-      stale: openOrders.filter(o => o.order_date && new Date(o.order_date).getTime() < weekAgo).length,
+      stale: openOrders.filter(o => isPaidAwaitingShipment(o) && o.order_date && new Date(o.order_date).getTime() < weekAgo).length,
     };
   }, [orders]); // eslint-disable-line
 
@@ -460,7 +465,7 @@ export default function UnifiedOrders() {
       if (!showClosed && isVisuallyClosed(o)) return false;
       if (metricFilter === 'awaitingShipment' && !isPaidAwaitingShipment(o)) return false;
       if (metricFilter === 'awaitingPayment' && !isAwaitingPayment(o)) return false;
-      if (metricFilter === 'stale' && !(o.order_date && new Date(o.order_date).getTime() < weekAgo)) return false;
+      if (metricFilter === 'stale' && !(isPaidAwaitingShipment(o) && o.order_date && new Date(o.order_date).getTime() < weekAgo)) return false;
       if (statusFilter === 'pending' && !isPendingOrder(o)) return false;
       if (statusFilter === 'ready' && !isReadyForAction(o)) return false;
       if (showBlocked && !isBlockedOrder(o)) return false;
