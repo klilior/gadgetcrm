@@ -424,6 +424,9 @@ export default function UnifiedOrders() {
     return false;
   };
 
+  // סינון לפי כרטיס דשבורד לחיץ
+  const [metricFilter, setMetricFilter] = useState(null);
+
   // ממתינה לתשלום — נציג צריך להתקשר להשלמת תשלום
   const isAwaitingPayment = (o) =>
     ['on-hold', 'pending', 'WAITING_DEBIT', 'WAITING_DEBIT_PAYMENT'].includes(o.status);
@@ -442,7 +445,6 @@ export default function UnifiedOrders() {
     const openOrders = orders.filter(o => !isVisuallyClosed(o));
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     return {
-      open: openOrders.length,
       awaitingShipment: openOrders.filter(isPaidAwaitingShipment).length,
       awaitingPayment: openOrders.filter(isAwaitingPayment).length,
       stale: openOrders.filter(o => o.order_date && new Date(o.order_date).getTime() < weekAgo).length,
@@ -452,9 +454,13 @@ export default function UnifiedOrders() {
   // Filtered + searched orders
   const filteredOrders = useMemo(() => {
     const search = searchTerm.toLowerCase().trim();
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     return orders.filter(o => {
       if (sourceFilter !== 'all' && o.source !== sourceFilter) return false;
       if (!showClosed && isVisuallyClosed(o)) return false;
+      if (metricFilter === 'awaitingShipment' && !isPaidAwaitingShipment(o)) return false;
+      if (metricFilter === 'awaitingPayment' && !isAwaitingPayment(o)) return false;
+      if (metricFilter === 'stale' && !(o.order_date && new Date(o.order_date).getTime() < weekAgo)) return false;
       if (statusFilter === 'pending' && !isPendingOrder(o)) return false;
       if (statusFilter === 'ready' && !isReadyForAction(o)) return false;
       if (showBlocked && !isBlockedOrder(o)) return false;
@@ -468,10 +474,10 @@ export default function UnifiedOrders() {
         o.products?.some(p => p.name?.toLowerCase().includes(search))
       );
     });
-  }, [orders, searchTerm, sourceFilter, statusFilter, showClosed, showBlocked, readyOnly]);
+  }, [orders, searchTerm, sourceFilter, statusFilter, showClosed, showBlocked, readyOnly, metricFilter]); // eslint-disable-line
 
   // Pagination — כל שינוי בחיפוש/סינון מחזיר לעמוד הראשון, אחרת התוצאה נופלת מחוץ לעמוד הנוכחי
-  useEffect(() => { setPage(1); }, [searchTerm, sourceFilter, statusFilter, showBlocked, readyOnly]);
+  useEffect(() => { setPage(1); }, [searchTerm, sourceFilter, statusFilter, showBlocked, readyOnly, metricFilter]);
 
   const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
   const paginatedOrders = filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -569,6 +575,7 @@ export default function UnifiedOrders() {
     setStatusFilter("all");
     setShowBlocked(false);
     setReadyOnly(false);
+    setMetricFilter(null);
     setPage(1);
   };
 
@@ -681,7 +688,7 @@ export default function UnifiedOrders() {
       )}
 
       {/* Summary Cards */}
-      <SummaryCards stats={summaryStats} />
+      <SummaryCards stats={summaryStats} activeMetric={metricFilter} onSelectMetric={setMetricFilter} />
 
       {/* Filters */}
       <Card className="border border-gray-100 shadow-sm rounded-2xl bg-white">
