@@ -28,6 +28,7 @@ import MobileOrderCard from "../components/unified-orders/MobileOrderCard";
 import OrderDetailPanel from "../components/unified-orders/OrderDetailPanel";
 import CargoShipmentModal from "../components/cargo/CargoShipmentModal";
 import PostShipmentConfirmDialog from "../components/unified-orders/PostShipmentConfirmDialog";
+import { fetchResolvedLinetDocNumbers, closeUndeliveredTaskForDoc } from "../components/unified-orders/linetOrderResolution";
 
 const PAGE_SIZE = 15;
 // חיתוך תאריכים לתצוגה: 90 יום. הזמנות שעדיין פתוחות מוצגות תמיד, גם אם ישנות יותר.
@@ -314,12 +315,14 @@ export default function UnifiedOrders() {
       const existingStatuses = await base44.entities.LinetOrderStatus.list(null, 500).catch(() => []);
       const statusMap = {};
       for (const s of existingStatuses) statusMap[s.doc_number] = s;
+      // אמת אחת: הזמנה שנסגרה בדשבורד ("הזמנות שלא סופקו") נחשבת מטופלת גם כאן
+      const resolvedDocs = await fetchResolvedLinetDocNumbers();
 
       // Build unified order objects
       for (const dn of orderDocNumbers) {
         const meta = docMeta[dn];
         const existing = statusMap[dn];
-        const status = existing?.status || 'ממתינה לאספקה';
+        const status = resolvedDocs.has(String(dn)) ? 'טופל' : (existing?.status || 'ממתינה לאספקה');
         // NOTE: do NOT auto-create a status record here. This loop runs on every load and
         // every 5-minute auto-refresh; firing a create per missing doc on each pass races
         // with itself and floods the backend. Missing status simply defaults to "ממתינה לאספקה"
@@ -540,6 +543,10 @@ export default function UnifiedOrders() {
         // Always resolve by doc_number first to avoid firing a 404 on a stale raw_id
         // (a stale record id gets logged as an AxiosError 404 before the catch runs).
         await upsertByDocNumber();
+        // אמת אחת: סגירת ההזמנה כאן סוגרת גם את משימת "הזמנות שלא סופקו" בדשבורד
+        if (newStatus === 'טופל') {
+          await closeUndeliveredTaskForDoc(order.order_number, currentUser?.employee_name || currentUser?.email);
+        }
         setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
       }
     } catch (err) {
