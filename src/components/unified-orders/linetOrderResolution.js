@@ -10,6 +10,26 @@ export async function fetchResolvedLinetDocNumbers() {
   return new Set(closed.map(t => String(t.source_doc_number || '')).filter(Boolean));
 }
 
+// כתיבת הסטטוס "טופל" לרשומת ההזמנה, כדי שכל צרכן אחר יראה את אותה אמת
+export async function persistResolvedLinetStatus(docNumber, meta = {}) {
+  const existing = await base44.entities.LinetOrderStatus
+    .filter({ doc_number: String(docNumber) })
+    .catch(() => []);
+  if (existing.length > 0) {
+    if (existing[0].status !== 'טופל') {
+      await base44.entities.LinetOrderStatus.update(existing[0].id, { status: 'טופל' }).catch(() => {});
+    }
+    return;
+  }
+  await base44.entities.LinetOrderStatus.create({
+    doc_number: String(docNumber),
+    linet_doc_id: meta.linet_doc_id || '',
+    status: 'טופל',
+    customer_name: meta.customer_name || '',
+    client_id: meta.client_id || ''
+  }).catch(() => {});
+}
+
 // סגירת משימת הדשבורד כאשר ההזמנה סומנה כטופלה במסך המרוכז
 export async function closeUndeliveredTaskForDoc(docNumber, userName) {
   if (!docNumber) return;

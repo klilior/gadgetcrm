@@ -28,7 +28,7 @@ import MobileOrderCard from "../components/unified-orders/MobileOrderCard";
 import OrderDetailPanel from "../components/unified-orders/OrderDetailPanel";
 import CargoShipmentModal from "../components/cargo/CargoShipmentModal";
 import PostShipmentConfirmDialog from "../components/unified-orders/PostShipmentConfirmDialog";
-import { fetchResolvedLinetDocNumbers, closeUndeliveredTaskForDoc } from "../components/unified-orders/linetOrderResolution";
+import { fetchResolvedLinetDocNumbers, closeUndeliveredTaskForDoc, persistResolvedLinetStatus } from "../components/unified-orders/linetOrderResolution";
 
 const PAGE_SIZE = 15;
 // חיתוך תאריכים לתצוגה: 90 יום. הזמנות שעדיין פתוחות מוצגות תמיד, גם אם ישנות יותר.
@@ -322,7 +322,11 @@ export default function UnifiedOrders() {
       for (const dn of orderDocNumbers) {
         const meta = docMeta[dn];
         const existing = statusMap[dn];
-        const status = resolvedDocs.has(String(dn)) ? 'טופל' : (existing?.status || 'ממתינה לאספקה');
+        const isResolvedInDashboard = resolvedDocs.has(String(dn));
+        const status = isResolvedInDashboard ? 'טופל' : (existing?.status || 'ממתינה לאספקה');
+        if (isResolvedInDashboard && existing?.status !== 'טופל') {
+          persistResolvedLinetStatus(dn, meta);
+        }
         // NOTE: do NOT auto-create a status record here. This loop runs on every load and
         // every 5-minute auto-refresh; firing a create per missing doc on each pass races
         // with itself and floods the backend. Missing status simply defaults to "ממתינה לאספקה"
